@@ -13,8 +13,9 @@ import { custodianKey, type CustodianKey } from '../custodian/lib.js';
 import { NO_HARDWARE_PROOF } from '../custodian/checker.js';
 import { API_BUNDLE_ASSET, MANIFEST_ASSET, SIGNATURES_ASSET } from '../shared/release-feed.js';
 import { parseManifest, parseSignatures, sha256Hex } from '../shared/release.js';
-import { get, startVault, type VaultUnderTest } from './harness.js';
+import { doGenesis, get, startVault, type VaultUnderTest } from './harness.js';
 import { makeRelease, publish } from './release-kit.js';
+import { StubS3 } from './stubs.js';
 
 /**
  * The custodian tool as a custodian runs it (`src/custodian/cli.ts` through tsx): every flag and file is checked
@@ -261,5 +262,47 @@ describe('vault-custodian release', () => {
         const right = await cli(['release', 'propose', '--version', '1.1.0', '--image', imageJson, '--same-custodians', '--api-bundle', bundle, '--out', path.join(dir, 'p-right'), ...feed]);
         expect(right.code).toBe(0);
         expect(parseManifest(readFileSync(path.join(dir, 'p-right', MANIFEST_ASSET), 'utf8'))).toMatchObject({ version: '1.1.0', imageHash: image.imageHash, image: { ukiSha256: image.ukiSha256, roothash: image.roothash } });
+    });
+
+    it('settings: a bad file goes nowhere; two custodians send the same file; backups lists both stores; watch --once says what it sees', async () => {
+        const { vault, feed } = await realTimeVault();
+        v = vault;
+        const g = await doGenesis(v);
+        const keys = v.custodians.map((c, i) => keyFile(`s${i}.json`, c));
+        const s3 = await new StubS3().start();
+        try {
+            const file = path.join(dir, 'settings.json');
+            writeFileSync(file, JSON.stringify({ v: 1, offsite: s3.settings() }));
+            const bad = path.join(dir, 'bad-settings.json');
+            writeFileSync(bad, JSON.stringify({ v: 1, alerts: { webhook: { url: 'http://hooks.example.org/x' } } }));
+            const refused = await cli(['settings', 'send', '--url', v.baseUrl, '--key', keys[0], '--file', bad, '--no-hardware-proof', ...feed]);
+            expect(refused.code).not.toBe(0);
+            expect(refused.out).toContain('must be https://');
+
+            const hash = await cli(['settings', 'hash', '--file', file]);
+            const local = /^([0-9a-f]{64}) /.exec(hash.out)?.[1];
+            expect(local).toBeTruthy();
+            const first = await cli(['settings', 'send', '--url', v.baseUrl, '--key', keys[0], '--file', file, '--no-hardware-proof', ...feed]);
+            expect(first.code).toBe(0);
+            expect(first.out).toContain('Waiting for a second custodian');
+            const second = await cli(['settings', 'send', '--url', v.baseUrl, '--key', keys[1], '--file', file, '--no-hardware-proof', ...feed]);
+            expect(second.code).toBe(0);
+            expect(second.out).toContain('"state":"in_force"');
+            expect(second.out).toContain('The vault took your file as it is (the same hash).');
+            expect(second.out).not.toContain(s3.secretAccessKey);
+
+            const name = await v.api.runBackup();
+            const listed = await cli(['backups', '--url', v.baseUrl, '--key', keys[2]]);
+            expect(listed.out).toContain(`on the vault (1): ${name}`);
+            expect(listed.out).toContain(`off the box (1): ${name}`);
+
+            const fine = await cli(['watch', '--url', v.baseUrl, '--ticket-key', g.ticketKey, '--once']);
+            expect(fine).toMatchObject({ code: 0, out: expect.stringMatching(/ open, report signed; fine/) });
+            await v.restartKeyholder();
+            const locked = await cli(['watch', '--url', v.baseUrl, '--ticket-key', g.ticketKey, '--once']);
+            expect(locked).toMatchObject({ code: 1, out: expect.stringMatching(/ locked; problems: locked/) });
+        } finally {
+            await s3.stop();
+        }
     });
 });

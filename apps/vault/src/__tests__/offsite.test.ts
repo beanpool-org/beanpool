@@ -107,6 +107,17 @@ describe('settings: two custodians', () => {
         for (const secret of [stub.secretAccessKey, stub.accessKeyId, stub.endpoint, stub.bucket]) expect(text).not.toContain(secret);
     });
 
+    it('kept across a restart of the API (a crash, a release): read back from the file, and backups still go off the box', async () => {
+        const v = await vault();
+        await doGenesis(v);
+        const stub = await s3();
+        const answers = await setSettings(v, { v: 1, offsite: { ...stub.settings(), prefix: undefined } });
+        await v.restartApi();
+        expect((await report(v)).body.settings).toMatchObject({ hash: (answers[1].body.hash as string).slice(0, 16), offsite: true });
+        const name = await v.api.runBackup();
+        expect([...stub.objects.keys()]).toEqual([name]);
+    });
+
     it('a key that is not a custodian, and settings that would send in the clear, are refused', async () => {
         const v = await vault();
         await doGenesis(v);

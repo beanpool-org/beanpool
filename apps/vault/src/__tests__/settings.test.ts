@@ -46,6 +46,18 @@ describe('operator settings', () => {
         expect(parseSettings({ v: 1, alerts: { email: { ...email, host: 'localhost' } } }).alerts?.email?.host).toBe('localhost');
     });
 
+    it('a parsed value reads back as itself (what the vault saves, it loads again after a restart)', () => {
+        for (const raw of [
+            { v: 1, offsite: { ...store, prefix: undefined, region: undefined }, alerts: { email: { ...email, username: undefined, password: undefined }, webhook: { url: 'https://ntfy.sh/t' } } },
+            { v: 1, offsite: store, alerts: { email: { ...email, port: 465 } } },
+            { v: 1 },
+        ]) {
+            const once = parseSettings(raw);
+            expect(parseSettings(JSON.parse(JSON.stringify(once)))).toEqual(once);
+            expect(settingsHash(parseSettings(JSON.parse(JSON.stringify(once))))).toBe(settingsHash(once));
+        }
+    });
+
     it('one hash whatever order the file is written in; any change, another hash', () => {
         const a = parseSettings({ v: 1, offsite: store, alerts: { email } });
         const b = parseSettings({ alerts: { email: Object.fromEntries(Object.entries(email).reverse()) }, offsite: Object.fromEntries(Object.entries(store).reverse()), v: 1 });

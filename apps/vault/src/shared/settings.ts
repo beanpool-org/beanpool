@@ -144,7 +144,8 @@ function parseOffsite(v: unknown): OffsiteS3 | null {
     if (u.pathname !== '/' || u.search) fail('offsite.endpoint is the store\'s address only (https://host[:port]), with no path.');
     const bucket = str(o, 'bucket', 'offsite', { max: 63 });
     if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) fail('offsite.bucket must be an S3 bucket name (3-63 lower-case letters, digits, dots, hyphens).');
-    const prefix = o.prefix === undefined || o.prefix === null ? '' : str(o, 'prefix', 'offsite', { max: 200 });
+    // '' is no prefix (how a parsed settings value holds it, so it reads back the same).
+    const prefix = o.prefix === undefined || o.prefix === null || o.prefix === '' ? '' : str(o, 'prefix', 'offsite', { max: 200 });
     // No '.' or '..' segment: a URL would fold `/bucket/../x/` into another bucket's path.
     if (prefix && (!/^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\/$/.test(prefix) || prefix.split('/').some(seg => seg === '.' || seg === '..'))) {
         fail('offsite.prefix must be like "vault/" or "a/b/" (letters, digits, . _ -, ending in /; no "." or ".." part).');

@@ -22,6 +22,8 @@ import {
     type ReleaseImage,
     type ReleaseManifest,
 } from '../shared/release.js';
+import type { AlertChannels, OperatorSettings } from '../shared/settings.js';
+import { parseSettings, settingsHash } from '../shared/settings.js';
 import { openKeyFile, sealKeyFile } from './keyfile.js';
 import {
     cancelPending,
@@ -30,15 +32,18 @@ import {
     custodianKey,
     fetchPendingShare,
     genesis,
+    listBackups,
     loadReleases,
     newCustodianKey,
     presentShare,
     restoreFromBackup,
+    sendSettings,
     type CallOptions,
     type CustodianCall,
     type CustodianKey,
     type ReleaseTrust,
 } from './lib.js';
+import { VaultWatcher } from './watch.js';
 
 /**
  * `vault-custodian`: a custodian's tool (key vault design §2, §3; host design §5.1 item 4).
@@ -52,6 +57,10 @@ import {
  *   vault-custodian fetch-share   --url <vault> --key <keyfile> --out <dir>
  *   vault-custodian confirm       --url <vault> --key <keyfile> --share <file>
  *   vault-custodian cancel        --url <vault> --key <keyfile> --pending <id>
+ *   vault-custodian settings hash --file <settings.json>
+ *   vault-custodian settings send --url <vault> --key <keyfile> --file <settings.json>  [checks]
+ *   vault-custodian backups       --url <vault> --key <keyfile>
+ *   vault-custodian watch         --url <vault> --ticket-key <hex> [--alerts <alerts.json>] [--every <seconds>] [--once]
  *   vault-custodian release status                                                  [feed]
  *   vault-custodian release propose --version <x.y.z> (--image <image.json> | --same-image) --api-bundle <file>
  *                                   (--custodian-keys <a,b,c> | --same-custodians) [--host-policy <file>] [--notes <text>]
@@ -67,6 +76,16 @@ import {
  * from source), and checks the vault's hello against the newest one: its image, then its host policy. On `none` it
  * says plainly that the host can read the vault's memory, and sends your part only when you type yes (or passed
  * `--no-hardware-proof`). A refused check sends nothing.
+ *
+ * `settings` are the vault's operator settings (shared/settings.ts: the off-box backup store, the alert channels): they
+ * take effect when two custodians have sent the same file. `settings hash` prints the hash the vault answers and
+ * reports, to check which settings are in force. `backups` lists what the vault's own store and the off-box store hold
+ * (the cold path: set the settings on a fresh vault, list, then `restore --backup <name>`, then two unlock).
+ *
+ * `watch` runs anywhere but the vault (custodian/watch.ts): every `--every` seconds (60) it looks at the vault and tells
+ * the channels in `--alerts` (`{"email": {...}, "webhook": {...}}`, as in the settings) when it is gone or locked for
+ * five minutes, its report isn't signed by `--ticket-key` (the key the apps pin) or isn't fresh, or the report says
+ * backups are failing. `--once` looks once, sends nothing, prints what it saw and exits 1 on any problem (for cron).
  *
  * Key files are sealed under a passphrase (keyfile.ts), asked for on the terminal, or taken from
  * VAULT_CUSTODIAN_PASSPHRASE. Every flag a command needs is checked, and every file it reads is read, before anything is
@@ -86,6 +105,10 @@ const COMMANDS: Record<string, { required: string[]; optional?: string[] }> = {
     'fetch-share': { required: ['--url', '--key', '--out'] },
     confirm: { required: ['--url', '--key', '--share'] },
     cancel: { required: ['--url', '--key', '--pending'] },
+    'settings hash': { required: ['--file'] },
+    'settings send': { required: ['--url', '--key', '--file'], optional: CHECK_FLAGS },
+    backups: { required: ['--url', '--key'] },
+    watch: { required: ['--url', '--ticket-key'], optional: ['--alerts', '--every'] },
     'release status': { required: [], optional: FEED_FLAGS },
     'release propose': { required: ['--version', '--api-bundle', '--out'], optional: [...FEED_FLAGS, '--image', '--custodian-keys', '--host-policy', '--notes'] },
     'release sign': { required: ['--dir', '--key'], optional: FEED_FLAGS },
@@ -323,10 +346,55 @@ async function release(sub: string, trust: ReleaseTrust): Promise<void> {
     console.log(`signed: ${validSigners(text, next, signers).length} of 2 signatures from the custodians who must sign it (${sigFile})`);
 }
 
+// ─── Settings and the watcher ────────────────────────────────────────────────────────────────
+
+/** A settings file, checked here before anything is sent (the vault checks it again). */
+function readSettings(file: string): OperatorSettings {
+    try {
+        return parseSettings(JSON.parse(readFileSync(file, 'utf8')));
+    } catch (e) {
+        return stop(`${file}: ${(e as Error).message}`);
+    }
+}
+
+async function watch(): Promise<void> {
+    const alertsFile = arg('--alerts');
+    let channels: AlertChannels | null = null;
+    if (alertsFile) {
+        try {
+            channels = parseSettings({ v: 1, alerts: JSON.parse(readFileSync(alertsFile, 'utf8')) }).alerts;
+        } catch (e) {
+            stop(`${alertsFile}: ${(e as Error).message}`);
+        }
+    }
+    const once = flag('--once');
+    const watcher = new VaultWatcher({ url: arg('--url') as string, ticketKey: arg('--ticket-key') as string, channels: once ? null : channels });
+    if (once) {
+        const look = await watcher.check();
+        const problems = [
+            ...(!look.reachable ? ['unreachable'] : look.state !== 'open' ? ['locked'] : !look.reportOk ? ['report'] : []),
+            ...look.problems.map(p => p.key),
+        ];
+        console.log(`${new Date(look.at).toISOString()} ${look.reachable ? look.state : 'unreachable'}${look.reportOk ? ', report signed' : ''}${problems.length ? `; problems: ${[...new Set(problems)].join(', ')}` : '; fine'}`);
+        for (const p of look.problems) console.log(`  ${p.key}: ${p.detail}`);
+        process.exit(problems.length ? 1 : 0);
+    }
+    if (!channels) console.error('warning: no --alerts file: problems are printed here and told to no one.');
+    const every = Math.max(10, Number(arg('--every') ?? 60)) * 1000;
+    let said = '';
+    for (;;) {
+        const look = await watcher.check().catch(e => ({ at: Date.now(), reachable: false, state: null, reportOk: false, problems: [{ key: 'unreachable', detail: (e as Error).message }] }));
+        const now = look.problems.map(p => `${p.key}: ${p.detail}`).join('; ');
+        if (now !== said) console.log(`${new Date(look.at).toISOString()} ${now || 'fine'}`);
+        said = now;
+        await new Promise(resolve => setTimeout(resolve, every));
+    }
+}
+
 // ─── Ceremonies ──────────────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-    const command = process.argv[2] === 'release' ? `release ${process.argv[3] ?? ''}` : process.argv[2];
+    const command = process.argv[2] === 'release' || process.argv[2] === 'settings' ? `${process.argv[2]} ${process.argv[3] ?? ''}` : process.argv[2];
     const spec = COMMANDS[command];
     if (!spec) stop(`usage: vault-custodian ${Object.keys(COMMANDS).join(' | ')} ...`);
     const missing = spec.required.filter(f => !arg(f));
@@ -348,6 +416,12 @@ async function main(): Promise<void> {
         return;
     }
     if (command.startsWith('release ')) return release(command.slice('release '.length), trustFromFlags());
+    if (command === 'settings hash') {
+        const settings = readSettings(arg('--file') as string);
+        console.log(`${settingsHash(settings)}  (the vault reports the first 16: ${settingsHash(settings).slice(0, 16)})`);
+        return;
+    }
+    if (command === 'watch') return watch();
 
     // Everything read and checked here, before the first request.
     const url = arg('--url') as string;
@@ -376,6 +450,30 @@ async function main(): Promise<void> {
 
     let result: CustodianCall;
     let confirmed: CustodianCall | null = null;
+    if (command === 'settings send') {
+        const file = arg('--file') as string;
+        const local = settingsHash(readSettings(file));
+        result = await sendSettings(url, key, JSON.parse(readFileSync(file, 'utf8')), opts);
+        print(result);
+        if (result.status === 200) {
+            console.log(result.body.hash === local ? 'The vault took your file as it is (the same hash).' : `The vault's hash is not your file's (${local.slice(0, 16)}): check the file.`);
+            if (result.body.state === 'waiting') console.log('Waiting for a second custodian to send the same file (within an hour).');
+        }
+        if (result.status !== 200 || result.body.hash !== local) process.exit(1);
+        return;
+    }
+    if (command === 'backups') {
+        result = await listBackups(url, key);
+        if (result.status === 200) {
+            const b = result.body as { local: string[]; offsite: string[] | null; offsiteError: string | null };
+            console.log(`on the vault (${b.local.length}): ${b.local.slice(-5).join(' ') || 'none'}${b.local.length > 5 ? ' …' : ''}`);
+            console.log(b.offsite ? `off the box (${b.offsite.length}): ${b.offsite.slice(-5).join(' ') || 'none'}${b.offsite.length > 5 ? ' …' : ''}`
+                : `off the box: ${b.offsiteError ? `can't be listed (${b.offsiteError})` : 'no store set'}`);
+            return;
+        }
+        print(result);
+        process.exit(1);
+    }
     if (command === 'genesis') {
         result = await genesis(url, key, opts);
         if (result.status === 200) confirmed = await keep(result.body.custodianShares as CustodianShare[]);

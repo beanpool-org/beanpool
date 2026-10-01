@@ -52,6 +52,7 @@ import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } f
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
+import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
@@ -1064,8 +1065,8 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
             ? {
                 success: true,
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true };
     } catch (e: any) {
@@ -1452,8 +1453,8 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                 success: true,
                 message: 'Report actioned successfully',
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {

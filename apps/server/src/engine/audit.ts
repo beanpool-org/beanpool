@@ -45,10 +45,23 @@ export type { ReplicaConsistency, AuditSyncPayload };
  *
  * Throws on a standby (config/node-role.ts), as persistDecayEvents does: every caller is a move a standby refuses first,
  * or the flush below, which returns before it, so reaching either there is a path that missed the rule.
+ *
+ * Throws, too, when the pot in memory is not a finite number, and writes nothing (decide N1 on #1379, 2026-10-02). The
+ * column is NOT NULL, but this write is an INSERT OR REPLACE, and SQLite's REPLACE puts the column DEFAULT (0) in place
+ * of the NULL that better-sqlite3 binds for NaN: the pot would be stored as 0 with no error. Every primitive that moves
+ * the pot already refuses a non-finite amount, so this is the last line, not the first. Inside a conservingTransaction
+ * the throw rolls the move back; the timer and the audit log it.
  */
 export function persistCommonsBalance(): void {
     assertLedgerWritable();
+    assertCommonsPotFinite();
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
+}
+
+function assertCommonsPotFinite(): void {
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        throw new Error(`The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written`);
+    }
 }
 
 /**
@@ -102,6 +115,9 @@ export function persistDecayEvents(): void {
  */
 export function persistDecayAndCommons(): void {
     if (getNodeRole() === 'backup') return;
+    // Before the decay queue is drained: a refusal inside the transaction would roll its rows back after they had left
+    // the queue, and they would never be written.
+    assertCommonsPotFinite();
     db.transaction(() => {
         persistDecayEvents();
         persistCommonsBalance();

@@ -29,7 +29,8 @@ import {
     passesReadGate,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
+import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -481,7 +482,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (statusOf(treasury) !== 'active') {
+        // An enterprise that reached its goal is not closed: it says so in the words pledgeToProject uses, on the door both
+        // apps pledge through (#1374 NB, 2026-10-02). Nothing has moved either way.
+        const enterpriseStatus = statusOf(treasury);
+        if (enterpriseStatus === 'funded') {
+            ctx.status = 400;
+            ctx.body = { error: PROJECT_FUNDED_NO_PLEDGES_ERROR };
+            return;
+        }
+        if (enterpriseStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
@@ -856,8 +865,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const { transactionId, finalHours, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
-        const rawHours = finalHours !== undefined ? finalHours : hours;
-        const parsedHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+        // As on the marketplace's completion: a quantity the engine can't read is refused there, not dropped here.
+        const parsedHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
         try {
             const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }

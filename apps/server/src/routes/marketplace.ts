@@ -33,6 +33,7 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
+import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
@@ -888,8 +889,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const actor = ctx.state?.actor as string | undefined;
-        const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = acceptPost(postId, buyerPublicKey, parsedHours, actor ? { authSigner: actor } : undefined);
+        const tx = acceptPost(postId, buyerPublicKey, dealQuantityFromBody(hours), actor ? { authSigner: actor } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -909,8 +909,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
-        const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = requestPost(postId, buyerPublicKey, parsedHours);
+        const tx = requestPost(postId, buyerPublicKey, dealQuantityFromBody(hours));
         if (!tx) throw new Error('Cannot request — post not found or unauthorized');
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
@@ -993,8 +992,8 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
     }
     if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
     if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
-    const rawHours = finalHours !== undefined ? finalHours : hours;
-    const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+    // A quantity the engine can't read is refused there, not dropped here (engine/post-fields.ts dealQuantityFromBody).
+    const parsedFinalHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
     try {
         const actor = ctx.state?.actor as string;
         const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });

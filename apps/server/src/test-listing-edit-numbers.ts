@@ -244,6 +244,7 @@ async function main() {
     check(rqRej.ok && txStatus(rq.id) === 'rejected', `and declining it clears it (${rqRej.ok ? txStatus(rq.id) : rqRej.error})`);
 
     const dealListing = createPost('offer', 'food', 'Kale', 'Kale', 6, 'fixed', seller)!;
+    const buyerBeforeKale = getBalance(buyer).balance;
     const dq = requestPost(dealListing.id, buyer);
     approvePostRequest(dq.id, seller);
     db.prepare(`UPDATE marketplace_transactions SET credits = 'abc' WHERE id = ?`).run(dq.id);
@@ -259,6 +260,15 @@ async function main() {
     const dAdmin = attempt(() => adminDeletePost(dealListing.id));
     check(dAdmin.ok && dAdmin.value === true && txStatus(dq.id) === 'cancelled',
         `a moderator removing the listing closes the deal (${dAdmin.ok ? `${dAdmin.value}, ${txStatus(dq.id)}` : dAdmin.error})`);
+    // Where the 6 Beans end up (sync check F1, 2026-10-02): Math.min('abc', 6) is NaN, so the removal used to refund
+    // nothing and leave them in the escrow of a cancelled deal, which nothing else can reach.
+    const kaleEscrow = `escrow_${dq.id}`;
+    const kaleEscrowRow = (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(kaleEscrow) as any)?.balance;
+    check(Math.abs(getBalance(buyer).balance - buyerBeforeKale) < 1e-9 && getBalance(kaleEscrow).balance === 0 && kaleEscrowRow === 0,
+        `and the buyer gets the 6 Beans its escrow held back (buyer ${buyerBeforeKale} → ${getBalance(buyer).balance}, escrow ${getBalance(kaleEscrow).balance}, row ${kaleEscrowRow})`);
+    const liveAudit = runConservationCheck(db as any) as ReturnType<typeof runConservationCheck> & { badBalances?: number };
+    check(liveAudit.strandedEscrows === 0 && (liveAudit.badBalances ?? 0) === 0,
+        `nothing is left stranded in an escrow on the live ledger (${JSON.stringify(liveAudit)})`);
 
     const s3end = ledgerState(everyone);
     check(s3end.bad === 0 && s3end.memoryFinite && Math.abs(s3end.total - s3.total) < 1e-9,

@@ -202,6 +202,8 @@ interface Journal {
         // the result can say which failed: an all-zero or empty copy adds up. Both are absent from a journal written before.
         audit: {
             ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** Balances that are not a finite number; absent from a journal written before (decide N3, 2026-10-02). */
+            badBalances?: number;
             copy?: NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy'] | null;
         } | null;
         announcement: string | null;
@@ -1100,6 +1102,7 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
         const r = promotionSanityCheck();
         const record = {
             at: new Date().toISOString(), ok: r.ok && copy.match, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows,
+            badBalances: r.badBalances,
             copy: {
                 match: copy.match,
                 here: { accounts: copy.here.accounts, holdings: copy.here.holdings },
@@ -1112,10 +1115,17 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
     }
     const recorded = getLocalConfig().lastPromotionAudit;
     if (j && j.steps.restart && !j.steps.audit && recorded) {
-        const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0;
-        j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows, addsUp: adds, copy: recorded.copy ?? null };
+        // A balance that is not a finite number is the conservation check failing too (engine audit.ts), so it is counted
+        // here and named, as the boot log names it: a promotion that failed only for such rows read "adds up" (N3).
+        const badBalances = recorded.badBalances ?? 0;
+        const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0 && badBalances === 0;
+        j.result.audit = {
+            ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows, addsUp: adds,
+            ...(recorded.badBalances === undefined ? {} : { badBalances }), copy: recorded.copy ?? null,
+        };
         const troubles = [
-            ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s))`]),
+            ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s)`
+                + `${badBalances > 0 ? `, ${badBalances} balance(s) that are not a finite number` : ''})`]),
             ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),
         ];
         mark(j, 'audit', recorded.ok

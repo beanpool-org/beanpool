@@ -87,6 +87,7 @@ export const SUITES = [
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',
+    'test-money-followups',
     'test-admin-password-query',
     'test-cors-policy',
     'test-gateway-config',

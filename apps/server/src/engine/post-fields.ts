@@ -38,6 +38,22 @@ export function isDealQuantity(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= POST_HOURS_MAX;
 }
 
+/** The refusal for a quantity that is given but isn't one (isDealQuantity), at a door where a fixed price ignores it. */
+export const DEAL_QUANTITY_ERROR = `The quantity must be a number above 0, at most ${POST_HOURS_MAX}`;
+
+/**
+ * A deal quantity as a request body carries it, for the escrow doors to judge (sync check F3, 2026-10-02): undefined when
+ * none is given (absent or null); a number as it is; a numeric string as its number (`Number("2.5")`). Anything else —
+ * text that isn't a number, "", true, [2], an object — is NaN, which every door refuses. The routes used to drop a
+ * quantity they couldn't read and pay the booked hours, and `Number(true)` read as 1.
+ */
+export function dealQuantityFromBody(raw: unknown): number | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string' && raw.trim() !== '') return Number(raw);
+    return NaN;
+}
+
 /** A listing's price in Beans: a finite number, 0 or more, at most POST_CREDITS_MAX. */
 export function isListingPrice(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= POST_CREDITS_MAX;

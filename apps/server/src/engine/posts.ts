@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -1305,15 +1305,26 @@ type ConservingTxnFn = <T>(fn: () => T) => T;
  * whole when the post was removed. Reported rather than swallowed: the shortfall is a real discrepancy
  * between the deal rows and the ledger, and the only honest thing to do is refund what is actually there
  * and say so. See `ESCROW_FLOOR` in @beanpool/core for how the node got into that state.
+ *
+ * Also reported, with `owed: null`, for a trade row that holds no valid amount (text struck from a listing priced
+ * "abc" before #1379): nobody can say what it owed, so the buyer gets everything its escrow held and the moderator is
+ * told (describeRefundShortfall).
  */
 export interface EscrowRefundShortfall {
     transactionId: string;
     postId: string;
     buyerPubkey: string;
-    /** What the trade row said the buyer paid in. */
-    owed: number;
+    /** What the trade row said the buyer paid in; null when the row holds no valid amount of Beans. */
+    owed: number | null;
     /** What the escrow actually held, and therefore all that could be returned. */
     refunded: number;
+}
+
+/** A shortfall in words, for the moderator who made the removal. */
+export function describeRefundShortfall(s: EscrowRefundShortfall): string {
+    return s.owed === null
+        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${s.refunded}`
+        : `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`;
 }
 
 /** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */
@@ -1354,21 +1365,29 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                 // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
                 // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
                 // ever recorded against it. A removal is a tidy-up; it must never create Beans.
-                const held = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : tx.credits;
-                const refund = Math.max(0, Math.min(tx.credits, held));
+                //
+                // Every figure here is a number of Beans or treated as none (isBeanAmount). A row holding text ("abc",
+                // struck before #1379) made Math.min NaN, so `refund > 0` was false and nothing went back: the buyer's
+                // Beans stayed in an escrow of a cancelled deal, which nothing else can reach (sync check F1,
+                // 2026-10-02). Nobody can say what such a row owed, so its buyer gets everything the escrow holds. An
+                // escrow that isn't a number of Beans itself (NaN, NULL, below 0) gives back nothing.
+                const owed = isBeanAmount(tx.credits) ? tx.credits : null;
+                const rawHeld = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : owed ?? 0;
+                const held = isBeanAmount(rawHeld) ? rawHeld : 0;
+                const refund = owed === null ? held : Math.min(owed, held);
                 if (refund > 0) {
                     const refunded = transferFn(escrowAccount, tx.buyer_pubkey, refund, `Escrow refund for removed post`, 'escrow', true);
                     // Inside the caller's conservingTransaction, so this unwinds the whole removal rather
                     // than leaving a cancelled trade beside an escrow that never paid out.
                     if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
                 }
-                if (refund < tx.credits) {
-                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${tx.credits}, escrow held ${held}, refunded ${refund}`);
+                if (owed === null || refund < owed) {
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.credits)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
                     hooks?.onRefundShortfall?.({
                         transactionId: tx.id,
                         postId,
                         buyerPubkey: tx.buyer_pubkey,
-                        owed: tx.credits,
+                        owed,
                         refunded: refund,
                     });
                 }

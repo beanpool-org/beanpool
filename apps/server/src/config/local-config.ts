@@ -98,6 +98,8 @@ export interface LocalConfig {
     // has no record of one). `ok` needs both.
     lastPromotionAudit?: {
         at: string; ok: boolean; sumBalances: number; drift: number; strandedEscrows: number;
+        // Balances that are not a finite number (engine audit.ts BROKEN_BALANCE_SQL). Absent from a record written before.
+        badBalances?: number;
         copy?: { match: boolean; here: { accounts: number; holdings: number }; lastCopy: { accounts: number; holdings: number; generatedAt: string | null } | null };
     } | null;
     // The recovery code a take-over was opened with. While recoveryCode is still that code, Settings says "Your

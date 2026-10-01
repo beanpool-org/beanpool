@@ -251,6 +251,7 @@ export const SUITES = [
     'test-message-attachment',
     'test-social-ratings',
     'test-app-store-versions',
+    'test-app-floors',
     'test-node-profile',
     'test-profile-feature-gate',
     'test-global-no-beans',

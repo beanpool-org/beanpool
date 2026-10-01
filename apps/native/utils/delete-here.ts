@@ -24,6 +24,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from './account-leaves-phone';
 import { communityName } from './community-name';
+import { communitySwitched } from './community-switch';
 import { fetchMembership } from './membership-probe';
 import type { BeanPoolIdentity } from './identity';
 import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
@@ -340,6 +341,8 @@ export async function deleteAccountHere(
             await leaveThisCommunity(plan.here, plan.next.url);
             const { initDB } = await import('./db');
             await initDB();
+            // The phone is on the next community: the update screen asks it (utils/community-switch.ts).
+            communitySwitched();
         } catch (e) {
             return { kind: 'left-unfinished', reason: reasonOf(e) };
         }

@@ -36,3 +36,23 @@ export function isVersionOlder(local: string, required: string): boolean {
     }
     return false;
 }
+
+/**
+ * Whether this open page is older than the server it came from: the web app's whole update rule.
+ *
+ * The web app has no store, no floor and no block. It is the server's own copy, fetched fresh on every page load (no
+ * service worker keeps an old one: vite.config.ts `selfDestroying`), so a page loaded today is already the server's
+ * version. Only a tab left open across a server upgrade can be behind, and reloading it fixes that. So the page compares
+ * itself with the server's own `version` from /api/community/health and, when it is older, offers a reload. It never
+ * reads the phone app's floors (`minAppVersion`, `appFloors`): those count the phone app's versions, which are not the
+ * web app's, and a reload could never meet them.
+ *
+ * `detached`: the page talks to a server other than the one that served it (Settings' node address). A reload brings
+ * back the copy that served it, not that server's, so it says nothing then. Unparseable versions say nothing either.
+ */
+export function webAppBehindServer(pageVersion: string, health: { version?: unknown } | null | undefined, detached: boolean): string | null {
+    if (detached) return null;
+    const server = normaliseVersion(health?.version);
+    if (!server) return null;
+    return isVersionOlder(pageVersion, server) ? server : null;
+}

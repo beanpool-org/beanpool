@@ -229,6 +229,9 @@ describe('the phone\'s community address is written only after the plain-address
         // Delete account, while another saved community keeps the key: the phone moves there (the plan only picks plain
         // saved addresses; this is the write's own check).
         'utils/delete-here.ts leaveThisCommunity': /assertPlainNodeAddress\(next\);[\s\S]*storage\.setItem\(ANCHOR_STORE_KEY, next\)/,
+        // The full-screen "Update required"'s "Use another community": a saved community (only plain ones are offered;
+        // this is the write's own check).
+        'utils/update-block-escape.ts switchFromUpdateBlock': /assertPlainNodeAddress\(url\);[\s\S]*deps\.storage\.setItem\(ANCHOR_STORE_KEY, url\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {

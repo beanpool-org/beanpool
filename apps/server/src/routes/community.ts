@@ -32,7 +32,7 @@ import {
     getMembersVersion,
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
-    isLiveVisitor, getActingMember, mayBringSomeoneIn,
+    isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
@@ -76,6 +76,7 @@ import { avatarKeysRequired } from '../engine/avatar-keys.js';
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
+import { doorRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
@@ -84,6 +85,17 @@ import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
+
+/**
+ * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
+ * member yet), in the member table's spelling; else null.
+ */
+function joiningAtOpenDoor(ctx: any): string | null {
+    const signer = ctx.state?.actor as string | undefined;
+    if (!signer || !getProfileSwitches().openJoin) return null;
+    const key = signer.toLowerCase();
+    return /^[0-9a-f]{64}$/.test(key) && !alreadyJoined(key) ? key : null;
+}
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -2078,7 +2090,11 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    if (!rateLimit(ctx)) return; // throttle enumeration, same as recovery lookup
+    // Throttle enumeration, same as recovery lookup. A key joining through the open door, signing its own name check,
+    // counts against the door's limiter instead (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the
+    // auth limiter's 15 a minute per address on names alone.
+    const joining = joiningAtOpenDoor(ctx);
+    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx))) return;
     const raw = (ctx.params.callsign || '').trim();
     const exclude = (ctx.query.exclude as string | undefined) || undefined;
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);

@@ -274,6 +274,100 @@ describe('TakeoverPanel', () => {
         expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
     });
 
+    it('a take-over that stopped and was rolled back: says the standby is as it was, and offers to take over again', async () => {
+        stubFetch({
+            '/api/local/admin/takeover/progress': () => ({
+                status: 200,
+                body: progress('failed', 3, {
+                    error: { step: 'roles', label: "Brought back the community's owners and admins", message: 'the database refused this role' },
+                    rolledBack: { at: '2026-09-20T01:00:05.000Z', detail: "put back this standby's own keys, links, settings, roles and web address" },
+                }),
+            }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+        expect(await screen.findByText(/nothing of it was kept: this server is the standby it was/)).toBeInTheDocument();
+        expect(screen.getByRole('alert').textContent).toContain('the database refused this role');
+        expect(screen.queryByText(/It is tried again from the same step when the server restarts/)).toBeNull();
+        expect(screen.getByRole('button', { name: 'Take over as the main server' })).toBeInTheDocument();
+    });
+
+    it('a roll-back under way says so, and offers nothing to start', async () => {
+        stubFetch({ '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('rolling-back', 3) }) });
+        render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+        expect(await screen.findByText(/putting itself back as the standby it was; if that does not finish, restart it/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
+    });
+
+    it('a roll-back that stopped says why; one whose undo copy is gone never says "restart" or "put back"', async () => {
+        const why = "the copy of this standby's own files from before the take-over, data/pre-takeover-x, is gone, so nothing was put back and nothing was deleted.";
+        for (const [stopped, headline] of [
+            [{ at: '2026-09-20T01:00:05.000Z', why: 'local-config.json could not be written (nodeRole not put back)' }, /if that does not finish, restart it/],
+            [{ at: '2026-09-20T01:00:05.000Z', why, undoCopyMissing: true }, /cannot put itself back as the standby it was by itself/],
+        ] as const) {
+            stubFetch({ '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('rolling-back', 4, { rollBackStopped: stopped }) }) });
+            const { unmount, container } = render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+            expect(await screen.findByText(headline)).toBeInTheDocument();
+            expect(container.querySelector('#takeover-rollback-stopped')?.textContent).toContain(stopped.why);
+            if ('undoCopyMissing' in stopped) {
+                expect(screen.queryByText(/restart it\./)).toBeNull();
+                expect(screen.queryByText(/nothing of it was kept/)).toBeNull();
+            }
+            expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
+            unmount();
+        }
+    });
+
+    it('a confirm that stops and rolls back, or finds another server took over: the reason, and back to the start', async () => {
+        for (const answer of [
+            { status: 500, body: { error: 'The take-over stopped at "Brought back the community\'s owners and admins": disk full. Nothing of it was kept.', failedStep: 'roles', rolledBack: true } },
+            { status: 409, body: { error: 'Another server already took over this community with these keys on 2026-09-20 01:00:00 UTC.', alreadyTakenOver: true } },
+        ]) {
+            let progressCalls = 0;
+            stubFetch({
+                '/api/local/admin/takeover/progress': () => { progressCalls++; return { status: 200, body: progress('none') }; },
+                '/api/local/admin/takeover/open': () => ({ status: 200, body: { success: true, preview: PREVIEW } }),
+                '/api/local/admin/takeover/confirm': () => answer,
+            });
+            const { unmount } = render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+            fireEvent.click(await screen.findByRole('button', { name: 'Take over as the main server' }));
+            fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'I understand, continue' }));
+            fireEvent.change(screen.getByLabelText(/The recovery code on the paper/), { target: { value: 'BPRC-1 RIGHT' } });
+            fireEvent.click(screen.getByRole('button', { name: 'Open the keys' }));
+            await screen.findByText(/Identity kept:/);
+            fireEvent.click(screen.getByLabelText(/The main server is gone, and nobody will start it again/));
+            const before = progressCalls;
+            fireEvent.click(screen.getByRole('button', { name: 'Take over now' }));
+            expect(await screen.findByText(answer.body.error)).toBeInTheDocument();
+            const dialog = screen.getByRole('dialog');
+            expect(within(dialog).getByText('Take over as the main server?')).toBeInTheDocument();
+            expect(within(dialog).queryByRole('button', { name: 'Take over now' })).toBeNull();
+            await waitFor(() => expect(progressCalls).toBeGreaterThan(before));
+            unmount();
+        }
+    });
+
+    it('the later of two standbys that took over with the same keys says so: read-only, and what to do', async () => {
+        stubFetch({
+            '/api/local/admin/takeover/progress': () => ({
+                status: 200,
+                body: {
+                    ...progress('complete', STEPS.length - 1), role: 'primary', codeUsed: null,
+                    replaced: {
+                        epoch: 1, ownEpoch: 1, since: '2026-09-20T01:00:00.000Z', detectedAt: '2026-09-20T02:00:00.000Z',
+                        url: 'https://riverbend.beanpool.org/api/node/identity-epoch', conflict: true, ownSince: '2026-09-20T01:05:00.000Z',
+                        message: 'Another server took over this community with the same keys on 2026-09-20 01:00:00 UTC, before this server did (2026-09-20 01:05:00 UTC). This server is now read-only.',
+                    },
+                },
+            }),
+        });
+        render(<TakeoverPanel activeNode={node} isStandby={false} pollMs={60_000} />);
+        const alert = await screen.findByText(/Another server took over this community with the same keys on 2026-09-20 01:00:00 UTC, before this server did/);
+        const box = alert.closest('#takeover-replaced') as HTMLElement;
+        expect(box.textContent).toContain('Two standbys took over this community with the same locked keys, and the other one did it first');
+        expect(box.textContent).toContain('Stop this server');
+        expect(box.textContent).not.toContain('identity epoch 1; this server is at 1');
+    });
+
     it('the explanation still lists what will be missing when the progress call failed', async () => {
         stubFetch({ '/api/local/admin/takeover/progress': () => 'network' });
         render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);

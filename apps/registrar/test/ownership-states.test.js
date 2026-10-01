@@ -1402,6 +1402,7 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         assert.equal(snapshot(), before);
         w.sqlite.exec(migration('0003_decision_seq.sql'));   // the Worker below reads 0003's column
         w.sqlite.exec(migration('0004_teardown.sql'));       // … and may write 0004's table
+        w.sqlite.exec(migration('0007_content_swap.sql'));   // … and 0007's column
 
         // And the Worker on top: the victim's own node heals it (today's nodes do so with a claim) on a fresh
         // tunnel; the taker's key cannot have it; the taker keeps `test`.
@@ -1533,7 +1534,7 @@ test('race: two heals from one key, the second landing just before the first goe
         // The node has no token for the fresh tunnel yet, so the second heal's re-attest fails.
         w.nodes[`${name}.beanpool.org`] = unreachableTunnel;
         let second;
-        w.beforeRun(/^UPDATE name_allocations SET status=\?, pause_reason=\?, paused_at=\?, attest_fails=\? WHERE/, async () => { second = await w.heal(owner); });
+        w.beforeRun(/^UPDATE name_allocations SET status=\?, pause_reason=\?, paused_at=\?, attest_fails=\?, swap_fails=\? WHERE/, async () => { second = await w.heal(owner); });
         const first = await w.claim(owner, { name });
         assert.ok(second, 'the second heal landed');
         const why = `first ${first.status} ${JSON.stringify(first.body)}; second ${second.status} ${JSON.stringify(second.body)}`;

@@ -20,15 +20,19 @@
  *      lookup hash is the node's, from the verified sub, and the stored blob opens with it; a malformed
  *      recovery body, or a two-layer split with no hub fragment, is refused before the nonce is spent; a device
  *      collecting that keeper gets the same `clientIds` with its nonce
- *   7. sign-ups per address: 5 an hour and 20 a day → 429 without spending the nonce; the address hash is
- *      cleared once a day old, by the next join or by the timer when nobody joins; the auth limiter still applies
+ *   7. sign-ups per address (the two-doors design §4): no work at the sign-in door under 30 joins an hour from the
+ *      address, and a join with none at 30 → 400 work_required with the nonce unspent, then the same nonce joins with the
+ *      work; the ceilings, 1,000 sign-in joins an hour and 5,000 a day → 429 network_busy with Retry-After, without
+ *      spending the nonce; the address hash is cleared once a day old, by the next join or by the timer when nobody
+ *      joins; the door's own limiter (20 a minute per key) covers the door in place of the auth limiter
  *   8. deleting your own account frees the sign-in account; one deleted while suspended, or a member the community
  *      removed, stays used (403)
  *   8b. a member re-keyed onto a new device keeps their sign-in account: deleting the new identity frees it, a
  *      community removal keeps it used (403, not 409); the replaced key is refused at the door (403, never a
  *      500), and a failure inside the join is an answer, not a 500 that names tables
  *   8c. deleting an account does not give its sign-up back to the address: join → delete → join again with the
- *      same sign-in is refused (429) past the hourly limit, and the sweep still clears those addresses
+ *      same sign-in still counts, and the address's 1,000th join an hour is refused (429) with those deleted ones among
+ *      them; the sweep still clears those addresses
  *   9. the door is read per request: back to local, the routes 404 again
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join.ts
@@ -50,7 +54,10 @@ import { _resetJwksCacheForTests, _clearNoncesForTests, ssoLookupHash, issueNonc
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { getFunnel } from './engine/funnel.js';
-import { OPEN_JOIN_LIMITS, startForgettingJoinAddresses, forgetOldJoinAddresses, openJoinHash, registerOpenJoin } from './engine/open-join.js';
+import { startForgettingJoinAddresses, forgetOldJoinAddresses, openJoinHash, registerOpenJoin } from './engine/open-join.js';
+import { DOOR_NUMBERS } from './engine/door-signal.js';
+import { DOOR_RATE_LIMIT } from './auth-rate-limit.js';
+import { solveDoorWorkSync } from '@beanpool/core';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { openShareRow } from './engine/recovery-shares.js';
 import { isNodeWrapped } from './services/recovery-seal-key.js';
@@ -120,7 +127,7 @@ function freshLimiters(): void {
     pruneAuthAttempts(Date.now() + 120_000);
     resetGatewayRateLimit();
 }
-/** Set only by the block that tests the auth limiter itself. */
+/** Set only by the block that tests the door's limiter itself. */
 let holdLimiters = false;
 
 async function call(id: Id | null, path: string, body: unknown): Promise<{ status: number; body: any }> {
@@ -405,32 +412,62 @@ async function main(): Promise<void> {
     assert([bea, dee, eve].every(id => joinRow(id.pk).ip_hash === ipHash), 'joins from one address share one address hash');
     const insertFake = db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)');
     const fakes: string[] = [];
-    const addFakes = (count: number, at: Date) => {
+    const addFakes = (count: number, at: Date) => db.transaction(() => {
         for (let i = 0; i < count; i++) {
             const pk = crypto.randomBytes(32).toString('hex');
             fakes.push(pk);
             insertFake.run(pk, 'google', crypto.randomBytes(32).toString('base64url'), at.toISOString(), ipHash);
         }
-    };
-    const recentFromHere = () => (db.prepare('SELECT COUNT(*) AS n FROM open_joins WHERE ip_hash = ?').get(ipHash) as any).n as number;
-    addFakes(OPEN_JOIN_LIMITS.perHour - recentFromHere(), new Date());
+    })();
+    // Joins from this address in the last day: the longest window the door's signal reads. (A newcomer the community
+    // removed keeps their hash longer, section 8c, but past the day they count for no window.)
+    const recentFromHere = () => (db.prepare('SELECT COUNT(*) AS n FROM open_joins WHERE ip_hash = ? AND joined_at >= ?')
+        .get(ipHash, new Date(Date.now() - 24 * 3600_000).toISOString()) as any).n as number;
+    const NUMBERS = DOOR_NUMBERS.global;
+
+    // No work at the sign-in door at ordinary rates: today's apps send none, and need none.
+    addFakes(NUMBERS.signInWorkFrom - 2 - recentFromHere(), new Date());
+    const gil = newId();
+    const quiet = await call(gil, '/api/join/work', { door: 'sign-in' });
+    assert(quiet.status === 200 && quiet.body?.work === null && quiet.body?.turnstile === null,
+        `the ${NUMBERS.signInWorkFrom - 1}th join from one address in the hour: the sign-in door asks no work (got ${quiet.status} ${JSON.stringify(quiet.body)})`);
+    addFakes(1, new Date());
+    const busy = await call(gil, '/api/join/work', { door: 'sign-in' });
+    assert(busy.status === 200 && busy.body?.work?.level === 0 && typeof busy.body?.work?.challenge === 'string',
+        `the ${NUMBERS.signInWorkFrom}th asks some, at level 0 (got ${busy.status} ${JSON.stringify(busy.body)})`);
+    const gilNonce = await joinNonce(gil);
+    const gilToken = mint('google', { sub: 'gil-google-sub', nonce: gilNonce });
+    const gilBare = await join(gil, { callsign: 'Gil', provider: 'google', idToken: gilToken, nonce: gilNonce });
+    assert(gilBare.status === 400 && gilBare.body?.code === 'work_required' && /update the BeanPool app/.test(String(gilBare.body?.error)) && !memberRow(gil.pk),
+        `a sign-in join with no work there (an app from before it) → 400 work_required, saying to update the app (got ${gilBare.status} ${JSON.stringify(gilBare.body)})`);
+    const gilWork = { challenge: busy.body.work.challenge, counters: solveDoorWorkSync(busy.body.work.challenge) };
+    const gilJoins = await join(gil, { callsign: 'Gil', provider: 'google', idToken: gilToken, nonce: gilNonce, work: gilWork });
+    assert(gilJoins.status === 200 && memberRow(gil.pk)?.invited_by === 'open:google',
+        `...and the same nonce, unspent, joins with the work (got ${gilJoins.status} ${JSON.stringify(gilJoins.body)})`);
+
+    // The ceilings: the only refusals left for a network at the sign-in door.
+    addFakes(NUMBERS.signInPerHour - recentFromHere(), new Date());
     const fay = newId();
     const fayNonce = await joinNonce(fay);
     const fayToken = mint('google', { sub: 'fay-google-sub', nonce: fayNonce });
-    const hourly = await join(fay, { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
-    assert(hourly.status === 429 && hourly.body?.code === 'rate_limited' && /last hour/.test(String(hourly.body?.error)),
-        `one join over ${OPEN_JOIN_LIMITS.perHour} from one address in an hour → 429 (got ${hourly.status} ${JSON.stringify(hourly.body)})`);
+    const hourly = await call(fay, '/api/join', { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
+    assert(hourly.status === 429 && hourly.body?.code === 'network_busy' && /last hour/.test(String(hourly.body?.error))
+        && hourly.body?.retryAfterSeconds > 0 && hourly.body?.retryAfterSeconds <= 3600,
+        `one join over ${NUMBERS.signInPerHour} from one address in an hour → 429 network_busy, with when to try again (got ${hourly.status} ${JSON.stringify(hourly.body)})`);
     assert(!memberRow(fay.pk), '...and did not join');
+    const fayWork = await call(fay, '/api/join/work', { door: 'sign-in' });
+    assert(fayWork.status === 429 && fayWork.body?.code === 'network_busy',
+        `and the work route says so first, before the phone does any (got ${fayWork.status} ${JSON.stringify(fayWork.body)})`);
 
     const twoHoursAgo = new Date(Date.now() - 2 * 3600_000).toISOString();
     db.prepare('UPDATE open_joins SET joined_at = ? WHERE ip_hash = ?').run(twoHoursAgo, ipHash);
-    addFakes(OPEN_JOIN_LIMITS.perDay - recentFromHere(), new Date(Date.now() - 3 * 3600_000));
+    addFakes(NUMBERS.signInPerDay - recentFromHere(), new Date(Date.now() - 3 * 3600_000));
     const daily = await join(fay, { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
-    assert(daily.status === 429 && /today/.test(String(daily.body?.error)),
-        `one join over ${OPEN_JOIN_LIMITS.perDay} from one address in a day → 429 (got ${daily.status} ${JSON.stringify(daily.body)})`);
+    assert(daily.status === 429 && daily.body?.code === 'network_busy' && /today/.test(String(daily.body?.error)),
+        `one join over ${NUMBERS.signInPerDay} from one address in a day → 429 (got ${daily.status} ${JSON.stringify(daily.body)})`);
     // Both windows full at once: the day is the one to wait out, so that is the one named. Told "the last hour",
     // they would retry in an hour and be refused again for the day.
-    addFakes(OPEN_JOIN_LIMITS.perHour, new Date());
+    addFakes(NUMBERS.signInPerHour, new Date());
     const hourAndDay = await join(fay, { callsign: 'Fay', provider: 'google', idToken: fayToken, nonce: fayNonce });
     assert(hourAndDay.status === 429 && /today/.test(String(hourAndDay.body?.error)) && !/last hour/.test(String(hourAndDay.body?.error)),
         `the hour and the day both used up → the refusal names the day (got ${hourAndDay.status} ${JSON.stringify(hourAndDay.body)})`);
@@ -460,8 +497,8 @@ async function main(): Promise<void> {
     holdLimiters = true;
     const probe = newId();
     let limited = 0;
-    for (let i = 0; i < 16; i++) if ((await call(probe, '/api/join/sso-nonce', {})).status === 429) limited++;
-    assert(limited === 1, `the auth limiter (15 a minute per address) still covers the door (${limited} of 16 refused)`);
+    for (let i = 0; i <= DOOR_RATE_LIMIT.perKey; i++) if ((await call(probe, '/api/join/sso-nonce', {})).status === 429) limited++;
+    assert(limited === 1, `the door's own limiter (${DOOR_RATE_LIMIT.perKey} a minute per key) covers the door, not the auth limiter's 15 (${limited} of ${DOOR_RATE_LIMIT.perKey + 1} refused)`);
     holdLimiters = false;
 
     // ── 8. purge and prune ───────────────────────────────────────────────────────────────────────
@@ -580,10 +617,17 @@ async function main(): Promise<void> {
     console.log('\n── 8c. deleting an account does not give its sign-up back to the address ──');
     freshAddress();
     assert(recentFromHere() === 0, 'setup: a fresh day for this address');
+    // Max, whom the community removed (as max2, after a re-key) seconds after he joined (section 8b), is the one row that
+    // keeps its address hash past the day: 7 days from his join instead of 1 (engine/door-signal.ts noteRemovedNewcomer).
+    // Nobody else's: not Dee, removed a day after her join (section 7 aged it), and never a self-deletion (Kim, Pat).
+    const keptHashes = db.prepare('SELECT member_pubkey FROM open_joins WHERE ip_hash IS NOT NULL').all() as { member_pubkey: string }[];
+    assert(keptHashes.length === 1 && keptHashes[0].member_pubkey === max2.pk && typeof joinRow(max2.pk)?.ip_kept_until === 'string'
+        && !joinRow(dee.pk)?.ip_kept_until && !joinRow(kim2.pk)?.ip_kept_until,
+        `only the removed newcomer's address hash outlives the day (${JSON.stringify(keptHashes.map(r => r.member_pubkey.slice(0, 8)))}, Max ${max2.pk.slice(0, 8)})`);
     const PAT_SUB = 'pat-google-sub';
     const patHash = openJoinHash('google', PAT_SUB);
     const cycles: string[] = [];
-    for (let i = 0; i < OPEN_JOIN_LIMITS.perHour; i++) {
+    for (let i = 0; i < 5; i++) {
         const pat = newId();
         const patNonce = await joinNonce(pat);
         const joined = await join(pat, { callsign: `Pat ${i}`, provider: 'google', idToken: mint('google', { sub: PAT_SUB, nonce: patNonce }), nonce: patNonce });
@@ -596,11 +640,14 @@ async function main(): Promise<void> {
         `the same Google account joins, deletes, and joins again while the address is under its limit (${cycles.join('; ')})`);
     assert(cycles.every((c, i) => c.includes(`count ${i + 1}→${i + 1}`)), `a deleted account's join still counts for its address (${cycles.join('; ')})`);
     assert(cycles.every(c => c.endsWith('hash released')), `each deletion frees the account by overwriting its hash, not by deleting its row (${cycles.join('; ')})`);
+    // The ceiling filled with all but the five deleted ones: only they make the hour's 1,000.
+    addFakes(DOOR_NUMBERS.global.signInPerHour - cycles.length, new Date());
+    assert(recentFromHere() === DOOR_NUMBERS.global.signInPerHour, `setup: ${DOOR_NUMBERS.global.signInPerHour} joins from this address in the hour, the five deleted ones among them`);
     const patOver = newId();
     const patOverNonce = await joinNonce(patOver);
     const patOverToken = mint('google', { sub: PAT_SUB, nonce: patOverNonce });
     const overLimit = await join(patOver, { callsign: 'Pat', provider: 'google', idToken: patOverToken, nonce: patOverNonce });
-    assert(overLimit.status === 429 && overLimit.body?.code === 'rate_limited' && /last hour/.test(String(overLimit.body?.error)),
+    assert(overLimit.status === 429 && overLimit.body?.code === 'network_busy' && /last hour/.test(String(overLimit.body?.error)),
         `one more join from that address in the hour → 429, deletions or not (got ${overLimit.status} ${JSON.stringify(overLimit.body)})`);
     assert(!memberRow(patOver.pk), '...and did not join');
     db.prepare('UPDATE open_joins SET joined_at = ? WHERE ip_hash = ?').run(new Date(Date.now() - 25 * 3600_000).toISOString(), ipHash);
@@ -608,6 +655,7 @@ async function main(): Promise<void> {
     assert(nextDay.status === 200, `a day later the same account joins with the nonce it kept (got ${nextDay.status})`);
     const releasedWithAddress = (db.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash LIKE 'released:%' AND ip_hash IS NOT NULL").get() as any).n;
     assert(releasedWithAddress === 0, 'and the sweep cleared the deleted accounts\' address hashes like any other day-old join');
+    for (const pk of fakes.splice(0)) delFake.run(pk);
 
     // ── 9. the door follows the profile ──────────────────────────────────────────────────────────
     console.log('\n── 9. the door follows the profile, per request ──');
@@ -615,11 +663,12 @@ async function main(): Promise<void> {
     const ivy = newId();
     assert((await call(ivy, '/api/join/sso-nonce', {})).status === 404, 'back to local: the nonce route is 404 again');
     assert((await join(ivy, { callsign: 'Ivy', provider: 'google', idToken: 'x', nonce: 'x' })).status === 404, 'back to local: the join route is 404 again');
+    assert((await call(ivy, '/api/join/work', { door: 'words' })).status === 404, 'back to local: the work route is 404 again');
     assert((await info()).features?.openJoin === false, 'and /api/community/info says openJoin false');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ The open door: signed, one sign-in account per identity, limited per address, shut on local nodes.');
+    console.log('⭐️ The open door: signed, one sign-in account per identity, work and ceilings per address, shut on local nodes.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

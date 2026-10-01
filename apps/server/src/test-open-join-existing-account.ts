@@ -13,8 +13,8 @@
  *      community's, so every federation check reads it as local (its spending is not a visitor's); it keeps its account
  *   3. one sign-in account, one member: another key, also a member elsewhere, with the same account → 409
  *      already_joined, nothing written; with a sign-in account of its own, that key joins
- *   4. the per-network limits count these joins as any other: with the hour's joins from one address used up, the next
- *      account's join → 429 rate_limited, nothing written
+ *   4. the per-network ceilings count these joins as any other: with the hour's sign-in joins from one address used up
+ *      (these among them), the next account's join → 429 network_busy, nothing written
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-open-join-existing-account.ts
  */
@@ -31,7 +31,7 @@ import { db } from './db/db.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
-import { OPEN_JOIN_LIMITS } from './engine/open-join.js';
+import { DOOR_NUMBERS } from './engine/door-signal.js';
 import { isVisitor } from './federation-settlement.js';
 
 let BASE = '';
@@ -174,17 +174,20 @@ async function main(): Promise<void> {
     assert(typeof ipHash === 'string' && [ned, mel2].every(id => joinRow(id.pk)?.ip_hash === ipHash),
         'every join above came from one address, and each counts against it');
     const fromHere = () => (db.prepare('SELECT COUNT(*) AS n FROM open_joins WHERE ip_hash = ?').get(ipHash) as any).n as number;
-    let n = 0;
-    while (fromHere() < OPEN_JOIN_LIMITS.perHour) {
-        const filler = newId();
-        const r = await joinWith(filler, `filler-google-sub-${++n}`, `Filler ${n}`);
-        if (r.status !== 200) throw new Error(`filler join refused: ${r.status} ${JSON.stringify(r.body)}`);
-    }
-    assert(fromHere() === OPEN_JOIN_LIMITS.perHour, `the hour's ${OPEN_JOIN_LIMITS.perHour} joins from this address are used, three of them by members of other communities`);
+    const realFromHere = fromHere();
+    // The rest of the hour's ceiling as rows: a thousand real joins would test the door's speed, not this.
+    const insertFake = db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)');
+    db.transaction(() => {
+        for (let i = realFromHere; i < DOOR_NUMBERS.global.signInPerHour; i++) {
+            insertFake.run(crypto.randomBytes(32).toString('hex'), 'google', crypto.randomBytes(32).toString('base64url'), new Date().toISOString(), ipHash);
+        }
+    })();
+    assert(realFromHere === 3 && fromHere() === DOOR_NUMBERS.global.signInPerHour,
+        `the hour's ${DOOR_NUMBERS.global.signInPerHour} sign-in joins from this address are used, three of them by members of other communities (${realFromHere} real)`);
     const ola = newId();
     registerVisitor(ola.pk, 'Ola', HOME);
     const over = await joinWith(ola, 'ola-google-sub', 'Ola');
-    assert(over.status === 429 && over.body?.code === 'rate_limited' && /last hour/.test(String(over.body?.error)),
+    assert(over.status === 429 && over.body?.code === 'network_busy' && /last hour/.test(String(over.body?.error)),
         `one more, also a member elsewhere → 429 for the hour (got ${over.status} ${JSON.stringify(over.body)})`);
     const olaRow = memberRow(ola.pk);
     assert(olaRow?.is_visitor === 1 && olaRow?.home_node_url === HOME && !joinRow(ola.pk),
@@ -192,7 +195,7 @@ async function main(): Promise<void> {
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
-    console.log('⭐️ The door takes a member of another community as it is: one member per sign-in account, limited per address, and local here once in.');
+    console.log('⭐️ The door takes a member of another community as it is: one member per sign-in account, a ceiling per address, and local here once in.');
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error('❌ Test failed:', e); process.exit(1); });

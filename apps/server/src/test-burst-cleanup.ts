@@ -238,6 +238,8 @@ async function main(): Promise<void> {
     const pat = member('Pat', 60);
     const ivy = member('Ivy', 2);
     const est = [1, 2, 3].map(i => member(`Est${i}`, 150));
+    // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
+    for (const e of est) for (let i = 0; i < 3; i++) createPost('offer', 'other', `${e.name} kept ${i}`, 'kept', 0, 'fixed', e.pk);
     let mod = as(keySession(mo));
     const adm = as(keySession(ada));
     const own = as(keySession(owner));

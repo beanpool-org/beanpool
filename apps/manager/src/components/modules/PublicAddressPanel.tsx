@@ -24,6 +24,8 @@ export interface PublicAddressStatus {
     communityName?: string;
     contact?: string;
     warning?: string;
+    /** With `paused` (and the address service's other states): why. */
+    reason?: string | null;
     /**
      * With `none`: the name this server keeps although the address service has no record of it (apps/server
      * engine/registrar-names.ts). Members' apps that use it are still accepted.
@@ -41,6 +43,21 @@ export interface TunnelStatus {
     connections?: number;
     reason?: string | null;
     version?: string | null;
+}
+
+/**
+ * Why the address service paused the name, for the operator. Every pause but the BeanPool project's own is lifted by this
+ * server by itself (apps/server services/tunnel-connector.ts healPausedAddress).
+ */
+export function pauseReason(reason: string | null | undefined): string {
+    switch (reason) {
+        case 'impostor': return 'another BeanPool server answered at this address, with a key that is not this server’s';
+        case 'content-swap': return 'for about an hour, something that is not a BeanPool server answered at this address';
+        case 'unverified': return 'it was taken back and is waiting for this server to confirm its key';
+        case 'incident-2026-09-24': return 'a fault at the address service on 24 September 2026';
+        case 'admin': return 'the BeanPool project paused it';
+        default: return reason ? `the address service says: ${reason}` : 'the address service gave no reason';
+    }
 }
 
 /** "connected (4)", "retrying: <reason> since 10:02", "not running". */
@@ -77,6 +94,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     // Action status & states
     const [submittingClaim, setSubmittingClaim] = useState(false);
     const [restarting, setRestarting] = useState(false);
+    const [rotating, setRotating] = useState(false);
     const [takingOffline, setTakingOffline] = useState(false);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
 
@@ -85,7 +103,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         isOpen: boolean;
         title: string;
         message: string;
-        actionType: 'restart' | 'offline';
+        actionType: 'restart' | 'offline' | 'rotate';
         confirmButtonText: string;
     }>({
         isOpen: false,
@@ -307,6 +325,16 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         });
     };
 
+    const requestRotateConfirmation = () => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Give the tunnel a new key',
+            message: 'Replace the tunnel’s key? Do this if only the tunnel’s key may have reached someone else (it was shown on this screen, or a standby you gave away): the old key stops working at once. This does NOT protect you from a copy of this server’s data folder or a backup: that copy holds the server’s own key and gets the new tunnel key by itself. This server switches to the new key by itself; visitors’ connections drop for a few seconds.',
+            actionType: 'rotate',
+            confirmButtonText: 'New key now',
+        });
+    };
+
     const requestOfflineConfirmation = () => {
         setConfirmModal({
             isOpen: true,
@@ -347,6 +375,34 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 setActionMessage({ text: e instanceof Error ? e.message : 'Restart failed', type: 'error' });
             } finally {
                 setRestarting(false);
+                stopLogMonitor();
+            }
+        } else if (action === 'rotate') {
+            setRotating(true);
+            setActionMessage({ text: '🔑 Asking for a new tunnel key...', type: 'info' });
+            startLogMonitor();
+            try {
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/rotate');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    setActionMessage({ text: '🔑 New tunnel key: the old one no longer works, and the tunnel runs on the new one.', type: 'success' });
+                    setRevealToken(false);
+                    await loadStatus();
+                } else {
+                    setActionMessage({ text: typeof data.error === 'string' ? data.error : 'No new key: the address service did not give one', type: 'error' });
+                }
+            } catch (e: unknown) {
+                setActionMessage({ text: e instanceof Error ? e.message : 'No new key: the request failed', type: 'error' });
+            } finally {
+                setRotating(false);
                 stopLogMonitor();
             }
         } else if (action === 'offline') {
@@ -407,6 +463,8 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const rawStatus = typeof statusData?.status === 'string' ? statusData.status : '';
     const isLive = rawStatus === 'live';
     const isPending = rawStatus === 'pending';
+    const isPaused = rawStatus === 'paused';
+    const pausedReason = typeof statusData?.reason === 'string' ? statusData.reason : null;
     const isNone = rawStatus === 'none' || !statusData;
     const isError = rawStatus === 'error';
     const hostname = typeof statusData?.hostname === 'string' ? statusData.hostname : '';
@@ -589,6 +647,22 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 Your registration request was signed and submitted. Once reviewed, Cloudflare DNS and edge tunnels will provision automatically.
                             </p>
                         </div>
+                    ) : isPaused ? (
+                        <div className="space-y-1.5 text-xs" data-testid="public-address-paused">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
+                                    <span>⏸️</span>
+                                    <span>Paused</span>
+                                </span>
+                                <span className="font-mono text-white break-all">{hostname || `${statusData?.name || 'your-node'}.beanpool.org`}</span>
+                            </div>
+                            <p className="m-0 text-nature-300">Why: {pauseReason(pausedReason)}.</p>
+                            <p className="m-0 text-nature-400">
+                                {pausedReason === 'admin'
+                                    ? 'Members can’t reach the community at this address until the BeanPool project lifts the pause. The name stays this community’s.'
+                                    : 'The name stays this community’s, and nobody else can claim it. This server asks for it back by itself every few minutes and gets it back as soon as it shows its own key. Nothing to do here.'}
+                            </p>
+                        </div>
                     ) : isNone && keptHostname ? (
                         <div className="space-y-1 text-xs" data-testid="public-address-kept">
                             <p className="m-0 text-amber-400 font-bold">
@@ -619,6 +693,18 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <span>⚡</span>
                             <span>{restarting ? 'Restarting…' : 'Restart tunnel'}</span>
                         </button>
+
+                        {isLive && mode === 'tunnel' && (
+                            <button
+                                type="button"
+                                onClick={requestRotateConfirmation}
+                                disabled={rotating}
+                                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                            >
+                                <span>🔑</span>
+                                <span>{rotating ? 'Getting a new key…' : 'New tunnel key'}</span>
+                            </button>
+                        )}
 
                         {(isLive || isPending) && (
                             <button

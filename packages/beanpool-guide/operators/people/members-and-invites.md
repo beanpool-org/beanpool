@@ -7,18 +7,20 @@ related: roles, reports-and-takedowns, decisions-and-emergencies, disputes, firs
 
 ## How people join
 
-Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join.
+On a local community, nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join.
 
 Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.
 
 Joining with a code is signed by the new member's own key, from the app or the web app they join in. So someone holding a code can only join as themselves: they can't use it to add a key that belongs to somebody else.
+
+**On the global community it is the other way round: nobody joins with an invite.** Invites are switched off there. No member, admin or owner can make one, in the app or in Settings, and a code or a paper ticket made before is refused too. Everyone joins through the open door with a sign-in, and one sign-in account is one member (see Open door, below). Without that, one sign-in could make invites for hundreds of accounts that no sign-in stands behind. The app's **Invites** shows **Bring someone here** instead, with the community's link to share. Someone there who asks to join a local community is let in by that community, with its own invite.
 
 ## Invites from Settings
 
 Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
 
 - Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.
-- If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server.
+- If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: "This community doesn’t use invites".
 - In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
 ![The Invites and QR screen in Settings](images/people-invites.webp)

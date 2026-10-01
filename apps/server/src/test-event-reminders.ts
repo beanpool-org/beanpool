@@ -29,6 +29,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import { initStateEngine } from './state-engine.js';
 import { setNodeRole } from './engine/sync.js';
 import {
@@ -391,10 +392,12 @@ async function main(): Promise<void> {
     // ── 11. All the way out to Expo, and the preference that silences it ─────────────────────
     console.log('\n--- 11. The dispatcher and the preference ---');
     const realFetch = globalThis.fetch;
-    const sent: any[] = [];
+    // Each push as its member is told it (push-notice-test-harness.ts): the lock screen shows only the kind's fixed words,
+    // and the reminder's words and where a tap lands are the notice's details, which the app reads from this server.
+    const sent: ToldPush[] = [];
     (globalThis as any).fetch = async (url: any, init: any) => {
         if (String(url).includes('exp.host')) {
-            sent.push(...JSON.parse(init.body));
+            sent.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
             return { ok: true, status: 200, json: async () => ({}) } as any;
         }
         return realFetch(url, init);
@@ -414,6 +417,11 @@ async function main(): Promise<void> {
         assert(sent[0]?.to === 'ExponentPushToken[goer]', '...to the member’s device');
         assert(sent[0]?.channelId === 'marketplace' && sent[0]?.categoryId === 'marketplace',
             '...on the Marketplace Android channel and category, so no app in the store needs an update');
+        assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.reminder' && !JSON.stringify(sent[0]?.sent).includes(wired.id)
+            && !JSON.stringify(sent[0]?.sent).includes('Wired up'),
+            `...its lock screen shows only "An event you're going to starts soon.", with no event name or post id (${sent[0]?.sent?.body})`);
+        assert(sent[0]?.title === reminderPushTitle('Wired up') && sent[0]?.body === reminderPushBody(1440),
+            `...its details (what the app shows) have the reminder's words (${sent[0]?.title} / ${sent[0]?.body})`);
         assert(sent[0]?.data?.screen === 'post' && sent[0]?.data?.postId === wired.id,
             '...and the payload that opens /post/:id');
 

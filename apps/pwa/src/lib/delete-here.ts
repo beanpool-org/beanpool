@@ -14,7 +14,7 @@
  *   page's own node ({@link leaveThisCommunity}). The key stays.
  * - Otherwise this is the last community this copy serves: the delete wipes it, as before.
  */
-import { getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
+import { fetchMembershipAt, getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
 
 /** How long the page's own node has to answer, as the phone waits for each community. */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -75,18 +75,17 @@ function thisCommunity(): string {
     return getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : '');
 }
 
-/** GET /api/community/membership/<key> at `community`, as the phone asks it. Never throws; gives up at `timeoutMs`. */
+/**
+ * GET /api/community/membership/<key> at `community`, as the phone asks it: signed by the key, which is the only one a
+ * community answers (api.ts fetchMembershipAt). Never throws; gives up at `timeoutMs`.
+ */
 export async function membershipAt(community: string, publicKey: string, timeoutMs: number = MEMBERSHIP_TIMEOUT_MS): Promise<Membership> {
     const base = originOf(community);
     if (!base) return 'unreachable';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(`${base}/api/community/membership/${publicKey}`, {
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-            signal: controller.signal,
-        });
+        const res = await fetchMembershipAt(base, publicKey, controller.signal);
         if (!res.ok) return 'unreachable';
         const data: unknown = await res.json();
         if (!data || typeof data !== 'object') return 'unreachable';

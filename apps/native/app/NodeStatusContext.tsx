@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
+import { fetchMembership } from '../utils/membership-probe';
 
 /**
  * Whether the active community node recognises this identity as a member.
@@ -49,11 +50,8 @@ export function NodeStatusProvider({ children }: { children: React.ReactNode }) 
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(`${url}/api/community/membership/${identity.publicKey}`, {
-                method: 'GET',
-                headers: { 'Accept': 'application/json' },
-                signal: controller.signal,
-            });
+            // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+            const res = await fetchMembership(url, identity, controller.signal);
             clearTimeout(timeoutId);
             if (!res.ok) {
                 // Reachable but the endpoint misbehaved — don't treat as a rejection.

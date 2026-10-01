@@ -14,7 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
+import { applyDelta, communityCachesRenamed, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
@@ -51,6 +51,9 @@ export function epochOf(res: { headers?: { get?(name: string): string | null } }
 }
 
 export async function getSyncCursorKey(keyId: string): Promise<string> {
+    // Never read before the phone's copies and their cursors have their new names (utils/cache-file-migration.ts): a
+    // cursor read under the new name before its file moved would start a whole sync for nothing.
+    await communityCachesRenamed();
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     return `pillar_sync_${getDatabaseFilenameForNode(url)}_${keyId}`;
 }

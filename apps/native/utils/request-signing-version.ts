@@ -7,6 +7,12 @@
  * this phone has not heard from yet gets format 2: that is every node once the release is out, and a hostile node
  * that pretends to be old gains only old-format signatures, which every node refuses after the switch.
  *
+ * One way only: once a host has said 2, nothing it says later moves it back. Until the switch every community still
+ * accepts the old format, which names no community, so a request signed in it for a hostile node that stopped saying
+ * 2 could be replayed at every other community where the key is a member for five minutes: a ledger transfer paid
+ * twice (multi-community review F2). A server that really went back to a release older than #1219 is refused the
+ * member's requests until it is updated, which is the right way round.
+ *
  * Kept per host (the name signed for, `audienceOf`), in memory for this run and on each SavedNode for the next
  * (utils/nodes.ts recordRequestSigning / loadSavedRequestSigning). No React Native import here: utils/crypto.ts reads
  * it on every signed request.
@@ -42,11 +48,19 @@ export function requestSigningOf(infoBody: unknown): number | null {
     return typeof v === 'number' && Number.isSafeInteger(v) && v > 0 ? v : 1;
 }
 
-/** Remember what the node at `url` said, for this run. Returns the host it was kept under, or null for none. */
+/** The higher of two answers: what a host once said it reads, it is never taken below. */
+export function ratchetedRequestSigning(held: unknown, said: number): number {
+    return typeof held === 'number' && Number.isSafeInteger(held) && held > said ? held : said;
+}
+
+/**
+ * Remember what the node at `url` said, for this run, never below what it said before (one way only). Returns the host
+ * it was kept under, or null for none.
+ */
 export function rememberRequestSigning(url: string, version: number): string | null {
     const host = hostOf(url);
     if (!host) return null;
-    known.set(host, version);
+    known.set(host, ratchetedRequestSigning(known.get(host), version));
     return host;
 }
 
@@ -64,8 +78,9 @@ export async function requestSigningFormatFor(url: string): Promise<RequestSigni
 }
 
 /**
- * Load what saved nodes recorded on an earlier run (app start). An answer heard in this run wins over the stored one.
- * Requests signed while this runs wait for it, so the first request after a cold start uses the stored answer.
+ * Load what saved nodes recorded on an earlier run (app start). The higher of the stored answer and one heard in this
+ * run wins (one way only), so an old-format answer that arrives before this finishes can't undo a stored 2. Requests
+ * signed while this runs wait for it, so the first request after a cold start uses the stored answer.
  */
 export function hydrateRequestSigning(load: () => Promise<Array<{ url: string; requestSigning?: unknown }>>): Promise<void> {
     const run = (async () => {
@@ -73,7 +88,7 @@ export function hydrateRequestSigning(load: () => Promise<Array<{ url: string; r
             for (const node of await load()) {
                 const host = typeof node.url === 'string' ? hostOf(node.url) : null;
                 const v = node.requestSigning;
-                if (host && !known.has(host) && typeof v === 'number' && Number.isSafeInteger(v) && v > 0) known.set(host, v);
+                if (host && typeof v === 'number' && Number.isSafeInteger(v) && v > 0) known.set(host, ratchetedRequestSigning(known.get(host), v));
             }
         } catch {
             // Nothing stored, or unreadable: each node is asked again when the app next reads its info.

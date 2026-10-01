@@ -414,9 +414,10 @@ export function postGroupThreadMessage(
 }
 
 /**
- * Pushes for one message: a mention reads "X mentioned you in G" and ignores a mute; everyone else in the
- * chat gets "X in G" unless they muted it. No message text leaves the node in a push — it would travel
- * through Apple's and Google's servers.
+ * Pushes for one message: a mention ignores a mute; everyone else in the chat is told unless they muted it. No message
+ * text leaves the node in a push — it would travel through Apple's and Google's servers — and neither does the sender's
+ * or the group's name: the lock screen shows the kind's fixed words, and "X mentioned you" in G stays here as the
+ * notice's details (state-engine.ts dispatchPushNotification).
  */
 function pushGroupMessage(cb: MessagingCallbacks, group: GroupRow, authorPubkey: string, senderName: string, mentions: string[]): void {
     const inChat = participantKeys(group.id).filter(pk => pk !== authorPubkey && canReadGroupThread(group.id, pk));
@@ -424,10 +425,10 @@ function pushGroupMessage(cb: MessagingCallbacks, group: GroupRow, authorPubkey:
     const others = unmutedRecipients(group.id, inChat.filter(pk => !mentions.includes(pk)));
     const data = { screen: 'chat', conversationId: group.id, groupId: group.id };
     if (mentioned.length > 0) {
-        cb.dispatchPushNotification(mentioned, authorPubkey, `👥 ${group.name}`, `${senderName} mentioned you`, data, 'chat');
+        cb.dispatchPushNotification(mentioned, authorPubkey, `👥 ${group.name}`, `${senderName} mentioned you`, data, 'chat', 'chat.mention');
     }
     if (others.length > 0) {
-        cb.dispatchPushNotification(others, authorPubkey, `👥 ${group.name}`, `${senderName} sent a message`, data, 'chat');
+        cb.dispatchPushNotification(others, authorPubkey, `👥 ${group.name}`, `${senderName} sent a message`, data, 'chat', 'chat.group');
     }
 }
 

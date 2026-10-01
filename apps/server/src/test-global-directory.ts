@@ -38,6 +38,7 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import http from 'node:http';
 import WebSocket from 'ws';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -87,11 +88,19 @@ process.env.DIRECTORY_REGISTRY_URL = `${REGISTRY}/functions/v1/directory-registe
 const serve = (rows: unknown[]) => { fixture = { status: 200, body: JSON.stringify(rows) }; };
 
 // ── pushes never leave: Expo is caught at fetch ──────────────────────────────────────────────────────────────────
+// Each as its member is told it (push-notice-test-harness.ts): the lock screen shows only "A community has started near
+// you.", and the words and the communities below are the notice's details, which the app reads from this server.
 const realFetch = globalThis.fetch;
 const pushed: any[] = [];
+const notGeneric: any[] = [];
+let caught = 0;
 (globalThis as any).fetch = async (url: any, init: any) => {
     if (String(url).includes('exp.host')) {
-        pushed.push(...JSON.parse(init.body));
+        for (const m of JSON.parse(init.body)) {
+            caught++;
+            if (!pushIsGeneric(m) || m.data.k !== 'community.near') notGeneric.push(m);
+            pushed.push(toldPush(db, m));
+        }
         return { ok: true, status: 200, json: async () => ({}) } as any;
     }
     return realFetch(url, init);
@@ -752,6 +761,8 @@ async function main(): Promise<void> {
     const localInit = publisher.initDirectoryPublisher() as unknown;
     assert(localInit !== false, `local: the publisher's timer is set as it always was (${String(localInit)})`);
     await p2p.stop();
+    assert(caught > 0 && notGeneric.length === 0,
+        `every push showed only "A community has started near you.", and carried no community's key, name or distance (${notGeneric.length} of ${caught} did not)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

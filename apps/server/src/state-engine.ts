@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -45,6 +46,7 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
+import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
@@ -962,14 +964,16 @@ export function runMarketplaceHygiene(): void {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
         const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
-        dispatchPushNotification(
-            [requesterPubkey, post?.author_pubkey].filter(Boolean),
-            'SYSTEM',
-            '⌛ Request Expired',
-            `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`,
-            { screen: 'post', postId: row.post_id },
-            'marketplace'
-        );
+        // Two people, two sentences: the requester made a request, the listing's author has a listing. (Both when they are
+        // one and the same member, as a request on their own listing can't be, but a bad row must not drop a push.)
+        const expiredBody = `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`;
+        const expiredData = { screen: 'post', postId: row.post_id };
+        if (requesterPubkey) {
+            dispatchPushNotification([requesterPubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.answer');
+        }
+        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey) {
+            dispatchPushNotification([post.author_pubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.listing');
+        }
     }
     if (stale.length > 0) console.log(`🧹 Expired ${stale.length} stale marketplace request(s)`);
 
@@ -989,7 +993,8 @@ export function runMarketplaceHygiene(): void {
             '⏳ Deal Awaiting Completion',
             `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
             { screen: 'post', postId: row.post_id },
-            'marketplace'
+            'marketplace',
+            'trade.update'
         );
         db.prepare(`UPDATE marketplace_transactions SET last_reminded_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(row.id);
     }
@@ -1009,6 +1014,14 @@ export function runMarketplaceHygiene(): void {
         if (tidied > 0) console.log(`🛡️ Tidied ${tidied} kept moderation notice(s) past their bounds`);
     } catch (e) {
         console.warn('[Notices] Hygiene tidy failed:', e);
+    }
+
+    // 5. The details of the pushes sent (engine/push-notices.ts): none older than 7 days, each member's newest 100.
+    try {
+        const tidied = tidyPushNotices();
+        if (tidied > 0) console.log(`🔔 Forgot ${tidied} push notice(s) past their bounds`);
+    } catch (e) {
+        console.warn('[Push] Hygiene tidy of push notices failed:', e);
     }
 }
 
@@ -7127,8 +7140,10 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
         scrubKnocksOf(publicKey);
-        // The moderation notices kept for them: nobody can read them now (engine/kept-notices.ts).
+        // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
+        // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
+        dropPushNoticesOf(publicKey);
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
@@ -7299,6 +7314,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         dropKeptNoticesOf(publicKey);
+        dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
@@ -7431,7 +7447,8 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     try {
         const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned' AND is_visitor = 0").all() as { public_key: string }[];
         const targetPubkeys = activeMembers.map(m => m.public_key);
-        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace');
+        // The push says only "Your community has a notice for you" (D3): the operator's words are the notice's details.
+        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace', 'community.notice');
     } catch (e: any) {
         console.error('[Push Announcement] Failed to send push notification broadcast:', e.message);
     }
@@ -8416,9 +8433,12 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 
 // ===================== GENERIC PUSH DISPATCHER =====================
 
+/** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
+
 /**
  * Generic push notification dispatcher with category-based preference gating,
- * app icon badge counts, iOS threadId grouping, and Android channelId routing.
+ * app icon badge counts, and Android channelId routing.
  * Fire-and-forget pattern. Returns how many notifications it handed to the push service
  * (one per registered phone of each recipient who has this category on).
  *
@@ -8426,6 +8446,12 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
  * standby, nothing is sent and it answers 0 (design G4): the tokens it holds are its main server's, copied so a server
  * that takes over reaches every phone at once, and every push a member is owed is the main server's to send. A standby
  * that sent its own would double it, or send one about something only the standby did.
+ *
+ * A push says nothing private (scratch/global-node/DESIGN-push-relay-fable.md §4.1, §4.3; @beanpool/core push-notice.ts):
+ * it goes out with `kind`'s fixed words and a signed notice as its `data` (the kind, a random id new for each recipient,
+ * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
+ * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
+ * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  */
 export function dispatchPushNotification(
     targetPubkeys: string[],
@@ -8433,7 +8459,8 @@ export function dispatchPushNotification(
     title: string,
     body: string,
     data: Record<string, any>,
-    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
+    categoryId: PushCategory,
+    kind: PushNoticeKind,
 ): number {
     if (getNodeRole() === 'backup') return 0;
     // Filter out the actor and SYSTEM from targets
@@ -8458,7 +8485,12 @@ export function dispatchPushNotification(
         recovery: 'default',
     };
 
+    const words = pushNoticeWords(kind);
+    const sentAt = Math.floor(Date.now() / 1000);
     const allMessages: any[] = [];
+    // Whose phone each message is for, by position: Expo answers with a ticket per message, in the order sent.
+    const phones: { publicKey: string; token: string }[] = [];
+    const notices: PushNoticeRow[] = [];
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -8475,19 +8507,23 @@ export function dispatchPushNotification(
         const unreadCounts = getListedUnreadCounts(pk);
         const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
 
+        // One notice per recipient, the same on each of their phones.
+        const notice = newPushNotice(kind, pk, sentAt);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
+
         for (const { token, platform } of tokens) {
             const msg: any = {
                 to: token,
                 sound: soundMap[categoryId] || 'default',
-                title,
-                body,
-                data,
+                title: words.title,
+                body: words.body,
+                data: notice.data,
                 badge: totalUnread,
                 categoryId,
             };
 
-            // iOS: threadId for notification grouping on lock screen
-            if (platform === 'ios' && data.conversationId) {
+            // iOS: a chat's notice wakes the app, as it did when a conversation id in the data decided it
+            if (platform === 'ios' && PUSH_NOTICE_KINDS[kind].tab === 'chats') {
                 msg._contentAvailable = true;
             }
 
@@ -8497,31 +8533,93 @@ export function dispatchPushNotification(
             }
 
             allMessages.push(msg);
+            phones.push({ publicKey: pk, token });
         }
     }
 
     if (allMessages.length === 0) return 0;
+    keepPushNotices(notices);
 
     // Batch send to Expo (max 100 per request)
-    const batches: typeof allMessages[] = [];
     for (let i = 0; i < allMessages.length; i += 100) {
-        batches.push(allMessages.slice(i, i + 100));
-    }
-
-    for (const batch of batches) {
+        const batch = allMessages.slice(i, i + 100);
+        const batchPhones = phones.slice(i, i + 100);
         // With EXPO_ACCESS_TOKEN set, `Authorization: Bearer` it too (config/expo-access-token.ts); unset, as it always was.
         fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
             headers: expoPushHeaders(),
             body: JSON.stringify(batch),
-        }).then(res => {
+        }).then(async res => {
             if (!res.ok) console.warn(`[Push] Expo API returned ${res.status}`);
             else console.log(`[Push] Sent ${batch.length} notification(s) for category=${categoryId}`);
+            await readExpoAnswer(res, batchPhones);
         }).catch(err => {
             console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
     return allMessages.length;
+}
+
+/**
+ * What Expo said about a batch beyond its HTTP status (design §4.4): a ticket per message, in the order sent. A phone Expo
+ * says is gone (`DeviceNotRegistered`: the app was removed, or its token no longer works) has that one registration here
+ * removed, with its tombstone so a standby drops it too. Any other refusal (`UNAUTHORIZED` for a missing or refused access
+ * token, a rate limit, credentials) is logged once per code and counted for diagnostics (pushServiceRefusals). Never
+ * logs a push token. Never throws.
+ */
+async function readExpoAnswer(res: Response, phones: readonly { publicKey: string; token: string }[]): Promise<void> {
+    let answer: any;
+    try {
+        answer = await res.json();
+    } catch {
+        return;
+    }
+    if (Array.isArray(answer?.errors)) {
+        for (const e of answer.errors) notePushRefusal(typeof e?.code === 'string' ? e.code : `HTTP ${res.status}`);
+    }
+    const tickets: any[] = Array.isArray(answer?.data) ? answer.data : [];
+    let gone = 0;
+    for (let i = 0; i < Math.min(tickets.length, phones.length); i++) {
+        const ticket = tickets[i];
+        if (ticket?.status !== 'error') continue;
+        const code = typeof ticket?.details?.error === 'string' ? ticket.details.error : 'unknown';
+        if (code !== 'DeviceNotRegistered') {
+            notePushRefusal(code);
+            continue;
+        }
+        const phone = phones[i];
+        // A ticket naming another token than the one sent in its place is not about this registration.
+        const named = ticket?.details?.expoPushToken;
+        if (typeof named === 'string' && named !== phone.token) continue;
+        try {
+            gone += deletePlainRows('push_tokens', 'public_key = ? AND token = ?', phone.publicKey, phone.token);
+        } catch (e: any) {
+            console.warn('[Push] Could not remove a phone Expo says is gone:', sanitizeMessage(String(e?.message ?? e)));
+        }
+    }
+    if (gone > 0) console.log(`[Push] Expo says ${gone} phone(s) no longer take notifications: their registrations were removed.`);
+}
+
+const pushRefusals = new Map<string, { count: number; firstAt: string; lastAt: string }>();
+
+function notePushRefusal(code: string): void {
+    const at = new Date().toISOString();
+    const seen = pushRefusals.get(code);
+    if (seen) {
+        seen.count++;
+        seen.lastAt = at;
+        return;
+    }
+    pushRefusals.set(code, { count: 1, firstAt: at, lastAt: at });
+    const why = code === 'UNAUTHORIZED'
+        ? 'Expo wants an access token for these notifications, and this server sends none it accepts (EXPO_ACCESS_TOKEN).'
+        : 'some notifications were not delivered.';
+    console.warn(`[Push] Expo refused notifications (${code}): ${why} Said once; diagnostics count each one.`);
+}
+
+/** What Expo refused since this server started, by Expo's code: for diagnostics. Never a token. */
+export function pushServiceRefusals(): Record<string, { count: number; firstAt: string; lastAt: string }> {
+    return Object.fromEntries([...pushRefusals].map(([code, r]) => [code, { ...r }]));
 }
 
 /**
@@ -8594,7 +8692,8 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         notification.title,
         notification.body,
         notification.data,
-        'escrow'
+        'escrow',
+        type === SystemMessageType.REVIEW_LEFT ? 'review.new' : 'trade.update'
     );
 }
 

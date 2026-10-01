@@ -105,6 +105,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -206,13 +207,26 @@ function socket(id: Id): Promise<Sock> {
 }
 const settle = (ms = 150) => new Promise(r => setTimeout(r, ms));
 
-/** Every push the node sent is answered here in place of Expo and never sent on, and kept here (section 5c). */
+/**
+ * Every push the node sent is answered here in place of Expo and never sent on, and kept here (section 5c), as its member
+ * is told it (push-notice-test-harness.ts): `title` and `body` are its notice's details, and every one is also held to
+ * its kind's fixed words (`notGenericPushes`).
+ */
 const pushed: { to: string; title: string; body: string }[] = [];
+const notGenericPushes: unknown[] = [];
+let caughtPushes = 0;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: any, init?: any) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input?.url;
     if (typeof url === 'string' && url.startsWith('https://exp.host/')) {
-        try { for (const m of JSON.parse(String(init?.body ?? '[]'))) pushed.push({ to: m.to, title: m.title, body: m.body }); } catch { /* */ }
+        try {
+            for (const m of JSON.parse(String(init?.body ?? '[]'))) {
+                caughtPushes++;
+                if (!pushIsGeneric(m)) notGenericPushes.push(m);
+                const told = toldPush(db, m);
+                pushed.push({ to: m.to, title: told.title, body: told.body });
+            }
+        } catch { /* */ }
         return new Response('{"data":[]}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     return realFetch(input, init);
@@ -1193,6 +1207,8 @@ async function main(): Promise<void> {
         await settle(50);
         const reminder = reached(reminderPushTitle('Probe picnic 5c'));
         assert(reminder.bob && !reminder.vera, `the event's reminder is pushed to Bob and not to Vera (${who(reminder)})`);
+        assert(caughtPushes > 0 && notGenericPushes.length === 0,
+            `every push showed only its kind's fixed words: no announcement title, event name or id reached a lock screen (${notGenericPushes.length} of ${caughtPushes} did not)`);
 
         // 4111438923: she takes down her own listing, from before this rule, and nothing else.
         const aliceQuinces = offer(alice, 'Alice quinces 5c');

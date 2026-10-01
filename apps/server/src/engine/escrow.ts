@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, isBeanAmount } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, type PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
 import { isServableAvatarValue } from '@beanpool/core';
@@ -28,7 +28,7 @@ type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbel
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
 
 export interface EscrowCallbacks {
     broadcast: BroadcastFn;
@@ -312,7 +312,8 @@ export function requestPost(
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
         { screen: 'post', postId: post.id },
-        'marketplace'
+        'marketplace',
+        'market.request'
     );
 
     return tx;
@@ -501,7 +502,8 @@ export function approvePostRequest(
         '✅ Request Approved',
         `Your request for "${post.title}" was approved!`,
         { screen: 'post', postId: row.post_id },
-        'marketplace'
+        'marketplace',
+        'market.answer'
     );
 
     return tx;
@@ -538,7 +540,8 @@ export function rejectPostRequest(
         '❌ Request Declined',
         `Your request for "${post.title}" was declined`,
         { screen: 'post', postId: row.post_id },
-        'marketplace'
+        'marketplace',
+        'market.answer'
     );
 
     return tx;
@@ -768,7 +771,8 @@ export function acceptPost(
         '🛒 Offer Accepted',
         `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
         { screen: 'post', postId: post.id },
-        'marketplace'
+        'marketplace',
+        'market.request'
     );
 
     return tx;
@@ -998,7 +1002,8 @@ export function completePostTransaction(
         '🎉 Deal Completed!',
         `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;
@@ -1071,7 +1076,8 @@ export function cancelPostTransaction(
         '🚫 Deal Cancelled',
         `Deal for "${post?.title || 'the post'}" was cancelled — escrow funds refunded.`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;
@@ -1362,7 +1368,8 @@ export function resolveEscrowDispute(
         '⚖️ Escrow Dispute Resolved',
         `Dispute arbitrated by ${resolverName}: ${actionLabel} for "${post?.title || 'deal'}"`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;

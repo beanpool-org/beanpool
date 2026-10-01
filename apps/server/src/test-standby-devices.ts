@@ -66,6 +66,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -97,7 +98,11 @@ const DEVICES = [
     'pricing_guide_items', 'pricing_reports',
 ] as const;
 type Tables = Record<string, Record<string, unknown>[]>;
-type Push = { to: string; title: string; categoryId: string };
+/**
+ * A push as its member is told it (push-notice-test-harness.ts): `title` is its notice's details on the node that sent it,
+ * and `generic` says its lock screen showed only its kind's fixed words and the notice.
+ */
+type Push = { to: string; title: string; categoryId: string; kind: string; generic: boolean };
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
@@ -109,7 +114,13 @@ function guardFetch(): { blocked: string[]; pushes: Push[] } {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') {
-            for (const m of JSON.parse(String(init?.body ?? '[]'))) seen.pushes.push({ to: m.to, title: m.title, categoryId: m.categoryId });
+            // Kept at once, as the commands take them straight after the dispatch; the title (the notice's details) is read
+            // just after, by the time a command that checks it takes the push.
+            for (const m of JSON.parse(String(init?.body ?? '[]'))) {
+                const push: Push = { to: m.to, title: '', categoryId: m.categoryId, kind: m.data?.k, generic: pushIsGeneric(m) };
+                seen.pushes.push(push);
+                void import('./db/db.js').then(({ db }) => { push.title = toldPush(db, m).title; });
+            }
             return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
         seen.blocked.push(url.hostname);
@@ -264,7 +275,7 @@ async function child(): Promise<void> {
             takePushes();
             const counts: Record<string, number> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Devices', 'A push of each category', {}, category);
+                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Devices', 'A push of each category', {}, category, 'community.notice');
             }
             return { counts, handed: takePushes().length };
         },
@@ -385,7 +396,7 @@ async function child(): Promise<void> {
             takePushes();
             const answers: Record<string, unknown> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category);
+                answers[`dispatchPushNotification(${category})`] = se.dispatchPushNotification(a.everyone, 'SYSTEM', 'On a standby', 'Never sent', {}, category, 'community.notice');
             }
             answers.sendPushNotification = se.sendPushNotification(id.post, SystemMessageType.ESCROW_FUNDED, { amount: 1, actorPubkey: id.gwen } as any, a.everyone) ?? 'no answer';
             answers.adminBroadcastAnnouncement = se.adminBroadcastAnnouncement('On a standby', 'Never sent', 'info') ?? 'no answer';
@@ -1139,6 +1150,8 @@ async function main(): Promise<void> {
         const promotedCounts = await standby.send('push-counts');
         assert(movedNotice.length > 0 && movedNotice.length === promotedCounts.counts.marketplace,
             `the notice "This community moved to a new server" reaches the members' phones the standby copied, as any announcement does (${movedNotice.length} phones; a push of its category reaches ${promotedCounts.counts.marketplace})`);
+        assert(movedNotice.every((x) => x.generic && x.kind === 'community.notice'),
+            `its lock screen says only "Your community has a notice for you.": the words are the notice's details`);
         assert(JSON.stringify(promotedCounts.counts) === JSON.stringify(mainCounts.counts) && promotedCounts.handed === mainCounts.handed,
             `a push of each category reaches exactly the members' phones M's did (${JSON.stringify(promotedCounts.counts)}; M ${JSON.stringify(mainCounts.counts)})`);
         assert(Object.values(pr.outside).every((n) => n === 0), `and holds no phone or leave of a key with no member's row (${JSON.stringify(pr.outside)})`);

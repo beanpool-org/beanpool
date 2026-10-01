@@ -300,10 +300,10 @@ async function main(): Promise<void> {
     const bundled = readOpenJoinRecord().joins.find((j) => j.memberPubkey === max.id.pk);
     const payloadText = JSON.stringify(payload);
     assert(typeof maxRow?.ip_kept_until === 'string' && !!exported && !!bundled
-        && JSON.stringify(Object.keys(exported).sort()) === JSON.stringify(['joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
-        && JSON.stringify(Object.keys(bundled).sort()) === JSON.stringify(['joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
+        && JSON.stringify(Object.keys(exported).sort()) === JSON.stringify(['joinCohort', 'joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
+        && JSON.stringify(Object.keys(bundled).sort()) === JSON.stringify(['joinCohort', 'joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
         && !payloadText.includes(maxRow.ip_hash) && !payloadText.includes(maxRow.ip_kept_until),
-        'a copy for a standby and the take-over record carry Max\'s row, but neither the hash nor how long it is kept');
+        'a copy for a standby and the take-over record carry Max\'s row (with its join_cohort label, report rings #1416), but neither the hash nor how long it is kept');
 
     // ── 7. overrides ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── 7. overrides in node_config ──');

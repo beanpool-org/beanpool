@@ -65,7 +65,13 @@ async function communitiesInClaimOrder(): Promise<string[]> {
 
 /** Move one community's copy and its cursors. Throws when a step fails, leaving what is done safe to repeat. */
 async function moveCopy(directory: string, from: string, to: string, keys: readonly string[]): Promise<void> {
-    if (!(await exists(fileUri(directory, from)))) return;
+    if (!(await exists(fileUri(directory, from)))) {
+        // Cut off after the rename but before the cursors moved (the app stopped, or a write threw): the file is at its
+        // new name and this copy's cursors are still under the old one. Only this copy's keys can be there, because a
+        // shared old file's second claimant never gets here. Finish them, never overwriting one the new name has.
+        if (await exists(fileUri(directory, to))) await moveCursors(from, to, keys, false);
+        return;
+    }
     if (await exists(fileUri(directory, to))) return;
 
     // Fold the log into the file. Opened under its old name, which nothing else opens any more, and closed again.
@@ -90,11 +96,19 @@ async function moveCopy(directory: string, from: string, to: string, keys: reado
         await FileSystem.deleteAsync(fileUri(directory, `${from}${side}`), { idempotent: true });
     }
 
+    await moveCursors(from, to, keys, true);
+}
+
+/** Move `pillar_sync_<from>_*` to `pillar_sync_<to>_*`, old key removed after the new one is written; safe to repeat. */
+async function moveCursors(from: string, to: string, keys: readonly string[], overwrite: boolean): Promise<void> {
     const prefix = `pillar_sync_${from}_`;
     for (const key of keys) {
         if (!key.startsWith(prefix)) continue;
+        const target = `pillar_sync_${to}_${key.slice(prefix.length)}`;
         const value = await AsyncStorage.getItem(key);
-        if (value !== null) await AsyncStorage.setItem(`pillar_sync_${to}_${key.slice(prefix.length)}`, value);
+        if (value !== null && (overwrite || (await AsyncStorage.getItem(target)) === null)) {
+            await AsyncStorage.setItem(target, value);
+        }
         await AsyncStorage.removeItem(key);
     }
 }

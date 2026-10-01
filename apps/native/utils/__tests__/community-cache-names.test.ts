@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
     store: new Map<string, string>(),
     opened: [] as string[],
     failMoveOf: null as string | null,
+    failSetPrefix: null as string | null,
 }));
 
 /** expo-sqlite over node:sqlite, opening files in this test's directory, as expo-sqlite opens them in its own. */
@@ -67,7 +68,10 @@ vi.mock('expo-file-system/legacy', async () => {
 vi.mock('@react-native-async-storage/async-storage', () => ({
     default: {
         getItem: vi.fn(async (k: string) => h.store.get(k) ?? null),
-        setItem: vi.fn(async (k: string, v: string) => { h.store.set(k, String(v)); }),
+        setItem: vi.fn(async (k: string, v: string) => {
+            if (h.failSetPrefix && k.startsWith(h.failSetPrefix)) { h.failSetPrefix = null; throw new Error('storage full'); }
+            h.store.set(k, String(v));
+        }),
         removeItem: vi.fn(async (k: string) => { h.store.delete(k); }),
         getAllKeys: vi.fn(async () => [...h.store.keys()]),
         multiRemove: vi.fn(async (ks: string[]) => { for (const k of ks) h.store.delete(k); }),
@@ -101,6 +105,7 @@ beforeEach(async () => {
     h.store.clear();
     h.opened = [];
     h.failMoveOf = null;
+    h.failSetPrefix = null;
 });
 
 const file = (name: string) => path.join(h.dir, name);
@@ -305,5 +310,33 @@ describe("a phone's copies under the old names move to the new ones, with nothin
         await closeDB();
         expect(rowsOf(oldB)).toEqual(['stray']);
         expect(rowsOf(getDatabaseFilenameForNode(BELLINGEN))).toEqual(['bellingen 1', 'bellingen 2']);
+    });
+
+    it('a run cut off after the rename, before the cursors moved, moves them on the next start', async () => {
+        phoneWith(MULLUM, [{ url: MULLUM }]);
+        const oldM = legacyDatabaseFilenameForNode(MULLUM);
+        const newM = getDatabaseFilenameForNode(MULLUM);
+        oldCopy(oldM, ['mullum 1']);
+        h.store.set(cursor(oldM, 'last-sync'), '1727740800000');
+        h.store.set(cursor(oldM, 'identity-epoch'), '4');
+        h.store.set(cursor(oldM, 'members_last_sync'), '1727740000000');
+        h.failSetPrefix = `pillar_sync_${newM}_`;
+
+        await getDb();
+        await closeDB();
+        // Run 1: the file was renamed, the first cursor write threw; not done.
+        expect(rowsOf(newM)).toEqual(['mullum 1']);
+        expect(fs.existsSync(file(oldM))).toBe(false);
+        expect(h.store.get(CACHE_NAMES_DONE_KEY)).toBeUndefined();
+
+        // The next start: the old file is gone, the cursors still are not.
+        resetCommunityCachesRenamedForTests();
+        await getDb();
+        await closeDB();
+        expect(h.store.get(cursor(newM, 'last-sync'))).toBe('1727740800000');
+        expect(h.store.get(cursor(newM, 'identity-epoch'))).toBe('4');
+        expect(h.store.get(cursor(newM, 'members_last_sync'))).toBe('1727740000000');
+        expect([...h.store.keys()].filter(k => k.includes(oldM))).toEqual([]);
+        expect(h.store.get(CACHE_NAMES_DONE_KEY)).toBe('1');
     });
 });

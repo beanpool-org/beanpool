@@ -31,6 +31,7 @@ import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
+    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT,
 } from '../services/snapshot-scheduler.js';
 import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
@@ -1029,6 +1030,13 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
     if (body.intervalHours !== undefined && !isAutoSnapshotInterval(body.intervalHours)) {
         ctx.status = 400;
         ctx.body = { error: `intervalHours must be a whole number of hours from 1 to ${MAX_AUTOSNAPSHOT_INTERVAL_HOURS}` };
+        return;
+    }
+    // A snapshot is the whole database, a deleted member's data and all, so how many are kept is how long that lasts
+    // (services/snapshot-scheduler.ts, data-at-rest report F3).
+    if (body.keep !== undefined && !isAutoSnapshotKeep(body.keep)) {
+        ctx.status = 400;
+        ctx.body = { error: `keep must be a whole number of snapshots from 1 to ${MAX_SNAPSHOTS_KEPT}` };
         return;
     }
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;

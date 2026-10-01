@@ -3388,8 +3388,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ password: authToken, enabled, intervalHours, keep })
                 });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const d = await res.json();
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
                 if (d.config) {
                     document.getElementById('autosnap-interval').value = d.config.intervalHours;
                     document.getElementById('autosnap-keep').value = d.config.keep;

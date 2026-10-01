@@ -374,6 +374,45 @@ export function openShareAsMember(sealed: SealedShare, privateKey: string | Uint
 }
 
 /**
+ * Labels that keep a secret sealed with the member scheme apart from every other use of it: the scheme name written
+ * into `kdfParams`, the HKDF info, and the AEAD's associated data. A box made under one domain never opens under
+ * another, so a recovery fragment can't be passed off as some other secret, or the other way round.
+ */
+export interface MemberKeyDomain {
+    alg: string;
+    info: string;
+    aad: string;
+}
+
+/**
+ * The member scheme ({@link sealShareToMember}: an ephemeral X25519 key against the member's account key, into
+ * XChaCha20-Poly1305) for a secret that isn't a recovery fragment, under its own {@link MemberKeyDomain}. The names
+ * list's key is wrapped to each admin this way (names-list-crypto.ts): one scheme, proven on Hermes, rather than a
+ * second one.
+ */
+export function sealToMemberKey(secret: Uint8Array, memberPublicKey: string | Uint8Array, domain: MemberKeyDomain): SealedShare {
+    const memberX = toX25519Public(requirePublicKey(memberPublicKey, 'memberPublicKey'), "That member's public key");
+    const eph = ephemeralKeypair();
+    const key = agreeKey(eph.secret, memberX, utf8ToBytes(domain.info), 'A key with that member');
+    return {
+        ...seal(key, secret, utf8ToBytes(domain.aad)),
+        ephemeralPubkey: b64(eph.publicKey),
+        kdfParams: JSON.stringify({ alg: domain.alg }),
+    };
+}
+
+/** Opens a box {@link sealToMemberKey} made, with the member's own identity key (PKCS8 or raw seed), under the same domain. */
+export function openWithMemberKey(sealed: SealedShare, privateKey: string | Uint8Array, domain: MemberKeyDomain): Uint8Array {
+    parseAlg(sealed.kdfParams, domain.alg);
+    if (!sealed.ephemeralPubkey) throw new KeeperCryptoError('A sealed key is missing the ephemeral public key that opens it.');
+    const seed = toEd25519Seed(asBytes(privateKey, 'privateKey'));
+    const myX = ed25519.utils.toMontgomerySecret(seed);
+    const ephX = requirePublicKey(unb64(sealed.ephemeralPubkey, 'ephemeralPubkey'), 'ephemeralPubkey');
+    const key = agreeKey(myX, ephX, utf8ToBytes(domain.info), 'The key that opens this box');
+    return open(key, sealed, utf8ToBytes(domain.aad));
+}
+
+/**
  * Seal the sign-in fragment (K3) under a key derived from the provider's subject claim.
  *
  * ## The salt here is NOT the lookup salt

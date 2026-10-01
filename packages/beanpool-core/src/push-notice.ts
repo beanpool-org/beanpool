@@ -174,7 +174,7 @@ export function verifyPushNotice(
     if (typeof opts.pushKey !== 'string' || !PUSH_KEY_PATTERN.test(opts.pushKey) || d.c !== pushCommunityTag(opts.pushKey)) {
         return { ok: false, reason: 'other-community' };
     }
-    let valid = false;
+    let valid: boolean;
     try {
         valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes({ c: d.c, k: d.k, i: d.i, t: d.t }, opts.recipient), hexToBytes(opts.pushKey));
     } catch {

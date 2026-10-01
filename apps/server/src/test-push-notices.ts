@@ -52,6 +52,10 @@ function assert(cond: boolean, msg: string): void {
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
+/** A step that throws on a tree without push notices (no such table) must fail its assertion, not abort the run. */
+function attempt<T>(fn: () => T): T | undefined {
+    try { return fn(); } catch (e: any) { console.error(`  (threw: ${e?.message})`); return undefined; }
+}
 const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 50)); };
 const DAY = 24 * 60 * 60 * 1000;
 const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
@@ -188,7 +192,7 @@ async function main() {
             const found = secrets.filter(s => text.includes(s));
             if (found.length) leaked.push(`${kind}: ${found.join(', ')}`);
             if (/\d/.test(`${msgs[0]?.title} ${msgs[0]?.body}`)) leaked.push(`${kind}: a number in the words`);
-            const row = notices ? db.prepare('SELECT title, body, data FROM push_notices WHERE id = ?').get(msgs[0]?.data?.i) as any : null;
+            const row = notices ? attempt(() => db.prepare('SELECT title, body, data FROM push_notices WHERE id = ?').get(msgs[0]?.data?.i)) as any : null;
             if (!row || row.title !== detailTitle || row.body !== detailBody || JSON.parse(row.data).postId !== POST_ID) unkept.push(kind);
         }
         assert(offKinds.length === 0, `each of the ${kinds.length} kinds goes out as "BeanPool" and its kind's sentence, with the notice as its only data${offKinds.length ? ` (not: ${offKinds.join(', ')})` : ''}`);
@@ -239,7 +243,7 @@ async function main() {
         assert(askedAnn.length === 2 && askedAnn.every(m => onlyItsWords(m) && m.data.k === 'market.request')
             && !/Quince|BobSecretname|\b7\b/.test(`${askedAnn[0]?.title} ${askedAnn[0]?.body}`) && !visible(asked).includes(listing.id),
             `an answer to a listing reaches both of Ann's phones as "Someone answered one of your listings.", with no title, name, amount or post id (${visible(askedAnn.slice(0, 1))})`);
-        assert(askedAnn.length === 2 && askedAnn[0].data.i === askedAnn[1].data.i,
+        assert(askedAnn.length === 2 && typeof askedAnn[0].data.i === 'string' && askedAnn[0].data.i === askedAnn[1].data.i,
             "one notice per member: both of Ann's phones carry the same notice");
 
         const announced = await caught(() => se.adminBroadcastAnnouncement('Hall meeting moved', 'Riverbend Growers meet at 9pm, bring the cash box', 'info'));
@@ -268,7 +272,7 @@ async function main() {
         assert((check(annNotice.data, bob) as any).reason === 'bad-signature', "Ann's notice fails on Bob's phone: the recipient is signed though not sent");
         const otherKey = Buffer.from(crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
         assert((check(annNotice.data, ann, otherKey) as any).reason === 'other-community', 'and with any other key it is not this community\'s');
-        const flip = (hex: string) => hex.slice(0, -1) + (hex.endsWith('0') ? '1' : '0');
+        const flip = (hex: unknown) => { const h = String(hex ?? ''); return h.slice(0, -1) + (h.endsWith('0') ? '1' : '0'); };
         const tampered: Array<[string, any]> = [
             ['c', { ...annNotice.data, c: flip(annNotice.data.c) }],
             ['k', { ...annNotice.data, k: 'trade.update' }],
@@ -277,7 +281,7 @@ async function main() {
             ['s', { ...annNotice.data, s: flip(annNotice.data.s) }],
         ];
         const held = tampered.filter(([, d]) => check(d, ann).ok);
-        assert(held.length === 0, `a change to any covered field fails the check: c, k, i, t and the signature itself${held.length ? ` (held: ${held.map(([f]) => f).join(', ')})` : ''}`);
+        assert(check(annNotice.data, ann).ok === true && held.length === 0, `a change to any covered field fails the check: c, k, i, t and the signature itself${held.length ? ` (held: ${held.map(([f]) => f).join(', ')})` : ''}`);
 
         // ── 4. The details route ───────────────────────────────────────────────────────────────────────────
         console.log('\n--- 4. GET /api/notices/push/:id ---');
@@ -304,16 +308,16 @@ async function main() {
         assert(![unsigned, outsider, notHers].some(r => JSON.stringify(r.body).includes('Hall meeting')), 'and none of them is told what it said');
 
         const nowS = Math.floor(Date.now() / 1000);
-        db.prepare('UPDATE push_notices SET sent_at = ? WHERE id = ?').run(nowS - PUSH_NOTICE_LIFETIME_SECONDS - 60, bobNotice.data.i);
+        attempt(() => db.prepare('UPDATE push_notices SET sent_at = ? WHERE id = ?').run(nowS - PUSH_NOTICE_LIFETIME_SECONDS - 60, bobNotice.data.i));
         const stale = await call('GET', bob, `/api/notices/push/${bobNotice.data.i}`);
         assert(stale.status === 404, `a notice older than 7 days is not answered, whenever the tidy last ran (${stale.status})`);
         se.runMarketplaceHygiene();
-        const left = db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(bobNotice.data.i) as any;
-        const kept = db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(annNotice.data.i) as any;
+        const left = attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(bobNotice.data.i)) as any;
+        const kept = attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(annNotice.data.i)) as any;
         assert(left?.n === 0 && kept?.n === 1, `the hourly tidy deletes it, and keeps a newer one (${left?.n}, ${kept?.n})`);
-        const catBefore = (db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk) as any).n;
+        const catBefore = (attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk)) as any)?.n;
         se.adminPruneUser(cat.pk, owner.pk);
-        const catAfter = (db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk) as any).n;
+        const catAfter = (attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk)) as any)?.n;
         assert(catBefore > 0 && catAfter === 0, `a pruned member's notice details go with them (${catBefore} → ${catAfter})`);
 
         // ── 5. Expo's tickets ──────────────────────────────────────────────────────────────────────────────
@@ -345,7 +349,7 @@ async function main() {
         const said = printed.filter(l => l.includes('[Push] Expo refused')).slice(refusalsBefore);
         assert(said.length === 2 && said.some(l => l.includes('MessageRateExceeded')) && said.some(l => l.includes('UNAUTHORIZED') && l.includes('EXPO_ACCESS_TOKEN')),
             `each is said once, UNAUTHORIZED in plain words naming EXPO_ACCESS_TOKEN (${said.length} line(s))`);
-        const counted = se.pushServiceRefusals();
+        const counted = typeof se.pushServiceRefusals === 'function' ? se.pushServiceRefusals() : {} as ReturnType<typeof se.pushServiceRefusals>;
         assert(counted.MessageRateExceeded?.count === 2 && counted.UNAUTHORIZED?.count === 2,
             `and counted for diagnostics (${JSON.stringify(Object.fromEntries(Object.entries(counted).map(([k, v]) => [k, v.count])))})`);
         const tokens = Object.values(phone);

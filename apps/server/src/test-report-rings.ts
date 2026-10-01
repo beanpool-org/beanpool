@@ -75,6 +75,7 @@ function member(name: string, daysAgo: number, invitedBy?: Id): Id {
 }
 
 interface Res { status: number; body: any }
+let lastCallAt = performance.now();
 async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Res> {
     resetGatewayRateLimit();
     pruneAuthAttempts(Date.now() + 120_000);
@@ -89,8 +90,13 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
+    // The server runs in this process with a 5 s keep-alive. After a long synchronous stretch (section 9's 300-deep chain,
+    // slower on CI), its idle-close timers fire only now: give them a turn so fetch doesn't reuse a socket the server is
+    // closing (ECONNRESET on CI's Node 22; memory suite-event-loop-keepalive-node22).
+    if (performance.now() - lastCallAt > 4_000) await new Promise(r => setTimeout(r, 100));
     const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
+    lastCallAt = performance.now();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty */ }
     return { status: res.status, body: parsed };

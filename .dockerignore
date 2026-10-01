@@ -1,0 +1,26 @@
+# What `docker build` never needs, kept out of its build context. On a build node the context is the project folder deploy.sh
+# unpacked, and deploy.sh moves the node's data/ and .env back into it before `docker compose up --build`, so without this file
+# the ledger, community.key and the node's secrets went to the builder (scratch/reviews/FABLE-sec-infra.md M1). The image never
+# held them (its runtime stage copies named paths), but the builder's cache did until the prune at the end of a deploy.
+# A pattern matches from the context root; **/ matches at any depth. scripts/test-deploy-package.sh checks these lines.
+
+# The node's own data and secrets.
+data
+**/.env*
+
+# Working state in a developer's checkout, should a build run from one.
+.claude
+scratch*
+.deploy-package.tar.gz
+
+# What the build installs or makes for itself.
+.git
+**/node_modules
+**/dist
+**/.turbo
+
+# The phone app and its build output. The node image never uses apps/native, and deploy.sh has never sent it to a build node.
+apps/native
+builds
+**/*.apk
+**/*.aab

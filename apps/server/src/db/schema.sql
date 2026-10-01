@@ -1404,10 +1404,16 @@ CREATE TABLE IF NOT EXISTS names_entries (
 CREATE INDEX IF NOT EXISTS idx_names_entries_generation ON names_entries(key_generation);
 
 -- The list key of one generation, wrapped to one admin's account key (the keeper scheme: X25519 ECDH into
--- XChaCha20-Poly1305). Only that admin's phone opens it. A holder who stops being an owner or admin keeps the row,
--- `dropped_at` set and the wrap cleared, until the list has a new key: a dropped row at the current generation is how
--- the node knows the next write needs one (engine/names-list.ts). An older generation's rows go once no entry is
--- sealed under it.
+-- XChaCha20-Poly1305). Only that admin's phone opens it. Every wrap is SIGNED by the admin who made it
+-- (@beanpool/core names-list-trust.ts): `signature` is `wrapped_by`'s Ed25519 signature over the community's id, the
+-- generation, the holder, the signer, `wrap_digest` (SHA-256 of the five wrap fields) and `drops` (the admins the signer
+-- dropped when it made this generation, space-separated; empty on a share). An admin's phone uses a wrap only where a
+-- key it already trusts signed it, so a row this server, or anyone with its database, writes opens nothing.
+-- A holder who stops being an owner or admin keeps the row, `dropped_at` set and the wrap cleared, until the list has a
+-- new key: a dropped row at the current generation is how the node knows the next write needs one
+-- (engine/names-list.ts). An older generation's wraps are cleared the same way once no entry is sealed under it. A
+-- cleared row keeps its signed header (`wrapped_by`, `wrap_digest`, `drops`, `signature`): the phones trace who added
+-- whom through them. `wrapped_by` is never moved by a re-key: the signature is that key's.
 CREATE TABLE IF NOT EXISTS names_list_keys (
     holder_pubkey    TEXT NOT NULL,
     generation       INTEGER NOT NULL CHECK (generation >= 1),
@@ -1417,6 +1423,9 @@ CREATE TABLE IF NOT EXISTS names_list_keys (
     ephemeral_pubkey TEXT,
     kdf_params       TEXT,
     wrapped_by       TEXT NOT NULL,
+    wrap_digest      TEXT NOT NULL,
+    drops            TEXT NOT NULL DEFAULT '',
+    signature        TEXT NOT NULL,
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     dropped_at       DATETIME,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.

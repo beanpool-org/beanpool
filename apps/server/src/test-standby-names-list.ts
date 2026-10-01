@@ -7,16 +7,21 @@
  * puller (services/backup-puller.ts) from the main server's real backup routes, and takes over through the real routes
  * with the recovery code, restarting itself. Nothing leaves this machine.
  *
- *  1. On the main server M, Owen's phone makes the list's key for Owen and Ada, two entries are added, Ada confirms Mel
- *     against one and reads the list, and Owen asks for two admins to confirm.
+ *  1. On the main server M, Owen's phone makes the list's key for Owen and Ada (each wrap signed by Owen, bound to the
+ *     community's id), shares it with Abe, two entries are added, Ada confirms Mel against one and reads the list, and
+ *     Owen asks for two admins to confirm. Each admin's phone keeps its pin (the keys it trusts).
  *  2. A standby S takes its first copy: its four tables hold exactly M's rows, sealed text and wraps, stamps included, and
  *     no byte of its database is a planted name. On S's own server the list opens for nobody (409 `standby`): a read
  *     writes the log, which is the main server's.
- *  3. On M: an entry is edited, another added and deleted, and Mel is re-keyed. The next delta brings all of it: the edit,
- *     the delete (its tombstone), and Mel's confirmation under her new key.
- *  4. M is killed and S takes over with the recovery code. After its restart, Owen's phone opens its own wrap from S and
- *     reads every entry as written on M; Ada's too. The list takes a new entry and a confirmation, the access log holds
- *     M's lines and S's, and two admins to confirm is still the community's setting.
+ *  3. On M: an entry is edited, another added and deleted, and Mel is re-keyed. Abe stops being an admin, and Owen's phone
+ *     makes generation 2 (its signed wrap naming Abe as dropped), seals the entries again and shares it with Ada; the
+ *     older generation's wraps are cleared, their signed headers kept. The next delta brings all of it: the edit, the
+ *     delete (its tombstone), Mel's confirmation under her new key, and every signed header.
+ *  4. M is killed and S takes over with the recovery code. After its restart, S names the same community, every
+ *     signature still checks out there, and Owen's and Ada's phones, with the pins they kept from M, take generation 2
+ *     from S (Abe still dropped) and read every entry as written on M. A generation Abe signs, written into S's database,
+ *     is refused. The list takes a new entry and a confirmation, the access log holds M's lines and S's, and two admins
+ *     to confirm is still the community's setting.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-names-list.ts
@@ -116,6 +121,22 @@ async function child(): Promise<void> {
                 sealed: a.sealed.filter((s) => bytes.includes(s)),
             };
         },
+        'drop-admin': async (a: { pubkey: string }) => {
+            const { revokeNodeRole } = await import('./engine/node-roles.js');
+            revokeNodeRole(a.pubkey, 'admin', 'owner:password');
+            return true;
+        },
+        /** A row written straight into this server's database, signed by a real admin key (`seed`), as whoever runs it can. */
+        'plant-signed': async (a: { holder: string; generation: number; signer: string; seed: string; communityId: string }) => {
+            const core = await import('@beanpool/core');
+            const { db } = await import('./db/db.js');
+            const w = core.wrapNamesListKey(core.newNamesListKey(), a.holder, a.generation);
+            const digest = core.namesWrapDigest(w);
+            const sig = core.signNamesWrap({ communityId: a.communityId, generation: a.generation, holder: a.holder, wrappedBy: a.signer, wrapDigest: digest, drops: [] }, a.seed);
+            db.prepare(`INSERT INTO names_list_keys (holder_pubkey, generation, wrapped_key, wrap_iv, wrap_tag, ephemeral_pubkey, kdf_params, wrapped_by, wrap_digest, drops, signature)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?)`).run(a.holder, a.generation, w.wrappedKey, w.wrapIv, w.wrapTag, w.ephemeralPubkey, w.kdfParams, a.signer, digest, sig);
+            return true;
+        },
         rekey: async (a: { old: string; next: string; operator: string }) => {
             const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
             const code = issueRekeyCode(a.old, a.operator).code;
@@ -176,7 +197,11 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000' });
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const [owen, ada, mel] = ['Owen', 'Ada', 'Mel'].map(newId);
+    const [owen, ada, abe, mel] = ['Owen', 'Ada', 'Abe', 'Mel'].map(newId);
+    const keysOf = (id: Id) => ({ publicKey: id.pk, privateKey: id.seedHex });
+    /** A wrap of `key` to `holder`, signed by `signer`'s phone, for `communityId`. */
+    const wrapFor = (communityId: string, signer: Id, key: Uint8Array, holder: Id, generation: number, drops: string[] = []) =>
+        core.signedNamesWrap(core.wrapNamesListKey(key, holder.pk, generation), { communityId, generation, holder: holder.pk, signer: keysOf(signer), drops });
 
     /** What an admin's phone does with the list on the server at `base`. */
     const phone = (base: string) => ({
@@ -187,6 +212,15 @@ async function main(): Promise<void> {
             const wrap = (s.body?.myKeys ?? []).find((k: any) => k.generation === generation);
             if (!wrap) throw new Error(`${id.name} holds no wrap of generation ${generation} (${s.status} ${j(s.body)})`);
             return core.unwrapNamesListKey(wrap, id.seedHex, id.pk, generation);
+        },
+        /** What `id`'s phone decides about the key on this server, from its pin: the walk the app runs. */
+        trace: async (id: Id, pin: any) => {
+            const s = await signedCall(base, 'GET', '/api/names/state', id);
+            if (s.status !== 200) throw new Error(`${id.name}'s state: ${s.status} ${j(s.body)}`);
+            return {
+                ...core.traceNamesTrust({ communityId: s.body.communityId, me: keysOf(id), pin, records: s.body.records, myKeys: s.body.myKeys, generation: s.body.generation }),
+                communityId: s.body.communityId as string, records: s.body.records as any[],
+            };
         },
         add: async (id: Id, key: Uint8Array, generation: number, name: string, note = '') => {
             const entryId = core.newNamesEntryId();
@@ -202,14 +236,20 @@ async function main(): Promise<void> {
         console.log('\n— 1. the main server keeps a names list —');
         const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
-        const setup = await main.send('setup-primary', { replicationToken, owner: owen.pk, members: [[ada.pk, 'Ada'], [mel.pk, 'Mel']], admins: [ada.pk] });
+        const setup = await main.send('setup-primary', { replicationToken, owner: owen.pk, members: [[ada.pk, 'Ada'], [abe.pk, 'Abe'], [mel.pk, 'Mel']], admins: [ada.pk, abe.pk] });
         const mBase = `https://localhost:${await main.send('serve')}`;
         const M = phone(mBase);
+        const community = (await signedCall(mBase, 'GET', '/api/names/state', owen)).body?.communityId;
+        require_(typeof community === 'string' && community.length > 0, `M names its community (${community})`);
         const k1 = core.newNamesListKey();
-        const made = await signedCall(mBase, 'POST', '/api/names/key', owen, {
-            generation: 1, wraps: [owen, ada].map((h) => ({ holder: h.pk, ...core.wrapNamesListKey(k1, h.pk, 1) })),
-        });
-        require_(made.status === 201, `M: Owen's phone makes the list's key for Owen and Ada (${made.status} ${j(made.body)})`);
+        const made = await signedCall(mBase, 'POST', '/api/names/key', owen, { generation: 1, wraps: [owen, ada].map((h) => wrapFor(community, owen, k1, h, 1)) });
+        require_(made.status === 201, `M: Owen's phone makes the list's key for Owen and Ada, signed (${made.status} ${j(made.body)})`);
+        const toAbe = await signedCall(mBase, 'POST', '/api/names/key/share', owen, { generation: 1, wraps: [wrapFor(community, owen, k1, abe, 1)] });
+        require_(toAbe.status === 200, `M: and shares it with Abe (${toAbe.status} ${j(toAbe.body)})`);
+        const owenM = await M.trace(owen, null);
+        const adaM = await M.trace(ada, null);
+        require_(owenM.keys.has(1) && adaM.keys.has(1) && adaM.firstTrust === owen.pk && owenM.pin!.trusted.includes(abe.pk),
+            "M: Owen's and Ada's phones take the key and keep their pins (Owen's trusts Abe, whom it added)");
         const zeb = await M.add(owen, k1, 1, PLANTED[0], 'Lives by the old cannery');
         const ott = await M.add(ada, await M.keyOf(ada, 1), 1, PLANTED[1]);
         require_(zeb.status === 201 && ott.status === 201, `M: two entries (${zeb.status} ${ott.status})`);
@@ -253,6 +293,17 @@ async function main(): Promise<void> {
         const melNew = newId('Mel');
         const rekeyed = await main.send('rekey', { old: mel.pk, next: melNew.pk, operator: owen.pk });
         require_(edit.status === 200 && tmp.status === 201 && del.status === 200 && rekeyed === true, `M: edited, added and deleted, Mel re-keyed (${edit.status} ${tmp.status} ${del.status})`);
+        // Abe stops being an admin: Owen's phone makes generation 2, naming him as dropped, seals the entries again, shares it with Ada.
+        require_(await main.send('drop-admin', { pubkey: abe.pk }) === true, 'M: Abe stops being an admin');
+        const k2 = core.newNamesListKey();
+        const made2 = await signedCall(mBase, 'POST', '/api/names/key', owen, { generation: 2, wraps: [wrapFor(community, owen, k2, owen, 2, [abe.pk])] });
+        require_(made2.status === 201, `M: Owen's phone makes generation 2, naming Abe as dropped (${made2.status} ${j(made2.body)})`);
+        const old1 = (await M.entries(owen)).body.entries;
+        const reenc = await signedCall(mBase, 'POST', '/api/names/entries/re-encrypt', owen, {
+            generation: 2, entries: old1.map((e: any) => ({ id: e.id, ciphertext: core.sealNamesEntry(k2, e.id, 2, core.openNamesEntry(k1, e.id, 1, e.ciphertext)) })),
+        });
+        const share2 = await signedCall(mBase, 'POST', '/api/names/key/share', owen, { generation: 2, wraps: [wrapFor(community, owen, k2, ada, 2)] });
+        require_(reenc.status === 200 && reenc.body?.left === 0 && share2.status === 200, `M: seals the entries again and shares generation 2 with Ada (${reenc.status} ${share2.status})`);
         const delta = await standby.send('pull');
         require_(delta.ok === true, `S: the delta lands (${j(delta)})`);
         const mRows2 = await main.send('names-rows');
@@ -262,6 +313,10 @@ async function main(): Promise<void> {
             && (sRows2.tombstones as any[]).some((r) => r.table_name === 'names_entries' && r.row_key === tmp.entryId), "the deleted entry's tombstone took it off S");
         const sConf = (sRows2.confirmations as any[]).find((r) => r.id === conf.body.id);
         assert(sConf?.member_pubkey === melNew.pk && sConf?.confirmed_by === ada.pk, `Mel's confirmation names her new key on S (${j(sConf)})`);
+        const sKeys = sRows2.names_list_keys as any[];
+        assert(sKeys.length === 5 && sKeys.filter((r) => r.generation === 1).every((r) => r.wrapped_key === null && r.signature.length === 128)
+            && sKeys.find((r) => r.generation === 2 && r.holder_pubkey === owen.pk)?.drops === abe.pk,
+            `S holds every signed header: generation 1's cleared wraps, and generation 2's naming Abe as dropped (${sKeys.length} rows)`);
 
         // ── 4. The take-over ──
         console.log('\n— 4. M is killed; S takes over with the recovery code —');
@@ -278,17 +333,23 @@ async function main(): Promise<void> {
         const sBase = `https://localhost:${await standby.send('serve')}`;
         const S = phone(sBase);
         const sState = await S.state(owen);
-        require_(sState.status === 200 && sState.body.generation === 1 && sState.body.newKeyNeeded === false,
-            `Owen opens the list on S: generation 1, no new key needed (${sState.status} ${j(sState.body)})`);
+        require_(sState.status === 200 && sState.body.generation === 2 && sState.body.newKeyNeeded === false,
+            `Owen opens the list on S: generation 2, no new key needed (${sState.status} ${j(sState.body)})`);
         assert(sState.body.settings.twoAdminsToConfirm === true, 'two admins to confirm is still the community\'s setting');
-        const owenK = await S.keyOf(owen, 1);
-        const adaK = await S.keyOf(ada, 1);
+        assert(sState.body.communityId === community && sState.body.records.length === 5 && sState.body.records.every((r: any) => core.verifyNamesWrap(r, r.signature)),
+            `S names the same community, and every wrap's signature checks out there (${sState.body.records.length} records)`);
+        const owenS = await S.trace(owen, owenM.pin);
+        const adaS = await S.trace(ada, adaM.pin);
+        assert(owenS.currentTraced && owenS.keys.has(2) && adaS.keys.has(2) && !owenS.trusted.has(abe.pk) && !adaS.trusted.has(abe.pk),
+            `Owen's and Ada's phones, with the pins they kept from M, take generation 2 from S, Abe still dropped (${j(adaS.refused)})`);
+        const owenK = owenS.keys.get(2)!;
+        const adaK = adaS.keys.get(2)!;
         const owenReads = opened(owenK, (await S.entries(owen)).body);
         const adaReads = opened(adaK, (await S.entries(ada)).body);
         assert(owenReads[zeb.entryId]?.name === PLANTED[0] && owenReads[zeb.entryId]?.note === 'Moved to Main St' && owenReads[ott.entryId]?.name === PLANTED[1]
             && Object.keys(owenReads).length === 2, `Owen's phone reads every entry as written on M, the edit included (${j(owenReads)})`);
         assert(j(adaReads) === j(owenReads), "and so does Ada's");
-        const corn = await S.add(ada, adaK, 1, PLANTED[2]);
+        const corn = await S.add(ada, adaK, 2, PLANTED[2]);
         assert(corn.status === 201, `the list takes a new entry on S (${corn.status} ${j(corn.body)})`);
         const confS = await signedCall(sBase, 'POST', '/api/names/confirmations', owen, { memberPubkey: melNew.pk, entryId: corn.entryId });
         assert(confS.status === 409 && confS.body?.code === 'already_confirmed',
@@ -297,6 +358,12 @@ async function main(): Promise<void> {
         const actions = (logS.body?.log ?? []).map((l: any) => `${l.actorCallsign ?? l.actor}:${l.action}`);
         assert(logS.status === 200 && actions.includes('Ada:confirm') && actions.includes('Owen:key_made') && actions.includes('Ada:add')
             && actions.filter((a: string) => a === 'Ada:read').length >= 2, `the access log holds M's lines and S's (${actions.join(', ')})`);
+        // Abe, dropped on M, really signs a generation 3 for Owen, written into S's database: Owen's phone refuses it.
+        await standby.send('plant-signed', { holder: abe.pk, generation: 3, signer: abe.pk, seed: abe.seedHex, communityId: community });
+        await standby.send('plant-signed', { holder: owen.pk, generation: 3, signer: abe.pk, seed: abe.seedHex, communityId: community });
+        const owenVsAbe = await S.trace(owen, owenS.pin);
+        assert(!owenVsAbe.keys.has(3) && !owenVsAbe.currentTraced && owenVsAbe.refused[0]?.reason === 'untrusted',
+            `after the take-over, a generation Abe signs is still refused: his drop came across with the signatures (${j(owenVsAbe.refused)})`);
     } finally {
         for (const n of nodes) await n.kill();
     }

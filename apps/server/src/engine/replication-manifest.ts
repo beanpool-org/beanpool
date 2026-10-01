@@ -391,7 +391,9 @@ export const TABLES: Record<string, TableEntry> = {
     // Sealed entries and the list key wrapped to each admin: a standby holds what the main server holds, scrambled text
     // it can't open, and a server that takes over serves it to the same admins' phones. A delete writes a tombstone.
     names_entries: plain('id ciphertext key_generation created_by created_at updated_by updated_at'),
-    names_list_keys: plain('holder_pubkey generation wrapped_key wrap_iv wrap_tag ephemeral_pubkey kdf_params wrapped_by created_at dropped_at updated_at'),
+    // Each wrap's signed header (wrap_digest, drops, signature) comes too: after a take-over the admins' phones check the
+    // same signatures on the server that took over.
+    names_list_keys: plain('holder_pubkey generation wrapped_key wrap_iv wrap_tag ephemeral_pubkey kdf_params wrapped_by wrap_digest drops signature created_at dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.
     confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.

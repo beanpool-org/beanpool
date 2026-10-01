@@ -120,6 +120,7 @@ function b64(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString('base64');
 }
 function unb64(s: string): Uint8Array {
+    if (typeof s !== 'string') throw new DmLineNotVerifiedError();
     return new Uint8Array(Buffer.from(s, 'base64'));
 }
 function utf8(bytes: Uint8Array): string {

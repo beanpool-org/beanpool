@@ -104,7 +104,7 @@ function refOf(v: DmLineVector, over: Partial<DmLineRef> = {}): DmLineRef {
 }
 
 function refused(api: DmLineApi, v: DmLineVector, keys: DmKeys, over: Partial<DmLineRef>, what: string): void {
-    let opened: OpenedDmLine | null = null;
+    let opened: OpenedDmLine;
     try { opened = api.openDmLine(v.payload, keys, refOf(v, over)); } catch { return; }
     fail(`${v.label}: ${what} opened (as format ${opened.format}, "${opened.text}")`);
 }

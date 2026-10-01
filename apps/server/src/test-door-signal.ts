@@ -34,7 +34,7 @@ delete process.env.NODE_PROFILE;
 delete process.env.GOOGLE_CLIENT_IDS;
 
 import crypto from 'node:crypto';
-import { solveDoorWorkSync, type DoorWorkDoor } from '@beanpool/core';
+import { type DoorWorkDoor } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, adminPruneUser, exportSyncState } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
@@ -46,7 +46,7 @@ import { forgetOldJoinAddresses, openJoinAddressHash, readOpenJoinRecord } from 
 import {
     DOOR_NUMBERS, REMOVED_NEWCOMER_KEEP_MS, _resetWordsJoinsForTests, doorCeilingReached, doorLevel, doorNumbers, noteWordsJoin,
 } from './engine/door-signal.js';
-import { nodeSha256 } from './services/door-work.js';
+import { solveOffLoop } from './door-work-test-solver.js';
 import { limiterKeyForIp } from './client-ip.js';
 
 let BASE = '';
@@ -102,18 +102,21 @@ async function askWork(door: DoorWorkDoor, ip: string, id: Id = newId()): Promis
     const r = await call('POST', id, '/api/join/work', ip, { door });
     return { ...r, level: r.status === 200 ? (r.body?.work?.level ?? null) : null };
 }
-/** A real 12-words join from `ip`: the work asked for, solved here, and the join. */
+/**
+ * A real 12-words join from `ip`: the work asked for, solved in a worker thread (a level-4 solve took 3.2 s on CI; on
+ * this thread it would hold the server's loop near its 5 s keep-alive: door-work-test-solver.ts), and the join.
+ */
 async function joinByWords(ip: string, callsign: string, id: Id = newId()): Promise<{ id: Id; level: number | null; res: Res }> {
     const w = await askWork('words', ip, id);
     if (w.status !== 200 || !w.body?.work) return { id, level: null, res: w };
-    const work = { challenge: w.body.work.challenge, counters: solveDoorWorkSync(w.body.work.challenge, nodeSha256) };
+    const work = { challenge: w.body.work.challenge, counters: await solveOffLoop(w.body.work.challenge) };
     return { id, level: w.level, res: await call('POST', id, '/api/join', ip, { door: 'words', callsign, work }) };
 }
 /** A real sign-in join from `ip`, with the work the door asks for, if any. */
 async function joinBySignIn(ip: string, sub: string, callsign: string, id: Id = newId()): Promise<Res> {
     const w = await askWork('sign-in', ip, id);
     if (w.status !== 200) return w;
-    const work = w.body?.work ? { challenge: w.body.work.challenge, counters: solveDoorWorkSync(w.body.work.challenge, nodeSha256) } : undefined;
+    const work = w.body?.work ? { challenge: w.body.work.challenge, counters: await solveOffLoop(w.body.work.challenge) } : undefined;
     const n = await call('POST', id, '/api/join/sso-nonce', ip, {});
     return call('POST', id, '/api/join', ip, { callsign, provider: 'google', idToken: mint(sub, n.body?.nonce), nonce: n.body?.nonce, work });
 }

@@ -1639,7 +1639,9 @@ export function WebJoin({
     }
 
     return (
-        <div data-testid={`join-screen-${screen.name}`} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+        // `data-words-work`: where the 12-words door's work stands, for the browser checks (e2e/app-csp-check.mjs).
+        <div data-testid={`join-screen-${screen.name}`} data-words-work={wordsOpen ? work.status : undefined}
+            style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {body}
         </div>
     );

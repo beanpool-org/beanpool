@@ -102,7 +102,7 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 | | |
 |---|---|
 | Handshake token | 60 seconds, single use, burned on exchange |
-| Browser session | 2 hours idle, 12 hours hard maximum |
+| Browser session | 2 hours idle, 12 hours hard maximum; **15 minutes idle** for a session the phone app's Manage hand-off opens in the phone's in-app browser, which App Lock can't cover on Android (`PHONE_HANDOFF_IDLE_TTL_MS`, 2026-10-01, #1413) |
 | Revocation | *"Revoke all web sessions"* in the app bumps the admin's `session_epoch`, invalidating every outstanding cookie instantly |
 
 **Phone button — built 2026-09-19 (Marty approved the flow 2026-09-19).**

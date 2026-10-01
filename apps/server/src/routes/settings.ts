@@ -17,7 +17,7 @@ import {
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
     getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
-import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
+import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
@@ -120,10 +120,11 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     // The Settings UI and its sign-in pages run inline scripts (app-document-csp.ts).
     useDocumentPolicy(ctx);
 
-    // 1. Deep-link Handshake Token Exchange (phone button flow)
+    // 1. Deep-link Handshake Token Exchange (an older phone app's Manage button): a page in the phone's in-app
+    //    browser, so the phone hand-off's short idle limit (admin-key-auth.ts PHONE_HANDOFF_IDLE_TTL_MS).
     const token = ctx.query.token as string | undefined;
     if (token) {
-        const exchangeRes = consumeHandshakeToken(token);
+        const exchangeRes = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         if (exchangeRes.ok && exchangeRes.sessionId) {
             ctx.cookies.set('admin_session', exchangeRes.sessionId, {
                 httpOnly: true,

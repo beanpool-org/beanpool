@@ -9,6 +9,8 @@
  *      expiry, single use, wrong key, non-admin refused, role revoked between request and use,
  *      role CHANGED between request and use (session takes the live role), demoted mid-session,
  *      no actor from the body, and the node's own TOTP still applies on top.
+ *   4. The hand-off's session locks after 15 minutes idle (PHONE_HANDOFF_IDLE_TTL_MS), through the exchange and an
+ *      older app's GET /settings?token=; a session made any other way keeps the 2-hour idle limit.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -22,7 +24,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } from './admin-key-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS } from './admin-key-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 
@@ -269,6 +271,45 @@ async function main() {
         const c = createAdminChallenge();
         const direct = verifyAndSolveChallenge({ challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(member, c.challenge) });
         assert(direct.ok === false && !direct.handshakeToken, 'verifyAndSolveChallenge refuses a signature from another key');
+    }
+
+    // ── 4. The hand-off's session locks itself after a short idle ──
+    // The phone opens it in its in-app browser, which App Lock can't cover on Android (deciding review of #1413).
+    console.log('\n4. Phone hand-off session idle limit');
+    {
+        assert(PHONE_HANDOFF_IDLE_TTL_MS === 15 * 60_000, 'the phone hand-off idle limit is 15 minutes');
+        const MIN = 60_000;
+        const t0 = Date.now();
+        const ex = await exchange((await requestLink(admin)).body.handshakeToken);
+        assert(ex.status === 200 && !!ex.sessionId, 'the hand-off exchange signs in');
+        const idleLeft = ex.body.idleExpiresAt - t0;
+        assert(idleLeft > 14 * MIN && idleLeft <= 15 * MIN + 5_000, `its idle limit is 15 minutes, not 2 hours (got ${Math.round(idleLeft / MIN)} min)`);
+        const info = await sessionInfo(ex.sessionId!);
+        assert(info.authenticated === true, 'the session works now');
+        assert(validateAdminSession(ex.sessionId!, t0 + 14 * MIN).valid === true, 'used again within 15 minutes: still signed in');
+        assert(validateAdminSession(ex.sessionId!, t0 + 28 * MIN).valid === true, 'each use slides the 15 minutes on');
+        const idle = validateAdminSession(ex.sessionId!, t0 + 28 * MIN + 16 * MIN);
+        assert(idle.valid === false && idle.idleTimeout === true, '16 minutes unused: signed out');
+        assert(/15 min idle/.test(idle.error ?? ''), `the reason names the 15 minutes (got "${idle.error}")`);
+        const after = await sessionInfo(ex.sessionId!);
+        assert(after.authenticated === false, 'and the node no longer accepts the cookie');
+
+        // An older app's GET /settings?token=… is the same hand-off.
+        const legacyLink = await requestLink(admin);
+        const legacy = await fetch(`${BASE}/settings?token=${legacyLink.body.handshakeToken}`, { redirect: 'manual' });
+        const legacyId = (legacy.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
+        assert(legacy.status === 302 && !!legacyId, `GET /settings?token= signs in (got ${legacy.status})`);
+        const tl = Date.now();
+        assert(validateAdminSession(legacyId!, tl + 14 * MIN).valid === true, 'GET /settings?token=: still signed in at 14 minutes');
+        assert(validateAdminSession(legacyId!, tl + 14 * MIN + 16 * MIN).valid === false, 'GET /settings?token=: signed out after 16 minutes unused');
+
+        // Any other sign-in (the desktop "Sign in with your phone" pairing redeems with no option) keeps 2 hours.
+        const direct = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken);
+        assert(direct.ok === true && direct.idleExpiresAt! - Date.now() > SESSION_IDLE_TTL_MS - MIN, 'a session made without the hand-off keeps the 2-hour idle limit');
+        assert(validateAdminSession(direct.sessionId!, Date.now() + 60 * MIN).valid === true, '…and is still signed in after an hour unused');
+        // The option can only shorten it.
+        const longer = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken, Date.now(), { idleTtlMs: 48 * 60 * MIN });
+        assert(longer.ok === true && longer.idleExpiresAt! - Date.now() <= SESSION_IDLE_TTL_MS, 'an idle limit longer than 2 hours is never granted');
     }
 
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);

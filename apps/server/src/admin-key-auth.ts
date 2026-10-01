@@ -6,7 +6,8 @@
  *
  * (a) Signed challenge auth for /settings and /api/local/admin/*:
  *     - 60-second single-use handshake token minted for an active member holding a node role
- *     - Handshake token exchanged for a browser session (2h idle / 12h hard limit)
+ *     - Handshake token exchanged for a browser session (2h idle / 12h hard limit); a session the phone app's
+ *       "Manage" hand-off opens in the phone's own browser locks after 15 min idle (PHONE_HANDOFF_IDLE_TTL_MS)
  *     - session_epoch per member for instant revoke-all
  *     - Phone-button deep link and desktop QR flow use the exact same token; the token is only ever
  *       returned to the party that proved the key (verify-challenge) or held inside a browser-bound
@@ -57,6 +58,17 @@ export const CHALLENGE_TTL_MS = 60_000;          // 60 seconds challenge freshne
 export const HANDSHAKE_TOKEN_TTL_MS = 60_000;    // 60 seconds single-use token freshness
 export const SESSION_IDLE_TTL_MS = 2 * 60 * 60 * 1000;   // 2 hours idle timeout
 export const SESSION_HARD_TTL_MS = 12 * 60 * 60 * 1000;  // 12 hours hard maximum
+/**
+ * Idle limit for a session opened by the phone app's "Manage <community>" hand-off (/settings#handoff=…, redeemed
+ * through POST /api/local/admin/auth/exchange, or an older app's GET /settings?token=). That page lives in the phone's
+ * in-app browser, which App Lock can't cover on Android (a Custom Tab is a task of its own) and only closes on an iPhone
+ * as the lock screen goes up (deciding review of #1413, 2026-10-01). So the node locks it itself: 15 minutes with no
+ * request from it. While Settings is on screen and in use it polls every few seconds, which keeps the session; its
+ * polls stop when the tab is hidden or untouched for ten minutes (apps/manager/src/lib/activity-pause.tsx), so a phone
+ * put down with Settings open is signed out within ~15 minutes. Opening Manage again signs straight back in.
+ * The desktop "Sign in with your phone" pairing keeps SESSION_IDLE_TTL_MS: that browser is on a computer.
+ */
+export const PHONE_HANDOFF_IDLE_TTL_MS = 15 * 60 * 1000;
 
 // ===================== TYPES =====================
 export interface AdminChallenge {
@@ -91,6 +103,8 @@ export interface AdminSession {
     lastActiveAt: number;
     hardExpiresAt: number;
     idleExpiresAt: number;
+    /** How long it may sit unused: SESSION_IDLE_TTL_MS, or PHONE_HANDOFF_IDLE_TTL_MS for the phone's hand-off. */
+    idleTtlMs: number;
 }
 
 // In-memory stores for ephemeral challenges, handshake tokens, and active sessions
@@ -402,7 +416,8 @@ export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, n
 // ===================== HANDSHAKE TOKEN EXCHANGE =====================
 
 /**
- * Exchanges a single-use 60-second handshake token for a browser session (2h idle / 12h hard).
+ * Exchanges a single-use 60-second handshake token for a browser session (2h idle / 12h hard). `idleTtlMs` shortens
+ * the idle limit: the phone app's hand-off passes PHONE_HANDOFF_IDLE_TTL_MS.
  *
  * Enforces:
  * - Single-use token: token is burned on exchange, replays are rejected
@@ -410,7 +425,7 @@ export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, n
  * - session_epoch verification: if epoch bumped since minting, token is rejected
  * - Node role verification: member must still hold a node role
  */
-export function consumeHandshakeToken(token: string, now = Date.now()): {
+export function consumeHandshakeToken(token: string, now = Date.now(), opts: { idleTtlMs?: number } = {}): {
     ok: boolean;
     error?: string;
     replay?: boolean;
@@ -460,7 +475,8 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
         return { ok: false, error: 'Member no longer holds a node role' };
     }
 
-    // Mint browser session (2h idle / 12h hard)
+    // Mint browser session (2h idle, or the phone hand-off's 15 min / 12h hard). Never longer than the default.
+    const idleTtlMs = Math.min(opts.idleTtlMs ?? SESSION_IDLE_TTL_MS, SESSION_IDLE_TTL_MS);
     const sessionId = crypto.randomBytes(32).toString('hex');
     const session: AdminSession = {
         sessionId,
@@ -470,7 +486,8 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
         createdAt: now,
         lastActiveAt: now,
         hardExpiresAt: now + SESSION_HARD_TTL_MS,
-        idleExpiresAt: now + SESSION_IDLE_TTL_MS,
+        idleExpiresAt: now + idleTtlMs,
+        idleTtlMs,
     };
     adminSessions.set(sessionId, session);
 
@@ -498,7 +515,7 @@ export function consumeHandshakeToken(token: string, now = Date.now()): {
  * Enforces:
  * - Session existence
  * - Hard limit: 12 hours hard maximum
- * - Idle limit: 2 hours idle timeout
+ * - Idle limit: 2 hours idle timeout (15 minutes for the phone app's hand-off)
  * - session_epoch: matching current member session_epoch in node_roles
  * - Node role: member still holds a node role (the session's role follows it)
  * - Sliding window: refreshes idle timeout on valid use
@@ -528,10 +545,11 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
         return { valid: false, error: 'Session expired (12h hard limit reached)', expired: true, hardLimit: true };
     }
 
-    // 2h Idle Limit check
+    // Idle Limit check (2h, or 15 min for the phone app's hand-off)
     if (now > session.idleExpiresAt) {
         adminSessions.delete(sessionId);
-        return { valid: false, error: 'Session expired (2h idle timeout)', idle: true, idleTimeout: true };
+        const idleFor = session.idleTtlMs < 60 * 60 * 1000 ? `${Math.round(session.idleTtlMs / 60_000)} min` : `${Math.round(session.idleTtlMs / 3_600_000)}h`;
+        return { valid: false, error: `Session expired (${idleFor} idle timeout)`, idle: true, idleTimeout: true };
     }
 
     // session_epoch check
@@ -554,7 +572,7 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 
     // Sliding window for idle timeout
     session.lastActiveAt = now;
-    session.idleExpiresAt = now + SESSION_IDLE_TTL_MS;
+    session.idleExpiresAt = now + session.idleTtlMs;
 
     return { valid: true, session };
 }

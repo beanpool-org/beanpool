@@ -21,7 +21,9 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import { GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -191,6 +193,12 @@ export default function PeopleScreen() {
     const makesInvites = invitesOn(nodeProfile?.features);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
+    // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
+    // once the global community has said its door is open. Only there: the door is the global community's alone, so a phone
+    // anywhere else never asks it.
+    const guestAtGlobal = guestNoInvites && isGlobalCommunity(anchorUrl);
+    const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
+    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest' });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -899,10 +907,22 @@ export default function PeopleScreen() {
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
-                                {guestNoInvites
+                                {guestDoor
+                                    ? GUEST_DOOR_TEXT
+                                    : guestNoInvites
                                     ? GUEST_NO_INVITES_TEXT
                                     : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
+                            {guestDoor && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Join the global community with a sign-in"
+                                    style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
+                                    onPress={() => router.push('/join-global')}
+                                >
+                                    <Text style={styles.btnGenerateText}>{GUEST_DOOR_BUTTON}</Text>
+                                </Pressable>
+                            )}
                         </View>
                     ) : (
                         <>

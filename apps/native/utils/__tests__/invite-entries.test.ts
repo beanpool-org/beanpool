@@ -17,7 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { invitesOn, readNodeProfile } from '../node-profile';
-import { communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT } from '../invite-entries';
+import { communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT, GUEST_DOOR_TEXT, GUEST_DOOR_BUTTON } from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
 const GLOBAL = readNodeProfile({
@@ -122,7 +122,9 @@ describe('People → Invites goes through the helpers (source check)', () => {
         expect(src).toMatch(/const guestNoInvites = isGuest && !makesInvites;/);
         expect(src).toContain('GUEST_NO_INVITES_TEXT');
         expect(GUEST_NO_INVITES_TEXT).toMatch(/doesn’t use invite codes/);
-        expect(GUEST_NO_INVITES_TEXT).toMatch(/isn’t possible in the app yet/);
+        // The dead end is gone (Marty, 2026-10-01: joining global from an account you already have, before launch): the
+        // sentence no longer says it can't be done, and is said only where no door is offered (the next test).
+        expect(GUEST_NO_INVITES_TEXT).not.toMatch(/isn’t possible in the app yet/);
         // The whole redeem section (heading, field, button) sits inside the guard.
         const start = src.indexOf('{!guestNoInvites && (');
         const end = src.indexOf('{isGuest && (', start);
@@ -139,5 +141,25 @@ describe('People → Invites goes through the helpers (source check)', () => {
         expect(invitesOn(undefined)).toBe(true);
         expect(invitesOn(GLOBAL)).toBe(false);
         expect(invitesOn(LOCAL)).toBe(true);
+    });
+
+    it("a guest of the global community, once its door is open: the door, with the account on this phone, in place of the sentence", () => {
+        // Only at the global community (the door is its alone), asked only there, and offered as global-join-existing.ts says.
+        expect(src).toMatch(/const guestAtGlobal = guestNoInvites && isGlobalCommunity\(anchorUrl\);/);
+        expect(src).toMatch(/const globalDoorOpen = useGlobalDoorOpen\(guestAtGlobal\);/);
+        expect(src).toMatch(/const guestDoor = guestAtGlobal && doorOfferedToAccount\(\{ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest' \}\);/);
+        // The door's words before the no-invites sentence, which is left for where no door is offered.
+        const banner = src.slice(src.indexOf('⚠️ Guest Connection Mode'), src.indexOf('{!guestNoInvites && ('));
+        expect(banner.indexOf('guestDoor')).toBeGreaterThan(0);
+        expect(banner.indexOf('GUEST_DOOR_TEXT')).toBeLessThan(banner.indexOf('GUEST_NO_INVITES_TEXT'));
+        // The way in: the door's screen, under its own guard.
+        const button = banner.slice(banner.indexOf('{guestDoor && ('));
+        expect(button).toContain("router.push('/join-global')");
+        expect(button).toContain('{GUEST_DOOR_BUTTON}');
+        expect(count("router.push('/join-global')")).toBe(1);
+        expect(GUEST_DOOR_TEXT).toMatch(/account on this phone/);
+        expect(GUEST_DOOR_TEXT).toMatch(/12 words stay the same/);
+        expect(GUEST_DOOR_TEXT).toMatch(/nothing changes in your other communities/);
+        expect(GUEST_DOOR_BUTTON).toMatch(/sign-in/);
     });
 });

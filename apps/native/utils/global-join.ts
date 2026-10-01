@@ -237,7 +237,8 @@ export type DoorPhase = 'checking' | 'unavailable' | 'signIn' | 'name' | 'joinin
  * Which ways off the door's screen are open: "← Back to Home", and "Use a different sign-in" on the name step.
  * - The name step never closes them, not even while its check is out: leaving stops the check (`checkNameAtDoor`).
  * - While the join itself is out, neither is offered. The key is on the phone and the join is counted, and its
- *   answer, bounded by JOIN_TIMEOUT_MS, decides where the member goes.
+ *   answer decides where the member goes: bounded by JOIN_TIMEOUT_MS, except the backstop's second sheet
+ *   ({@link submitJoin}), which the member can cancel.
  * - At the sign-in, Back waits for the nonce (bounded too) and the provider's own sheet.
  */
 export function doorWaysOut(phase: DoorPhase, busy: boolean): { back: boolean; otherSignIn: boolean } {

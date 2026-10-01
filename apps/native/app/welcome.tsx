@@ -2356,7 +2356,8 @@ export default function WelcomeScreen() {
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
                                         To keep out fake accounts, sign in once with an account you already have. That sign-in
-                                        also becomes a way back into BeanPool if you lose this phone. BeanPool never sees your
+                                        also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy
+                                        of your account for it, and BeanPool can open that copy. BeanPool never sees your
                                         password and never posts anything for you.
                                     </Text>
 

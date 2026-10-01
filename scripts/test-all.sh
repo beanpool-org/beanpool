@@ -247,6 +247,12 @@ run_check "deploy_no_fleet_secrets" bash scripts/test-deploy-no-fleet-secrets.sh
 # answers and stubbed container/disk state. Local only, a few seconds.
 run_check "deploy_health" bash scripts/test-deploy-health.sh
 
+# deploy.sh packed the whole folder it ran from minus a deny-list, so .claude/ (board answers, settings) and scratchpad/
+# went to every server (scratch/reviews/FABLE-sec-infra.md M2). It now packs only what git tracks. This runs it in a temp
+# git checkout with untracked files beside the tracked ones and no node to deploy to, and reads .dockerignore, which keeps
+# a node's data/ and .env out of a build node's Docker build. Pure shell; nothing is contacted.
+run_check "deploy_package" bash scripts/test-deploy-package.sh
+
 # The report below has to NAME what failed. On PR #1065 it did not: the Failure Details block prints the
 # last 150 lines of the failing task, and a Testing Library failure buries the `FAIL <file> > <test>` line
 # under its own DOM dump, so a run that failed 1 of 723 tests never said which one and was re-run as a

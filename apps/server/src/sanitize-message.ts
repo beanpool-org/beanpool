@@ -9,6 +9,7 @@
 
 import crypto from 'node:crypto';
 import net from 'node:net';
+import { expoAccessTokenValue } from './config/expo-access-token.js';
 
 /**
  * Internet addresses. A candidate is kept only when node:net reads it as an address, so a time (10:22:33), a MAC
@@ -105,11 +106,23 @@ export function redactCodes(text: string): string {
 }
 
 /**
+ * Secrets the node holds only in its environment, taken out of a line by their VALUE: a key name (`token:`,
+ * `Authorization: Bearer`) is caught above, but an error can quote one bare. Shorter than 8 characters is left alone,
+ * so a stray value can't blank out ordinary words.
+ */
+function redactEnvironmentSecrets(text: string): string {
+    const token = expoAccessTokenValue();
+    return token && token.length >= 8 ? text.split(token).join('[REDACTED_CREDENTIAL]') : text;
+}
+
+/**
  * Sanitizes input message by redacting sensitive items (private keys, passwords, mnemonics, internet addresses).
  */
 export function sanitizeMessage(msg: string): string {
     if (!msg) return '';
-    let sanitized = msg;
+    // 0. The Expo access token's value, wherever it sits (`redactEnvironmentSecrets`), before any step below can cut
+    // it into a shape the value no longer matches.
+    let sanitized = redactEnvironmentSecrets(msg);
 
     // 1. BIP39 Mnemonic Seed Phrase (12 to 24 words)
     // Matches 12 to 24 lowercase space-separated words of 3-12 chars.

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 87,
-  "hash": "458363da01c9c486c06c04fdddf282ea3aa240551a7a0ad2183317ca5fb918ea",
+  "version": 88,
+  "hash": "a996a85d71ff5f955f2ac8d800df701c298ad7b446d784b03690d670a2152a39",
   "sections": [
     {
       "id": "setup",
@@ -1775,7 +1775,7 @@
         },
         {
           "type": "p",
-          "text": "At its first start after the update that brought the recovery seal, the server locks every member's sign-in recovery copy with recovery-seal.key, and clears the copies it had deleted out of state.db. Files made before that hold the copies as members' apps made them: anyone holding such a file can open every GitHub-linked member's copy with that member's public GitHub id."
+          "text": "At its first start after the update that brought the recovery seal, the server locks every member's sign-in recovery copy with recovery-seal.key, and clears the copies it had deleted out of state.db. Files made before that hold the copies as members' apps made them: anyone holding such a file can open every GitHub-linked member's copy with that member's public GitHub id, and a Google-linked member's copy with that member's Google id, which every other app they signed in to with Google also holds."
         },
         {
           "type": "p",
@@ -2116,7 +2116,7 @@
         },
         {
           "type": "p",
-          "text": "If you update your servers from a copy of the BeanPool source code with deploy.sh, this is what it does on each one: it stops the server, moves the data folder and .env out of the way into the home folder (as beanpool-data-backup and beanpool-env-backup, each followed by the server's folder name), puts the new code in place, moves both back, and only then starts the server. It needs the flock command on the server, which comes with almost every Linux; if it says flock is missing, install util-linux."
+          "text": "If you update your servers from a copy of the BeanPool source code with deploy.sh (the copy must be a git clone, run from its top folder, because deploy.sh sends only the files git tracks, so a new file needs git add before it ships), this is what it does on each one: it stops the server, moves the data folder and .env out of the way into the home folder (as beanpool-data-backup and beanpool-env-backup, each followed by the server's folder name), puts the new code in place, moves both back, and only then starts the server. It needs the flock command on the server, which comes with almost every Linux; if it says flock is missing, install util-linux."
         },
         {
           "type": "ul",
@@ -2700,6 +2700,14 @@
             "Members' Pulse channels are fetched from the sites they link to.",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."
           ]
+        },
+        {
+          "type": "p",
+          "text": "**EXPO_ACCESS_TOKEN** is for the servers BeanPool runs itself. **On your own server, leave it empty:** your notifications go out exactly as they always have, and your server never needs anything from us to send them. Where it is set, the server sends the token with every notification. It reads it from .env only: it never saves it in its database or settings, never puts it in a backup or a standby's copy, and never writes it in the log."
+        },
+        {
+          "type": "p",
+          "text": "Your server keeps a push address for each member's phone, and that address alone is enough to send the phone a notification. So treat your backups and any standby's copy as carefully as the server itself: anyone holding one could send your members fake notices."
         }
       ]
     },

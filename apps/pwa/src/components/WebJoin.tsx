@@ -1045,7 +1045,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
                         Why a sign-in? It stops one person making many accounts. We keep only a scrambled reference to it,
-                        never your email or name from there.
+                        never your email or name from there. It also locks a copy of your account, so this sign-in can
+                        bring it back. The people who run this community's server can open that copy.
                     </p>
                     <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
                         ← Change name

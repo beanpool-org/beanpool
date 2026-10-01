@@ -144,7 +144,7 @@ const FAQ_ITEMS = [
     },
     {
         q: 'Is my data private?',
-        a: 'Your identity is an Ed25519 keypair stored only on your device — never on a server. Your posts and transactions are shared within your community, but your private key never leaves your device.',
+        a: "Your identity is an Ed25519 key made on your device. Your posts are shared within your community. Your balance and trades are not: a trade shows only its two people. Your key leaves your device only as a locked copy, if you join with a sign-in or link one, or when you copy your account to another device of yours. The locked copy is so that sign-in can bring your account back. The people who run your community's server can open that copy. Your 12 words are the way back that needs nobody.",
     },
     {
         q: 'What are community credits?',

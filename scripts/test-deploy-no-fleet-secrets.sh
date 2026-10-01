@@ -64,6 +64,9 @@ SENTINELS='sentinel-cf-api-token-3f9a61|sentinel-cf-zone-id-77c1d0|Sentinel-admi
 FLEET_SHA=$(printf '%s' 'sentinel-cf-tunnel-token-b2e4c8' | sha256_hex)
 # test: a build node (no registry lookup) and one of the two that used to start the sidecar.
 echo "1:test:deploy-guard.invalid:test.deploy-guard.invalid:root:BeanPool-Test" > "$APP/deploy-targets.conf"
+# deploy.sh packs only what git tracks (scripts/test-deploy-package.sh); the .env above stays untracked, as on the Mac.
+git -C "$APP" -c init.defaultBranch=main init -q
+git -C "$APP" add -f deploy.sh scripts/deploy-lib.sh deploy-targets.conf
 
 # ssh: a script on stdin is kept; the health probe's container query answers "running 0". Nothing is contacted.
 cat > "$BIN/ssh" << STUB

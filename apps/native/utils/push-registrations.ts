@@ -32,9 +32,12 @@ import * as SecureStore from 'expo-secure-store';
 import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
 import {
     PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
 } from './storage-keys';
+
+export { communityAddress };
 
 const PUSH_TOKENS_PATH = '/api/push-tokens';
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -60,12 +63,6 @@ interface Storage {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
     removeItem(key: string): Promise<void>;
-}
-
-/** A community's address as the phone sends to it: trimmed, no trailing slash. Null for anything but an http(s) address. */
-export function communityAddress(raw: unknown): string | null {
-    if (typeof raw !== 'string' || !/^https?:\/\/\S+$/i.test(raw.trim())) return null;
-    return raw.trim().replace(/\/+$/, '');
 }
 
 function parseRecord(raw: string | null): string[] {
@@ -387,10 +384,11 @@ export async function registerPushTokenWithCommunity(
     const request = fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     inFlight.set(request, key);
     let answered = false;
+    let answer: { success?: unknown; pushKey?: unknown } | undefined;
     try {
         const res = await request;
         answered = true;
-        const answer: { success?: unknown } | undefined = await res.json().catch(() => undefined);
+        answer = await res.json().catch(() => undefined);
         if (!res.ok || answer?.success !== true) throw new Error(`${community} did not register this phone (${res.status})`);
     } catch (e) {
         await stillDue(key, community, answered || controller.signal.aborted ? 'refused' : 'unanswered', storage);
@@ -400,6 +398,9 @@ export async function registerPushTokenWithCommunity(
         clearTimeout(timer);
     }
     await landed(key, community, storage);
+    // The key this community signs its notices with, from its answer to this signed request (push-pins.ts): pinned on
+    // its saved record, or the pin taken off when it names none.
+    await pinPushKey(community, pushKeyOf(answer), storage);
     return true;
 }
 

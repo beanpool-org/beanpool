@@ -17,6 +17,11 @@ export interface SavedNode {
      * a server that reads format 2, 1 when it answered without saying. Absent: not asked yet (format 2 is used).
      */
     requestSigning?: number;
+    /**
+     * The key this community signs its notices with, from the answer to this phone's push registration there
+     * (push-pins.ts). Absent: none pinned, and its pushes are treated as unsigned (push-notice-check.ts).
+     */
+    pushKey?: string;
 }
 
 export async function getSavedNodes(): Promise<SavedNode[]> {

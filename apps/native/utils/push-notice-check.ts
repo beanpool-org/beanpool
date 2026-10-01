@@ -1,0 +1,427 @@
+/**
+ * What the app does with a push before it acts on it (scratch/global-node/DESIGN-push-relay-fable.md §4.3; the notice
+ * format and its check are @beanpool/core push-notice.ts).
+ *
+ * A push with words is shown by the phone's system before any app code runs, so whoever holds this phone's push token
+ * can put words on its lock screen. What the app controls is what happens next:
+ *
+ * - **While the app is open** ({@link checkWhileOpen}), a push is shown only when it carries a notice signed by a
+ *   community this phone keeps, for the account on it, no older than the notice's lifetime (7 days, the time the node
+ *   keeps its details), and not shown before. It is shown with its kind's fixed words. Anything else is dropped and
+ *   counted ({@link droppedNoticeCounts}).
+ * - **On a tap** ({@link checkTap}), the same check. A valid notice is opened: the app asks its community where it lands
+ *   (`GET /api/notices/push/<id>`) and goes there only through {@link noticeRoute}, which builds the route from a fixed
+ *   list and lets an id through only in the shape the node issues them. Not valid: the app goes nowhere and shows
+ *   {@link FORGED_NOTICE_LINE} once ({@link warnAboutNotice}).
+ * - **No string from a push reaches a route.** The kind picks a tab from core's fixed table; the notice id goes only into
+ *   the details request, and only in its fixed shape. A push's own `screen`, `postId` or `conversationId` (what servers
+ *   sent before signed notices) is never read.
+ *
+ * ## Pushes no community signed
+ *
+ * A server from before signed notices (or one with no node key yet) sends pushes with nothing to check, and its
+ * registration answer names no key (push-pins.ts). The phone can't tell one of its pushes from anyone else's, so:
+ *
+ * - While a community this phone keeps and sent its token to has pinned no key, an unsigned push is shown with fixed
+ *   words ({@link UNSIGNED_NOTICE_WORDS}, or its kind's when it names one) instead of its own, and a tap on it opens the
+ *   app where it was: no navigation, and no warning (it may well be that community's).
+ * - Once every such community has pinned a key, an unsigned push comes from none of them: dropped while open, and a tap
+ *   on it gets the warning.
+ * - A community the phone has forgotten has no pin: its signed notices do nothing, and a tap on one gets the warning.
+ *
+ * BeanPool's key vault sends its own notices (apps/vault api/push.ts, `data.type`), not yet signed. Each is honoured
+ * only on a phone that gave the vault its push token for the account on it: shown as it came, and a tap opens Settings,
+ * where the recovery banner reads what is really waiting from the vault. On any other phone it is an unsigned push.
+ *
+ * The app's own notices (a push shown with fixed words in its place, and the sync's notices, sync-notices.ts) are told
+ * apart by how they arrived: the phone's push service marks a push it delivered (trigger `push`), and nothing a sender
+ * puts in a push can change that.
+ */
+import {
+    isPushNoticeId, isPushNoticeKind, PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS,
+    PUSH_NOTICE_VERSION, pushNoticeWords, verifyPushNotice, type PushNoticeKind, type PushNoticeRefusal, type PushNoticeTab,
+} from '@beanpool/core';
+import { buildSignedHeaders } from './crypto';
+import type { BeanPoolIdentity } from './identity';
+import { readPushPins, type PushPin, type PushPins } from './push-pins';
+import { vaultPushTokenStoreKey } from './storage-keys';
+
+/** What a tap on a notice the phone can't trust shows, once. */
+export const FORGED_NOTICE_LINE =
+    "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification.";
+
+/** The words shown, while the app is open, in place of an unsigned push's own, when it names no kind. */
+export const UNSIGNED_NOTICE_WORDS = { title: 'BeanPool', body: 'There is news from your community.' } as const;
+
+/** `data` of a notice the app posts itself: one shown in a push's place, and the sync's (sync-notices.ts). */
+export const LOCAL_NOTICE_DATA = { bpLocal: 1 } as const;
+
+/** Which notice ids this phone has shown while open, and which it has opened from a tap: id → the notice's time. */
+export const NOTICE_LEDGER_STORE_KEY = 'beanpool_push_notice_ledger';
+/** As long as a notice can pass the check: its lifetime, and the clock skew a newer one is allowed. */
+const LEDGER_KEEP_SECONDS = PUSH_NOTICE_LIFETIME_SECONDS + PUSH_NOTICE_CLOCK_SKEW_SECONDS;
+/** The most ids kept in each list; the oldest go first. More than the 100 a member's node keeps for 7 days. */
+const LEDGER_MAX = 500;
+
+/** The key vault's notices (apps/vault api/push.ts `PushKind`). */
+const VAULT_NOTICE_TYPES = new Set(['vault-hold', 'vault-released', 'vault-replaced']);
+
+/** A post or conversation id in the shape the node issues them: a UUID (utils/events.ts POST_ID_RE). */
+const NODE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface Storage {
+    getItem(key: string): Promise<string | null>;
+    setItem(key: string, value: string): Promise<void>;
+}
+
+/** A notification as the app received it, whatever library delivered it. */
+export interface IncomingNotice {
+    /** The notification request's identifier. */
+    identifier: string;
+    /** Delivered by the phone's push service (expo-notifications trigger `push`), not posted by this app. */
+    remote: boolean;
+    title: string | null;
+    body: string | null;
+    data: unknown;
+}
+
+export interface NoticeContext {
+    storage: Storage;
+    /** The public key of the account on this phone, or null with none. */
+    recipient: string | null;
+    /** Whole seconds; the phone's clock when absent. */
+    now?: number;
+}
+
+export type DropReason = PushNoticeRefusal | 'repeated' | 'unsigned' | 'no-account' | 'unreadable';
+
+export type OpenDecision =
+    /** Show it as it came. */
+    | { kind: 'show' }
+    /** Show these words instead of its own (the app posts them as its own notice). */
+    | { kind: 'replace'; title: string; body: string; data: Record<string, unknown> }
+    | { kind: 'drop'; reason: DropReason };
+
+export type TapDecision =
+    /** A notice its community signed for this account: ask it where the tap lands. `active`: the community the phone is set to. */
+    | { kind: 'open'; community: string; id: string; noticeKind: PushNoticeKind; active: boolean }
+    /** The key vault's notice, on a phone that gave the vault its token. */
+    | { kind: 'settings' }
+    /** Open the app where it was. */
+    | { kind: 'nothing'; reason: DropReason | 'local' }
+    /** Go nowhere, and show {@link FORGED_NOTICE_LINE}. */
+    | { kind: 'warn'; reason: DropReason };
+
+// ── Counting what was dropped ──────────────────────────────────────────────────────────────────────────────────
+
+const dropped = new Map<string, number>();
+
+function count(reason: string): void {
+    dropped.set(reason, (dropped.get(reason) ?? 0) + 1);
+}
+
+/** How many pushes this run dropped while open, or refused on a tap, by reason. */
+export function droppedNoticeCounts(): Record<string, number> {
+    return Object.fromEntries(dropped);
+}
+
+// ── The warning line ───────────────────────────────────────────────────────────────────────────────────────────
+
+const listeners = new Set<() => void>();
+let warningPending = false;
+
+/**
+ * A tap on a notice the phone can't trust: {@link FORGED_NOTICE_LINE} goes up once. Held until the line's component
+ * takes it, so a tap that launched the app is shown once the app has drawn (components/PushNoticeWarning.tsx).
+ */
+export function warnAboutNotice(): void {
+    warningPending = true;
+    for (const listener of listeners) listener();
+}
+
+/** Whether a warning is waiting to be shown; taking it clears it. */
+export function takeNoticeWarning(): boolean {
+    const pending = warningPending;
+    warningPending = false;
+    return pending;
+}
+
+/** Called each time a warning comes in. Returns the unsubscribe. */
+export function onNoticeWarning(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+}
+
+// ── What a push carries ────────────────────────────────────────────────────────────────────────────────────────
+
+function asObject(data: unknown): Record<string, unknown> | null {
+    return data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : null;
+}
+
+/** Whole digits for a number, as a push service may hand them over: the signed bytes spell `t` the same either way. */
+function wholeNumber(v: unknown): unknown {
+    return typeof v === 'string' && /^[1-9][0-9]{0,15}$/.test(v) ? Number(v) : v;
+}
+
+/** The push's data as a signed notice, or null when it carries no signature at all (an unsigned push). */
+function signedNotice(data: unknown): Record<string, unknown> | null {
+    const d = asObject(data);
+    if (!d || wholeNumber(d.bp) !== PUSH_NOTICE_VERSION || typeof d.s !== 'string') return null;
+    return { ...d, bp: PUSH_NOTICE_VERSION, t: wholeNumber(d.t) };
+}
+
+function isVaultNotice(data: unknown): boolean {
+    const type = asObject(data)?.type;
+    return typeof type === 'string' && VAULT_NOTICE_TYPES.has(type);
+}
+
+async function vaultHasToken(ctx: NoticeContext): Promise<boolean> {
+    if (!ctx.recipient) return false;
+    try {
+        return !!(await ctx.storage.getItem(vaultPushTokenStoreKey(ctx.recipient)));
+    } catch {
+        return false;
+    }
+}
+
+/** The pin whose community signed with this tag: the community the phone is set to first. */
+function pinFor(pins: PushPins, tag: unknown): PushPin | undefined {
+    const matches = pins.pinned.filter((p) => p.tag === tag);
+    return matches.find((p) => p.community === pins.anchor) ?? matches[0];
+}
+
+type Checked =
+    | { ok: true; pin: PushPin; kind: PushNoticeKind; id: string; sentAt: number; pins: PushPins }
+    | { ok: false; reason: DropReason };
+
+/** A signed notice checked against the pins and the account on the phone. */
+async function checkSigned(notice: Record<string, unknown>, ctx: NoticeContext): Promise<Checked> {
+    if (!ctx.recipient) return { ok: false, reason: 'no-account' };
+    let pins: PushPins;
+    try {
+        pins = await readPushPins(ctx.storage);
+    } catch {
+        return { ok: false, reason: 'unreadable' };
+    }
+    const pin = pinFor(pins, notice.c);
+    if (!pin) return { ok: false, reason: 'other-community' };
+    const check = verifyPushNotice(notice, { recipient: ctx.recipient, pushKey: pin.pushKey, now: ctx.now });
+    if (!check.ok) return { ok: false, reason: check.reason };
+    return { ok: true, pin, kind: check.kind, id: check.id, sentAt: check.sentAt, pins };
+}
+
+// ── The ledger of ids seen ─────────────────────────────────────────────────────────────────────────────────────
+
+interface Ledger { shown: Record<string, number>; tapped: Record<string, number> }
+
+function parseLedger(raw: string | null): Ledger {
+    const ledger: Ledger = { shown: {}, tapped: {} };
+    try {
+        const parsed = asObject(JSON.parse(raw ?? '{}'));
+        for (const list of ['shown', 'tapped'] as const) {
+            for (const [id, t] of Object.entries(asObject(parsed?.[list]) ?? {})) {
+                if (typeof t === 'number' && Number.isSafeInteger(t)) ledger[list][id] = t;
+            }
+        }
+    } catch {
+        // An unreadable ledger is an empty one.
+    }
+    return ledger;
+}
+
+function tidy(list: Record<string, number>, now: number): Record<string, number> {
+    const kept = Object.entries(list).filter(([, t]) => now - t <= LEDGER_KEEP_SECONDS).sort((a, b) => b[1] - a[1]);
+    return Object.fromEntries(kept.slice(0, LEDGER_MAX));
+}
+
+let ledgerWrites: Promise<unknown> = Promise.resolve();
+
+/**
+ * Note `id` in `list`, after any note under way. True the first time; false when it was noted before. A ledger that
+ * can't be read or written counts as first time: a notice shown twice is better than one never acted on.
+ */
+function noteOnce(storage: Storage, list: keyof Ledger, id: string, sentAt: number, now: number): Promise<boolean> {
+    const next = ledgerWrites.then(async () => {
+        let raw: string | null;
+        try {
+            raw = await storage.getItem(NOTICE_LEDGER_STORE_KEY);
+        } catch {
+            return true;
+        }
+        const ledger = parseLedger(raw);
+        if (id in ledger[list]) return false;
+        ledger[list][id] = sentAt;
+        const tidied: Ledger = { shown: tidy(ledger.shown, now), tapped: tidy(ledger.tapped, now) };
+        try {
+            await storage.setItem(NOTICE_LEDGER_STORE_KEY, JSON.stringify(tidied));
+        } catch (e) {
+            console.warn('[Push] Could not note a notice as handled', e);
+        }
+        return true;
+    });
+    ledgerWrites = next.catch(() => {});
+    return next;
+}
+
+const nowSeconds = (ctx: NoticeContext) => ctx.now ?? Math.floor(Date.now() / 1000);
+
+// ── While the app is open ──────────────────────────────────────────────────────────────────────────────────────
+
+function drop(reason: DropReason): OpenDecision {
+    count(reason);
+    console.log(`[Push] A notification was not shown: ${reason}`);
+    return { kind: 'drop', reason };
+}
+
+/** What the app does with a push that arrives while it is open. Never throws. */
+export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Promise<OpenDecision> {
+    // The app's own: nothing from outside can post one.
+    if (!n.remote) return { kind: 'show' };
+    try {
+        const notice = signedNotice(n.data);
+        if (notice) {
+            const checked = await checkSigned(notice, ctx);
+            if (!checked.ok) return drop(checked.reason);
+            if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
+            const words = pushNoticeWords(checked.kind);
+            if (n.title === words.title && n.body === words.body) return { kind: 'show' };
+            // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
+            return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
+        }
+        if (isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'show' };
+        const pins = await readPushPins(ctx.storage);
+        if (pins.unpinnedRegistered.length === 0) return drop('unsigned');
+        const named = asObject(n.data)?.k;
+        const words = isPushNoticeKind(named) ? pushNoticeWords(named) : UNSIGNED_NOTICE_WORDS;
+        return { kind: 'replace', title: words.title, body: words.body, data: { ...LOCAL_NOTICE_DATA } };
+    } catch (e) {
+        console.warn('[Push] Could not check a notification', e);
+        return drop('unreadable');
+    }
+}
+
+// ── On a tap ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+function refuse(reason: DropReason): TapDecision {
+    count(`tap:${reason}`);
+    console.log(`[Push] A tapped notification was not followed: ${reason}`);
+    return { kind: 'warn', reason };
+}
+
+/**
+ * What a tap on a notification does (and the notification that launched the app). Never throws. A `warn` has not been
+ * shown yet: the caller calls {@link warnAboutNotice}.
+ */
+export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<TapDecision> {
+    try {
+        const notice = signedNotice(n.data);
+        if (notice) {
+            const checked = await checkSigned(notice, ctx);
+            if (!checked.ok) {
+                // Signed by its community for this account, only late (or the phone's clock is off): not a forgery.
+                if (checked.reason === 'too-old' || checked.reason === 'from-the-future') return { kind: 'nothing', reason: checked.reason };
+                return refuse(checked.reason);
+            }
+            if (!(await noteOnce(ctx.storage, 'tapped', checked.id, checked.sentAt, nowSeconds(ctx)))) return { kind: 'nothing', reason: 'repeated' };
+            return {
+                kind: 'open', community: checked.pin.community, id: checked.id, noticeKind: checked.kind,
+                active: checked.pin.community === checked.pins.anchor,
+            };
+        }
+        // The app's own notices carry no target: it opens where it was.
+        if (!n.remote) return { kind: 'nothing', reason: 'local' };
+        if (isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
+        const pins = await readPushPins(ctx.storage);
+        return pins.unpinnedRegistered.length > 0 ? { kind: 'nothing', reason: 'unsigned' } : refuse('unsigned');
+    } catch (e) {
+        console.warn('[Push] Could not check a tapped notification', e);
+        return { kind: 'nothing', reason: 'unreadable' };
+    }
+}
+
+// ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
+
+export type NoticeRoute = '/(tabs)' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`;
+
+const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
+    home: '/(tabs)',
+    market: '/(tabs)',
+    chats: '/(tabs)/chats',
+    settings: '/(tabs)/settings',
+};
+
+/**
+ * Where a valid notice's tap lands, from what its community answered for it (`data` of `GET /api/notices/push/<id>`,
+ * or nothing when it couldn't be had): a post or a chat when the answer names one by an id in the node's own shape,
+ * Settings when it says so, and otherwise the tab for the notice's kind. Every route is one of a fixed few; the only
+ * text taken from the answer is an id that matched {@link NODE_ID}.
+ */
+export function noticeRoute(kind: PushNoticeKind, details: unknown): NoticeRoute {
+    const d = asObject(details) ?? {};
+    if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
+    if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
+    if (d.screen === 'settings') return '/(tabs)/settings';
+    return TAB_ROUTES[PUSH_NOTICE_KINDS[kind].tab];
+}
+
+// ── Following a tap ────────────────────────────────────────────────────────────────────────────────────────────
+
+/** How long a community has to say where a tap lands before the app opens the tab for the notice's kind. */
+export const NOTICE_DETAILS_TIMEOUT_MS = 8000;
+
+type Account = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
+
+/**
+ * What `community` answers for notice `id` (`GET /api/notices/push/<id>`, signed by the account it was sent to): its
+ * `data`, or null when it can't be had (no answer within `timeoutMs`, a refusal, a node that forgot it, an answer for
+ * another id). Never throws.
+ */
+export async function noticeDetails(community: string, id: string, account: Account, timeoutMs = NOTICE_DETAILS_TIMEOUT_MS): Promise<unknown> {
+    if (!isPushNoticeId(id)) return null;
+    const url = `${community}/api/notices/push/${id}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const headers = await buildSignedHeaders('GET', url, '', account.privateKey, account.publicKey);
+        const res = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+        if (!res.ok) return null;
+        const body = asObject(await res.json().catch(() => null));
+        return body?.id === id ? body.data ?? null : null;
+    } catch (e) {
+        console.log(`[Push] Where a notice lands could not be had from ${community}: ${e instanceof Error ? e.message : e}`);
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * A tap on a notification (or the one that launched the app), followed: {@link checkTap}, then for a valid notice from
+ * the community the phone is set to, its details and {@link noticeRoute}; Settings for the key vault's; the warning for
+ * one the phone can't trust. A valid notice from another community the phone keeps opens nothing: the screens show the
+ * community the phone is set to. Returns what was decided. Never throws.
+ */
+export async function followTap(
+    n: IncomingNotice,
+    ctx: Omit<NoticeContext, 'recipient'> & { account: Account | null; detailsTimeoutMs?: number },
+    navigate: (route: NoticeRoute) => void,
+): Promise<TapDecision> {
+    const decision = await checkTap(n, { storage: ctx.storage, recipient: ctx.account?.publicKey ?? null, now: ctx.now });
+    try {
+        if (decision.kind === 'open' && ctx.account) {
+            if (!decision.active) {
+                console.log(`[Push] A notice from ${decision.community}, which the phone is not set to: nothing opened`);
+                return decision;
+            }
+            const details = await noticeDetails(decision.community, decision.id, ctx.account, ctx.detailsTimeoutMs);
+            navigate(noticeRoute(decision.noticeKind, details));
+        } else if (decision.kind === 'settings') {
+            navigate('/(tabs)/settings');
+        } else if (decision.kind === 'warn') {
+            warnAboutNotice();
+        }
+    } catch (e) {
+        console.warn('[Push] Could not follow a tapped notification', e);
+    }
+    return decision;
+}

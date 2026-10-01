@@ -113,9 +113,12 @@ export interface LocalConfig {
     identityEpochSince?: string | null;
     // Set when this server saw, at its own public address, a HIGHER epoch signed by its own node key: another server
     // took over from it. It then refuses members' writes. Kept across restarts; applies only while this server still
-    // has that PeerId and is a main server.
+    // has that PeerId and is a main server. With `conflict`: the SAME epoch from another take-over, made before this
+    // server's own (`since` the other's, `conflict.ownSince` this server's): two standbys took over with one set of keys,
+    // and this is the later one. Applies only while this server is still at that epoch, from that take-over.
     identityReplaced?: {
         peerId: string; epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string;
+        conflict?: { ownSince: string | null } | null;
     } | null;
 }
 

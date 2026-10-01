@@ -1,8 +1,11 @@
 // This node's role in the one-directional backup topology: the main server, or a standby that copies it.
 //
-// A leaf module (it reads local-config.json and the environment, nothing else), so the database's boot (db.ts) can ask
-// it without an import cycle. engine/sync.ts re-exports it, where the rest of the server imports it from.
+// A leaf module (it reads local-config.json, the take-over journal's state and the environment, nothing else), so the
+// database's boot (db.ts) can ask it without an import cycle. engine/sync.ts re-exports it, where the rest of the server
+// imports it from.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { getLocalConfig } from './local-config.js';
 
 export type NodeRole = 'primary' | 'backup';
@@ -11,14 +14,30 @@ let nodeRole: NodeRole | null = null;
 /**
  * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
  * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
- * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process.
+ * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process. A take-over
+ * rolled back at boot (services/takeover.ts) reads it again, after putting the standby's own `nodeRole` back; one still
+ * being rolled back makes this a standby, whatever the config says.
  */
-function resolveNodeRole(): NodeRole {
+export function resolveNodeRole(): NodeRole {
+    // A take-over being rolled back (services/takeover.ts) never made this server the main one, though its `role` step
+    // may have written `nodeRole: primary` already: a standby until the roll-back finishes, from the database's boot on.
+    if (takeoverRollingBack()) return 'backup';
     try {
         const configured = getLocalConfig().nodeRole;
         if (configured === 'primary' || configured === 'backup') return configured;
     } catch { /* no readable config: the environment decides */ }
     return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
+}
+
+/** The take-over journal says 'rolling-back' (read from the file, as db/swap-at-boot.ts takeoverUnderWay reads it). */
+function takeoverRollingBack(): boolean {
+    try {
+        const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
+        const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8')) as { state?: unknown } | null;
+        return j?.state === 'rolling-back';
+    } catch {
+        return false;
+    }
 }
 
 export function getNodeRole(): NodeRole {

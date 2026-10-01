@@ -35,6 +35,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
+import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
@@ -63,6 +64,7 @@ import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
+import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -522,6 +524,11 @@ export interface AbuseReport {
     /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
     postId?: string | null;
     postAuthorCallsign?: string | null;
+    /**
+     * The reported post's author's key: who a report on a post is about, read from the post, never from the reporter
+     * (a report filed before POST /api/reports set its target from the post may name someone else in targetPubkey).
+     */
+    postAuthorPubkey?: string | null;
     postDescription?: string | null;
     postRemoved?: boolean | null;
     /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
@@ -6057,6 +6064,17 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
 }
 
 /**
+ * The author of a post here, for reporting it: a report on a post is about its author, whoever the reporter names
+ * (engine/burst-cleanup.ts opens the author's group from it). Null when no post here has this id: the phone app files an
+ * enterprise's report with the enterprise's key in targetPostId.
+ */
+export function getReportablePostAuthor(postId: unknown): string | null {
+    if (typeof postId !== 'string' || !postId) return null;
+    const row = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
+    return row?.author_pubkey || null;
+}
+
+/**
  * The owner of a live Pulse item, for reporting it. Null when the item does not exist or is
  * already tombstoned — there is nothing left on the feed to report.
  */
@@ -6090,7 +6108,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
                p.hidden_by_reports_at as post_hidden_at,
-               mp.callsign as post_author_callsign,
+               mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
                pi.deleted_at as pulse_deleted_at
         FROM abuse_reports ar
@@ -6127,6 +6145,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
         postId: r.post_row_id || null,
         postAuthorCallsign: r.post_row_id ? (r.post_author_callsign || null) : null,
+        // Who the report is about when it is about a post: its author, whatever targetPubkey the reporter sent.
+        postAuthorPubkey: r.post_row_id ? (r.post_author_pubkey || null) : null,
         // What the post says (its first 500 characters), so whoever triages the report can judge it from the report.
         postDescription: r.post_row_id ? (r.post_description ?? null) : null,
         // A post the admins or its author already took down.
@@ -6231,6 +6251,16 @@ export function restoreHiddenPost(postId: string): 'restored' | 'not_hidden' | '
 /** A moderator lifts a member's mute (G3). False when they were not muted. */
 export function liftModerationMute(pubkey: string): boolean {
     return liftMuteEngine(moderationNoticeCb, pubkey);
+}
+
+/** A moderator hides the posts of a burst's accounts in one action (engine/burst-cleanup.ts), already checked. */
+export function hideBurst(anchor: string, keys: string[], byRole: BurstActorRole): BurstActionSummary {
+    return hideBurstPosts(moderationNoticeCb, anchor, keys, byRole);
+}
+
+/** A moderator undoes a burst hide (engine/burst-cleanup.ts). */
+export function undoBurst(actionId: string): UndoOutcome {
+    return undoBurstHide(moderationNoticeCb, actionId);
 }
 
 export function actionReport(
@@ -7171,6 +7201,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        // Removed within a day of joining through the open door: their network asks the most door work for 7 days from
+        // the join (engine/door-signal.ts). Local, and nothing happens for anyone else.
+        noteRemovedNewcomer(publicKey);
         // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
         db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
         // Every post that could come back (PRUNE_CLOSES_POSTS_IN): a paused one too, or its author could put it back up
@@ -7402,7 +7435,11 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // would be a way out of the sanction with the same sign-in; never on adminPruneUser, so a member the
         // community removed cannot walk straight back in (engine/open-join.ts); and so not when that member deletes
         // the account afterwards either, nor for a visitor's row, which joined through no door.
-        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) releaseOpenJoin(publicKey);
+        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) {
+            releaseOpenJoin(publicKey);
+            // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
+            forgetBurstActionsOf(publicKey);
+        }
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -7637,6 +7674,11 @@ export const PUBLIC_URL_RULES = {
     community: { publicAddress: 'any', cfRecordName: 'in-zone', lostNames: 'skip' },
     /** Where this server asks for its own identity-epoch statement (services/identity-epoch.ts ownPublicEpochUrl). */
     identityEpoch: { publicAddress: 'hostname', cfRecordName: 'as-set', lostNames: 'skip' },
+    /**
+     * Where a standby, before it takes over, asks whether another server took over with the same keys (services/identity-
+     * epoch.ts newerTakeoverAnswering): the community's address from the keys only, never this standby's own CF_RECORD_NAME.
+     */
+    takeoverCheck: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'skip' },
     /** The `buyerHomeNode` a cross-community purchase or commission sends (routes/federation-*.ts); the peer works it out when null. */
     buyerHomeNode: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'keep' },
 } as const satisfies Record<string, PublicUrlRules>;

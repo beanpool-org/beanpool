@@ -566,6 +566,75 @@ describe('PublicAddressPanel Component', () => {
         expect(domainSpan?.textContent).toBe('long-community-subdomain-overflow-test.beanpool.org');
     });
 
+    // M3 of the 2026-10-01 registrar review: the registrar pauses a name another server answers at, and this server
+    // takes it back by itself. Until then a paused status read as "Couldn't reach the registrar".
+    it('a name the address service paused says so, why, and that this server takes it back by itself', async () => {
+        const pausedPayload = (reason: string) => ({ success: true, status: 'paused', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', reason, since: 1790000000 });
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? pausedPayload('content-swap') : { logs: [] }),
+        } as Response));
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const card = await screen.findByTestId('public-address-paused');
+        expect(card.textContent).toContain('Paused');
+        expect(card.textContent).toContain('cairns.beanpool.org');
+        expect(card.textContent).toMatch(/something that is not a BeanPool server answered at this address/);
+        expect(card.textContent).toMatch(/asks for it back by itself/);
+        expect(card.textContent).toMatch(/nobody else can claim it/);
+        expect(screen.queryByText(/Couldn.t reach the registrar/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /New tunnel key/i })).not.toBeInTheDocument();
+        unmount();
+
+        vi.restoreAllMocks();
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? pausedPayload('admin') : { logs: [] }),
+        } as Response));
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const admin = await screen.findByTestId('public-address-paused');
+        expect(admin.textContent).toMatch(/the BeanPool project paused it/);
+        expect(admin.textContent).toMatch(/until the BeanPool project lifts the pause/);
+        expect(admin.textContent).not.toMatch(/asks for it back by itself/);
+    });
+
+    it('New tunnel key: confirmed first, then the node rotates the name onto a fresh tunnel; offered only for a live tunnel name', async () => {
+        let rotateCalls = 0;
+        let mode = 'tunnel';
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/rotate') && opts?.method === 'POST') {
+                rotateCalls++;
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'live' }) } as Response);
+            }
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ status: 'live', hostname: 'cairns.beanpool.org', mode }) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ logs: [] }) } as Response);
+        });
+
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const button = await screen.findByRole('button', { name: /New tunnel key/i });
+        fireEvent.click(button);
+        expect(screen.getByText('Give the tunnel a new key')).toBeInTheDocument();
+        // Honest about its limit: it does not lock out a copied data folder or backup.
+        expect(screen.getByText(/does NOT protect you from a copy of this server’s data folder or a backup/)).toBeInTheDocument();
+        expect(screen.queryByText(/nobody can use a copy/)).not.toBeInTheDocument();
+        expect(screen.getByText(/the old key stops working at once/i)).toBeInTheDocument();
+        expect(rotateCalls).toBe(0);
+        fireEvent.click(screen.getByRole('button', { name: 'New key now' }));
+        await waitFor(() => expect(rotateCalls).toBe(1));
+        expect(await screen.findByText(/New tunnel key: the old one no longer works/i)).toBeInTheDocument();
+        unmount();
+
+        // A direct name runs no tunnel: no key to replace.
+        mode = 'direct';
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await screen.findByText('Live');
+        expect(screen.queryByRole('button', { name: /New tunnel key/i })).not.toBeInTheDocument();
+    });
+
     it('sets role="log", aria-live="polite", and aria-atomic="false" on propagation monitor terminal', async () => {
         vi.spyOn(global, 'fetch').mockImplementation(() => {
             return Promise.resolve({

@@ -95,7 +95,8 @@ interface ConfigKeyWrite { key: string; at: string }
  * Every node_config row key the .ts files under `roots` write, outside tests: each INSERT, REPLACE or UPDATE of
  * node_config, its key a literal in the SQL or the `?` its `.run(…)` fills. That argument is read through string
  * literals, a constant (declared once in its file, or imported and exported once anywhere), `a + b` and templates (a
- * part that can't be read leaves a prefix: `nodeProfile.*`), and `for (const k of LIST)` over a constant list.
+ * part that can't be read leaves a prefix: `nodeProfile.*`), and `for (const k of LIST)` over a constant list (one that
+ * spreads in another, `[...OTHER, 'k']`, read through it).
  * `unread`: each write whose key this can't read, so a new kind of write is looked at, never missed.
  */
 function nodeConfigKeysWritten(roots: string[], relativeTo: string): { writes: ConfigKeyWrite[]; unread: string[] } {
@@ -152,7 +153,8 @@ function nodeConfigKeysWritten(roots: string[], relativeTo: string): { writes: C
         if (ts.isArrayLiteralExpression(e)) {
             const out: string[] = [];
             for (const el of e.elements) {
-                const v = read(el, seen);
+                // `...LIST`: the strings LIST can be, read as any element is.
+                const v = read(ts.isSpreadElement(el) ? el.expression : el, seen);
                 if (!v) return null;
                 out.push(...v);
             }

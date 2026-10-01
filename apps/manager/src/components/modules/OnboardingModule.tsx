@@ -64,7 +64,15 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     already_joined: 'That sign-in already joined here',
     removed: 'That sign-in belongs to someone this community removed',
     key_invalidated: 'Key replaced by a re-key',
+    // Before the door's signal (engine/door-signal.ts): kept for the days counted then.
     rate_limited: 'Too many new accounts from one network',
+    network_busy: 'Too many new accounts from one network',
+    network_busy_words: 'Too many 12-words accounts from one network (the sign-in way stayed open)',
+    // The door's work (services/door-work.ts): the app starts it again by itself, so these are rarely the end of a join.
+    work_required: 'Setting up was needed and none was sent (an older app on a busy network)',
+    work_invalid: "Setting up didn't check out",
+    work_expired: 'Setting up took over ten minutes',
+    work_spent: 'Setting up was used twice',
     sign_in: 'Sign-in not accepted',
     sign_in_unavailable: "Couldn't reach the sign-in provider",
     join_failed: "The join couldn't be saved",
@@ -80,7 +88,7 @@ const OPEN_DOOR_REFUSALS: Record<string, string> = {
     ticket_nonce: "Key vault ticket sent with a sign-in that wasn't for it",
 };
 
-const PROVIDER_NAMES: Record<string, string> = { google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };
+const PROVIDER_NAMES: Record<string, string> = { words: '12 words', google: 'Google', apple: 'Apple', facebook: 'Facebook', github: 'GitHub' };
 
 function sum(rows: FunnelRow[]): number {
     return rows.reduce((n, r) => n + r.count, 0);

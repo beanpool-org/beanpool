@@ -362,6 +362,12 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
     { method: 'GET', path: '/api/local/admin/members/muted' },
     { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
+    // Clean-up by burst (engine/burst-cleanup.ts, S9): the digest, one account's burst, hiding its posts and the undo.
+    // Removing its accounts is not here: that stays with owners and admins.
+    { method: 'GET', path: '/api/local/admin/bursts' },
+    { method: 'GET', path: '/api/local/admin/members/:pubkey/burst' },
+    { method: 'POST', path: '/api/local/admin/members/:pubkey/burst/hide' },
+    { method: 'POST', path: '/api/local/admin/bursts/:id/undo' },
     { method: 'POST', path: '/api/local/admin/csrf-token' },
     { method: 'POST', path: '/api/local/admin/auth/revoke-all' },
 ];

@@ -34,9 +34,10 @@ Moderators look after reports, and nothing else. They sign in from the app's **M
 - read every report, filtered by open, handled or dismissed, with what the post says and who reported it;
 - take down the reported post while its report is still open, with a reason the author reads;
 - take a reported Pulse item off the Pulse, again while its report is still open;
-- dismiss a report, or mark it handled.
+- dismiss a report, or mark it handled;
+- on the global community, see which accounts joined from the same internet connection within a day of a reported one, with each one's standing, and hide all their posts in one go, or undo that (see Reports and takedowns).
 
-That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
+That is all. A moderator cannot suspend, remove or freeze anyone, see members' details or the member list beyond those accounts, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
 
 A moderator whose role is taken away, or changed, is signed out straight away.
 

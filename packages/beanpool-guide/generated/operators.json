@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 92,
-  "hash": "bfbd5325259a96d0b8bd50f90d325610c5aea0a78cacb9653935140e6f3356f6",
+  "version": 93,
+  "hash": "3a8609467bdddfbdc50d67f3c54635f7da5b4d80e38be3221c51c53cbe7360c3",
   "sections": [
     {
       "id": "setup",
@@ -46,10 +46,11 @@
     {
       "id": "server",
       "title": "Running the server",
-      "summary": "Backups, updates and health, your address and peers, and rate limits.",
+      "summary": "Backups, updates and health, the app's floor, your address and peers, and rate limits.",
       "slugs": [
         "backups-and-replicas",
         "updates-and-health",
+        "app-floor",
         "address-and-peers",
         "rate-limits"
       ]
@@ -761,12 +762,13 @@
             "read every report, filtered by open, handled or dismissed, with what the post says and who reported it;",
             "take down the reported post while its report is still open, with a reason the author reads;",
             "take a reported Pulse item off the Pulse, again while its report is still open;",
-            "dismiss a report, or mark it handled."
+            "dismiss a report, or mark it handled;",
+            "on the global community, see which accounts joined from the same internet connection within a day of a reported one, with each one's standing, and hide all their posts in one go, or undo that (see Reports and takedowns)."
           ]
         },
         {
           "type": "p",
-          "text": "That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work."
+          "text": "That is all. A moderator cannot suspend, remove or freeze anyone, see members' details or the member list beyond those accounts, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work."
         },
         {
           "type": "p",
@@ -925,7 +927,7 @@
         },
         {
           "type": "p",
-          "text": "**On the global community it is the other way round: nobody joins with an invite.** Invites are switched off there. No member, admin or owner can make one, in the app or in Settings, and a code or a paper ticket made before is refused too. Everyone joins through the open door with a sign-in, and one sign-in account is one member (see Open door, below). Without that, one sign-in could make invites for hundreds of accounts that no sign-in stands behind. The app's **Invites** shows **Bring someone here** instead, with the community's link to share. Someone there who asks to join a local community is let in by that community, with its own invite."
+          "text": "**On the global community it is the other way round: nobody joins with an invite.** Invites are switched off there. No member, admin or owner can make one, in the app or in Settings, and a code or a paper ticket made before is refused too. Everyone joins through the open door, with 12 secret words or a sign-in, and one sign-in account is one member (see Open door, below). Without that, one sign-in could make invites for hundreds of accounts that no sign-in stands behind. The app's **Invites** shows **Bring someone here** instead, with the community's link to share. Someone there who asks to join a local community is let in by that community, with its own invite."
         },
         {
           "type": "p",
@@ -1034,7 +1036,7 @@
         },
         {
           "type": "p",
-          "text": "**Open door.** The open door lets someone join by signing in with an account they already have, such as Google or Apple, instead of using an invite code. It is open on the global community; on a local one it is normally shut, and the screen says which yours is. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **too many new accounts from one network** (the door takes 5 an hour and 20 a day from one address) and **that sign-in already joined here** (one sign-in account is one member). On the global community you may also see a **key vault ticket** turned away, as expired, not signed by a key this server lists, and so on. A run of those usually means this server's clock is wrong, or its BEANPOOL_VAULT_TICKET_KEYS is not the vault's: the log says which. With the door shut, these stay at 0."
+          "text": "**Open door.** The open door lets someone join without an invite code: with 12 secret words alone, or by signing in with an account they already have, such as Google or Apple. It is open on the global community, with both ways in; on a local one it is normally shut, and the screen says which yours is. Before a join the person's phone does a moment of setting up, worked out on the phone itself; on a network where many people are joining at once it takes a little longer, instead of anyone being turned away. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, by the way they came in (words, Google, Apple, Facebook), and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **that sign-in already joined here** (one sign-in account is one member) and, only at rates no ordinary network reaches, **too many new accounts from one network** (500 an hour or 2,000 a day by 12 words from one address, with the sign-in way still open to them; 1,000 an hour or 5,000 a day by sign-in). A setting-up that didn't work out or took over ten minutes is counted too; the app starts it again by itself. On the global community you may also see a **key vault ticket** turned away, as expired, not signed by a key this server lists, and so on. A run of those usually means this server's clock is wrong, or its BEANPOOL_VAULT_TICKET_KEYS is not the vault's: the log says which. With the door shut, these stay at 0."
         },
         {
           "type": "p",
@@ -1079,6 +1081,10 @@
         {
           "type": "p",
           "text": "Only an owner can suspend an owner, or remove an owner or an admin. Nobody can remove the last owner."
+        },
+        {
+          "type": "p",
+          "text": "**Removing someone from a community with an open door is a speed bump, not a wall.** Their key is shut out for good, and if they had joined within a day, new 12-words accounts from their network take longer to set up for a week. But anyone can make a new account in about a minute with new 12 words, and someone removed with their Google account can come back that way too. So what protects the community is how little a new account can do: someone who joined with 12 words has new-account limits for their first 7 days (2 posts, 4 photos and 3 new people a day), and one report from an established member hides their post until a moderator looks. Adding a sign-in puts them on the usual new-account limits."
         },
         {
           "type": "h2",
@@ -1178,7 +1184,8 @@
             "**Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.",
             "**Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.",
             "**Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.",
-            "**Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled."
+            "**Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.",
+            "**Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See \"On the global community: accounts that joined together\" below."
           ]
         },
         {
@@ -1239,7 +1246,55 @@
         },
         {
           "type": "p",
-          "text": "A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once fewer than three circles count; **Remove the post** takes it down as above."
+          "text": "A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**. Then a reporter also has to be **established**: past the new-account limits themselves, as well as everything above. So one report from an established member hides it, and a newcomer's report hides nothing, however long ago they joined. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's."
+        },
+        {
+          "type": "p",
+          "text": "A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above."
+        },
+        {
+          "type": "h2",
+          "text": "On the global community: accounts that joined together"
+        },
+        {
+          "type": "p",
+          "text": "Anyone can join the global community with a sign-in, so one person can make several accounts in a row from one place and fill the Market with spam. The server notes which accounts joined through the open door from the same internet connection within a day of the first of them (see Privacy and what your server can see). You are shown only that they joined together: never the connection, its address or anything else about the network. On a local community none of this exists."
+        },
+        {
+          "type": "p",
+          "text": "**Who joined with them.** On a report, **Who joined with them** lists the other accounts that joined from the same connection within a day of the reported one, oldest first. For each you see when they joined, their standing (the same points as above: weeks as a member, posts that stayed up, people they finished a deal with), how many of their posts are up or hidden, and their open reports. On a report about a post, the account is always the post's author, whoever the reporter named. A moderator sees this from an account with an open report filed by someone else (about them, or about a post they wrote: a moderator's own report doesn't count), or from a group listed at the top of Reports; owners and admins from any account. That is a limit that leaves a record, not a wall: a moderator could file a report from a second account, but every report names who filed it. Someone who joined another way, by invite or before the server noted this, has nobody listed."
+        },
+        {
+          "type": "p",
+          "text": "**At the top of Reports** (in **Triage & Moderation** for owners and admins): a line for each group of 5 or more accounts that joined together in the last 7 days, saying how many were reported, how many of their posts are hidden and how many were removed, with **See them**; and a line for each action taken on such a group in the last 30 days."
+        },
+        {
+          "type": "p",
+          "text": "**Tick, then act.** A shared connection can be a household, a meetup, a campus or a phone network, so real people can be in a group with a spammer:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Accounts that are established (standing 4 or more: a month as a member, or a week with posts that stayed up) start unticked. Here a post hidden for review still counts as up, so hiding an account's posts first never makes it easier to remove. Anyone who holds a role (owner, admin or moderator) can never be included. Untick anyone you are not sure of.",
+            "Before anything happens you are told again how many accounts, their standing, and which of them are established.",
+            "The server acts only on the accounts you ticked: one that joined after you opened the list is never included. It does nothing at all if one of them is no longer in the group, or if an established account is included without your saying so. The list then loads again as the group is now, with the reason on screen; **Load again** reads it again at any time."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, \"Your posts are hidden for review\", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden."
+        },
+        {
+          "type": "p",
+          "text": "**Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with can't join again. You type the number of accounts to confirm. A removal can't be undone."
+        },
+        {
+          "type": "p",
+          "text": "What removal can't do: someone determined can come back with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that a few reports hide. Removing it again is one more action."
+        },
+        {
+          "type": "p",
+          "text": "If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time."
         },
         {
           "type": "h2",
@@ -1652,7 +1707,7 @@
     {
       "slug": "backups-and-replicas",
       "title": "Backups and replicas",
-      "summary": "What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words and phones, restoring, running a second server as a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.",
+      "summary": "What to back up, locked backups, sending them off the server to storage you choose, owners' 12 words and phones, restoring, running a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.",
       "section": "server",
       "related": [
         "updates-and-health",
@@ -1676,7 +1731,7 @@
             "**libp2p_key**: the server's own identity. It signs what your server sends to standbys, to other communities and to the service that gives it its web address. Lose it and the server comes back as a stranger: its address has to be claimed again with help, every link with another community made again by hand on both sides, and every standby set up again. Members, beans and posts are in state.db and survive;",
             "**connectors.json**: your links with other communities;",
             "**genesis.json** and **community.key**: the community's founding record and a key kept for later. community.key signs nothing today. Keep both anyway;",
-            "**recovery-seal.key**: the key that opens members' sign-in recovery copies. A member who connects Google, Apple or Facebook has a locked copy of their account on the server, so that sign-in can bring it back, and the server locks every such copy again with this key. A main server makes it at its first start; a standby has none of its own. It is never in state.db, so a copy of the database alone opens no member's copy. Lose it and those copies can't be opened: members' 12 words still work, and each member connects their sign-in again. A server that took over or was restored may also hold files named **recovery-seal-retired-** and a number: keys it replaced, kept so that nothing they locked is lost. Keep them;",
+            "**recovery-seal.key**: the key that opens members' sign-in recovery copies. A member who connects Google, Apple or Facebook has a locked copy of their account on the server, so that sign-in can bring it back, and the server locks every such copy again with this key. A main server makes it at its first start; a standby has none of its own. It is never in state.db, so a copy of the database alone opens no member's copy. The server locks the push address of each member's phone with it too, so a copy of the database alone can't send anyone a notification. Lose it and those copies can't be opened: members' 12 words still work, and each member connects their sign-in again. Each phone gets notifications again once its app next opens. A server that took over or was restored may also hold files named **recovery-seal-retired-** and a number: keys it replaced, kept so that nothing they locked is lost. Keep them;",
             "**open-join.key**: on the global community, the key behind its record of who joined with which sign-in account. The server keeps a scrambled reference to each Google or Apple account that joined, so that one account makes one member; this key does the scrambling. A main server makes it the first time it needs it; a standby has none of its own. It is never in state.db, so a copy of the database alone can't tell anyone which sign-in account is which member. Lose it and the server can't tell a returning account from a new one, so **joining with a sign-in is refused** until the key is back (\"This community can't check sign-ins right now\"); members already in are not affected. A server that took over or was restored may also hold files named **open-join-retired-** and a number: keys it replaced. Keep them. Servers updated to this version move the key out of state.db into this file at their first start, and say so once in the log: \"Open door: moved the key for the door's hashes out of the database\";",
             "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
             "**takeover-envelope.json**: the server's keys and sign-in settings, locked so that only the community's owners can open them (any one of them alone), or a printed recovery code once one is made. The server makes it and keeps it up to date whenever an owner is added or removed, or those settings change. With no owner and no recovery code there is nobody to lock it to, so the file isn't there. It is a locked copy for taking over on another server later; the server still runs from the files above;",
@@ -1796,7 +1851,7 @@
           "type": "ul",
           "items": [
             "**With a recovery code**: a **.bpsealed** file, a locked backup. It holds a clean copy of the database taken while the server runs, the settings, and the server's keys and sign-in settings (libp2p_key, community.key, genesis.json, connectors.json, recovery-seal.key, open-join.key, the scrambled admin password, two-factor sign-in). One file brings back the whole community, members' sign-in recovery copies included. It is locked to the recovery code and to the community's owners. Nobody else can open it, including anyone who finds the file. Every download is locked.",
-            "**Without a recovery code**: a **.tar.gz** file, not locked: a clean copy of the database and the settings. It does **not** hold the server's keys, and not recovery-seal.key or open-join.key. Its settings leave out the scrambled admin password, two-factor sign-in and the replication token. Restored onto this same server, with its data folder still in place, members' sign-in recovery copies open as before. Restored onto any other server, the copies locked with it don't open: members' 12 words still work, and each member can connect their sign-in again. On the global community, that other server also refuses anyone joining with a sign-in until this community's open-join.key is back in its data folder, because without it it can't tell a returning account from a new one. So make a recovery code first. Until then the only copy of the keys is the data folder itself, so copy that folder too (see What matters)."
+            "**Without a recovery code**: a **.tar.gz** file, not locked: a clean copy of the database and the settings. It does **not** hold the server's keys, and not recovery-seal.key or open-join.key. Its settings leave out the scrambled admin password, two-factor sign-in and the replication token. Restored onto this same server, with its data folder still in place, members' sign-in recovery copies open as before. Restored onto any other server, the copies locked with it don't open: members' 12 words still work, and each member can connect their sign-in again. That server can't open the phones' push addresses either, so it removes them, and each phone gets notifications again once its app next opens. On the global community, that other server also refuses anyone joining with a sign-in until this community's open-join.key is back in its data folder, because without it it can't tell a returning account from a new one. So make a recovery code first. Until then the only copy of the keys is the data folder itself, so copy that folder too (see What matters)."
           ]
         },
         {
@@ -1829,6 +1884,90 @@
         {
           "type": "p",
           "text": "If the recovery code is lost, a locked backup still opens with the phone of any owner it was locked to. While the server is running a lost code costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server."
+        },
+        {
+          "type": "h2",
+          "text": "Backups off the server"
+        },
+        {
+          "type": "p",
+          "text": "A backup in data/snapshots, or a file you downloaded once, does not help when the server's disk, the server or the hosting account is lost. So the main server can also send a locked backup, on a schedule, to storage you choose somewhere else. It is optional: nothing is sent anywhere until you add a destination. No destination is BeanPool's, and none is needed."
+        },
+        {
+          "type": "p",
+          "text": "**What goes**: only locked backups. Each is the same .bpsealed file **Download Sovereign Database** makes once you have a recovery code: the database, the settings and the server's keys, locked to the recovery code and the community's owners. The storage holds a file it cannot read. It can see the file's outside: which community and which server it is from, when it was made, and the names of the owners it is locked to. A server that keeps photos on its own disk sends them in the file; one that keeps them in a bucket (IMAGE_STORE=s3) leaves them there, as its downloaded backups do."
+        },
+        {
+          "type": "p",
+          "text": "**Without a recovery code nothing goes.** A backup that is not locked can be read by anyone who has it, and in someone else's storage that would be every message of the community in the clear. The card and Home say \"Nothing goes off the box: this server has no recovery code…\". Everything else keeps working. Make a recovery code (see Make a recovery code) and the next check sends a locked backup."
+        },
+        {
+          "type": "p",
+          "text": "**Only the main server sends.** A standby sends nothing and asks no storage anything. Put the same destinations on the standby anyway: if it takes over, it starts sending to them, into the same folder. A main server that sees another server has taken over from it stops sending."
+        },
+        {
+          "type": "h3",
+          "text": "Choosing storage"
+        },
+        {
+          "type": "p",
+          "text": "Any storage that speaks S3: Cloudflare R2, Backblaze B2, Wasabi, AWS S3, Scaleway, OVH, Hetzner, or MinIO or Garage on a machine of your own. For each destination:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Make a bucket for these backups alone.",
+            "Make a key that may read, write, list and delete in that bucket and nothing else.",
+            "Turn off versioning on the bucket, or add a rule that removes old versions within 30 days. With versioning on, a backup the server deletes stays behind as an old version.",
+            "Add a lifecycle rule that deletes files older than 30 days, if the storage has them (R2, B2, Wasabi, AWS and MinIO do). The server deletes old backups itself, but only while it runs and only where a destination points now; the rule keeps the 30-day promise after a **Change**, a **Remove**, or once the server is gone for good.",
+            "Note its endpoint: the storage's S3 address without the bucket in it, starting https://. For R2, https://ACCOUNT-ID.r2.cloudflarestorage.com."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Two destinations at two different companies are safer than one: an account closed, a bill unpaid or an outage then costs one copy, not both."
+        },
+        {
+          "type": "h3",
+          "text": "Setting it up"
+        },
+        {
+          "type": "p",
+          "text": "In Settings: **Appliance & Data**, **Backups & Restore**, **Backups off the server**, **Add a destination**. Fill in a name of your choosing, the endpoint, the bucket, the region (\"auto\" for R2, your storage's region elsewhere), a folder if you want one, the access key id and the secret access key, and press **Add**. The first backup goes there within a few minutes. Only an owner sees this card or changes it (anyone with the admin password counts as one); an admin is told \"Only an owner of this node can see or change where its backups go off the box\"."
+        },
+        {
+          "type": "p",
+          "text": "Settings keeps a destination in data/offbox-backups.json, which only the server's own user can read. It is never in the database, so never in a snapshot, a backup or a standby's copy, and the log never shows a key. The card shows the key id shortened and never shows the secret again. To change a destination press **Change**: leave the key id and the secret empty to keep them, or type new ones. **Remove** stops sending there; what that destination already holds stays there, so delete it yourself within 30 days. A **Change** to another endpoint, bucket or folder is the same for the old place: the backups already sent there stay, the server no longer looks there, and the card says so; delete them yourself within 30 days."
+        },
+        {
+          "type": "p",
+          "text": "Or in the server's .env, for up to two destinations (Settings takes more, five in all): BACKUP_OFFBOX_1_ENDPOINT, BACKUP_OFFBOX_1_BUCKET, BACKUP_OFFBOX_1_REGION, BACKUP_OFFBOX_1_ACCESS_KEY_ID and BACKUP_OFFBOX_1_SECRET_ACCESS_KEY, with BACKUP_OFFBOX_1_PREFIX (a folder) and BACKUP_OFFBOX_1_NAME if you want them, and the same with BACKUP_OFFBOX_2_ for a second; then docker compose up -d. The card marks these \"set in .env\"; they change only there. A destination with a setting missing or wrong shows \"Can't be used\" and names the setting, never what it holds. Five in all is the most, .env's first: one past that shows \"Can't be used\" too, gets no new backups, and its old ones are still removed on time."
+        },
+        {
+          "type": "h3",
+          "text": "When, and when it fails"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Every 24 hours by default (nightly); **How often** chooses 6 hours to a week. The server looks every 5 minutes, and a destination gets a backup once its last one is older than that. All destinations get the same file. **Send one now** sends to every destination at once.",
+            "After each upload the server asks the storage for the file's size, so a copy cut short is never counted as made.",
+            "Each upload is tried 3 times. If it still fails, the destination shows **Failing** with the storage's own words (a refused key says so), and is tried again after 15 minutes, then 30, doubling up to 6 hours, until it works. One that has had no backup for a day and a half (with the 24-hour setting) shows **Late**.",
+            "Owners see the same on Home: \"Backups off the server need attention\", with what failed and when it is tried next.",
+            "One upload carries about 5 GB at most. A larger backup is refused in words: such a community is not covered yet."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "How long they are kept"
+        },
+        {
+          "type": "p",
+          "text": "**Keep each backup** is 30 days by default. You can choose fewer, never more: a member who deletes their account is in every backup made before, and the members' guide promises that ends within 30 days. 30 days in .env is the most it reads; more is read as 30."
+        },
+        {
+          "type": "p",
+          "text": "The server deletes this community's backups past that age from each destination after each upload and every hour, also while nothing is sent for want of a recovery code. It deletes only files it named itself, beanpool-backup- and the date with .bpsealed, in this community's own folder (the folder you chose, then the community's id). It touches nothing else in the bucket, another community's backups included."
         },
         {
           "type": "h2",
@@ -1909,6 +2048,30 @@
         },
         {
           "type": "h3",
+          "text": "Push addresses made before they were locked"
+        },
+        {
+          "type": "p",
+          "text": "At its first start after the update that locks them, a main server locks the push address of every member's phone with recovery-seal.key. Until then they were in state.db in the clear, and anyone holding a copy could send those phones notifications that look like BeanPool's. Docker's log shows it: docker compose logs beanpool-node | grep \"Push tokens\""
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A main server says once \"Push tokens: locked the … phone registrations …\", and at every start \"Push tokens: … phone registrations, locked with data/recovery-seal.key.\"",
+            "A standby says once \"Push tokens: this standby dropped the …\": it has no key to lock them with. It copies its main server again in full, once, and gets the locked ones.",
+            "A server that took over or was restored without this community's recovery-seal.key says \"Push tokens: removed … phone registrations locked with a key this server doesn't have\". Those phones get notifications again once their apps next open. Nothing else waits on it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Going back to an older version: first, on the main server, still on the newer image and with the server stopped, run: docker compose run --rm --no-deps beanpool-node node dist/services/push-token-seal.js --unlock-push-tokens. It puts every phone's address back in the old form, and then you set the older BEANPOOL_IMAGE_TAG. Without it the older server starts, but it cannot register a phone or send a notification (it looks for a column that is no longer there), and members' actions that notify someone, such as a request or an accept, go through but answer them with an error, until you run it. It refuses on a standby, which has no key. A standby that goes back keeps the locked table until its next full copy of its main server, within about 15 minutes, which rebuilds it in the old form; a server promoted from it before then can neither register a phone nor send. Go back on the main server first, and run the command there before the standby copies it."
+        },
+        {
+          "type": "p",
+          "text": "Backups, snapshots and copies of the data folder made before this update hold the addresses in the clear. Delete them as the steps above say for the recovery seal, once you have a new backup."
+        },
+        {
+          "type": "h3",
           "text": "GitHub copies"
         },
         {
@@ -1981,9 +2144,10 @@
             "**Or type the printed recovery code**, then press **Open with the code and restore**.",
             "Without Settings, on the server's own machine, in the folder that holds the file: curl -k -X POST --data-binary @FILE -H \"X-Admin-Password: PASSWORD\" -H \"X-Recovery-Code: CODE\" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE. With two-factor sign-in on, add -H \"X-Admin-TOTP: 123456\" with the code the authenticator shows. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.",
             "This works on a **fresh server** too: install BeanPool, sign in to its Settings with its own admin password, and restore. The whole community comes back onto it.",
+            "**From a backup off the server**: on the fresh server, add the same destination under **Backups off the server** (or put it in .env), and press **Show backups**. It lists the lost community's backups, newest first, marked \"another community\" until the restore. Press **Download** on the newest: the server checks it against the fingerprint it was sent with, and a file the storage gives back changed stops short rather than arriving whole. Then restore that file with the Restore Database Wizard and the recovery code, as above. You can also take the file from the storage's own website or tools: it is in the folder you chose, then the community's id. The fresh server sends nothing off the box until it has a recovery code; after the restore it has the community's, and carries on sending to the same folder.",
             "It brings back everything in the file: the database, the server's keys (the key that opens members' sign-in recovery copies and, on the global community, open-join.key among them), the community's genesis, its links with other communities, and its admin password and two-factor sign-in. If this server had a different recovery-seal.key of its own, it is kept as recovery-seal-retired- and a number, and a different open-join.key as open-join-retired- and a number. When the backup holds sign-in recovery copies locked with such a key, the server's log then says whether they open on this server. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)",
             "If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. If you know the machine, send the same command again with -H \"X-Accept-Signer: NAME\", putting the name it gave. A file let through this way brings back its **database only**: the server never takes keys or an admin password from it. Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.",
-            "**A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key, recovery-seal.key, open-join.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again. Without its open-join.key, a global community refuses anyone joining with a sign-in: the restore's answer and the server's log say so in one line starting \"Open door: this server holds …\", and every start repeats it. Copy the community's open-join.key into the data folder and the next person to join is let in (or told they already have an account), with no restart.",
+            "**A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key, recovery-seal.key, open-join.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again. The phones' push addresses don't open either: the server removes them at its start and its log says how many (\"Push tokens: removed …\"); each phone gets notifications again once its app next opens. Without its open-join.key, a global community refuses anyone joining with a sign-in: the restore's answer and the server's log say so in one line starting \"Open door: this server holds …\", and every start repeats it. Copy the community's open-join.key into the data folder and the next person to join is let in (or told they already have an account), with no restart.",
             "Stop and think before restoring over a live community: everything since the backup is lost."
           ]
         },
@@ -2073,7 +2237,7 @@
         {
           "type": "ul",
           "items": [
-            "keeps a copy of its own keys and settings in a folder named pre-takeover- and the date, in its data folder;",
+            "keeps a copy of its own keys and settings, and of the owners, admins, web address and settings in its database, in a folder named pre-takeover- and the date, in its data folder. If a later step fails, this is what it puts back (If a step fails, below);",
             "writes the main server's node key (libp2p_key), so it keeps the main server's identity, and its genesis, community key and links with other communities. Its own link to the old main server goes;",
             "writes the key that opens members' sign-in recovery copies (recovery-seal.key). If the standby had a different one of its own, it keeps it as recovery-seal-retired- and a number, and at the next start locks the copies only that key opened again with the community's key. Keys locked before they carried it are still taken over: its log says \"No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.\";",
             "installs the community's admin password and two-factor sign-in, and the record of the recovery code;",
@@ -2107,11 +2271,21 @@
         },
         {
           "type": "p",
-          "text": "If something went wrong, the standby's own files from before are in the pre-takeover- folder, its own recovery-seal.key and open-join.key among them if it had them. The recovery-seal-retired- and open-join-retired- files are not in it and stay where they are: keep them. The step that failed is named on the screen and in data/takeover-journal.json."
+          "text": "**If a step fails.** If one of the steps before the restart fails (a disk that refuses a write, say), the take-over is undone at once, and nothing of it is kept. The standby puts back its own node key, links, settings, owners and admins, web address and how far its copies had reached, from the pre-takeover- folder, and deletes the opened keys. It is the standby it was: it goes on copying the main server, and its own admin password works again. The screen names the step that failed and why, and says nothing was kept; data/takeover-journal.json says the same. Fix what stopped it, then take over again: **Take over as the main server** is there again, and the recovery code or an owner's phone opens the keys as before."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If the server stops while it undoes a take-over, it finishes undoing it the next time it starts, before anything else. Until then it copies nothing from the main server, and the screen says it is putting itself back.",
+            "If undoing it can't finish (a settings file or database that refuses the write, say), the server still starts, as a standby: never as the main server, and without the community's web address, even if the take-over had got as far as making it the main server. It copies nothing, and the screen says why it couldn't put itself back. Fix that, then restart it: it finishes undoing the take-over at that start.",
+            "If the pre-takeover- folder is gone, or has lost public-address.json, the server can't tell what it should put back, so it puts back and deletes nothing: it keeps the community's keys and settings as the take-over left them, runs as a standby that copies nothing, and the screen says the folder is missing. Restarting alone won't change that. Put the folder back from a file backup of the data folder, then restart it.",
+            "If the power goes part-way through a take-over and the step it carries on with then fails when it starts, the take-over is undone at that start too. So is one whose opened keys (data/takeover-bundle.json) are gone, since it can't go on without them. A power cut on its own undoes nothing: the take-over carries on from where it was, as above.",
+            "The pre-takeover- folder stays, with the standby's own files as they were, its own recovery-seal.key and open-join.key among them if it had them; another try makes another folder. The recovery-seal-retired- and open-join-retired- files are not in it and stay where they are: keep them."
+          ]
         },
         {
           "type": "p",
-          "text": "The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from. It then writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server."
+          "text": "The standby refuses to take over if the keys it holds are for another community, or are not signed by the main server it copies from, or if another server has already taken over with them (see Two standbys, one set of keys). It then writes nothing. With a phone it also refuses a phone whose owner the keys are not locked to, an expired or already used code, and, after 5 bad tries, closes the code. The owner's phone refuses too, and says why, if the keys belong to another community than its own, or (once the app has seen its own server's lock) were not locked by its own server."
         },
         {
           "type": "h2",
@@ -2142,6 +2316,24 @@
         {
           "type": "p",
           "text": "To use the old machine again, set it up from scratch as a standby of the new main server: it needs a new identity of its own. Before this update the way back was a script, scripts/restore-primary.mjs; it is gone, and the take-over above does its job without changing the community's identity."
+        },
+        {
+          "type": "h2",
+          "text": "Two standbys, one set of keys"
+        },
+        {
+          "type": "p",
+          "text": "Every standby of your community holds the same locked keys, so two standbys could each take over: you type the code on one, its restart takes a while, and you try again on the other. Both would then be main servers, and members' changes would be split between them for good."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Before it takes over**, a standby asks the community's web address, and the main server's address it copies from, for the identity epoch. If a server with the community's key answers there with a take-over newer than the keys the standby holds, another server has already taken over, and the standby refuses: \"Another server already took over this community with these keys…\", with when. It writes nothing and stays a standby. It asks when the keys are opened and again when you press **Take over now**, in case another standby took over while the screen was open.",
+            "If that server is now your main server, make the standby copy it instead: make a replication token on the new main server and paste it into the standby under **Live Backup Server**. The standby then holds the new main server's keys, and can take over from it if it goes too.",
+            "**If both took over anyway** (neither address answered: the tunnel was not back yet, say), both are main servers at the same identity epoch. Each one asks its web address when it starts and every hour after. When the other answers there, the one that took over second goes **read-only**: members' changes are refused with \"Another server took over this community with the same keys on (date and time), before this server did (date and time). This server is now read-only.\" Its Settings show the same in red, its log says so at every start, and it stays read-only after a restart. The one that took over first carries on taking members' changes, and its log says another server took over after it.",
+            "What you do then: stop the server that went read-only, and set its machine up from scratch as a standby of the other one. Anything members changed on it before it went read-only stays on it and never reaches the other server.",
+            "Like the check above, this works only when each can see the other at the web address. With one tunnel run from both, the address answers from either, so each asks several times at every check, but until one of them sees the other, both take members' changes. So: take over on one standby only, and wait for its screen to say it is the main server."
+          ]
         }
       ]
     },
@@ -2352,6 +2544,118 @@
       ]
     },
     {
+      "slug": "app-floor",
+      "title": "Raising the app's floor",
+      "summary": "Making members update an old phone app, safely: one platform at a time, with a grace date, after checking how many it would stop.",
+      "section": "server",
+      "related": [
+        "updates-and-health",
+        "what-the-server-sees",
+        "troubleshooting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What the floor does"
+        },
+        {
+          "type": "p",
+          "text": "Your server tells every phone app the oldest version it should run: the floor. An app below it shows a banner that cannot be closed while it is in use. Once the grace date has passed, it also stops with a full-screen **Update required** and one **Update** button that opens the store. It does that only at a safe moment: when the app starts, or when someone comes back to it after 5 minutes or more away. It never covers a screen while someone is using it."
+        },
+        {
+          "type": "p",
+          "text": "The server never refuses an app because of its version. Whatever a member was doing when their app fell below the floor still reaches the server. Only the app stops, and only until it is updated."
+        },
+        {
+          "type": "p",
+          "text": "A floor never stops anyone the store cannot help. Your server reads Google Play's and the App Store's newest versions itself, every 6 hours, and holds a platform's floor until its store has a version that meets it: Apple can take days to review a new version. If the server has not read a store's version, nothing is stopped on that platform."
+        },
+        {
+          "type": "h2",
+          "text": "Setting it"
+        },
+        {
+          "type": "p",
+          "text": "In .env:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**MIN_APP_VERSION**: the floor for both kinds of phone, for example 1.2.60. Unset, it is 1.0.75, below every app in use.",
+            "**MIN_APP_VERSION_ANDROID** and **MIN_APP_VERSION_IOS**: a floor for one kind of phone, in place of MIN_APP_VERSION. A kind of phone without its own floor has MIN_APP_VERSION's.",
+            "**MIN_APP_VERSION_FROM**: the grace date, from when an app below the floor stops. A date, such as 2026-10-15 (midnight UTC), or a date and time, such as 2026-10-15T09:00:00+10:00. Until then the app shows its banner only. Unset, an app below the floor stops at its next start.",
+            "**MIN_APP_VERSION_FROM_ANDROID** and **MIN_APP_VERSION_FROM_IOS**: a grace date for one kind of phone."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Then run: docker compose up -d"
+        },
+        {
+          "type": "p",
+          "text": "A floor that is not a version is ignored. A grace date that is not a date turns the full-screen update off for that kind of phone until you fix it, and the log says so."
+        },
+        {
+          "type": "h2",
+          "text": "Raising it safely"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Look first.** Home's **Phone app versions** card shows, for Android and iPhone, how many people run each version, how many are below the floor, and what each floor is doing now. It counts the members and visitors seen in the last 30 days, or since the server last started.",
+            "**Check the store has it.** The card says what Google Play and the App Store have. A floor above that waits by itself, and the card and the log say so.",
+            "**Give a grace date** a week or so ahead, and tell members before it, with an announcement.",
+            "**One kind of phone at a time** when the stores differ. If the App Store does not have the new version yet, give iPhones a later grace date of their own (MIN_APP_VERSION_FROM_IOS): an iPhone floor that waited for the store applies as soon as the store has the version, so without a later date iPhones would stop with no banner first.",
+            "**Watch the card.** After the date, members update at their next start, and the numbers below the floor fall."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Apps from before the full-screen update show the banner only, whatever the date. They do not say their version, so the card does not count them, and they do not say which kind of phone they are on, so your server gives them the lower of the two floors: MIN_APP_VERSION, until you have raised both kinds of phone past it. While you raise one kind of phone at a time, they see no banner; once both are raised, they see it with the lower of the two numbers."
+        },
+        {
+          "type": "h2",
+          "text": "Undoing it"
+        },
+        {
+          "type": "p",
+          "text": "A phone too old for the new version cannot install it, and its member cannot get past the screen into your community, which tells them to ask you. Lower the floor, or move the grace date later, and run docker compose up -d. A stopped app asks again every time it comes back to the front, and lets the member in."
+        },
+        {
+          "type": "h2",
+          "text": "What the screen still lets a member do"
+        },
+        {
+          "type": "p",
+          "text": "The screen stops your community only, never the member's account. From it a member can:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Use another community** saved on the same phone. The app moves there, and that community's own floor decides. Coming back to yours is checked again, so your floor still holds here.",
+            "**See their 12 words** on the screen itself, after the phone's own lock, or add them to a phone that has none, so they never lose the account.",
+            "**Leave this community.** The phone forgets it and its copy, and opens the next community on the phone. Nothing is deleted on your server: the member can come back with an invite or their 12 words. On a phone with no other community, leaving takes the account off the phone, as Sign Out does, after showing the 12 words. Someone who never finished joining simply forgets your community and can use another invite."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "None of these asks your server anything. Leaving only asks it, in passing, to stop sending that phone notifications, and never waits for the answer. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it."
+        },
+        {
+          "type": "h2",
+          "text": "The web app"
+        },
+        {
+          "type": "p",
+          "text": "The web app has no floor. It is your server's own copy, loaded fresh every time a page opens, so it is always the server's version. A page left open across a server update shows a banner asking to refresh, and refreshing loads the new one. The floors are for the phone apps only."
+        },
+        {
+          "type": "p",
+          "text": "Each server sets its own floor. A phone that holds several communities follows each one's floor while it is using that one."
+        }
+      ]
+    },
+    {
       "slug": "address-and-peers",
       "title": "Address, identity and peers",
       "summary": "Your community's web address, the addresses members' apps use, what it tells the BeanPool directory, the gateway switches, and links to other communities.",
@@ -2377,7 +2681,10 @@
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
             "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
             "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
-            "The BeanPool project then checks from time to time that the name still answers with your server's key. If another server answers, the name is taken away."
+            "Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.",
+            "You don't need to do anything about a pause. Your server asks for the name back by itself within a few minutes. It gets it back as soon as it shows its own key, on a new tunnel that only your server is given, so whoever was answering there is cut off. The one exception is a pause by the BeanPool project itself: only the project can lift it.",
+            "**New tunnel key** gives the tunnel a new key, and the old key stops working at once. Use it if someone else may have only the tunnel's key: someone saw it on this screen, or you gave away a machine that was a standby. Anyone with the old key could answer at your address. Your server switches to the new key by itself; visitors' connections drop for a few seconds.",
+            "**New tunnel key does not help if a copy of this server's data folder, or a backup, went somewhere it shouldn't.** That copy holds your server's own key, which is what the name belongs to, and a server started from it gets the new tunnel key from the address service on its own. Nothing in Settings replaces your server's own key. Keep the data folder and backups private, and if a copy may have got out, contact the BeanPool project, who run the address service, and say so."
           ]
         },
         {
@@ -2506,6 +2813,7 @@
           "items": [
             "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.",
             "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.",
+            "**The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: from the 10th join an hour from one address, each new account's setting-up takes a little longer, in steps at the 10th, 30th, 100th and 200th, and a step more when the whole community is taking hundreds of 12-words accounts in 10 minutes. A join is refused only past 500 12-words accounts an hour or 2,000 a day from one address (the sign-in way stays open to them), or 1,000 an hour or 5,000 a day by sign-in. Each of these numbers can be changed with a node_config row named doorNumbers. and the number's name (in the server's code, engine/door-signal.ts); there is no Settings screen for them, and a standby does not copy them.",
             "**New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.",
             "**Settings**: 300 requests a minute per internet address.",
             "**Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.",
@@ -2708,7 +3016,7 @@
         },
         {
           "type": "p",
-          "text": "It also notes which members joined through the open door from the same internet connection within a day of each other: a random label they share, never the address. Only the hiding of reported posts reads it, so that their reports count as one (see Reports and takedowns). It is in the database, so anyone who can read the database can see who joined together, as people in one household or at one meetup often do. A standby copies it, and it goes when the member deletes their own account."
+          "text": "It also notes which members joined through the open door from the same internet connection within a day of each other: a random label they share, never the address. Two things read it. The hiding of reported posts, so that their reports count as one; and your moderators, who see which accounts joined together with a reported account, so they can hide all their posts or remove them in one action (see Reports and takedowns). They see only which accounts joined together and when, never the connection or its address. A moderator sees that from an account with an open report filed by someone else (about them, or about a post they wrote), or from a group of 5 or more that joined in the last 7 days; owners and admins from any account. That limit leaves a record rather than being a wall: a moderator could file a report from a second account, and the report names who filed it. Each such action is recorded on this server for 30 days (how many accounts and posts, the posts a hide hid, and the role of whoever acted, never their name), so that a hide can be undone. The label is in the database, so anyone who can read the database can see who joined together, as people in one household or at one meetup often do. A standby copies the label, not the record of actions. Both go when the member deletes their own account."
         },
         {
           "type": "p",
@@ -2764,7 +3072,8 @@
           "items": [
             "The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written. The log keeps its newest 2,500 lines, and none older than 30 days.",
             "The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.",
-            "Reports, and the people they are about."
+            "Reports, and the people they are about.",
+            "On the global community, which accounts joined from the same internet connection within a day of each other (above). Moderators see this too."
           ]
         },
         {
@@ -2783,6 +3092,7 @@
             "**Notices kept for other members.** For 7 days your server keeps the details of each push it sent to a member (who wrote, which chat, which listing). On a delete it rewrites every such notice of other members that names the member or shows the start of their key: \"Wren sent you a message\" becomes \"A member sent you a message\". The rest of those notices (the chat or listing they point to) stays for the 7 days. They are the server's own: a standby does not copy them.",
             "**Snapshots** keep everything as it was when each was taken, until the snapshot is deleted: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.",
             "**A backup you downloaded** is a file out of the server's reach. It keeps everything until you delete it. A fleet manager keeps one copy a day for 30 days.",
+            "**Backups off the server**, if you set them up (see Backups and replicas), keep everything as it was until the server deletes them there: after 30 days at most, sooner if you chose. A copy the storage keeps on its own beyond that (an old version, a destination you removed) is yours to delete.",
             "**Deletion records.** A short record of each delete (which row went, such as which two members were friends) stays on every server for 30 days, so a standby can copy the delete.",
             "**Docker's own log** of the server holds the same lines as the log, with their name, and nothing can change it afterwards. It is two files of 5 MB at most, and the oldest lines go as it fills, which on a quiet server can take weeks. It goes with the container: an update that replaces the container starts a new one, and so does: docker compose up -d --force-recreate"
           ]
@@ -2800,7 +3110,7 @@
           "items": [
             "**Replication Access** shows the address each standby copy came from, and each refused try, so you can tell your standby from a stranger. It keeps each address for 7 days, then shows \"address no longer kept\" with the time and the outcome. The standby watch and the list of which standby holds which take-over keys do the same.",
             "A log line that has to tell one address from another (wrong admin passwords, a proxy missing from TRUSTED_PROXIES, the gateway's limit) names it by a code such as ip#k3Jx9QaB7d. The code is the address scrambled with a key that changes every day, is never saved, and is new after a restart. So the same address has the same code all day, and nobody can turn a code back into the address.",
-            "The rate limits and the password brake count addresses in memory only. Joining with a sign-in and requests to join keep a scrambled address for a day, to limit how many come from one place.",
+            "The rate limits and the password brake count addresses in memory only. Joining through the open door (with 12 secret words or a sign-in) and requests to join keep a scrambled address for a day, to set how long a join from one place takes to set up and to limit how many come from it. When the community removes someone within a day of their joining, their scrambled address is kept for 7 days from their join instead, so new 12-words accounts from that network take longer to set up that week. It is never kept longer for someone who deleted their own account, and a standby never copies it.",
             "Snapshots and backups hold no visitor's or standby's address, not even a scrambled one, and none is left in the file's free space. A standby's copy never has them. A downloaded backup also carries your settings, including any admin IP allowlist you typed in under Gateway & Peers.",
             "A report file that a crash or a freeze leaves in the data folder lists each open connection by its port, with no address. The server takes the addresses out of its own crash report as soon as it writes it, and out of any other report file when it starts.",
             "A server updated to this version clears what it kept before when it starts: addresses older than 7 days, and every address in older log lines, in the snapshots it keeps and in older report files. A backup you downloaded before the update is a file on your own computer, out of the server's reach. Docker's own log of the server keeps what was printed before the update until Docker replaces it. The tunnel helper (cloudflared) keeps its own log."
@@ -2818,6 +3128,14 @@
         {
           "type": "p",
           "text": "Home shows how many times the web app was opened on your server each day for the last 30 days, and about how many different visitors that was. Your server counts this itself as it sends the web app's page: there is no cookie, no outside service and nothing extra in the app. It counts a person's browser opening the web app, and not the app's own requests, its files, Settings, the phone app, search engines, link previews or uptime checks. For each day it keeps the date (in UTC), the number of visits and the number of visitors, and nothing else, for 400 days. To tell visitors apart it scrambles each visit's internet address and browser name with a key made for that day, which is kept in memory only and thrown away at midnight UTC; only the count is saved, never an address, a browser name, a scrambled code or who is a member, and nothing about it goes in the logs. So the number of visitors is an estimate: people on one internet connection with the same browser count once, and after a restart someone who comes back counts again. A standby does not copy the counts: each server counts the visits it serves."
+        },
+        {
+          "type": "h2",
+          "text": "Phone app versions"
+        },
+        {
+          "type": "p",
+          "text": "The phone app says which version it is, and whether it is Android or iPhone, on each request to its community, so Home can show how many people run each version before you raise the app's floor (see Raising the app's floor). Your server counts only requests whose signature it has checked, from members and visitors, and only from phones set to your community: the app names its version to its own community and no one else. A visitor is counted when their phone is set to your community; a member of another community who visits from their own is counted there, not here. It keeps the counts in memory only: never in the database, a file or the logs, and gone when the server restarts. To count each person once it scrambles their key with a key of its own, made when the server starts and never written down, so the counts cannot be matched to anyone. Someone not seen for 30 days drops out. The server never refuses an app because of its version."
         },
         {
           "type": "h2",
@@ -2839,7 +3157,7 @@
         },
         {
           "type": "p",
-          "text": "Your server keeps a push address for each member's phone, and that address alone is enough to send the phone a notification. So treat your backups and any standby's copy as carefully as the server itself: anyone holding one could send your members fake notices."
+          "text": "Your server keeps a push address for each member's phone, and that address alone is enough to send the phone a notification. The server locks each one with recovery-seal.key, the key it keeps beside its database and never in it (see Backups and replicas). So a copy of the database alone holds no address anyone can use: not state.db, not a snapshot, not a backup that is not locked, not a standby's copy. The running server opens each one only to send to it. Whoever runs the server, or takes it over completely, still has them. Backups, snapshots and copies of the data folder made before the update that brought this hold the addresses in the clear: treat those as carefully as the server itself, and delete them when you can."
         }
       ]
     },

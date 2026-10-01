@@ -26,6 +26,19 @@ export default tseslint.config(
       'no-empty': 'warn',
     },
   },
+  // The registrar (apps/registrar): a Cloudflare Worker and its node:test suites and scripts, in plain JS. The Worker runs
+  // with the web platform's globals and the tests and scripts with node's, which eslint knows of for no .js file: every
+  // use of them was a no-undef error.
+  {
+    files: ['apps/registrar/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: {
+        console: 'readonly', fetch: 'readonly', Request: 'readonly', Response: 'readonly', Headers: 'readonly', URL: 'readonly',
+        crypto: 'readonly', TextEncoder: 'readonly', TextDecoder: 'readonly', AbortSignal: 'readonly',
+        setTimeout: 'readonly', clearTimeout: 'readonly', process: 'readonly',
+      },
+    },
+  },
   // Native: exactly one KeyboardProvider, in app/_layout.tsx. A second one nested inside a Modal
   // broke keyboards app-wide (measured 2026-09-17). Screens and modals use the keyboard-controller
   // hooks/components under the root provider instead.

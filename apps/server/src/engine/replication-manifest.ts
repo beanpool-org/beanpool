@@ -313,7 +313,10 @@ export const TABLES: Record<string, TableEntry> = {
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
         columns: cols('member_pubkey provider join_hash joined_at updated_at join_cohort'),
-        except: { ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' } },
+        except: {
+            ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' },
+            ip_kept_until: { reason: "how long a removed newcomer's address hash is kept here; the hash is never sent (engine/door-signal.ts)" },
+        },
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
@@ -444,6 +447,10 @@ export const TABLES: Record<string, TableEntry> = {
     withheld_lines: { kind: 'local', reason: 'lines kept for their sender alone, because the person they were sent to had blocked them: never in a copy, so no standby can deliver one (engine/withheld-lines.ts)' },
     withheld_conversations: { kind: 'local', reason: 'conversations kept for their opener alone, because the other had blocked them: never in a copy (engine/withheld-lines.ts)' },
     withheld_overlays: { kind: 'local', reason: "a blocked member's reaction or edit on a line, kept for them alone and laid over their own reads: never in a copy (engine/withheld-lines.ts)" },
+    // A burst action's undo (engine/burst-cleanup.ts). The posts it hid travel hidden (posts.hidden_by_reports_at), so a
+    // server that takes over keeps them hidden, and its moderators restore them one at a time.
+    burst_actions: { kind: 'local', reason: "this server's record of the moderators' burst actions, for their undo, 30 days: the posts a hide hid travel hidden in posts, and after a take-over are restored one at a time (engine/burst-cleanup.ts)" },
+    burst_action_posts: { kind: 'local', reason: "the posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
     // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
     // copied, stores none (engine/withheld-notes.ts).
     withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },

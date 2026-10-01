@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { attestSweep } from '../src/index.js';
-import { nowS, toHex, world, liveName, makeKey, routing } from './harness.js';
+import { nowS, toHex, world, liveName, makeKey, routing, attestsAs } from './harness.js';
 
 const DAY = 86400;
 const sign = async (key, message) => toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(message)));
@@ -144,11 +144,20 @@ test('L3: claim, heal and update refuse an over-long or malformed field with a 4
         }
 
         // A heal and an update are held to the same rules, and a refused one changes nothing.
+        // (PR #1410 note 1: the key's own name drops a label that fails, and still refuses a bad routing field.)
+        const isLabel = (fields) => Object.keys(fields).every((k) => ['community_name', 'communityName', 'contact'].includes(k));
         const kept = state(w);
         for (const [what, fields] of Object.entries(bad)) {
+            const labels = (await w.row('riverbend'));
             const r = await w.heal(key, { name: 'riverbend', ...fields });
-            assert.equal(r.status, 400, `heal with ${what}`);
+            if (isLabel(fields)) {
+                assert.equal(r.status, 200, `heal with ${what}: ${JSON.stringify(r.body)}`);
+                const now = await w.row('riverbend');
+                assert.equal(now.community_name, labels.community_name, `heal with ${what}: the bad label is not stored`);
+                assert.equal(now.contact, labels.contact, `heal with ${what}: the bad label is not stored`);
+            } else assert.equal(r.status, 400, `heal with ${what}`);
         }
+        const kept2 = state(w);
         for (const fields of [{ community_name: long(121) }, { communityName: long(121) }, { contact: long(255) }, { contact: 'a\u0000b' }, { community_name: ['x'] }]) {
             const r = await send(w, await (async () => {
                 const ts = String(nowS());
@@ -156,9 +165,10 @@ test('L3: claim, heal and update refuse an over-long or malformed field with a 4
                 const sig = await sign(key, `beanpool-registrar-request/v1\nPOST\n/api/registrar/update\n${ts}\n${text}`);
                 return new Request('https://beanpool.org/api/registrar/update', { method: 'POST', body: text, headers: { 'x-bp-pubkey': key.pubHex, 'x-bp-timestamp': ts, 'x-bp-signature': sig } });
             })());
-            assert.equal(r.status, 400, `update with ${JSON.stringify(fields).slice(0, 60)}`);
+            assert.equal(r.status, 200, `update with ${JSON.stringify(fields).slice(0, 60)}`);
         }
-        assert.deepEqual(state(w), kept, 'no refused heal or update changed the row');
+        assert.deepEqual(state(w), kept2, 'an update whose only fields are bad labels changes nothing');
+        void kept;
 
         // A direct name with an IPv4 address is fine.
         const direct = await makeKey();
@@ -487,4 +497,90 @@ test('L4: a Cloudflare failure answers a keyholder a reference, never the accoun
         console.error = realError;
         w.restore();
     }
+});
+
+// ── PR #1410 review, notes 1 and 2 ─────────────────────────────────────────────────────────────────────────────────
+
+// A name its key holds, paused as an impostor by two sweeps, whose node answers at it again under its own key.
+async function pausedImpostor(w, name, key) {
+    await liveName(w, name, key);
+    await liveName(w, `${name}-n1`, await makeKey()); await liveName(w, `${name}-n2`, await makeKey());   // a sweep that fails every name pauses none
+    const other = await makeKey();
+    w.nodes[`${name}.beanpool.org`] = attestsAs(other);
+    await attestSweep(w.env); await attestSweep(w.env);
+    const row = await w.row(name);
+    assert.equal(row.status, 'paused'); assert.equal(row.pause_reason, 'impostor');
+    w.nodes[`${name}.beanpool.org`] = attestsAs(key);
+}
+
+test('note 1: a held name heals to live whatever its community name or contact holds — a bad label is dropped, never a refusal', async () => {
+    const labels = {
+        'plain': ['Byron Bay Exchange', 'Byron Bay Exchange'],
+        'Android BidiFormatter isolates': ['⁨مجتمع بايرون⁩', null],
+        'a tab': ['Byron\tBay', null],
+    };
+    for (const [what, [name, kept]] of Object.entries(labels)) {
+        for (const field of ['community_name', 'contact']) {
+            const w = await world();
+            try {
+                const key = await makeKey();
+                await pausedImpostor(w, 'riverbend', key);
+                const r = await w.claim(key, { name: 'riverbend', origin: 'http://127.0.0.1:8080', [field]: name });
+                assert.equal(r.status, 200, `${what} in ${field}: ${JSON.stringify(r.body)}`);
+                assert.equal(r.body.status, 'live', `${what} in ${field}`);
+                assert.equal((await w.row('riverbend'))[field], kept, `${what} in ${field}: dropped, or kept when fine`);
+            } finally { w.restore(); }
+        }
+    }
+});
+
+test('note 1: heal and update of the key\'s own name drop a bad label too; routing fields are still refused; a NEW claim with a bad label is still a 400', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        await liveName(w, 'riverbend', key);
+        const h = await w.heal(key, { name: 'riverbend', community_name: 'Byron\tBay', contact: 'ok@example.org' });
+        assert.equal(h.status, 200, JSON.stringify(h.body));
+        assert.equal((await w.row('riverbend')).contact, 'ok@example.org', 'the good label is kept');
+        const u = await w.release(key, { community_name: 'A⁦B⁩', contact: 'new@example.org' }, '/api/registrar/update');
+        assert.equal(u.status, 200, JSON.stringify(u.body));
+        assert.equal((await w.row('riverbend')).community_name, null, 'the bad label was not stored');
+        assert.equal((await w.row('riverbend')).contact, 'new@example.org');
+        assert.equal((await w.claim(key, { name: 'riverbend', origin: 'http://127.0.0.1:8080/admin' })).status, 400, 'a bad origin is still refused');
+
+        const stranger = await makeKey();
+        for (const bad of [{ community_name: 'Byron\tBay' }, { community_name: '⁨x⁩' }, { contact: 'a\nb' }]) {
+            const before = state(w);
+            const r = await w.claim(stranger, { name: 'newname', ...bad });
+            assert.equal(r.status, 400, JSON.stringify(bad));
+            assert.match(r.body.error, /invisible formatting or control character/);
+            assert.doesNotMatch(r.body.error, /^[a-z_]+ contains a control character/);
+            assert.deepEqual(state(w), before, 'a refused claim writes nothing');
+        }
+        assert.equal((await w.row('newname')), null);
+    } finally { w.restore(); }
+});
+
+test('note 2: /health advertises v2 only while request_nonces exists', async () => {
+    const health = async (w) => (await send(w, new Request('https://beanpool.org/api/registrar/health'))).body.accepted_proto;
+    const w = await world();
+    try { assert.deepEqual(await health(w), ['v1', 'v2']); } finally { w.restore(); }
+    const old = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql'] });
+    try { assert.deepEqual(await health(old), ['v1'], 'no nonce table, no v2'); } finally { old.restore(); }
+});
+
+test('note 2: a v2 request on a Worker without request_nonces is a 401 listing v1 — not a 500 — and the same request under v1 works', async () => {
+    const w = await world({ migrations: ['0001_init.sql', '0002_states.sql', '0003_decision_seq.sql', '0004_teardown.sql', '0005_reserve_global.sql'] });
+    try {
+        const key = await makeKey();
+        await liveName(w, 'riverbend', key);   // v1 claim: fine without the table
+        const r = await sendV2(w, await v2('GET', '/api/registrar/status', key));
+        assert.equal(r.status, 401, JSON.stringify(r.body));
+        assert.deepEqual(r.body, { error: 'bad signature', accepted_proto: ['v1'] });
+        // What the node does with that (registrar-client retryProto): sign again under v1.
+        const again = await w.status(key);
+        assert.equal(again.status, 200);
+        assert.equal(again.body.status, 'live');
+        assert.equal((await w.heal(key, { name: 'riverbend' })).status, 200);
+    } finally { w.restore(); }
 });

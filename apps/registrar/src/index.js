@@ -14,7 +14,7 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519, requestProto, requestNonce, protoOf, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
+import { verifySignedRequest, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
@@ -25,6 +25,21 @@ const json = (obj, status = 200) =>
 const badSignature = () => json({ error: 'bad signature', accepted_proto: ACCEPTED_PROTOS }, 401);
 const nowS = () => Math.floor(Date.now() / 1000);
 
+// The protocols this Worker can serve right now: all of them while D1 has the nonce table (migration 0006), and without
+// it only those that sign no nonce. Checked against D1 at most once a minute per isolate: /health and the 401s answer it.
+const nonceTable = new WeakMap();   // env.DB -> { at, ok }
+async function nonceTableExists(env) {
+    if (!env.DB) return true;   // no database to ask (a unit test of /health): nothing to say against v2
+    const seen = nonceTable.get(env.DB);
+    if (seen && Date.now() - seen.at < 60_000) return seen.ok;
+    let ok = true;
+    try { await env.DB.prepare('SELECT 1 FROM request_nonces LIMIT 0').run(); } catch { ok = false; }
+    nonceTable.set(env.DB, { at: Date.now(), ok });
+    return ok;
+}
+const protosWithoutNonce = () => ACCEPTED_PROTOS.filter((p) => !PROTOCOLS[p].nonce);
+const acceptedProtos = async (env) => ((await nonceTableExists(env)) ? ACCEPTED_PROTOS : protosWithoutNonce());
+
 // The key that signed a request, or the Response refusing it: a bad signature, or — under a protocol that signs a
 // nonce (v2) — a nonce this key has sent before: a request the Worker already took, replayed. The nonce is taken
 // before the request does anything. A v1 request signs none, and still verifies until its timestamp is too old
@@ -33,7 +48,17 @@ async function signer(request, env, bodyText) {
     const pubkey = await verifySignedRequest(request, bodyText);
     if (!pubkey) return badSignature();
     const n = requestNonce(request);
-    if (n && !(await db.takeNonce(env, pubkey, n.nonce, n.ts))) return json({ error: 'request already used' }, 401);
+    if (n) {
+        let taken;
+        try { taken = await db.takeNonce(env, pubkey, n.nonce, n.ts); }
+        catch (e) {
+            // A Worker deployed before migration 0006 has no nonce table. The v2 request can't be recorded, so it is
+            // not served; the node reads the accepted_proto, signs the same request under v1 (no nonce), and works.
+            console.error('[NONCE_TABLE]', e.message || e);
+            return json({ error: 'bad signature', accepted_proto: protosWithoutNonce() }, 401);
+        }
+        if (!taken) return json({ error: 'request already used' }, 401);
+    }
     return pubkey;
 }
 
@@ -483,21 +508,44 @@ function validOrigin(v) {
     try { new URL(v); return true; } catch { return false; }   // a port over 65535, a malformed IPv6 address
 }
 
-// What is wrong with the fields a claim, heal or update body sets, or null. A field absent, null or empty is not set.
-// Answered with a 400 before the request writes anything.
-function fieldProblem(b) {
-    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+// What is wrong with the display labels (community name, contact) a claim, heal or update body sets, or null. A label
+// absent or null is not set.
+function labelProblem(b) {
     for (const [key, max] of Object.entries(TEXT_MAX)) {
         const v = b[key];
         if (v === undefined || v === null) continue;
         if (typeof v !== 'string') return `${key} must be text`;
         const t = v.trim();   // what is stored
         if ([...t].length > max) return `${key} is longer than ${max} characters`;
-        if (BAD_TEXT.test(t)) return `${key} contains a control character`;
+        if (BAD_TEXT.test(t)) return `${key} contains an invisible formatting or control character`;
     }
+    return null;
+}
+// What is wrong with the fields that decide routing, or null.
+function routeProblem(b) {
     if (isSet(b.origin) && !validOrigin(b.origin)) return `origin must be http(s)://host[:port], at most ${ORIGIN_MAX} characters`;
     if (isSet(b.public_ip) && !(typeof b.public_ip === 'string' && IPV4_RE.test(b.public_ip))) return 'public_ip must be an IPv4 address';
     return null;
+}
+// What is wrong with the fields a claim, heal or update body sets, or null. Answered with a 400 before the request
+// writes anything.
+function fieldProblem(b) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    return labelProblem(b) || routeProblem(b);
+}
+// For a request by the key that already holds the name: routing outranks a label, so a label that fails its checks is
+// dropped from the body and logged here, never a reason to refuse a claim or heal (a node whose community name carries
+// a character it can't see would otherwise stay dark through every tick). Returns the problem with the routing
+// fields, which are still refused, or null; `b` is changed in place.
+function dropBadLabels(b, who) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    for (const key of Object.keys(TEXT_MAX)) {
+        const problem = labelProblem({ [key]: b[key] });
+        if (!problem) continue;
+        console.warn('[LABEL_DROPPED]', who, problem);
+        delete b[key];
+    }
+    return routeProblem(b);
 }
 const badField = (problem) => json({ error: problem }, 400);
 
@@ -732,14 +780,18 @@ async function handleClaim(request, env, bodyText) {
     const pubkey = await signer(request, env, bodyText);
     if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-    const problem = fieldProblem(b);
-    if (problem) return badField(problem);
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
 
     const name = String(b.name || '').toLowerCase();
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const existing = await db.getAllocation(env, name);
+    // A new claim with a label that fails its checks is refused; the key's own name drops the label instead.
+    if (isOwnRow(existing, pubkey)) dropBadLabels(b, `${name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
 
     // The claimant's own name: a heal (or taking back its own release). Ownership outranks a policy row added
     // after the claim; only the admin's block stops it — and the admin's release of it, through its hold.
@@ -762,11 +814,14 @@ async function handleHeal(request, env, bodyText) {
     const pubkey = await signer(request, env, bodyText);
     if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-    const problem = fieldProblem(b);
-    if (problem) return badField(problem);
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const cur = b.name ? await db.getAllocation(env, String(b.name).toLowerCase()) : await db.getOwnAllocation(env, pubkey);
+    if (isOwnRow(cur, pubkey)) dropBadLabels(b, `${cur.name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
     if (blockedOut(env, cur, pubkey, now)) return json({ error: 'name blocked' }, 403);
     if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to heal', status: 'none' }, 404);
     if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
@@ -853,7 +908,9 @@ async function handleUpdate(request, env, bodyText) {
     const a = await db.getAllocationByPubkey(env, pubkey);
     if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
-    const problem = fieldProblem(b);
+    // An update of the key's own name: a bad label is dropped, not a reason to refuse (the rest still applies).
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const problem = dropBadLabels(b, `${a.name} ${key16(pubkey)}`);
     if (problem) return badField(problem);
     const updates = {};
     const commVal = b.community_name !== undefined ? b.community_name : b.communityName;
@@ -1339,7 +1396,7 @@ export default {
             // commit: the git SHA this Worker was deployed from (`wrangler deploy --var GIT_SHA:…`, the deploy workflow);
             // null for a deploy that didn't say. The workflow fails unless it is the commit it deployed.
             if (method === 'GET' && p === '/api/registrar/health')
-                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: ACCEPTED_PROTOS });
+                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());

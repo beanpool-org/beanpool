@@ -218,6 +218,7 @@ export const SUITES = [
     'test-apple-return',
     'test-recovery-backup-durability',
     'test-public-address',
+    'test-clean-label',
     'test-tunnel-connector',
     'test-no-docker-socket',
     'test-node-config-public',

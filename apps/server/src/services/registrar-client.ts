@@ -65,6 +65,7 @@ export const ATTEST_DOMAIN = PROTOCOLS.v1.attest;
 import { randomBytes } from 'node:crypto';
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
+import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 
 const getRegistrarUrl = () => (process.env.REGISTRAR_URL || 'https://beanpool.org').replace(/\/$/, '');
 
@@ -181,10 +182,15 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     return data;
 }
 
+// The labels go out as the registrar accepts them (config/clean-label.ts): a character it can't see never keeps a name dark.
 export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string) =>
-    signedFetch('POST', '/api/registrar/claim', { name, mode, origin, contact, community_name: communityName });
+    signedFetch('POST', '/api/registrar/claim', {
+        name, mode, origin, contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX), community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX),
+    });
 export const updateAddressMetadata = (communityName?: string, contact?: string) =>
-    signedFetch('POST', '/api/registrar/update', { community_name: communityName, contact });
+    signedFetch('POST', '/api/registrar/update', {
+        community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX), contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX),
+    });
 export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
 export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});
 

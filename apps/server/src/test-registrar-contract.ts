@@ -429,6 +429,20 @@ async function run() {
         const oldAnswers = [await send(oldNode), await send(oldNode)];
         assert(oldAnswers.every((r) => r.status === 200), 'today\'s v1 node (no nonce) still verifies, as before — a repeat too, until nodes send v2');
 
+        // A Worker deployed without migration 0006 (no request_nonces): /health leaves v2 out, and a node sending v2 gets a
+        // 401 naming v1 (not a 500), signs the same call again under v1 and works. PR #1410 note 2.
+        world = newWorld();
+        world.sqlite.prepare('DROP TABLE request_nonces').run();
+        const bareHealth = await (await registrar.index.default.fetch(new Request('https://beanpool.org/api/registrar/health'), world.env)).json();
+        assert(isDeepStrictEqual(bareHealth.accepted_proto, ['v1']), 'a Worker without the nonce table advertises v1 only', bareHealth);
+        sent.length = 0;
+        warnings.length = 0;
+        const bareClaim = await nodeV2.claimAddress('contract-bare', 'tunnel', 'http://beanpool-node:8080');
+        assert(bareClaim.status === 'live', 'a v2 node falls back to v1 against it and claims its name', bareClaim);
+        assert(sent.length === 2 && sent[0].status === 401 && sent[0].proto === 'v2' && sent[1].status === 200 && sent[1].proto === null && warnings.length === 1,
+            'one 401 under v2, then one 200 under v1, and a warning (no 500)', { sent, warnings });
+        assert((await nodeV2.addressStatus()).status === 'live', 'and its next call works the same way');
+
         // ── 6. The deploy workflow's checks ──
         console.log('— the deploy workflow\'s checks (apps/registrar/scripts/deploy-checks.mjs)');
         const source = fs.readFileSync(CLIENT_SOURCE, 'utf8');

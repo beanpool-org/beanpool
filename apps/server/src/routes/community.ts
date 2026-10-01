@@ -80,6 +80,7 @@ import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '..
 import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
+import { cleanLabel } from '../config/clean-label.js';
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -277,7 +278,7 @@ router.post('/api/local/update-identity', async (ctx) => {
             updates.location = { lat: parsedLat, lng: parsedLng };
         }
     }
-    if (communityName !== undefined) updates.communityName = (communityName || '').slice(0, 60) || null;
+    if (communityName !== undefined) updates.communityName = cleanLabel(communityName, 60) ?? null;
     if (contactEmail !== undefined) updates.contactEmail = (contactEmail || '').slice(0, 100) || null;
     if (contactPhone !== undefined) updates.contactPhone = (contactPhone || '').slice(0, 30) || null;
     updateLocalConfig(updates);

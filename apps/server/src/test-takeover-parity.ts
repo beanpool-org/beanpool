@@ -114,6 +114,13 @@ async function child(): Promise<void> {
     const fetches = guardFetch();
     await runNodeChild({
         ...serveCommands,
+        'backdate-members': async (a: { publicKeys: string[]; days: number }) => {
+            const { db } = await import('./db/db.js');
+            const at = new Date(Date.now() - a.days * 86_400_000).toISOString();
+            for (const pk of a.publicKeys) db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(at, pk);
+            return (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at = ? AND public_key IN (SELECT value FROM json_each(?))`)
+                .get(at, JSON.stringify(a.publicKeys)) as { c: number }).c;
+        },
         /**
          * The real server, without the pricing guide's own timer (pricing-aggregator.ts: a first cycle 5 s after boot, then
          * hourly). Whether it had fired by the read was the runner's speed; the scenario runs the cycle itself instead.
@@ -345,6 +352,12 @@ async function main(): Promise<void> {
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip, rex]) await join(who);
 
+        // The members are backdated before any trade. A community of members who joined minutes ago and trade only with each other is what
+        // the wash-trading check (engine/trust.ts runWashTradingAnalysis: insular cluster, half or more under 14 days old) flags, and a flagged
+        // member's trades earn no credit, so their first direct send is refused ("only after your first completed trade"). That check is
+        // memoised for 10 s, so the suite passed whenever the memo still predated its first trade and failed when a slow run let it expire.
+        // The check is right; these fixture members are older than a fortnight, as the members of a real community who trade are.
+        require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip, rex].map((w) => w.pk), days: 20 }) === 7, 'M: the seven members joined twenty days ago');
         const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) =>
             built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed',

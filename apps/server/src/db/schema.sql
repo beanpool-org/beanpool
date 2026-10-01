@@ -1039,6 +1039,55 @@ CREATE TABLE IF NOT EXISTS push_notices (
 CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
 CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);
 
+-- 14j. Withheld lines (engine/withheld-lines.ts). A direct message to someone who has blocked its sender is answered as
+-- sent and kept here for its sender alone, never in `messages`: the person who blocked them never gets it, then or after
+-- an unblock, and nothing that reads `messages` (the chats, unread counts, pushes, a standby's copy) can show it to them.
+-- A conversation such a sender opens with them, where the two have none, is kept here too, until either of them opens
+-- the real one or the sender writes in it after the block is lifted: then it becomes the real conversation, under the same
+-- id. Local to this server, never in a copy. Goes with its sender on a prune or a self-deletion; a re-key moves it.
+CREATE TABLE IF NOT EXISTS withheld_conversations (
+    id TEXT PRIMARY KEY,
+    owner_pubkey TEXT NOT NULL,
+    other_pubkey TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    owner_last_read_at TEXT,
+    CHECK (owner_pubkey != other_pubkey)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_withheld_conversations_pair ON withheld_conversations(owner_pubkey, other_pubkey);
+CREATE INDEX IF NOT EXISTS idx_withheld_conversations_other ON withheld_conversations(other_pubkey);
+CREATE TABLE IF NOT EXISTS withheld_lines (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    ciphertext TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'text',
+    metadata TEXT,
+    timestamp TEXT NOT NULL,
+    edited_at TEXT,
+    attachment_data TEXT,
+    attachment_nonce TEXT,
+    attachment_mime TEXT,
+    storage_key TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_conversation ON withheld_lines(conversation_id, author_pubkey, timestamp);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_author ON withheld_lines(author_pubkey);
+-- What a blocked member did to a line in `messages` that would show on the screen of someone who has blocked them: their
+-- reaction on a line of a DM with that person, or their edit of their own line in it. Kept for them alone and laid over
+-- their own reads of the line, never written into the line, so the person who blocked them never sees it, then or after
+-- an unblock. One row per line and author. Local, as the lines above are.
+CREATE TABLE IF NOT EXISTS withheld_overlays (
+    message_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    reaction TEXT,
+    ciphertext TEXT,
+    nonce TEXT,
+    edited_at TEXT,
+    changed_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, author_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

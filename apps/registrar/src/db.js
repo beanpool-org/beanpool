@@ -88,6 +88,38 @@ export const updateIfUnchanged = async (env, name, expected, fields, { withIds =
 // keys racing for a freed name must not both think they won, and a take-back must not undo the admin's release.
 export const replaceAllocation = (env, name, expected, fields) => updateIfUnchanged(env, name, expected, fields);
 
+// Delete `expected` — a row this request inserted — only if its tenure and state are still as inserted.
+export const deleteIfUnchanged = async (env, name, expected) => {
+    const r = await env.DB.prepare(`DELETE FROM name_allocations WHERE name=? AND ${STATE.map((c) => `${c} IS ?`).join(' AND ')}`)
+        .bind(name, ...STATE.map((c) => expected[c] ?? null)).run();
+    return (r?.meta?.changes ?? 0) > 0;
+};
+
+// How many names `pubkey` holds, for the per-key claim limit (index.js claimLimit): every row of that key that holds
+// its name as holdsName decides it — any state but a release past its hold (`since` = now − the hold), a release that
+// freed the name at once ('admin', 'withdrawn') and an abandoned one; a state this code doesn't know counts, as holdsName
+// treats it — except the admin's release of a name it had taken from that key ('admin-held-all'), held from that key too.
+export const countHeldBy = async (env, pubkey, since) => {
+    const r = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM name_allocations WHERE node_pubkey=?
+           AND (status NOT IN ('released', 'abandoned')
+                OR (status = 'released' AND COALESCE(pause_reason, '') NOT IN ('admin', 'withdrawn', 'admin-held-all')
+                    AND COALESCE(released_at, 0) > ?))`
+    ).bind(pubkey, since).first();
+    return Number(r?.n) || 0;
+};
+
+// A signed request's one-use nonce (signing protocol v2, migration 0006): true the first time this key sends it, false
+// after — a replay. A driver that doesn't say how many rows changed reads as a replay: a check that can't tell must not
+// let one through.
+export const takeNonce = async (env, pubkey, nonce, ts) => {
+    const r = await env.DB.prepare('INSERT OR IGNORE INTO request_nonces (pubkey, nonce, ts) VALUES (?,?,?)').bind(pubkey, nonce, ts).run();
+    return (r?.meta?.changes ?? 0) > 0;
+};
+
+// Nonces whose request's timestamp no longer verifies (sign.js CLOCK_SKEW_S) can't be replayed: the sweep drops them.
+export const pruneNonces = (env, before) => env.DB.prepare('DELETE FROM request_nonces WHERE ts < ?').bind(before).run();
+
 // A valid signed request from `pubkey`: the abandonment clock restarts and any warning clears, on every name
 // the key holds. At most one write an hour per key (nodes ask every 5 min), unless a warning must clear.
 export const touchContact = (env, pubkey, now, proto = 'v1') =>

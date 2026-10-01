@@ -35,6 +35,7 @@ import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig
 import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
 import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
+import { cleanLabel } from './clean-label.js';
 
 export type { SyncCommunitySettings };
 
@@ -122,6 +123,8 @@ const orNull = <T>(check: Check<T>): Check<T | null> => (v) => (v === null ? nul
 
 /** A string, cut to what the route that sets it keeps (routes/community.ts update-identity). */
 const text = (max: number): Check<string> => (v) => (typeof v === 'string' ? v.slice(0, max) : BAD);
+/** A name people see and the registrar publishes: as `text`, minus characters nobody can see (config/clean-label.ts). */
+const label = (max: number): Check<string> => (v) => (typeof v === 'string' ? (cleanLabel(v, max) ?? '') : BAD);
 const oneOf = <T extends string>(...allowed: T[]): Check<T> => (v) => (allowed.includes(v as T) ? v as T : BAD);
 const bool: Check<boolean> = (v) => (typeof v === 'boolean' ? v : BAD);
 
@@ -185,7 +188,7 @@ const radius: Check<{ lat: number; lng: number; radiusKm: number }> = (v) => {
 
 const LOCAL_CONFIG_CHECKS: Record<(typeof COMMUNITY_LOCAL_CONFIG_FIELDS)[number], Check<unknown>> = {
     callsign: orNull(text(20)),
-    communityName: orNull(text(60)),
+    communityName: orNull(label(60)),
     location: orNull(place),
     contactEmail: orNull(text(100)),
     contactPhone: orNull(text(30)),

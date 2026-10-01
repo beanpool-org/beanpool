@@ -361,7 +361,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                         (data.held_until ? (data.reason === 'admin-held-all' ? ', held from every key, its own included, until ' : ', held for its key until ') + new Date(data.held_until * 1000).toLocaleString() : '') + '.');
                     loadRegistrarData();
                 } else {
-                    alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : ''));
+                    alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : '') + (data.ref ? ' (log ref ' + data.ref + ')' : ''));
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);

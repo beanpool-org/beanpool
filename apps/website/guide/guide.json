@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 96,
-  "hash": "3e998bd66534eb01732fcfc40bbb3d76ee4cc010908efff3dc278b6061325611",
+  "version": 97,
+  "hash": "af25722b601161ada14f61882af60c34d8977d46c1b468224504faa03c7ccc80",
   "sections": [
     {
       "id": "about",
@@ -1884,7 +1884,7 @@
         },
         {
           "type": "p",
-          "text": "**Too many new accounts from this network:** the global community takes only a few new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later."
+          "text": "**Too many new accounts from this network:** the global community takes only so many new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later."
         },
         {
           "type": "h2",
@@ -4681,7 +4681,8 @@
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
             "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. The server's own daily copies made before then keep them for up to 14 days. A backup an owner downloaded keeps them until the owner deletes it. See \"Leaving or deleting your account\".",
-            "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\"."
+            "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\".",
+            "On the global community, its moderators can see which accounts joined from the same internet connection within a day of each other, but never the connection itself, so they can deal with a burst of fake accounts in one go. See \"Reporting a problem\"."
           ]
         },
         {
@@ -4887,6 +4888,7 @@
           "items": [
             "**A post reported by three members who don't know each other** is hidden at once, until a moderator looks at it. Each of them must have been a member for at least a week, and be at least half as established there as the person who posted it. Time as a member counts most, then posts that stayed up and people they have finished a deal with. Trust badges don't count. People who joined from the same internet connection within a day of each other count as one, and so do people who came in on invites from the same person. Someone who reported three posts in a month that the moderators then kept doesn't count for a while. Otherwise the reports wait for the moderators, as they do everywhere. So a few new accounts can't hide the posts of someone who has been there for months.",
             "**A hidden post** can still be seen by its author, who gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.",
+            "**Accounts that joined together.** The moderators can see which accounts joined from the same internet connection within a day of a reported one, never the connection itself, so they can deal with a burst of fake accounts in one go: hide all their posts while they look, or remove the accounts. If yours are hidden that way, you get one alert, \"Your posts are hidden for review\", and they come back if the moderators keep them. People in one household or at one meetup often join together, so the moderators check each account before they act.",
             "**New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.",
             "**If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.",
             "**There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.",
@@ -5231,6 +5233,7 @@
             "**A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.",
             "**Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.",
             "**Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.",
+            "**Backups kept elsewhere.** If your community's server sends its backups to storage somewhere else, each one made before you deleted keeps your account as it was until the server deletes it there: after 30 days at most. These backups are locked: only the people your community trusts with its recovery code, and its owners, can open them.",
             "**A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.",
             "**The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.",
             "**Your trades** stay in the ledger, under \"Deleted Member\", so everyone's beans still add up.",

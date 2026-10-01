@@ -93,11 +93,10 @@ describe('every write or removal of the phone\'s community announces it', () => 
     it('the exceptions: every caller of leaveThisCommunity announces once the next copy is open', () => {
         const callers = sourceFiles()
             .map((f) => [path.relative(NATIVE, f), code(fs.readFileSync(f, 'utf8'))] as const)
-            .filter(([, src]) => /await leaveThisCommunity\(/.test(src));
-        expect(callers.length).toBeGreaterThan(0);
-        for (const [f] of callers) expect(['utils/delete-here.ts', 'utils/update-block-escape.ts']).toContain(f);
+            .filter(([, src]) => /await (deps\.)?leaveThisCommunity\(/.test(src));
+        expect(callers.map(([f]) => f).sort()).toEqual(['utils/delete-here.ts', 'utils/update-block-escape.ts']);
         for (const [, src] of callers) {
-            expect(src).toMatch(/await leaveThisCommunity\([^)]*\);[\s\S]{0,400}?communitySwitched\(\);/);
+            expect(src).toMatch(/await (deps\.)?leaveThisCommunity\([^)]*\);\s*(const \{ initDB \} = await import\('\.\/db'\);\s*)?await (deps\.)?initDB\(\);\s*communitySwitched\(\);/);
         }
     });
 

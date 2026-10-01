@@ -3,28 +3,32 @@
  * up over the whole app (utils/force-update.ts).
  *
  * The account is the member's, not the community's, and a phone can hold several communities. So the block never takes
- * from the member more than that one community (#1415's deciding review, BLOCKING):
- * - **Use another community**: every other community saved on this phone, one tap each. The phone moves there as the
- *   BeanPool sheet moves it (use-communities.ts), the block comes down, and the community now in use is asked at once
- *   (utils/community-switch.ts): its own floor, not the one left, decides. The floor still holds where it was set:
- *   switching back is a safe moment, and that community puts its block up again.
- * - **The 12 words** and **leaving the community**, always: the block steps aside for Settings' own Recovery Phrase and
- *   Account Deletion & Sign Out, exactly as Settings has them (the phone's lock first, the typed confirmations, the plan
- *   of what a delete keeps). It steps aside only while one of those sections is in front on the Settings tab
- *   ({@link ACCOUNT_SECTIONS}), and comes back the moment the member goes anywhere else.
- *
- * It also makes a hostile or broken node survivable. A node can name any floor and, in the same answer, any store
- * version (the phone cannot ask the stores itself without depending on them), so it can put this block up on its own
- * members' phones whenever it likes. It still holds only that community: the member's other communities, their words
- * and the way to leave it stay one tap away.
+ * from the member more than that one community (#1415's deciding review, BLOCKING), and none of its ways out depends on
+ * anything that community answers (#1415's re-review, BLOCKING): a node can name any floor and, in the same answer, any
+ * store version, and it also answers whether the key is a member there. Each way out is done on the phone, inside the
+ * block itself, never through a screen the block covers or a status the node controls:
+ * - **Use another community**: every other community saved on this phone, one tap each, read from the phone's own
+ *   list. The phone moves there as the BeanPool sheet moves it (use-communities.ts), the block comes down, and the
+ *   community now in use is asked at once (utils/community-switch.ts): its own floor, not the one left, decides. The
+ *   floor still holds where it was set: switching back is a safe moment, and that community puts its block up again.
+ * - **The 12 words**: read from the phone's key store behind the phone's own lock (words-behind-lock.ts), and drawn in
+ *   the block with capture blocked (components/WordsOnScreen.tsx); or, on a phone with none, added from paper
+ *   (components/AddWordsForm.tsx, checked against the key on the phone and sent nowhere).
+ * - **Leave this community** ({@link planLeaveFromUpdateBlock}, {@link leaveFromUpdateBlock}): the phone forgets it.
+ *   With other communities on the phone, it goes from the list with its copy and the phone moves to the next; the key
+ *   stays. As the last, the account leaves the phone as Sign Out takes it, after the words. The community is told only
+ *   in passing (its push alerts), and nothing waits on it.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { BeanPoolIdentity } from './identity';
 import { communityName } from './community-name';
 import { communitySwitched } from './community-switch';
 import { assertPlainNodeAddress, plainOriginOf } from './node-url';
 import { SAVED_NODES_STORE_KEY } from './storage-keys';
 
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
+/** The communities this key visited as a guest (nodes.ts `markGuestNode`). */
+const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
 
 interface Storage {
     getItem(key: string): Promise<string | null>;
@@ -91,38 +95,132 @@ export async function switchFromUpdateBlock(url: string, injected?: SwitchDeps):
     communitySwitched();
 }
 
-/**
- * Settings' sections the block steps aside for: the 12 words (View Recovery Phrase, or adding them to a phone with
- * none), Account Protection (a sign-in that restores the account, which Recovery Phrase sends a member without words
- * to), and Account Deletion & Sign Out (leaving the community).
- */
-export const ACCOUNT_SECTIONS = ['seed', 'protection', 'wipe'] as const;
-export type AccountSection = typeof ACCOUNT_SECTIONS[number];
-
-export function isAccountSection(mode: unknown): mode is AccountSection {
-    return (ACCOUNT_SECTIONS as readonly unknown[]).includes(mode);
+/** What the block's "Leave this community" will do, read from the phone alone before the member confirms. */
+export interface BlockLeavePlan {
+    /** The community the phone is set to, as it saved it: the one being left. */
+    here: string;
+    hereName: string;
+    /** Where the phone goes next: the first other community saved on it. None: this is the last, and the account leaves. */
+    next: OtherCommunity | null;
 }
 
-let accountSectionOpen = false;
-const accountSectionListeners = new Set<(open: boolean) => void>();
+/**
+ * The plan for the block's "Leave this community": the community the phone is set to, its name, and the next one on the
+ * phone, if any. Reads the phone's storage only. Throws when the phone is not set to a community, or its storage can't
+ * be read: nothing is left then.
+ */
+export async function planLeaveFromUpdateBlock(storage: Pick<Storage, 'getItem'> = AsyncStorage): Promise<BlockLeavePlan> {
+    const here = await storage.getItem(ANCHOR_STORE_KEY);
+    if (!here || !plainOriginOf(here)) throw new Error('This phone is not set to a community.');
+    let saved: unknown;
+    try {
+        saved = JSON.parse((await storage.getItem(SAVED_NODES_STORE_KEY)) ?? '[]');
+    } catch {
+        saved = [];
+    }
+    const hereAddress = plainOriginOf(here);
+    const entry = Array.isArray(saved)
+        ? saved.find((n) => n && typeof n === 'object' && plainOriginOf((n as { url?: unknown }).url) === hereAddress) as
+            { url?: string; alias?: unknown; nodeName?: unknown } | undefined
+        : undefined;
+    const hereName = communityName({ url: here, alias: typeof entry?.alias === 'string' ? entry.alias : null, nodeName: entry?.nodeName });
+    const [next] = await otherCommunitiesOnPhone(storage);
+    return { here, hereName, next: next ?? null };
+}
+
+type LeavingAccount = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
+
+export interface LeaveDeps {
+    storage: Pick<Storage, 'getItem'>;
+    /** delete-here.ts: this community off the push record, its copy and its list entries gone, the phone set to `next`. */
+    leaveThisCommunity(here: string, next: string): Promise<void>;
+    initDB(): Promise<void>;
+    /** account-leaves-phone.ts: Sign Out (Device Only). */
+    signOutOfThisPhone(account: LeavingAccount): Promise<void>;
+    /** No account on the phone and no other community: this one off the phone, and the phone on none. */
+    forgetCommunity(here: string): Promise<void>;
+    /** account-leaves-phone.ts: one community asked to drop the push token. Never throws. */
+    stopPushAlertsAt(account: LeavingAccount, community: string): Promise<boolean>;
+    /** push-registrations.ts: a community back on the push record, so a later Sign Out asks it again. */
+    putBackOnRecord(communities: readonly string[]): Promise<void>;
+}
+
+async function defaultLeaveDeps(): Promise<LeaveDeps> {
+    const [{ leaveThisCommunity }, { initDB }, { signOutOfThisPhone, stopPushAlertsAt }, { putBackOnRecord }] = await Promise.all([
+        import('./delete-here'), import('./db'), import('./account-leaves-phone'), import('./push-registrations'),
+    ]);
+    return { storage: AsyncStorage, leaveThisCommunity, initDB, signOutOfThisPhone, stopPushAlertsAt, putBackOnRecord, forgetCommunity };
+}
 
 /**
- * Settings says, as its tab gains or loses focus and its section changes, whether one of {@link ACCOUNT_SECTIONS} is in
- * front now. The block reads it ({@link onAccountSectionInFront}).
+ * A phone with no account (a join never finished: the block can land on Welcome's invite join) and no other community:
+ * `here` comes off it, its cached copy, its list entry and its guest marker, and the phone is set to none. Then the
+ * update screen has nothing to hold, and Welcome takes another invite. Its own storage only.
  */
-export function setAccountSectionInFront(open: boolean): void {
-    if (open === accountSectionOpen) return;
-    accountSectionOpen = open;
-    for (const listener of [...accountSectionListeners]) {
-        try { listener(open); } catch { /* skipped */ }
+async function forgetCommunity(here: string, storage: Pick<Storage, 'getItem' | 'setItem'> & { removeItem(key: string): Promise<void> } = AsyncStorage): Promise<void> {
+    try {
+        const { removeCommunityCaches } = await import('./community-cache');
+        await removeCommunityCaches([here]);
+    } catch (e) {
+        console.warn('[Update] The cached copy of the community left could not be removed', e);
+    }
+    await storage.removeItem(ANCHOR_STORE_KEY);
+    // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
+    communitySwitched();
+    const hereAddress = plainOriginOf(here);
+    const isHere = (url: unknown) => plainOriginOf(url) === hereAddress;
+    for (const [key, entryUrl] of [[SAVED_NODES_STORE_KEY, (n: unknown) => (n && typeof n === 'object' ? (n as { url?: unknown }).url : n)], [GUEST_NODES_STORE_KEY, (n: unknown) => n]] as const) {
+        try {
+            const parsed: unknown = JSON.parse((await storage.getItem(key)) ?? '[]');
+            if (Array.isArray(parsed) && parsed.some((n) => isHere(entryUrl(n)))) {
+                await storage.setItem(key, JSON.stringify(parsed.filter((n) => !isHere(entryUrl(n)))));
+            }
+        } catch (e) {
+            console.warn('[Update] The community left could not be taken off a list', e);
+        }
     }
 }
 
-export function accountSectionInFront(): boolean {
-    return accountSectionOpen;
-}
+/** What the block's "Leave this community" did. */
+export type BlockLeave =
+    /** The community left the phone, which is on `to` now; the key and its words stay. */
+    | { kind: 'moved'; to: OtherCommunity }
+    /** It was the last: the account left the phone as Sign Out takes it. */
+    | { kind: 'signed-out' }
+    /** No account and no other community: the phone is on none now. */
+    | { kind: 'forgotten' };
 
-export function onAccountSectionInFront(listener: (open: boolean) => void): () => void {
-    accountSectionListeners.add(listener);
-    return () => { accountSectionListeners.delete(listener); };
+/**
+ * The block's "Leave this community", once the member has confirmed `plan` behind the phone's lock. On the phone only:
+ * - Another community on the phone: this one leaves it as a delete that keeps the key leaves it (delete-here.ts
+ *   `leaveThisCommunity`: off the push record, its cached copy gone, the phone set to `plan.next`, off the saved list
+ *   and the guest markers), the next one's copy opens, and the update screen hears the switch. The account at the
+ *   community left is not deleted there: the member can come back with an invite or their words.
+ * - The last: account-leaves-phone.ts `signOutOfThisPhone`, as Settings' Sign Out (Device Only). With no account on
+ *   the phone (a join never finished), the community only comes off the phone, which is then on none.
+ *
+ * The community left is told only in passing: its push alerts are asked to stop (stopPushAlertsAt), without waiting,
+ * and if it never confirms, it goes back on the push record, so a later Sign Out asks it again. Sign Out's own
+ * requests are bounded and never fail it. Nothing the community answers, or fails to, changes what happens here.
+ * Throws when the phone has moved since the plan (nothing is done), or when the phone's own storage fails.
+ */
+export async function leaveFromUpdateBlock(account: LeavingAccount | null, plan: BlockLeavePlan, injected?: LeaveDeps): Promise<BlockLeave> {
+    const deps = injected ?? await defaultLeaveDeps();
+    if (plainOriginOf(await deps.storage.getItem(ANCHOR_STORE_KEY)) !== plainOriginOf(plan.here)) {
+        throw new Error('This phone changed community. Open Leave this community again.');
+    }
+    if (!plan.next) {
+        if (!account) {
+            await deps.forgetCommunity(plan.here);
+            return { kind: 'forgotten' };
+        }
+        await deps.signOutOfThisPhone(account);
+        return { kind: 'signed-out' };
+    }
+    const told = account ? deps.stopPushAlertsAt(account, plan.here).catch(() => false) : Promise.resolve(true);
+    await deps.leaveThisCommunity(plan.here, plan.next.url);
+    await deps.initDB();
+    communitySwitched();
+    void told.then((took) => (took ? undefined : deps.putBackOnRecord([plan.here]))).catch(() => {});
+    return { kind: 'moved', to: plan.next };
 }

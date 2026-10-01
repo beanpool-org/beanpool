@@ -207,3 +207,48 @@ describe('a Safety Backup grid waits with its spinner', () => {
         expect(container.textContent).toBe(WORDS);
     });
 });
+
+describe('drawn above the screens (the full-screen "Update required"): no screen focus to follow', () => {
+    /** As the block draws them: outside any screen, where the navigation's focus can't be asked. */
+    async function aboveTheScreens(show = true): Promise<void> {
+        const { NoScreenCapture, WordsOutsideScreens } = await import('../../components/WordsOnScreen');
+        await draw(createElement(WordsOutsideScreens, {
+            children: createElement('div', null,
+                createElement('h1', null, 'Update required'),
+                show ? createElement(NoScreenCapture, { children: createElement('p', null, WORDS) }) : null,
+            ),
+        }));
+    }
+
+    it('the block first, the words after; let go once the words have gone; the focus is never asked', async () => {
+        // Behind another screen as far as the navigation knows: above the screens, that says nothing.
+        nav.set(false);
+        await aboveTheScreens();
+        expect(asked).toEqual([{ call: 'prevent', wordsOnPage: false }]);
+        expect(wordsOnPage()).toBe(false);
+        await act(async () => { answerPrevent(); });
+        expect(wordsOnPage()).toBe(true);
+
+        await aboveTheScreens(false);
+        expect(asked).toEqual([
+            { call: 'prevent', wordsOnPage: false },
+            { call: 'allow', wordsOnPage: false },
+        ]);
+    });
+
+    it('nested (the window and the grid both hold it): asked once, let go once', async () => {
+        const { NoScreenCapture, WordsOutsideScreens } = await import('../../components/WordsOnScreen');
+        const nested = (show: boolean) => createElement(WordsOutsideScreens, {
+            children: show ? createElement(NoScreenCapture, {
+                children: createElement('div', null, createElement(NoScreenCapture, { children: createElement('p', null, WORDS) })),
+            }) : null,
+        });
+        await draw(nested(true));
+        await act(async () => { answerPrevent(); });
+        await act(async () => {});
+        expect(wordsOnPage()).toBe(true);
+        await draw(nested(false));
+        expect(asked.map((a) => a.call)).toEqual(['prevent', 'allow']);
+        expect(asked[1].wordsOnPage).toBe(false);
+    });
+});

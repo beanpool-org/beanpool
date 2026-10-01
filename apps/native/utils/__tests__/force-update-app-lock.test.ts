@@ -331,6 +331,6 @@ describe('the block, as it is wired: its gate hears App Lock (components/ForceUp
         const block = code(fs.readFileSync(path.join(NATIVE, 'components/ForceUpdateBlock.tsx'), 'utf8'));
         expect(block).toContain('appLockPromptOpen: isAppLockPromptOpen,');
         expect(block).toContain('whenAppLockPromptsClose,');
-        expect(block).toContain("import { isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';");
+        expect(block).toContain("import { authenticateUser, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';");
     });
 });

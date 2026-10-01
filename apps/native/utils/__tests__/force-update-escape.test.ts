@@ -5,8 +5,9 @@
  * communities, their 12 words and the way to leave, and any node can raise it. Now:
  * - with other communities saved on the phone, the block offers each; using one takes the block down and asks that
  *   community at once, and switching back asks the first again (driven on the gate at the end);
- * - with an account on the phone, it always offers the 12 words and leaving, as Settings' own sections, which it steps
- *   aside for while one of them is in front.
+ * - with an account on the phone, it always offers the 12 words and leaving, done in the block itself on the phone,
+ *   never through a screen it covers or anything the community answers (#1415's re-review, BLOCKING: a community that
+ *   answered "not a member" bounced both off the layout's redirect to node-mismatch, which the block covers).
  *
  * Nothing here contacts a node.
  */
@@ -132,59 +133,65 @@ describe('switchFromUpdateBlock: the phone moves, and says so', () => {
     });
 });
 
-describe("Settings' account sections, which the block steps aside for", () => {
-    it('only the words, Account Protection and Account Deletion & Sign Out', async () => {
-        vi.resetModules();
-        const { isAccountSection, ACCOUNT_SECTIONS } = await import('../update-block-escape');
-        expect([...ACCOUNT_SECTIONS]).toEqual(['seed', 'protection', 'wipe']);
-        for (const other of ['menu', 'profile', 'advanced', 'notifications', 'diagnostics', undefined]) {
-            expect(isAccountSection(other)).toBe(false);
-        }
-    });
-
-    it('says when one comes in front and when it goes, once each', async () => {
-        vi.resetModules();
-        const m = await import('../update-block-escape');
-        const seen: boolean[] = [];
-        const stop = m.onAccountSectionInFront((open) => seen.push(open));
-        m.setAccountSectionInFront(true);
-        m.setAccountSectionInFront(true);
-        expect(m.accountSectionInFront()).toBe(true);
-        m.setAccountSectionInFront(false);
-        stop();
-        m.setAccountSectionInFront(true);
-        expect(seen).toEqual([true, false]);
-    });
-});
-
 /** The source without comments, so a pin can't be met by a comment. */
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
     const block = code(read('components/ForceUpdateBlock.tsx'));
 
-    it('"Use another community" whenever the phone has another, and each switches through switchFromUpdateBlock', () => {
+    it('"Use another community" whenever the phone has another, and each switches through switchFromUpdateBlock, then re-checks the community switched TO', () => {
         expect(block).toContain('otherCommunitiesOnPhone().then(');
         expect(block).toMatch(/\{others\.length > 0 && \(/);
         expect(block).toContain('Use another community');
-        expect(block).toMatch(/await switchFromUpdateBlock\(c\.url\);\s*if \(router\.canDismiss\(\)\) router\.dismissAll\(\);\s*router\.replace\('\/welcome'\);/);
+        expect(block).toMatch(/await switchFromUpdateBlock\(c\.url\);\s*await recheck\(\)\.catch\(\(\) => 'unknown'\);\s*if \(router\.canDismiss\(\)\) router\.dismissAll\(\);\s*router\.replace\('\/welcome'\);/);
     });
 
-    it('with an account on the phone, always the 12 words and leaving, as Settings has them', () => {
+    it('the 12 words are read here, behind the phone\'s lock, and drawn here with capture blocked', () => {
         expect(block).toMatch(/\{identity && \(/);
-        expect(block).toContain("openAccountSection('seed')");
-        expect(block).toContain("openAccountSection('wipe')");
-        expect(block).toContain('Leave this community');
-        expect(block).toMatch(/router\.navigate\(\{ pathname: '\/\(tabs\)\/settings', params: \{ section, open: String\(Date\.now\(\)\) \} \}\)/);
-        // The words are never read or drawn here: Settings' section does that behind the phone's lock.
-        expect(block).not.toMatch(/readWordsBehindLock|getMnemonic|deleteAccountHere|signOutOfThisPhone/);
+        expect(block).toContain('See my 12 words');
+        expect(block).toContain('Add my 12 words to this phone');
+        expect(block).toMatch(/const words = await readWordsBehindLock\(identity, WORDS_REASON\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'words', words \}\);/);
+        // The words' pages are drawn only in a WordsWindow: capture blocked first, and on Android a window opened after.
+        expect(block).toMatch(/<WordsOutsideScreens>\s*<NoScreenCapture>\s*\{Platform\.OS === 'android'\s*\? <Modal visible/);
+        expect(block).toMatch(/page\.kind === 'words'\) \{\s*pageView = \(\s*<WordsWindow/);
+        expect(block).toMatch(/page\.kind === 'add-words'\) \{\s*pageView = \(\s*<WordsWindow/);
+        expect(block).toMatch(/pageView = page\.words\s*\? <WordsWindow/);
+        // Put away after 15 s or more away, as everywhere else.
+        expect(block).toContain('usePutAwayAfterLeave(wordsShown, toMain);');
     });
 
-    it('steps aside only while an account section is in front, and its back button only works while it shows', () => {
-        expect(block).toContain('useState(accountSectionInFront)');
-        expect(block).toContain('onAccountSectionInFront(setAside)');
-        expect(block).toContain('if (!block || aside) return null;');
+    it('leaving is done here: planned from the phone, the phone\'s lock first, then leaveFromUpdateBlock', () => {
+        expect(block).toContain('Leave this community');
+        expect(block).toContain('await planLeaveFromUpdateBlock()');
+        const leave = block.slice(block.indexOf('const leave = async'), block.indexOf('const secondary ='));
+        // With an account on the phone; with none there is nothing for the lock to protect.
+        const asked = leave.indexOf('if (identity && !checked && !(await authenticateUser(plan.next ? LEAVE_REASON : LAST_LEAVE_REASON))) return;');
+        expect(asked).toBeGreaterThan(-1);
+        expect(leave.indexOf('await leaveFromUpdateBlock(identity ?? null, plan)')).toBeGreaterThan(asked);
+        // Offered with or without an account: a join never finished can't leave the phone stuck on this community.
+        expect(block).toMatch(/\{!identity && \(\s*<View style=\{\[\.\.\.card, styles\.next\]\}>\s*<Pressable onPress=\{\(\) => \{ void openLeave\(\); \}\}/);
+        // `checked` only after the words were shown behind the same lock, on the last community's page.
+        expect(block.match(/void leave\(plan, checked\)/g)).toHaveLength(1);
+        expect(block).toContain(`leaveButton("I've written them down: leave", true)`);
+        expect(block.match(/leaveButton\([^)]*, true\)/g)).toHaveLength(1);
+        expect(block).toMatch(/await readWordsBehindLock\(identity, LAST_LEAVE_REASON\);\s*if \(!words \|\| turn !== turnRef\.current\) return;\s*setPage\(\{ kind: 'leave', plan, words \}\);/);
+    });
+
+    it('no way out goes through a screen the block covers, or reads what the community says about the member', () => {
+        // No navigation but the one into the community switched to, after the switch has taken the block down.
+        expect(block.match(/router\.(navigate|push|replace)\(/g)).toEqual(["router.replace(", "router.replace("]);
+        expect(block.match(/router\.replace\('\/welcome'\)/g)).toHaveLength(2);
+        expect(block).not.toMatch(/settings|node-mismatch/);
+        expect(block).not.toMatch(/recognition|fetchMembership|membership-probe|isMember/);
+        // The only things it fetches: the community's health (the gate), and nothing else.
+        expect(block.match(/fetch\(/g)).toHaveLength(1);
+        // It never steps aside any more.
+        expect(block).not.toMatch(/aside|AccountSection/);
+    });
+
+    it('its back button leaves the app while it shows; on iPhone App Lock\'s lock screen is drawn inside it', () => {
         expect(block).toMatch(/if \(!showing \|\| Platform\.OS !== 'android'\) return;/);
+        expect(block).toMatch(/<FullWindowOverlay unstable_accessibilityContainerViewIsModal>\s*<AppLockSurface>\{screen\}<\/AppLockSurface>/);
     });
 
     it('the gate hears every switch of community', () => {
@@ -192,26 +199,16 @@ describe('the block, as it is wired (components/ForceUpdateBlock.tsx)', () => {
         expect(block).toContain('stopSwitches();');
     });
 
-    it('mounted inside the identity (for the account options), after the screens, so it shows with or without an account', () => {
+    it('mounted inside the identity and the node status, after the screens, so it shows with or without an account', () => {
         const layout = code(read('app/_layout.tsx'));
         // (A JSX comment between them reads `{}` once comments are taken out.)
-        expect(layout).toMatch(/<IdentityProvider>\s*<NodeStatusProvider>\s*<RootLayoutNav \/>\s*<\/NodeStatusProvider>\s*(\{\}\s*)?<ForceUpdateBlock \/>\s*<\/IdentityProvider>/);
+        expect(layout).toMatch(/<IdentityProvider>\s*<NodeStatusProvider>\s*<RootLayoutNav \/>\s*(\{\}\s*)?<ForceUpdateBlock \/>\s*<\/NodeStatusProvider>\s*<\/IdentityProvider>/);
         expect(layout.match(/<ForceUpdateBlock \/>/g)).toHaveLength(1);
     });
-});
 
-describe('Settings opens the sections the block asks for, and says when one is in front', () => {
-    const settings = code(read('app/(tabs)/settings.tsx'));
-
-    it("section=seed opens View Recovery Phrase; section=wipe opens Account Deletion & Sign Out from its start; each tap is new", () => {
-        expect(settings).toMatch(/params\.section === 'seed'\) \{\s*openViewWords\(\);/);
-        expect(settings).toMatch(/params\.section === 'wipe'\) \{\s*setMode\('wipe'\);\s*setWipeType\('options'\);\s*setWipeConfirm\(''\);\s*setPurgeConfirm\(''\);/);
-        expect(settings).toContain('}, [params.section, params.open])');
-    });
-
-    it('in front means the Settings tab focused and one of the account sections open; gone when it unmounts', () => {
-        expect(settings).toContain('setAccountSectionInFront(settingsFocused && isAccountSection(mode));');
-        expect(settings).toContain('useEffect(() => () => setAccountSectionInFront(false), []);');
+    it('Settings no longer opens sections for it', () => {
+        const settings = code(read('app/(tabs)/settings.tsx'));
+        expect(settings).not.toMatch(/AccountSection|params\.open|update-block-escape/);
     });
 });
 

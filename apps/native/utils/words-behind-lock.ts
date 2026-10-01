@@ -7,7 +7,8 @@ import { getMnemonic, type BeanPoolIdentity } from './identity';
  * The words are the whole account, and a phone left unlocked on a table is the case this is for. Every screen that
  * draws an account's words reads them here, so each asks the same check, and asks it before anything is read:
  * Settings' View Recovery Phrase, Account Protection's Show, "Replace this phone's account?" (the outgoing
- * account's words), node-mismatch's delete, and the join wizard's Safety Backup for a key the phone already had.
+ * account's words), node-mismatch's delete, the join wizard's Safety Backup for a key the phone already had, and the
+ * full-screen "Update required" (its See my 12 words, and the words before leaving the last community).
  *
  * The rest of the rule (2026-09-27) asks the same check, LocalAuth.authenticateUser, directly: sending the account to a
  * computer (pair-device), linking a sign-in that can restore it (SsoEnrolSheet, the global door with the phone's key),

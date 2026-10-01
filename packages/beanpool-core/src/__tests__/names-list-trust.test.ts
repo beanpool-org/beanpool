@@ -8,6 +8,8 @@ import { randomBytes } from '@noble/hashes/utils.js';
 import { newNamesListKey, wrapNamesListKey } from '../names-list-crypto.js';
 import {
     namesWrapDigest, signNamesWrap, verifyNamesWrap, signedNamesWrap, traceNamesTrust, readNamesTrustPin, normaliseNamesDrops,
+    emptyNamesTrustPin, namesKeyChanges, pinKeyChanges, pinCallsigns, namesKeyQr, namesKeyCode, readNamesKeyCheck, namesKeyCheckMatches,
+    pinCheckedKey, namesShareCheck,
     type NamesKeyRecord, type NamesOwnWrap, type NamesTrustPin,
 } from '../names-list-trust.js';
 
@@ -189,7 +191,7 @@ describe('the walk', () => {
         const owen = admin();
         const s = new FakeServer();
         s.wrapBy(owen, newNamesListKey(), owen.publicKey, 1);
-        const t = trace(s, owen, { v: 1, communityId: 'ffff', trusted: [owen.publicKey] });
+        const t = trace(s, owen, { ...emptyNamesTrustPin('ffff', owen.publicKey) });
         expect(t.otherCommunity).toBe(true);
         expect(t.keys.size).toBe(0);
         expect(t.pin).toBeNull();
@@ -206,10 +208,125 @@ describe('the walk', () => {
         expect(t.firstTrust).toBeNull();
     });
 
-    it('reads back a stored pin, and nothing else', () => {
+    it('reads back a stored pin (and the first version’s, which knew only whom it trusted), and nothing else', () => {
         const a = admin();
-        expect(readNamesTrustPin({ v: 1, communityId: COMMUNITY, trusted: [a.publicKey, 'junk'] })).toEqual({ v: 1, communityId: COMMUNITY, trusted: [a.publicKey] });
-        expect(readNamesTrustPin({ v: 2, communityId: COMMUNITY, trusted: [] })).toBeNull();
+        expect(readNamesTrustPin({ v: 1, communityId: COMMUNITY, trusted: [a.publicKey, 'junk'] }))
+            .toEqual({ v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: {}, newest: 0, dropped: {}, replaced: {} });
+        const kept = { v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada', junk: 'x' }, newest: 3, dropped: { [a.publicKey]: 2, bad: 1 }, replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 }, [admin().publicKey]: 'old form' } };
+        expect(readNamesTrustPin(kept)).toEqual({ v: 2, communityId: COMMUNITY, trusted: [a.publicKey], names: { [a.publicKey]: 'Ada' }, newest: 3, dropped: { [a.publicKey]: 2 }, replaced: { [a.publicKey]: { callsign: 'Ada', at: 3 } } });
+        expect(readNamesTrustPin({ v: 3, communityId: COMMUNITY, trusted: [] })).toBeNull();
         expect(readNamesTrustPin(null)).toBeNull();
+    });
+});
+
+describe('what the pin remembers (PR #1411, second deciding review)', () => {
+    /** Owen made generation 1 for Owen, Ada and Abe; Abe is removed; Ada's phone made 2 (dropping Abe), then Owen made 3. */
+    function history() {
+        const [owen, ada, abe] = [admin(), admin(), admin()];
+        const s = new FakeServer();
+        const [k1, k2, k3] = [newNamesListKey(), newNamesListKey(), newNamesListKey()];
+        for (const h of [owen, ada, abe]) s.wrapBy(owen, k1, h.publicKey, 1);
+        s.wrapBy(ada, k2, ada.publicKey, 2, [abe.publicKey]);
+        s.wrapBy(ada, k2, owen.publicKey, 2);
+        s.wrapBy(owen, k3, owen.publicKey, 3);
+        s.wrapBy(owen, k3, ada.publicKey, 3);
+        return { owen, ada, abe, s, k1, k2, k3 };
+    }
+
+    it('THE ROLLBACK: a server put back to generation 1 (whose key Abe kept) is refused by a phone that took 2 and 3', () => {
+        const { ada, abe, s } = history();
+        const seen = trace(s, ada, null);
+        expect(seen.keys.has(3) && seen.pin!.newest).toBe(3);
+        expect(seen.pin!.dropped).toEqual({ [abe.publicKey]: 2 });
+        // Whoever runs the server deletes generations 2 and 3, and puts generation 1 back as it was.
+        s.rows = s.rows.filter((r) => r.generation === 1);
+        const back = trace(s, ada, seen.pin);
+        expect(back.rolledBack).toBe(true);
+        // Abe stays out: his generation-1 wrap is older than his drop, so it doesn't bring him back.
+        expect(back.trusted.has(abe.publicKey)).toBe(false);
+        expect(back.pin!.newest).toBe(3);
+        expect(back.pin!.dropped).toEqual({ [abe.publicKey]: 2 });
+        // A phone that never saw 2 or 3 has nothing to know it by: the documented first-use limit.
+        expect(trace(s, ada, { ...seen.pin!, newest: 0, dropped: {} }).rolledBack).toBe(false);
+    });
+
+    it('a dropped admin comes back only by a trusted admin’s wrap made at or after the drop', () => {
+        const { owen, ada, abe, s, k3 } = history();
+        const pin = trace(s, ada, null).pin!;
+        // Abe is made an admin again, and Owen's phone shares generation 3 with him: Ada's phone trusts him again.
+        s.wrapBy(owen, k3, abe.publicKey, 3);
+        const again = trace(s, ada, pin);
+        expect(again.trusted.has(abe.publicKey)).toBe(true);
+        expect(again.pin!.dropped).toEqual({});
+        void owen;
+    });
+
+    it('a maker naming itself as dropped drops nobody: it signed the key it holds', () => {
+        const [owen, ada] = [admin(), admin()];
+        const s = new FakeServer();
+        const [k1, k2] = [newNamesListKey(), newNamesListKey()];
+        s.wrapBy(owen, k1, owen.publicKey, 1);
+        s.wrapBy(owen, k1, ada.publicKey, 1);
+        const pin = trace(s, ada, null).pin!;
+        s.wrapBy(owen, k2, owen.publicKey, 2, [owen.publicKey]);
+        s.wrapBy(owen, k2, ada.publicKey, 2);
+        const t = trace(s, ada, pin);
+        expect(t.trusted.has(owen.publicKey) && t.keys.has(2) && t.currentTraced).toBe(true);
+    });
+
+    it('A KEY CHANGED UNDER AN ADMIN’S NAME: the old key is dropped for good; the new one is trusted only once checked in person', () => {
+        const [owen, ada, op] = [admin(), admin(), admin()];
+        let pin = pinCallsigns({ ...emptyNamesTrustPin(COMMUNITY, owen.publicKey), trusted: [owen.publicKey, ada.publicKey].sort() },
+            [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
+        expect(pin.names[ada.publicKey]).toBe('Ada');
+        // The server moved Ada's account to a key of its own.
+        const admins = [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: op.publicKey, callsign: 'ada' }];
+        const changes = namesKeyChanges(pin, admins);
+        expect(changes).toEqual([{ callsign: 'ada', was: ada.publicKey, now: op.publicKey }]);
+        pin = pinKeyChanges(pin, changes, 2);
+        expect(pin.trusted).not.toContain(ada.publicKey);
+        expect(pin.replaced).toEqual({ [ada.publicKey]: { callsign: 'ada', at: 2 } });
+        expect(namesShareCheck(pin, admins[1])).toBe('changed');
+        // The old key never comes back from an old wrap: a share Owen made to it before is ignored. What it signed up to
+        // generation 2 (the key Owen's phone holds came from Ada) still counts; what it signs for 3 doesn't.
+        const s = new FakeServer();
+        const [k1, k2, k3] = [newNamesListKey(), newNamesListKey(), newNamesListKey()];
+        s.wrapBy(owen, k1, owen.publicKey, 1);
+        s.wrapBy(owen, k1, ada.publicKey, 1);
+        s.wrapBy(ada, k2, ada.publicKey, 2);
+        s.wrapBy(ada, k2, owen.publicKey, 2);
+        const t2 = trace(s, owen, pin);
+        expect(t2.trusted.has(ada.publicKey)).toBe(false);
+        expect(t2.keys.has(2) && t2.currentTraced).toBe(true);
+        s.wrapBy(ada, k3, ada.publicKey, 3);
+        s.wrapBy(ada, k3, owen.publicKey, 3);
+        expect(trace(s, owen, pin).refused[0]).toMatchObject({ generation: 3, reason: 'untrusted' });
+        // A look-alike name in another script is not the same name: nothing is flagged, and that key is still unchecked.
+        expect(namesKeyChanges({ ...pin, trusted: [...pin.trusted, ada.publicKey], names: { ...pin.names, [ada.publicKey]: 'Ada' } },
+            [{ pubkey: op.publicKey, callsign: '\u0410da' }])).toEqual([]);
+        expect(namesShareCheck(emptyNamesTrustPin(COMMUNITY, owen.publicKey), { pubkey: op.publicKey, callsign: '\u0410da' })).toBe('check');
+        // Checked in person: Ada's real phone shows her key, not the server's, so the operator's never matches.
+        expect(namesKeyCheckMatches(namesKeyQr(ada.publicKey), op.publicKey)).toBe(false);
+        expect(namesKeyCheckMatches(namesKeyCode(ada.publicKey), op.publicKey)).toBe(false);
+        // Ada's new phone, re-keyed for real, does match, and only then is trusted.
+        const adaNew = admin();
+        expect(namesKeyCheckMatches(namesKeyQr(adaNew.publicKey), adaNew.publicKey)).toBe(true);
+        pin = pinCheckedKey(pin, adaNew.publicKey, 'Ada');
+        expect(namesShareCheck(pin, { pubkey: adaNew.publicKey, callsign: 'Ada' })).toBe('trusted');
+    });
+
+    it('a key’s code: 20 digits in five groups, the same typed any way, and different for another key', () => {
+        const [a, b] = [admin(), admin()];
+        const code = namesKeyCode(a.publicKey);
+        expect(code).toMatch(/^\d{4}( \d{4}){4}$/);
+        expect(namesKeyCode(a.publicKey.toUpperCase())).toBe(code);
+        expect(namesKeyCode(b.publicKey)).not.toBe(code);
+        expect(namesKeyCheckMatches(code.replace(/ /g, '-'), a.publicKey)).toBe(true);
+        expect(namesKeyCheckMatches(code.replace(/ /g, ''), a.publicKey)).toBe(true);
+        expect(namesKeyCheckMatches(code.slice(0, -1), a.publicKey)).toBe(false);
+        expect(readNamesKeyCheck('https://evil.example/' + a.publicKey)).toBeNull();
+        expect(readNamesKeyCheck(namesKeyQr(a.publicKey))).toEqual({ kind: 'key', pubkey: a.publicKey });
+        expect(readNamesKeyCheck(`${namesKeyQr(a.publicKey)}x`)).toBeNull();
+        expect(namesShareCheck(null, { pubkey: a.publicKey, callsign: 'A' })).toBe('check');
     });
 });

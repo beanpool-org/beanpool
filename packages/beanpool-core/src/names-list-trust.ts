@@ -36,14 +36,37 @@
  * trusts itself, and the signer of the wrap it is opening for the first time (the current generation's, else its
  * newest). A phone that makes the list's first key trusts only itself.
  *
+ * ## What the pin remembers (PR #1411's second deciding review)
+ *
+ * - **The newest generation this phone accepted** (`newest`). A server offering an older one as current (rolled back to
+ *   an earlier copy, which a removed admin may hold the key of) is refused ({@link NamesTrustTrace.rolledBack}).
+ * - **Whom a trusted admin dropped, and at which generation** (`dropped`). The walk never trusts such a key again from a
+ *   wrap older than its drop, so a server that hides the drop can't bring them back; a trusted admin's wrap made at or
+ *   after the drop can (they were made an admin again, and an admin shared with them).
+ * - **Keys replaced under an admin's name** (`replaced`; {@link namesKeyChanges}): when the server shows an admin's
+ *   callsign on a new key and the key this phone trusted under it is gone (a re-key after a lost phone, or whoever runs
+ *   the server moving the account to a key of its own), the old key is dropped for good and the new one is trusted only
+ *   after an in-person check on this phone, or a trusted admin's signed share. What the old key signed up to the
+ *   generation current when this phone noticed (`at`) still counts (the key this phone holds may have come from them);
+ *   nothing it signs for a later one does, and no wrap makes it a holder again.
+ * - **The callsign each trusted key had** (`names`), to notice that.
+ *
+ * ## Checking a key in person (the director's decision on PR #1411, under Marty's delegation, 2026-10-02)
+ *
+ * A key the server names an admin by callsign is never shared with on that word alone. An admin's phone shows its own
+ * key as a QR code ({@link namesKeyQr}) and a 20-digit code ({@link namesKeyCode}); the sharing admin scans it, or
+ * compares the code, and only a match ({@link namesKeyCheckMatches}) puts that key in this phone's pin
+ * ({@link pinCheckedKey}). Share is offered only for a key in the pin ({@link namesShareCheck}).
+ *
  * ## What this doesn't protect against (said in the guide and in the app)
  *
  * - The first use: a phone with no pin trusts whoever signed the first wrap it opens. A server that hands a new admin's
- *   phone a key of its own making first gets what that admin then types; the other admins' phones refuse it.
+ *   phone a key of its own making first gets what that admin then types; the other admins' phones refuse it. The app
+ *   shows the new admin the code of whom it trusted, to compare in person.
+ * - An in-person check is only as good as the person checking: comparing the code with someone who isn't that admin.
  * - A compromised admin phone: it holds the key and can sign.
- * - An admin who was removed, working with whoever runs the server: the server can hide the removal from the phones,
- *   which then can't tell that admin is out.
- * - An admin tapping Share for a key the server made an admin, or tapping "Trust" for one: that is an admin's own choice.
+ * - An admin who was removed, working with whoever runs the server, before any phone saw the signed drop: a phone that
+ *   never learnt of it can't tell that admin is out.
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -85,11 +108,28 @@ export interface NamesOwnWrap extends WrappedNamesKey {
     drops: string[];
 }
 
-/** What a phone keeps for one community: the community's id, and the admin keys it trusts for the list. */
+/** What a phone keeps for one community (see the header). */
 export interface NamesTrustPin {
-    v: 1;
+    v: 2;
     communityId: string;
+    /** The admin keys this phone trusts for the list (itself included). */
     trusted: string[];
+    /** The callsign each trusted key had when this phone last saw it, to notice a key changed under an admin's name. */
+    names: Record<string, string>;
+    /** The newest generation a trusted admin made, as this phone saw it: it never goes back to an older one. */
+    newest: number;
+    /** Keys a trusted admin dropped, with the generation they were dropped at. */
+    dropped: Record<string, number>;
+    /**
+     * Keys replaced under an admin's name, with that name and the generation current when this phone noticed: trusted
+     * again only by an in-person check on this phone; their signatures count up to `at` only.
+     */
+    replaced: Record<string, { callsign: string; at: number }>;
+}
+
+/** A pin that trusts no one yet but this phone. */
+export function emptyNamesTrustPin(communityId: string, me: string): NamesTrustPin {
+    return { v: 2, communityId, trusted: [me.toLowerCase()], names: {}, newest: 0, dropped: {}, replaced: {} };
 }
 
 export function isNamesCommunityId(id: unknown): id is string {
@@ -183,6 +223,8 @@ export interface NamesTrustTrace {
     pin: NamesTrustPin | null;
     /** The server names another community than the pin: nothing is used. */
     otherCommunity: boolean;
+    /** The server's current generation is older than the newest this phone accepted: a copy rolled back. */
+    rolledBack: boolean;
 }
 
 export interface NamesTrustInput {
@@ -220,7 +262,7 @@ function cleanRecord(raw: unknown, communityId: string): NamesKeyRecord | null {
 export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     const me = input.me.publicKey.toLowerCase();
     const none = (otherCommunity: boolean): NamesTrustTrace => ({
-        keys: new Map(), trusted: new Set([me]), currentTraced: false, refused: [], firstTrust: null, pin: null, otherCommunity,
+        keys: new Map(), trusted: new Set([me]), currentTraced: false, refused: [], firstTrust: null, pin: null, otherCommunity, rolledBack: false,
     });
     if (!isNamesCommunityId(input.communityId)) return none(true);
     if (input.pin && input.pin.communityId !== input.communityId) return none(true);
@@ -245,7 +287,13 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     const valid = [...byKey.values()].filter((r) => verifyNamesWrap(claimOf(r), r.signature));
     const validKeys = new Set(valid.map((r) => `${r.holder}|${r.generation}`));
 
-    const trusted = new Set<string>(input.pin ? input.pin.trusted.map((k) => k.toLowerCase()).filter((k) => HEX_KEY.test(k)) : []);
+    // What the pin remembers: keys dropped (and at which generation) and keys replaced, which no old wrap brings back.
+    const droppedAt = new Map<string, number>(Object.entries(input.pin?.dropped ?? {}).filter(([k, g]) => HEX_KEY.test(k) && Number.isSafeInteger(g) && g > 0));
+    const replaced = new Map<string, number>(Object.entries(input.pin?.replaced ?? {}).filter(([k]) => HEX_KEY.test(k) && k !== me).map(([k, r]) => [k, r.at]));
+    /** Whether `k` signs for generation `g`: trusted now, or a replaced key, for what it signed up to when it was replaced. */
+    const signs = (k: string, g: number) => trusted.has(k)
+        || (replaced.has(k) && g <= replaced.get(k)! && !(droppedAt.has(k) && droppedAt.get(k)! <= g));
+    const trusted = new Set<string>(input.pin ? input.pin.trusted.map((k) => k.toLowerCase()).filter((k) => HEX_KEY.test(k) && !replaced.has(k) && !droppedAt.has(k)) : []);
     trusted.add(me);
     let firstTrust: string | null = null;
     if (!input.pin) {
@@ -264,16 +312,24 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     for (const g of generations) {
         const here = valid.filter((r) => r.generation === g);
         for (const r of here) {
-            if (!trusted.has(r.wrappedBy)) continue;
-            for (const d of r.drops) if (d !== me) trusted.delete(d);
+            if (!signs(r.wrappedBy, g)) continue;
+            // A maker naming itself as dropped means nothing: it signs the key it holds.
+            for (const d of r.drops) {
+                if (d === me || d === r.wrappedBy) continue;
+                trusted.delete(d);
+                droppedAt.set(d, Math.max(droppedAt.get(d) ?? 0, g));
+            }
         }
         let changed = true;
         while (changed) {
             changed = false;
             for (const r of here) {
                 const id = `${r.holder}|${r.generation}`;
-                if (accepted.has(id) || !trusted.has(r.wrappedBy)) continue;
+                if (accepted.has(id) || !signs(r.wrappedBy, g)) continue;
+                // A dropped key comes back only by a trusted admin's wrap made at or after its drop; a replaced key, never here.
+                if (r.holder !== me && (replaced.has(r.holder) || (droppedAt.get(r.holder) ?? 0) > g)) continue;
                 accepted.add(id);
+                droppedAt.delete(r.holder);
                 if (!trusted.has(r.holder)) trusted.add(r.holder);
                 changed = true;
             }
@@ -294,24 +350,166 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
         }
     }
     const currentTraced = [...accepted].some((id) => id.endsWith(`|${input.generation}`));
+    const newestAccepted = Math.max(0, ...[...accepted].map((id) => Number(id.split('|')[1])));
+    const pinnedNewest = input.pin?.newest ?? 0;
     // Nothing accepted and nothing pinned yet: nothing is learnt, so nothing is kept (the next open is a first use again).
     const learnt = !!input.pin || keys.size > 0;
     if (!learnt) firstTrust = null;
+    const names: Record<string, string> = {};
+    for (const [k, n] of Object.entries(input.pin?.names ?? {})) if (trusted.has(k)) names[k] = n;
     return {
         keys,
         trusted,
         currentTraced,
         refused,
         firstTrust: keys.size > 0 ? firstTrust : null,
-        pin: learnt ? { v: 1, communityId: input.communityId, trusted: [...trusted].sort() } : null,
+        pin: learnt ? {
+            v: 2, communityId: input.communityId, trusted: [...trusted].sort(), names,
+            newest: Math.max(pinnedNewest, newestAccepted),
+            dropped: Object.fromEntries([...droppedAt.entries()].filter(([k]) => !trusted.has(k)).sort()),
+            replaced: { ...(input.pin?.replaced ?? {}) },
+        } : null,
         otherCommunity: false,
+        rolledBack: !!input.pin && input.generation < pinnedNewest,
     };
 }
 
-/** A pin read back from storage, or null for anything that isn't one. */
+/** A pin read back from storage (this version's, or the first version's, which knew only whom it trusted), or null. */
 export function readNamesTrustPin(raw: unknown): NamesTrustPin | null {
-    const p = raw as Partial<NamesTrustPin> | null;
-    if (!p || typeof p !== 'object' || p.v !== 1 || !isNamesCommunityId(p.communityId) || !Array.isArray(p.trusted)) return null;
+    const p = raw as Partial<Omit<NamesTrustPin, 'v'>> & { v?: unknown } | null;
+    if (!p || typeof p !== 'object' || (p.v !== 1 && p.v !== 2) || !isNamesCommunityId(p.communityId) || !Array.isArray(p.trusted)) return null;
     const trusted = p.trusted.filter((k): k is string => typeof k === 'string' && HEX_KEY.test(k));
-    return { v: 1, communityId: p.communityId, trusted };
+    const record = <T>(raw: unknown, ok: (v: unknown) => v is T): Record<string, T> => {
+        const out: Record<string, T> = {};
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) for (const [k, v] of Object.entries(raw)) if (HEX_KEY.test(k) && ok(v)) out[k] = v;
+        return out;
+    };
+    const isName = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64;
+    const isGeneration = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) > 0;
+    const isReplaced = (v: unknown): v is { callsign: string; at: number } => !!v && typeof v === 'object'
+        && isName((v as { callsign?: unknown }).callsign) && Number.isSafeInteger((v as { at?: unknown }).at) && (v as { at: number }).at >= 0;
+    return {
+        v: 2, communityId: p.communityId, trusted,
+        names: record(p.names, isName),
+        newest: Number.isSafeInteger(p.newest) && (p.newest as number) > 0 ? p.newest as number : 0,
+        dropped: record(p.dropped, isGeneration),
+        replaced: record(p.replaced, isReplaced),
+    };
+}
+
+// ── Keys changed under an admin's name ───────────────────────────────────────────────────────
+
+/** A callsign as compared here: the same letters in any case or width. A look-alike in another script is not the same. */
+const sameName = (a: string, b: string) => a.normalize('NFKC').toLowerCase() === b.normalize('NFKC').toLowerCase();
+
+/** An admin as the server lists them: a key and the callsign it shows on it. */
+export interface NamesAdminName {
+    pubkey: string;
+    callsign: string;
+}
+
+/**
+ * Keys changed under an admin's name: an admin the server lists under a callsign this phone trusted on another key, which
+ * the server no longer lists as an admin. That is a re-key (a lost phone replaced), or whoever runs the server moving the
+ * account to a key of its own: this phone can't tell which, so it trusts neither until it is checked in person.
+ */
+export function namesKeyChanges(pin: NamesTrustPin | null, admins: NamesAdminName[]): { callsign: string; was: string; now: string }[] {
+    if (!pin) return [];
+    const listed = new Set(admins.map((a) => a.pubkey.toLowerCase()));
+    const out: { callsign: string; was: string; now: string }[] = [];
+    for (const a of admins) {
+        const now = a.pubkey.toLowerCase();
+        if (pin.trusted.includes(now)) continue;
+        for (const was of pin.trusted) {
+            const name = pin.names[was];
+            if (was !== now && !listed.has(was) && name && sameName(name, a.callsign)) out.push({ callsign: a.callsign, was, now });
+        }
+    }
+    return out;
+}
+
+/**
+ * The pin with each changed key's old key moved from trusted to replaced (see {@link namesKeyChanges}), noticed while
+ * the server's current generation is `generation`.
+ */
+export function pinKeyChanges(pin: NamesTrustPin, changes: { callsign: string; was: string }[], generation: number): NamesTrustPin {
+    if (changes.length === 0) return pin;
+    const gone = new Set(changes.map((c) => c.was));
+    const names = { ...pin.names };
+    const replaced = { ...pin.replaced };
+    for (const c of changes) { replaced[c.was] = { callsign: c.callsign, at: Math.max(0, generation) }; delete names[c.was]; }
+    return { ...pin, trusted: pin.trusted.filter((k) => !gone.has(k)), names, replaced };
+}
+
+/** The pin with the callsign each trusted key shows now (as the server lists it), for noticing a key change next time. */
+export function pinCallsigns(pin: NamesTrustPin, admins: NamesAdminName[]): NamesTrustPin {
+    const names = { ...pin.names };
+    for (const a of admins) if (pin.trusted.includes(a.pubkey.toLowerCase())) names[a.pubkey.toLowerCase()] = a.callsign;
+    return { ...pin, names };
+}
+
+// ── Checking a key in person ─────────────────────────────────────────────────────────────────
+
+/** What an admin's phone shows as a QR code: its own identity key, nothing else. */
+export const NAMES_KEY_QR_PREFIX = 'beanpool-admin-key:v1:';
+
+export function namesKeyQr(pubkey: string): string {
+    return `${NAMES_KEY_QR_PREFIX}${pubkey.toLowerCase()}`;
+}
+
+/**
+ * A key's code, to compare by eye or read aloud when scanning isn't possible: 20 digits in five groups (about 66 bits,
+ * from SHA-256 of the key), so nobody can make a key of their own with the same code.
+ */
+export function namesKeyCode(pubkey: string): string {
+    const h = sha256(utf8ToBytes(`beanpool-key-code-v1\n${pubkey.toLowerCase()}`));
+    const groups: string[] = [];
+    for (let i = 0; i < 5; i++) {
+        const n = ((h[4 * i] << 24) >>> 0) + (h[4 * i + 1] << 16) + (h[4 * i + 2] << 8) + h[4 * i + 3];
+        groups.push(String(n % 10000).padStart(4, '0'));
+    }
+    return groups.join(' ');
+}
+
+/** What was scanned or typed: a key from an admin's QR code, or a 20-digit code; null for anything else. */
+export function readNamesKeyCheck(text: unknown): { kind: 'key'; pubkey: string } | { kind: 'code'; digits: string } | null {
+    if (typeof text !== 'string') return null;
+    const t = text.trim();
+    if (t.startsWith(NAMES_KEY_QR_PREFIX)) {
+        const pubkey = t.slice(NAMES_KEY_QR_PREFIX.length).toLowerCase();
+        return HEX_KEY.test(pubkey) ? { kind: 'key', pubkey } : null;
+    }
+    if (!/^[\d\s-]+$/.test(t)) return null;
+    const digits = t.replace(/\D/g, '');
+    return digits.length === 20 ? { kind: 'code', digits } : null;
+}
+
+/** Whether what was scanned or typed is `pubkey`'s: its QR code, or its code. */
+export function namesKeyCheckMatches(text: unknown, pubkey: string): boolean {
+    const read = readNamesKeyCheck(text);
+    if (!read || !HEX_KEY.test(pubkey.toLowerCase())) return false;
+    if (read.kind === 'key') return read.pubkey === pubkey.toLowerCase();
+    return read.digits === namesKeyCode(pubkey).replace(/\D/g, '');
+}
+
+/** The pin once this phone's admin checked `pubkey` in person: trusted, under `callsign`, and no longer dropped or replaced. */
+export function pinCheckedKey(pin: NamesTrustPin, pubkey: string, callsign: string): NamesTrustPin {
+    const k = pubkey.toLowerCase();
+    const dropped = { ...pin.dropped };
+    const replaced = { ...pin.replaced };
+    delete dropped[k];
+    delete replaced[k];
+    return { ...pin, trusted: [...new Set([...pin.trusted, k])].sort(), names: { ...pin.names, [k]: callsign }, dropped, replaced };
+}
+
+/**
+ * Whether this phone may share the list with an admin the server lists: only a key it trusts (`trusted`). `changed`: the
+ * key isn't trusted, and the callsign is one this phone trusted on a key that was replaced. `check`: a key this phone
+ * hasn't checked. Either way, never on the callsign alone.
+ */
+export function namesShareCheck(pin: NamesTrustPin | null, admin: NamesAdminName): 'trusted' | 'changed' | 'check' {
+    const k = admin.pubkey.toLowerCase();
+    if (pin?.trusted.includes(k)) return 'trusted';
+    if (pin && Object.values(pin.replaced).some((r) => sameName(r.callsign, admin.callsign))) return 'changed';
+    return 'check';
 }

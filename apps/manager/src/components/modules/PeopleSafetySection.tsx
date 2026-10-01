@@ -14,7 +14,7 @@ import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportBurstSubject, type NodeReport } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -506,11 +506,8 @@ export function PeopleSafetySection({
                                                     )}
                                                     <span className="text-xs font-mono text-nature-300">
                                                         {(() => {
-                                                            const target = typeof report.targetPubkey === 'string'
-                                                                ? report.targetPubkey
-                                                                : (typeof report.target_pubkey === 'string'
-                                                                    ? report.target_pubkey
-                                                                    : '');
+                                                            // On a post, its author as the node read it from the post (reportSubject).
+                                                            const target = reportSubject(report);
                                                             return `Target: ${target ? `${target.slice(0, 16)}...` : 'Unknown'}`;
                                                         })()}
                                                     </span>
@@ -570,8 +567,8 @@ export function PeopleSafetySection({
                                                 )}
                                                 {hasDoorMembers && burstsHere && (() => {
                                                     // A report on a post opens its author's group, as the node read it
-                                                    // from the post: never the key the reporter sent (reportBurstSubject).
-                                                    const target = reportBurstSubject(report);
+                                                    // from the post: never the key the reporter sent (reportSubject).
+                                                    const target = reportSubject(report);
                                                     return target ? (
                                                         <button
                                                             type="button"

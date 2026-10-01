@@ -96,6 +96,46 @@ describe('ThreatReviewModal', () => {
         }
     });
 
+    it('a report on a post freezes its author as the node read it, never the key the reporter wrote', async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{
+                    id: 'r-post', isReport: true, reason: 'spam',
+                    // The reporter named Bob; the post is Alice's.
+                    targetPubkey: 'ring0-1784649014864567',
+                    postId: 'post-1', postAuthorPubkey: 'wash1-1784649014864123',
+                }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+        });
+        expect(handleFreeze).toHaveBeenCalledWith(['wash1-1784649014864123']);
+        expect(screen.queryByText(/Bob Ring/)).not.toBeInTheDocument();
+    });
+
+    it('a report on a post whose author the node did not say offers nobody to freeze', async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{ id: 'r-post', isReport: true, reason: 'spam', targetPubkey: 'ring0-1784649014864567', postId: 'post-1', postAuthorPubkey: null }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        const freeze = screen.getByText('🛑 Freeze Accounts').closest('button')!;
+        expect(freeze).toBeDisabled();
+        await act(async () => {
+            fireEvent.click(freeze);
+        });
+        expect(handleFreeze).not.toHaveBeenCalled();
+    });
+
     it('a failed freeze shows the error, stays open and neither closes nor dismisses', async () => {
         vi.useFakeTimers();
         const handleFreeze = vi.fn().mockRejectedValue(new Error('HTTP 500: Internal Server Error'));

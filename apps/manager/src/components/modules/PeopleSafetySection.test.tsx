@@ -449,6 +449,47 @@ describe('PeopleSafetySection Component', () => {
             }
         });
 
+        it('a report on a post names and freezes its author, never the member the reporter wrote beside it', async () => {
+            vi.useFakeTimers();
+            vi.stubGlobal('fetch', vi.fn());
+            try {
+                const [named, author] = [mockMembers[0].publicKey as string, mockMembers[1].publicKey as string];
+                // As a node before this fix sends it: the reporter's key in targetPubkey, the post's author beside it.
+                const onPost = {
+                    id: 'rep_on_post', targetPubkey: named, reason: 'Fake watches', outcome: 'open', status: 'pending',
+                    postId: 'post_watches', postTitle: 'Watches', postAuthorPubkey: author, postAuthorCallsign: 'bob',
+                };
+                const onFreezeUser = vi.fn().mockResolvedValue(undefined);
+                render(
+                    <PeopleSafetySection
+                        activeNode={mockProfile}
+                        nodeData={{ reports: [onPost], members: mockMembers }}
+                        nodeDataLoading={false}
+                        onRefresh={vi.fn()}
+                        onFreezeUser={onFreezeUser}
+                        onPruneUser={vi.fn()}
+                        onUpdateTier={vi.fn()}
+                        onToggleVoucher={vi.fn()}
+                        onToggleOperator={vi.fn()}
+                        initialSubTab="moderation"
+                    />
+                );
+                expect(screen.getByText(`Target: ${author.slice(0, 16)}...`)).toBeInTheDocument();
+                expect(screen.queryByText(`Target: ${named.slice(0, 16)}...`)).not.toBeInTheDocument();
+
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                expect(onFreezeUser).toHaveBeenCalledTimes(1);
+                expect(onFreezeUser).toHaveBeenCalledWith(author, true);
+                expect(onFreezeUser).not.toHaveBeenCalledWith(named, true);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
         it("after a refresh the server's outcome wins over what this browser marked", async () => {
             vi.useFakeTimers();
             const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });

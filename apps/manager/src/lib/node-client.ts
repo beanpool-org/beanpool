@@ -1266,13 +1266,16 @@ export async function fetchBurstDigest(nodeUrl: string, adminPassword?: string, 
 }
 
 /**
- * The member a report is about, to open "Who joined with them" from. A report on a post is about the post's author, as
- * the node reads it from the post (`postAuthorPubkey`), never the key the reporter sent (`targetPubkey`): a crafted report
- * could name anyone beside a real spam post. A node that doesn't say who wrote it gets null, so nothing is offered.
- * Otherwise (a member, or a Pulse item, whose owner the node sets) the report's target.
+ * The member a report is about: whom a moderator suspends, freezes, names as its target or opens "Who joined with them"
+ * from. A report on a post is about the post's author, as the node reads it from the post (`postAuthorPubkey`), never the
+ * key the reporter sent (`targetPubkey`): a crafted report could name anyone beside a real spam post. A node that doesn't
+ * say who wrote it gets null, so nothing is offered. Otherwise (a member, or a Pulse item, whose owner the node sets) the
+ * report's target.
  */
-export function reportBurstSubject(report: NodeReport): string | null {
-    if (report.postId) return typeof report.postAuthorPubkey === 'string' && report.postAuthorPubkey ? report.postAuthorPubkey : null;
+export function reportSubject(report: { postId?: unknown; postAuthorPubkey?: unknown; targetPubkey?: unknown; target_pubkey?: unknown }): string | null {
+    if (typeof report.postId === 'string' && report.postId) {
+        return typeof report.postAuthorPubkey === 'string' && report.postAuthorPubkey ? report.postAuthorPubkey : null;
+    }
     const target = typeof report.targetPubkey === 'string' && report.targetPubkey ? report.targetPubkey
         : (typeof report.target_pubkey === 'string' ? report.target_pubkey : '');
     return target || null;

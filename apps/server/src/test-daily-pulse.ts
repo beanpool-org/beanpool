@@ -162,14 +162,14 @@ async function main() {
     assert(getActiveMemberListingCount() === 0, 'Active member listing count is 0 (Daily Pulse excluded)');
 
     // 1 member listing created: Daily Pulse remains eligible
-    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'local', peerPubkey);
+    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 1, 'Active member listing count is 1 after 1 member post');
     const { post: postWith1Listing } = rotateDailyPulse(dateDay2);
     assert(!!postWith1Listing, 'Daily Pulse post is created/retained when 1 member listing exists (< 2)');
     assert(!!getActivePulsePost(), 'getActivePulsePost() returns post when 1 member listing exists');
 
     // 2 member listings created: Daily Pulse is SUPPRESSED (>= 2)
-    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'local', peerPubkey);
+    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 2, 'Active member listing count is 2 after 2nd member post');
     const { post: postWith2Listings, pulseItem: pulseItemWith2 } = rotateDailyPulse(dateDay2);
     assert(postWith2Listings === null, 'Daily Pulse post is suppressed when 2 member listings exist (post is null)');
@@ -183,7 +183,7 @@ async function main() {
     assert(activeMarketplacePulse.length === 0, 'Zero active Daily Pulse posts in marketplace when >= 2 member listings');
 
     // 3 member listings: Still suppressed
-    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'local', peerPubkey);
+    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 3, 'Active member listing count is 3');
     assert(getActivePulsePost() === null, 'getActivePulsePost() still null with 3 member listings');
     const { post: postWith3Listings } = rotateDailyPulse(dateDay2);

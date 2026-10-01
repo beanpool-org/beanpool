@@ -142,11 +142,12 @@ async function main() {
     const cfProjAfterDelete = getCrowdfundProject(projectId);
     assert(cfProjAfterDelete === undefined, 'Deleted project returns undefined from getCrowdfundProject(id)');
 
-    const cfGetRes = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
+    // Read by a member (another than its proposer): the crowdfunds and the enterprises are members' reads (2026-10-01).
+    const cfGetRes = await signedFetch('GET', `/api/crowdfund/projects/${projectId}`, attacker);
     assert(cfGetRes.status === 404, `GET /api/crowdfund/projects/:id returns 404 after deletion (got ${cfGetRes.status})`);
 
     // Verify /api/treasuries excludes deleted and bounded enterprises by default
-    const treasuriesRes = await fetch(`${BASE}/api/treasuries`).then(r => r.json()) as any;
+    const treasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
     assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
 
     // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 400

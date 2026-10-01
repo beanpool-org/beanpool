@@ -528,7 +528,7 @@ async function main(): Promise<void> {
     for (const [who, route] of [
         [bea, `/api/profile/${ann.pk}`], [null, `/api/community/membership/${ann.pk}`], [bea, '/api/community/members'],
         [bea, '/api/members'], [null, '/api/community/info'], [null, '/api/node/info'], [null, '/api/directory/info'],
-        [null, '/api/enterprises/map'], [bea, '/api/activity/feed'], [bea, '/api/invite/tree'], [bea, '/api/community/me'],
+        [bea, '/api/enterprises/map'], [bea, '/api/activity/feed'], [bea, '/api/invite/tree'], [bea, '/api/community/me'],
     ] as Array<[Id | null, string]>) {
         const r = await call('GET', who, route);
         if (r.status !== 200) leaks.push(`${route} answered ${r.status}`);

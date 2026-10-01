@@ -319,7 +319,8 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * database names it; a copy of a big community runs longer than the grace period. So while a staging is there, the
  * objects it names count as referenced, and nothing written since the copy started is judged at all (a page's photos are
  * put before its rows commit): stagedObjects. A staging that can't be read judges nothing an orphan, as a failed read of
- * the live rows does (review 4139589323).
+ * the live rows does (review 4139589323). So are the objects a whole copy that failed fetched, until the next is due and
+ * has had its time (services/stager.ts keepFetchedObjects): its retry waits an hour, as long as this grace.
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
@@ -400,7 +401,7 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
     // A whole copy staging beside this database: what it names, and what was written since it started, are kept.
     let staged: { since: number; keys: Set<string> } | null;
     try {
-        staged = stagedObjects(options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'));
+        staged = stagedObjects(options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), nowMs);
     } catch {
         return out;
     }

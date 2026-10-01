@@ -483,6 +483,7 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
             baseline: result.baseline,
             drift: result.drift,
             strandedEscrows: result.strandedEscrows,
+            badBalances: result.badBalances,
             ok: result.ok,
         };
     } catch (e: any) {
@@ -1358,11 +1359,17 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         ctx.body = { error: 'postIds array required' };
         return;
     }
-    const refundShortfalls: EscrowRefundShortfall[] = [];
-    const deleted = adminBulkDeletePosts(postIds, { onRefundShortfall: s => refundShortfalls.push(s) });
-    ctx.body = refundShortfalls.length > 0
-        ? { success: true, deleted, deletedCount: deleted, refundShortfalls }
-        : { success: true, deleted, deletedCount: deleted };
+    try {
+        const refundShortfalls: EscrowRefundShortfall[] = [];
+        const deleted = adminBulkDeletePosts(postIds, { onRefundShortfall: s => refundShortfalls.push(s) });
+        ctx.body = refundShortfalls.length > 0
+            ? { success: true, deleted, deletedCount: deleted, refundShortfalls }
+            : { success: true, deleted, deletedCount: deleted };
+    } catch (e: any) {
+        console.error('Error bulk deleting posts:', e);
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to bulk delete posts' };
+    }
 });
 
 

@@ -69,10 +69,10 @@ function stubMatchMedia() {
 
 /*
  * Every read a visitor may make of the global node: the node's public allowlist (apps/server/src/https-server.ts,
- * PUBLIC_READ_EXACT and PUBLIC_READ_PATTERNS) less what it makes members-only with the visitors' view on
- * (MEMBERS_ONLY_ON_GUEST_LISTINGS_*: Commons decisions and balance, the Pulse feed, enterprises, treasuries,
- * crowdfunds and Commons projects). Copied, since the server can't be imported here: a read added to the lobby that
- * isn't one of these fails the test below.
+ * PUBLIC_READ_EXACT and PUBLIC_READ_PATTERNS) less what is members-only there (MEMBERS_ONLY_READS_*: Commons
+ * decisions, the Pulse feed, enterprises, treasuries, crowdfunds and Commons projects, on every node; and
+ * MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: the Commons pot, with the visitors' view on). Copied, since the server can't be
+ * imported here: a read added to the lobby that isn't one of these fails the test below.
  */
 const VISITOR_READS_EXACT = new Set([
     '/api/version', '/api/community/info', '/api/community/health', '/api/node/config', '/api/directory/info',

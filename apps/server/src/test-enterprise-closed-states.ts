@@ -10,8 +10,9 @@
  *     - suspended / disabled / completed: the enterprise is still shown, so the thread reads with
  *       readOnly = true and a post is refused with 400 and a "read-only" error. The paused case stays open.
  *  3. GET /api/enterprises/map never pins a suspended, disabled or pruned enterprise.
- *     GET /api/treasuries hides a suspended or disabled enterprise from the public, but still lists it to a
- *     signed keeper of that enterprise (and to a node admin), so a keeper can reach it from the Commons list.
+ *     GET /api/treasuries hides a suspended or disabled enterprise from a member who keeps none of it, but still lists
+ *     it to a signed keeper of that enterprise (and to a node admin), so a keeper can reach it from the Commons list.
+ *     These reads are members' on every node (2026-10-01): an unsigned one is refused.
  *  4. Location routes: a permission refusal is 403, a bad body is 400 — including the Settings-app route
  *     on a wound-up enterprise, which used to answer 400 while the signed route answered 403.
  *  5. finaliseWindUp on an enterprise that never had a location does not stamp a location signer.
@@ -142,7 +143,7 @@ async function main() {
         postEnterpriseThreadMessage(ent, member.pubKeyHex, 'before closing');
         setStatus(ent, state);
 
-        const detail = await publicGet(`/api/enterprise/${ent}`);
+        const detail = await signedFetch('GET', `/api/enterprise/${ent}`, member);
         assert(detail.status === 200, `A ${state} enterprise's detail is still shown (got ${detail.status})`);
 
         const get = await signedFetch('GET', `/api/enterprises/${ent}/thread`, member);
@@ -167,7 +168,7 @@ async function main() {
         postEnterpriseThreadMessage(ent, member.pubKeyHex, 'before removal');
         setStatus(ent, state);
 
-        const detail = await publicGet(`/api/enterprise/${ent}`);
+        const detail = await signedFetch('GET', `/api/enterprise/${ent}`, member);
         assert(detail.status === 404, `A ${state} enterprise's detail is hidden (got ${detail.status})`);
         const get = await signedFetch('GET', `/api/enterprises/${ent}/thread`, member);
         assert(get.status === 404, `GET thread of a ${state} enterprise is 404 like its detail (got ${get.status})`);
@@ -195,7 +196,8 @@ async function main() {
         setStatus(byState[state], state);
     }
     for (const mapPath of ['/api/enterprises/map', '/api/map/enterprises', '/api/treasuries/map']) {
-        const map = await publicGet(mapPath);
+        assert((await publicGet(mapPath)).status === 401, `${mapPath} is refused unsigned: members only`);
+        const map = await signedFetch('GET', mapPath, member);
         const keys = new Set((map.body.enterprises as any[]).map(e => e.publicKey));
         assert(keys.has(activePin), `${mapPath} pins an active enterprise`);
         for (const [state, pk] of Object.entries(byState)) {
@@ -205,10 +207,11 @@ async function main() {
 
     const listKeys = (body: any) => new Set((body.treasuries as any[]).map(t => t.publicKey));
     for (const listPath of ['/api/treasuries', '/api/enterprises']) {
-        const anon = listKeys((await publicGet(listPath)).body);
+        assert((await publicGet(listPath)).status === 401, `${listPath} is refused unsigned: members only`);
+        const anon = listKeys((await signedFetch('GET', listPath, member)).body);
         assert(anon.has(activePin), `${listPath} lists an active enterprise`);
         for (const [state, pk] of Object.entries(byState)) {
-            assert(!anon.has(pk), `${listPath} (public) hides a ${state} enterprise`);
+            assert(!anon.has(pk), `${listPath} (a member who keeps none of them) hides a ${state} enterprise`);
         }
         const asStranger = listKeys((await signedFetch('GET', listPath, stranger)).body);
         assert(!asStranger.has(byState.suspended) && !asStranger.has(byState.disabled),

@@ -811,14 +811,14 @@ async function partTwo(): Promise<void> {
     const projectId = String(proj.json?.project?.id ?? '');
     assert(proj.status === 200 && projectId.length > 0, `the project is created (${proj.status} ${proj.json?.error ?? ''})`);
     const projectPhotos = async (): Promise<unknown[]> => {
-        const res = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
-        const body = await res.json().catch(() => null) as any;
+        // Read as the member: the crowdfunds are members' reads on every node (2026-10-01).
+        const body = (await signed('GET', `/api/crowdfund/projects/${projectId}`, undefined, member)).json;
         const photos = body?.photos ?? body?.project?.photos;
         return typeof photos === 'string' ? JSON.parse(photos) : (Array.isArray(photos) ? photos : []);
     };
     let listed = await projectPhotos();
-    await served('crowdfund photo 0, as the public project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED);
-    await served('crowdfund photo 1, as the public project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
+    await served('crowdfund photo 0, as the project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED);
+    await served('crowdfund photo 1, as the project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
     await served('crowdfund project avatar', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_JPEG_STRIPPED);
     const projUpd = await signed('POST', '/api/crowdfund/projects/update', {
         id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,

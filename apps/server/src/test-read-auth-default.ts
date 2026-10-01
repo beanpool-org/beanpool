@@ -14,7 +14,8 @@
  *   4. every public read the guest path needs → 200, both unsigned (the Welcome screen, before any
  *      identity exists) and signed by a key that is NOT a member here (the PWA guest of #849/#850,
  *      which holds a keypair and signs every read); that guest is still refused private reads (403),
- *      and a local community's listings (401/403 naming the global community)
+ *      a local community's listings, and its other reads that name members (its enterprises, Commons Decisions,
+ *      projects, crowdfunds and Pulse feed, 2026-10-01): 401/403 naming the global community
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-read-auth-default.ts
  */
@@ -130,22 +131,14 @@ async function main() {
         '/api/node/config',
         '/api/node/info',
         // Not /api/marketplace/posts: a local community's listings are its members' (Marty, 2026-09-28), so a guest is
-        // refused them below. It was listed here while the board was public on every node.
-        '/api/enterprises',
-        '/api/enterprises/map',
-        '/api/treasuries',
+        // refused them below. It was listed here while the board was public on every node. Nor the enterprises, the
+        // Commons Decisions, projects and crowdfunds and the Pulse feed, which name members (2026-10-01): refused below.
         '/api/commons/balance',
-        '/api/commons/projects',
-        '/api/commons/decisions',
-        '/api/crowdfund/projects',
         // Not /api/activity/feed: it names the members in every trade and the Beans, so it is members-only
         // (test-activity-feed-members-only). It was listed here while the feed was public.
-        '/api/pulse/feed',
         '/api/pricing-guide',
         '/api/federation/links',
         '/api/federation/reachable-peers',
-        `/api/enterprise/${enterprise}`,
-        `/api/treasury/${enterprise}`,
         `/api/community/membership/${alice.pubKeyHex}`,
         '/api/members/callsign-available/somebody-new',
     ];
@@ -168,6 +161,16 @@ async function main() {
     assert(boardGuest.status === 403 && /global\.beanpool\.org/.test(boardGuest.error ?? ''), `non-member guest, signed, GET /api/marketplace/posts is refused the same way (got ${boardGuest.status})`);
     const boardMember = await get('/api/marketplace/posts', alice);
     assert(boardMember.status === 200, `alice, a member, reads the board (got ${boardMember.status})`);
+    // The rest that names members: refused to both the same way, and read by a member.
+    for (const path of ['/api/enterprises', '/api/enterprises/map', '/api/treasuries', `/api/enterprise/${enterprise}`, `/api/treasury/${enterprise}`,
+        '/api/commons/projects', '/api/commons/decisions', '/api/crowdfund/projects', '/api/pulse/feed']) {
+        const u = await get(path);
+        const g = await get(path, guest);
+        assert(u.status === 401 && /global\.beanpool\.org/.test(u.error ?? ''), `unsigned GET ${path} is refused, naming the global community (got ${u.status})`);
+        assert(g.status === 403 && /global\.beanpool\.org/.test(g.error ?? ''), `non-member guest, signed, GET ${path} is refused the same way (got ${g.status})`);
+        const m = await get(path, alice);
+        assert(m.status === 200, `alice, a member, reads ${path} (got ${m.status})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

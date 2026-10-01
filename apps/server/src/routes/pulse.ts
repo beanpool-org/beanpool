@@ -37,7 +37,8 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
     const thumbnailService = (deps as PulseRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
 
     /**
-     * Public activity feed for The Pulse.
+     * The Pulse's activity feed, for members only on every node (https-server.ts MEMBERS_ONLY_READS_EXACT): each card
+     * carries its member's key, name, face and their own page elsewhere.
      *
      * Cursor-paginated (by published_at DESC).
      * Filterable by category.
@@ -60,7 +61,8 @@ export function createPulseRoutes(deps: RouteDeps | PulseRouteDeps): Router {
     });
 
     /**
-     * Public thumbnail proxy for Pulse feed items.
+     * Public thumbnail proxy for Pulse feed items (an <img> cannot sign). A member's item id is 96 random bits that only
+     * the members' feed hands out; the curated and Daily Pulse items are BeanPool's own.
      *
      * Serves image bytes from the node origin to satisfy CSP (img-src 'self'),
      * prevent member IP leakage to external CDNs, and survive CDN link expiry.

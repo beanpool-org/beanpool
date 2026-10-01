@@ -1356,6 +1356,87 @@ END`;
         fs.rmSync(standbyDir, { recursive: true, force: true });
     }
 
+    // ── accounts.balance NOT NULL (review FABLE-sec-input F1, 2026-10-01) ─────────────────────────
+    // better-sqlite3 binds NaN as NULL, and the column was nullable, so a NaN balance was written as NULL without a word.
+    // A fresh install declares it NOT NULL; a node whose table predates that is rebuilt at boot, unless a balance there
+    // is already not a number, which stops the migration with the account named rather than a value guessed for it.
+    {
+        console.log('\n— accounts.balance is NOT NULL, fresh or upgraded, and a broken row stops the upgrade —');
+        const balanceNotNull = (d: Database.Database) =>
+            ((d.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as any)?.nn ?? 0) === 1;
+        const f = new Database(path.join(freshDir, 'state.db'), { readonly: true });
+        assert(balanceNotNull(f), 'a fresh install declares accounts.balance NOT NULL');
+        f.close();
+
+        const LEGACY_ACCOUNTS = `CREATE TABLE accounts (
+            public_key TEXT PRIMARY KEY,
+            balance REAL DEFAULT 0.0,
+            last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+            last_demurrage_epoch INTEGER DEFAULT 0
+        );
+        CREATE INDEX idx_accounts_last_updated_at ON accounts(last_updated_at);`;
+        // console.error is where the migration speaks; the boot script sends it to stdout, which bootInto returns.
+        const loudBoot = `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `;
+        const plantLegacy = (dir: string, rows: [string, number | string | null][]) => {
+            const d = new Database(path.join(dir, 'state.db'));
+            d.exec(LEGACY_ACCOUNTS);
+            const ins = d.prepare(`INSERT INTO accounts (public_key, balance, last_updated_at, last_demurrage_epoch) VALUES (?, ?, '2026-09-30T00:00:00.000Z', 7)`);
+            for (const [pk, b] of rows) ins.run(pk, b);
+            d.close();
+        };
+        const rowsOf = (dir: string) => {
+            const d = new Database(path.join(dir, 'state.db'), { readonly: true });
+            const out = { notNull: balanceNotNull(d), rows: d.prepare(`SELECT public_key, balance, typeof(balance) AS t, last_updated_at, last_demurrage_epoch FROM accounts WHERE public_key LIKE 'acct_%' ORDER BY public_key`).all() as any[], index: indexes(d, 'accounts') };
+            d.close();
+            return out;
+        };
+
+        // A clean legacy table: rebuilt, every row kept exactly.
+        const cleanDir = tmp('accounts-legacy');
+        plantLegacy(cleanDir, [['acct_a', 12.5], ['acct_b', -3], ['acct_c', 0]]);
+        const cleanBoot = bootInto(cleanDir, {}, loudBoot);
+        const clean = rowsOf(cleanDir);
+        assert(cleanBoot.ok && clean.notNull, `a node whose accounts table predates NOT NULL boots and ends up NOT NULL (${cleanBoot.ok ? 'booted' : cleanBoot.output.split('\n').slice(-5).join(' | ')})`);
+        assert(JSON.stringify(clean.rows.map((r) => [r.public_key, r.balance, r.last_updated_at, r.last_demurrage_epoch])) === JSON.stringify([
+            ['acct_a', 12.5, '2026-09-30T00:00:00.000Z', 7], ['acct_b', -3, '2026-09-30T00:00:00.000Z', 7], ['acct_c', 0, '2026-09-30T00:00:00.000Z', 7]]),
+        `every row it held is kept as it was, stamps and epochs too (${JSON.stringify(clean.rows)})`);
+        assert(clean.index.includes('idx_accounts_last_updated_at'), `and it keeps the delta backup's index (${JSON.stringify(clean.index)})`);
+        let refusedNull = false;
+        try {
+            const w = new Database(path.join(cleanDir, 'state.db'));
+            try { w.prepare(`INSERT INTO accounts (public_key, balance) VALUES ('acct_nan', ?)`).run(NaN); } catch { refusedNull = true; }
+            w.close();
+        } catch { /* reported by the assert */ }
+        assert(refusedNull, 'the upgraded table refuses a NaN balance (bound as NULL)');
+        assert(bootInto(cleanDir).ok && rowsOf(cleanDir).notNull, 'booting it again is a no-op');
+        fs.rmSync(cleanDir, { recursive: true, force: true });
+
+        // A planted NULL (a buyer's balance after the F1 probe) and text: the migration stops, names them, and changes nothing.
+        const brokenDir = tmp('accounts-broken');
+        plantLegacy(brokenDir, [['acct_a', 12.5], ['acct_nulled', null], ['acct_texted', 'abc']]);
+        const brokenBoot = bootInto(brokenDir, {}, loudBoot);
+        const broken = rowsOf(brokenDir);
+        assert(brokenBoot.ok, `a node holding a NULL balance still boots (${brokenBoot.ok ? 'booted' : brokenBoot.output.split('\n').slice(-5).join(' | ')})`);
+        assert(!broken.notNull && broken.rows.length === 3 && broken.rows[1].balance === null && broken.rows[2].balance === 'abc',
+            `but its table is NOT rebuilt and no value is guessed: the NULL and the text are still there (${JSON.stringify(broken.rows)})`);
+        assert(/MIGRATION STOPPED/.test(brokenBoot.output) && brokenBoot.output.includes('acct_nulled') && brokenBoot.output.includes('acct_texted')
+            && /2 account row\(s\) hold a balance that is not a finite number/.test(brokenBoot.output),
+            `and the boot log says so loudly, naming each account (${brokenBoot.output.split('\n').filter((l) => /\[DB\]|STOPPED/.test(l)).slice(0, 6).join(' | ')})`);
+        // Once an operator has set them, the next boot makes the column NOT NULL.
+        const fix = new Database(path.join(brokenDir, 'state.db'));
+        fix.prepare(`UPDATE accounts SET balance = 0 WHERE public_key IN ('acct_nulled', 'acct_texted')`).run();
+        fix.close();
+        const fixedBoot = bootInto(brokenDir, {}, loudBoot);
+        assert(fixedBoot.ok && rowsOf(brokenDir).notNull && /accounts\.balance is now NOT NULL \(3 account row/.test(fixedBoot.output),
+            `after the operator sets them, the next boot makes the column NOT NULL (${fixedBoot.output.split('\n').filter((l) => /accounts\.balance/.test(l)).join(' | ')})`);
+        fs.rmSync(brokenDir, { recursive: true, force: true });
+    }
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });

@@ -60,7 +60,10 @@ import {
     namesPhotoObject, photoReferenceOf, type CopyPage, type PhotoReference, type ValueLeftOut,
 } from '../engine/sync.js';
 import { getImageStore, headObject, readObject, writeObject, MAX_OBJECT_BYTES } from '../storage/image-store.js';
-import { StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY } from './stager.js';
+import {
+    StagedCopy, StagedCopyRefused, roomForStaging, stagingDir, READY_FILE, PREVIOUS_DB, SWAPPED_COPY_KEY, keepFetchedObjects, releaseFetchedObjects,
+} from './stager.js';
+import { COPY_MAX_MS } from '../engine/copy-pages.js';
 import { deletePreviousDatabase as deletePreviousFile, previousDatabaseThere } from '../db/swap-at-boot.js';
 import { noteCopyOpen, noteCopyClosed } from '../engine/open-copies.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -188,6 +191,25 @@ function resyncRetryMs(): number {
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_RESYNC_RETRY_MS;
 }
 
+/** The pull under way: why it was stopped (stopPullInFlight), or null while it goes on. */
+let pullUnderWay: { stoppedBecause: string | null } | null = null;
+
+/**
+ * Stop the pull under way, whatever it is asking the main server for: no request of it is sent from now on (a page, an
+ * object, even one waiting its slot, or the close of its copy), and it fails as a staged copy stopped at its closing checks
+ * does, importing nothing. A take-over confirmed (services/takeover.ts): this server asks the old main server for nothing
+ * more, on every path, a delta's and a one-page whole copy's as well as a staged copy's (review of #1370,
+ * backup-puller.ts:872). At most the requests already sent, OBJECT_CONCURRENCY, finish. Whether a pull was under way.
+ */
+export function stopPullInFlight(why: string): boolean {
+    if (!pullUnderWay) return false;
+    pullUnderWay.stoppedBecause ??= why;
+    return true;
+}
+
+/** How long past the next whole copy's longest the objects a failed one fetched are kept for it (keepFetchedObjects). */
+const KEEP_FETCHED_MARGIN_MS = 60 * 60_000;
+
 let pullTimer: ReturnType<typeof setTimeout> | null = null;
 let stopped = false;
 let inFlight = false;
@@ -225,7 +247,8 @@ let previousToDelete = false;
 // A whole copy is ready to be swapped in: this process restarts (registerSwapRestart), and pulls nothing more. Never set in a
 // process that registered no restart: it carries on, and the copy waits in data/staging for the next start.
 let swapReady = false;
-// N2 (design §4.2): after a copy that came and was refused, when the next of its kind may be asked for. A whole copy waits
+// N2 (design §4.2): after a copy that came and was refused, or whose pages came and whose listing photos' objects could
+// not be fetched, when the next of its kind may be asked for. A whole copy waits
 // for the next routine one (a reconcile interval); a force-resync, and a first copy, RESYNC_RETRY_MS. An operator's
 // force-resync is always taken. A force-resync or a first copy that never came (the main server restarting) keeps the usual
 // cadence; a whole copy taken over deltas that never came waits for the next routine one too, and the retention resync
@@ -322,14 +345,16 @@ class NoCopy extends Error {
 class CopyRequests {
     private lastAt = 0;
 
-    constructor(private readonly base: string, private readonly headers: Record<string, string>) {}
+    /** `pullStop`: the pull's own (stopPullInFlight). Once it says the pull was stopped, no request of it is sent. */
+    constructor(private readonly base: string, private readonly headers: Record<string, string>, private readonly pullStop?: CopyStopped) {}
 
     private async request(method: 'POST' | 'GET' | 'DELETE', route: string, body: 'page' | 'object' = 'page', stop?: CopyStopped): Promise<Response> {
         // One pace for every request of a pull, its objects' too: requests made at once each take the next slot.
         const at = Math.max(Date.now(), this.lastAt + pageGapMs());
         this.lastAt = at;
         if (at > Date.now()) await new Promise((r) => setTimeout(r, at - Date.now()));
-        // A copy stopped while this request waited its slot: not sent (fetchPhotoObjects).
+        // A pull or a copy stopped while this request waited its slot: not sent (stopPullInFlight, fetchPhotoObjects).
+        stopIfStopped(this.pullStop);
         stopIfStopped(stop);
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -398,7 +423,7 @@ class CopyRequests {
         return (res as Response & { bytes_?: Buffer }).bytes_ ?? Buffer.alloc(0);
     }
 
-    /** The main server may close a copy this standby won't finish (it serves one at a time). Never throws. */
+    /** The main server may close a copy this standby won't finish (it serves one at a time); not once the pull was stopped. Never throws. */
     async close(copyId: string): Promise<void> {
         try { await this.request('DELETE', `${COPY_PATH}/${encodeURIComponent(copyId)}`); } catch { /* it closes by itself when idle */ }
     }
@@ -449,7 +474,7 @@ function photoReferencesOf(page: CopyPage): PhotoReference[] {
     return out;
 }
 
-/** Why the copy whose objects are being fetched was stopped (StagedCopy.stoppedBecause), or null while it goes on. */
+/** Why the pull or the copy whose objects are being fetched was stopped (stopPullInFlight, StagedCopy.stoppedBecause), or null while it goes on. */
 type CopyStopped = () => string | null;
 
 function stopIfStopped(stop: CopyStopped | undefined): void {
@@ -522,12 +547,13 @@ interface PhotoObjectsFetched {
  * for good. So does one the main server can't send because its bytes there are not its photo (410: PhotoObjectNotItsPhoto),
  * which the main server's next copy leaves out and names in `photosOmitted`. Anything else the main server or the store
  * answers fails the pull. What was fetched before a failure stays in the store, content-addressed, so the next pull asks
- * only for the rest.
+ * only for the rest: a whole copy's until its next is due and has had its time (pullOnce, keepFetchedObjects).
  *
- * `stop`: a staged copy's (StagedCopy.stoppedBecause). Once it says the copy was stopped (a take-over confirmed, which
- * aborts it: services/takeover.ts, or its stager gone), no further object is asked for, not even one waiting its slot, and
- * the fetch fails as the copy's next page would: the old main server is asked for nothing more once this server has taken
- * over from it (review 4148896584). At most the requests already sent, OBJECT_CONCURRENCY, finish.
+ * `stop`: the pull's (stopPullInFlight), and a staged copy's (StagedCopy.stoppedBecause). Once it says the pull or the copy
+ * was stopped (a take-over confirmed: services/takeover.ts; or the copy's stager gone), no further object is asked for,
+ * not even one waiting its slot, and the fetch fails as the copy's next page would: the old main server is asked for
+ * nothing more once this server has taken over from it (review 4148896584, and the review of #1370 for a delta and a
+ * one-page whole copy). At most the requests already sent, OBJECT_CONCURRENCY, finish.
  */
 async function fetchPhotoObjects(
     refs: Iterable<PhotoReference> | AsyncIterable<PhotoReference>, requests: CopyRequests, stop?: CopyStopped,
@@ -732,10 +758,19 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     const seed = (fresh && (why === 'format' || why === 'operator')) || (replicaFormatOfCopy() === 0 && !hadCursor);
 
     inFlight = true;
+    const thisPull: { stoppedBecause: string | null } = { stoppedBecause: null };
+    pullUnderWay = thisPull;
+    const pullStopped: CopyStopped = () => thisPull.stoppedBecause;
     // Where a failure happened: no copy came ('fetch'), or it came and was not imported ('import'). Only the second counts
     // toward "refused in a row" in the report.
     let stage: 'fetch' | 'import' = 'fetch';
-    const requests = new CopyRequests(primaryUrl.replace(/\/$/, ''), authHeader);
+    // Every page of the copy came, and its listing photos' objects were being fetched when it failed (F4 of the standby
+    // review): the main server built, signed and sent the whole copy, so a whole copy failing here waits as one refused does.
+    let pagesCame = false;
+    // When this copy's fetch of its listing photos' objects started: what it wrote from then on is kept for the next whole
+    // copy when this one fails (keepFetchedObjects).
+    let fetchStartedAt: number | null = null;
+    const requests = new CopyRequests(primaryUrl.replace(/\/$/, ''), authHeader, pullStopped);
     // The copy open on the main server, closed there when this pull leaves it unfinished; the one being built here.
     let openCopy: string | null = null;
     let staged: StagedCopy | null = null;
@@ -800,8 +835,10 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // the copy closed: fetched a page at a time, a first copy of a community with many photos would hold it open past
             // its longest (engine/copy-pages.ts COPY_MAX_MS). The closing checks then refuse the copy if any is missing.
             stage = 'fetch';
+            pagesCame = true;
+            fetchStartedAt = Date.now();
             const building = staged;
-            await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause).catch((e) => {
+            await fetchPhotoObjects(building.photoReferences(), requests, () => building.stoppedBecause ?? pullStopped()).catch((e) => {
                 // Objects that came but are not what their rows name: the copy came, and is refused. A copy stopped here
                 // (a take-over confirmed) is reported as one stopped at its closing checks always was.
                 if (e instanceof PhotoObjectRefused || e instanceof StagedCopyRefused) stage = 'import';
@@ -820,6 +857,8 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             if (previousToDelete) deletePreviousDatabase('the one that replaced it passed a whole copy\'s closing checks');
             staged.markReady({ pages: checked.pages, rows: checked.rows, generatedAt: checked.generatedAt, cursor: checked.cursor, why: why ?? mode });
             staged = null;
+            // What a whole copy that failed before it fetched is named by this one's rows now, or is the sweep's again.
+            releaseFetchedObjects();
             // Landed, as far as this process goes: the next start swaps it in, and the standby's record in it already says so.
             lastSuccessAt = Date.now();
             if (consecutiveFailures > 0) logger.info('P2P', `[Backup] ✅ Recovered after ${consecutiveFailures} failed pull(s)`);
@@ -869,12 +908,17 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         if (refs.length > 0) {
             for (const page of pages) await verifyCopyPage(page);
             stage = 'fetch';
-            await fetchPhotoObjects(refs, requests).catch((e) => {
-                if (e instanceof PhotoObjectRefused) stage = 'import';
+            pagesCame = true;
+            fetchStartedAt = Date.now();
+            await fetchPhotoObjects(refs, requests, pullStopped).catch((e) => {
+                // A pull stopped here (a take-over confirmed) is reported as a staged copy stopped in its fetch is.
+                if (e instanceof PhotoObjectRefused || e instanceof StagedCopyRefused) stage = 'import';
                 throw e;
             });
             stage = 'import';
         }
+        // Stopped once everything had come (a take-over confirmed): nothing of it imported.
+        stopIfStopped(pullStopped);
         // The import path enforces: each page's valid signature → signer maps to a trusted `mirror` connector (the
         // primary) → the pages are one copy, every page in order → conservation guard (runs on a backup unconditionally,
         // A2-8). A forged/tampered page is rejected there. It applies a delta or a whole copy identically, LWW per row; only
@@ -957,6 +1001,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // A whole copy landed: whatever held the last one back when it was refused is gone. One that landed with tables
             // left out holds the next back instead, as a refused one does (N2, nextMode).
             wholeRetryAt = 0;
+            releaseFetchedObjects();
             lastWholeLeftOut = leftOut.length > 0;
             lastWholePages = 1;
             recordQuietly(() => noteWholeCopyTaken({ at: lastFullReconcileAt, pages: 1, generatedAt: payload.generatedAt ?? null }));
@@ -982,8 +1027,13 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and
-        // its cursor stays where the last copy that landed put it.
-        if (stage === 'import' && !isDelta) {
+        // its cursor stays where the last copy that landed put it. Nor is one whose pages all came and whose listing photos'
+        // objects could not be fetched (a 404, the main server's store answering 503, a timeout): asked for on the next tick,
+        // a first copy of a community whose store refuses one object would be the whole copy rebuilt and sent every minute
+        // (F4 of the standby review). But for an object the main server holds whose bytes are not its photo (410): its next
+        // copy leaves that photo out, and lands (review 4148896755), so that one is asked for on the next tick.
+        const came = stage === 'import' || (pagesCame && !(e instanceof PhotoObjectNotItsPhoto));
+        if (came && !isDelta) {
             const now = Date.now();
             wholeRetryAt = now + (getReconcileMs() || resyncRetryMs());
             if (fresh || !hadCursor) resyncRetryAt = now + resyncRetryMs();
@@ -992,13 +1042,21 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // a request timing out): asked for again on the next tick, it would be every tick's pull, and no delta would land
         // meanwhile (#1315 review 4132485902). Deltas carry on, and the next routine time asks again. A force-resync or a
         // first copy that never came is asked for on the next tick (the main server may be restarting with the same
-        // update); the retention one waits RESYNC_RETRY_MS (below).
-        const wholeNeverCame = stage === 'fetch' && !isDelta && !fresh && hadCursor;
+        // update), and waits only once its pages came (above); the retention one waits RESYNC_RETRY_MS (below).
+        const wholeNeverCame = !came && !isDelta && !fresh && hadCursor;
         if (wholeNeverCame) wholeRetryAt = Date.now() + (getReconcileMs() || resyncRetryMs());
         // The retention resync waits RESYNC_RETRY_MS after any failure, a copy that never came too. Asked for on the next
         // tick instead, it would be every tick's pull, and no delta would ever land. Deltas carry on meanwhile; the record
         // keeps it owed (nextMode).
         if (why === 'retention') resyncRetryAt = Date.now() + resyncRetryMs();
+        // F5 of the standby review: the objects a whole copy fetched before it failed, kept from the orphan sweep until the
+        // next is due and has had a copy's longest to bring its pages (COPY_MAX_MS), whose staging database then names them.
+        // The sweep's hour of grace alone ends as the hour's wait for a first copy or a force-resync does, and the next would
+        // fetch every photo again.
+        if (!isDelta && fetchStartedAt !== null) {
+            const nextAt = Math.max(Date.now(), fresh || !hadCursor || why === 'retention' ? resyncRetryAt : wholeRetryAt);
+            keepFetchedObjects(fetchStartedAt, nextAt + COPY_MAX_MS + KEEP_FETCHED_MARGIN_MS);
+        }
         const msg = e?.name === 'AbortError' ? `timeout after ${FETCH_TIMEOUT_MS}ms` : (e?.message || String(e));
         // Conservation/trust rejections are security-relevant — surface loudly.
         if (/conservation|untrusted|mirror|signature/i.test(msg)) {
@@ -1006,7 +1064,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         } else {
             const next = why === 'retention'
                 ? `no force-resync asked for before ${new Date(resyncRetryAt).toISOString()}; deltas meanwhile`
-                : stage === 'import' && !isDelta
+                : came && !isDelta
                 ? `no ${fresh || !hadCursor ? 'force-resync or first copy' : 'whole copy'} asked for before ${new Date(fresh || !hadCursor ? resyncRetryAt : wholeRetryAt).toISOString()}`
                 : wholeNeverCame
                 ? `no whole copy asked for before ${new Date(wholeRetryAt).toISOString()}; deltas meanwhile`
@@ -1016,6 +1074,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         return { ok: false, error: msg };
     } finally {
         inFlight = false;
+        if (pullUnderWay === thisPull) pullUnderWay = null;
     }
 }
 
@@ -1330,9 +1389,10 @@ function nextMode(): PullMode | ResyncKind | Wait {
     // A copy an older importer made, or none yet (engine/sync.ts REPLICA_FORMAT): one force-resync, first, since no whole
     // copy repairs a row the old importer got wrong (it skips every row whose stamp hasn't moved). A new standby's first
     // pull is this one too, which also clears whatever its own boot seeded. Asked for until one lands (it records the
-    // format): one whose fetch fails is asked for again on the next tick, since the main server may be restarting with the
-    // same update; one whose import is refused leaves this standby as it was, and is asked for again after
-    // RESYNC_RETRY_MS, deltas carrying on from the cursor it kept meanwhile.
+    // format): one that never came is asked for again on the next tick, since the main server may be restarting with the
+    // same update; one whose import is refused, or whose listing photos' objects could not be fetched once its pages came,
+    // leaves this standby as it was, and is asked for again after RESYNC_RETRY_MS, deltas carrying on from the cursor it
+    // kept meanwhile.
     if (!resyncWaits && replicaFormatOfCopy() < REPLICA_FORMAT) {
         logger.info('P2P', `[Backup] This standby's copy was made by an older importer (format ${replicaFormatOfCopy()}, now ${REPLICA_FORMAT}): taking one force-resync`);
         return 'format';
@@ -1669,7 +1729,7 @@ export function pullNow(): Promise<{ ok: boolean; error?: string; staged?: boole
     const next = nextMode();
     if (next === 'wait') {
         const until = Math.max(resyncRetryAt, deltaTooBig ? wholeRetryAt : 0);
-        return Promise.resolve({ ok: false, error: `This standby's last copy was refused; the next is asked for at ${new Date(until).toISOString()}.` });
+        return Promise.resolve({ ok: false, error: `This standby's last copy came and was not taken; the next is asked for at ${new Date(until).toISOString()}.` });
     }
     return next === 'format' || next === 'mismatch' || next === 'operator' || next === 'retention' ? pullOnce('resync', next) : pullOnce(next);
 }

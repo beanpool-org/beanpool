@@ -20,7 +20,7 @@ import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../ser
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
-    clearReplicationToken, hasReplicationToken,
+    clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
     updateBackupCadence,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
@@ -1123,13 +1123,23 @@ async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-p
         return null;
     }
     if (headerPassword && !cfg.replicationTokenOnly) {
+        // The admin password that verified for a copy in the last few minutes, the same string: taken without its scrypt,
+        // as the token is (config/local-config.ts rememberCopyPassword). Any other goes through checkAdminAuth in full.
+        const password = String(headerPassword).trim();
+        if (copyPasswordRemembered(password)) return 'admin-pw';
+        const { adminHash, salt } = cfg;
         (ctx as any).requestBody = { password: headerPassword };
         if (await checkAdminAuth(ctx as any)) {
             // A key session wins over the header in checkAdminAuth, so an admin's session with any X-Admin-Password
             // got here too: only an owner's copies the whole ledger (the password is owner level).
-            if (requireAdminRole(ctx, ['owner'], COPY_OWNER_ONLY)) return 'admin-pw';
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'not an owner' });
-            return null;
+            if (!requireAdminRole(ctx, ['owner'], COPY_OWNER_ONLY)) {
+                recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'not an owner' });
+                return null;
+            }
+            // Only the admin password itself, checked against its hash (not a break-glass code, nor a session), is
+            // remembered: so the shortcut above admits only someone who sent the owner-level password.
+            if (ctx.state?.verifiedAdminPassword === password && adminHash && salt) rememberCopyPassword(password, adminHash, salt);
+            return 'admin-pw';
         }
         // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
         recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });

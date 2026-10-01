@@ -107,3 +107,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-21 - Replace any type assertions in PeerConnectorsPanel
 **Learning:** `PeerConnectorsPanel.tsx` used `as any` type assertions in `select` onChange handlers when setting state for `newTrustLevel` and `newMode`, bypassing TypeScript type checking.
 **Action:** Use strict union type assertions (e.g. `as 'peer' | 'blocked' | 'mirror'`) to ensure select handler values match state types.
+
+## 2026-11-22 - Add loading state indicator for ReplicationAccessPanel
+**Learning:** `ReplicationAccessPanel.tsx` displayed unpopulated default metrics ("0 pulls / token not set") while replication settings were fetching asynchronously.
+**Action:** Render an explicit loading indicator and spinner when `loading && !accessData` before data arrives.

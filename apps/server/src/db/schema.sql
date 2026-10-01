@@ -147,7 +147,9 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 -- 3. Ledger Accounts & Transactions
 CREATE TABLE IF NOT EXISTS accounts (
     public_key TEXT PRIMARY KEY,
-    balance REAL DEFAULT 0.0,
+    -- NOT NULL: better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance silently (review F1,
+    -- 2026-10-01). A node whose table predates this is rebuilt at boot (db.ts makeAccountBalanceNotNull).
+    balance REAL NOT NULL DEFAULT 0.0,
     last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_demurrage_epoch INTEGER DEFAULT 0
 );

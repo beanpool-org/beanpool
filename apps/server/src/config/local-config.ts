@@ -175,6 +175,10 @@ export function getLocalConfig(): LocalConfig {
 }
 
 export function saveLocalConfig(config: LocalConfig): void {
+    // The admin password changed: the one a copy verified last is not taken any more (rememberCopyPassword).
+    if (rememberedCopyPassword && (config.adminHash !== rememberedCopyPassword.storedHash || config.salt !== rememberedCopyPassword.salt)) {
+        rememberedCopyPassword = null;
+    }
     try {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -556,6 +560,39 @@ export async function verifyReplicationToken(token: string): Promise<boolean> {
         rememberedToken = { digest, storedHash, until: Date.now() + REPLICATION_TOKEN_REMEMBERED_MS };
     }
     return ok;
+}
+
+/**
+ * The admin password a standby copies with (routes/backup.ts replicationAuth: every install from before token-only, whose
+ * flag reads as off), remembered as the replication token is (rememberedToken), so that a copy's object requests, one per
+ * listing photo, cost the main server one scrypt, not one each (review of #1370, routes/backup.ts:1074). The SHA-256 of
+ * the password, the stored hash and salt it verified against, and until when. Only a password the admin hash verified, and
+ * only on the copy routes: a wrong one, or a break-glass code, pays checkAdminAuth's full brake and tarpit every time.
+ * Forgotten when the admin password changes (saveLocalConfig), and never taken against a hash or salt other than the one
+ * it verified against, nor while break-glass mode or two-factor sign-in is on (either would refuse the password there).
+ */
+let rememberedCopyPassword: { digest: Buffer; storedHash: string; salt: string; until: number } | null = null;
+
+/**
+ * The admin password `password` verified against the stored `storedHash` and `salt` for a copy (checkAdminAuth passed on
+ * it): remembered for REPLICATION_TOKEN_REMEMBERED_MS, if they are still the stored ones.
+ */
+export function rememberCopyPassword(password: string, storedHash: string, salt: string): void {
+    const config = getLocalConfig();
+    if (config.adminHash !== storedHash || config.salt !== salt) return;
+    rememberedCopyPassword = {
+        digest: createHash('sha256').update(password).digest(), storedHash, salt, until: Date.now() + REPLICATION_TOKEN_REMEMBERED_MS,
+    };
+}
+
+/** `password` is the admin password a copy verified last, still (rememberCopyPassword): taken without its scrypt. */
+export function copyPasswordRemembered(password: string): boolean {
+    const r = rememberedCopyPassword;
+    if (!r || Date.now() >= r.until) return false;
+    const config = getLocalConfig();
+    if (config.adminHash !== r.storedHash || config.salt !== r.salt || config.replicationTokenOnly) return false;
+    if (isBreakGlassMode() || (config.totpEnabled && config.totpSecret)) return false;
+    return timingSafeEqual(r.digest, createHash('sha256').update(password).digest());
 }
 
 // ===================== THRESHOLDS =====================

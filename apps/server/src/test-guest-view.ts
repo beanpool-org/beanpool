@@ -36,14 +36,16 @@
  *      every drop, converges on the lone listing's area centre, never the listing
  *  7c. the communities (/api/global/communities, and the card's): each distance and the order are from the place each
  *      community shows in the body (the public directory's), and from nothing else
- *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
- *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
- *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
+ *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset), which
+ *      runs section 2's sweep too (nothing public there names a member to a guest), and then its own: the listings and
+ *      every other read that names people (the Commons decisions, the Pulse feed, the enterprises, crowdfunds and
+ *      projects) are refused to a guest with code members_only and the global community's address, and no view header
+ *      is sent; the Commons pot stays public; the membership probe names nobody; faces are public by key, avatar URLs
  *      carry no `k=` (a listing's photo URL carries its key: the listings are members'), and the recovery lookup matches
- *      a prefix with photos; where an operator keeps the directory there, the landing card's count is a member's from
- *      each listing's place and anyone else's from its area, so bisecting it finds the area; a non-member signer reads a trust
- *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
- *      as on every node (#1177 settles #1156's call); and a HEAD
+ *      the whole name only, with no photo or join date; where an operator keeps the directory there, the landing card's
+ *      count is a member's from each listing's place and anyone else's from its area, so bisecting it finds the area; a
+ *      non-member signer reads no trust profile and a code's holder gets no member's card but their own, as on global;
+ *      a pruned account is refused every read it signs, as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
@@ -444,11 +446,6 @@ async function main(): Promise<void> {
         `${POSTS}?${ALL_TYPES}&lat=-28.55&lng=153.51&sort=recent`,
         `${POSTS}?audienceScope=public&${ALL_TYPES}`,
     ];
-    if (LOCAL_RUN) {
-        await localChecks();
-        return;
-    }
-
     // ── 2. the sweep ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. the sweep: every public read, as an unsigned caller and a non-member signer (a pruned account is refused them all) ──');
     /** One materialised request per pattern, with what that route may echo because the caller typed it. */
@@ -516,6 +513,13 @@ async function main(): Promise<void> {
     }
     // Not the device-pairing poll: the middleware never sees /api/pair/ (isSignatureBypassed), a relay that knows no member.
     await prunedRefused('every public read it signs', [...exactReads, ...patternExamples.map(e => e.path)].filter(p => !p.startsWith('/api/pair/')));
+
+    // A local community: the sweep above is its too, since nothing on it names a member to a guest either (Marty,
+    // 2026-09-28; its people reads are members' since 2026-10-01). The rest of its checks are its own.
+    if (LOCAL_RUN) {
+        await localChecks();
+        return;
+    }
 
     // ── 2b. every read that takes a point is measured ──────────────────────────────────────────
     console.log('\n── 2b. every read a visitor can send a point to is one this suite measures ──');
@@ -1246,7 +1250,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/takeover/confirm', 'POST /api/local/admin/takeover/open', 'POST /api/local/admin/takeover/phone/start',
             'POST /api/local/admin/takeover/phone/wait', 'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/takeover/recovery-code',
             'POST /api/local/admin/takeover/recovery-code/check', 'POST /api/local/admin/takeover/status', 'POST /api/local/admin/takeover/words-checks',
-            'POST /api/local/admin/treasury', 'POST /api/local/admin/treasury/:treasury/ceiling', 'DELETE /api/local/admin/treasury/:treasury/location',
+            'GET /api/local/admin/treasury', 'POST /api/local/admin/treasury', 'POST /api/local/admin/treasury/:treasury/ceiling', 'DELETE /api/local/admin/treasury/:treasury/location',
             'POST /api/local/admin/treasury/:treasury/location', 'POST /api/local/admin/treasury/:treasury/need',
             'POST /api/local/admin/treasury/:treasury/offer', 'GET /api/local/admin/treasury/:treasury/operators',
             'POST /api/local/admin/treasury/:treasury/operators', 'DELETE /api/local/admin/treasury/:treasury/operators/:pubkey',
@@ -1558,31 +1562,40 @@ async function main(): Promise<void> {
     }
 
     async function localChecks(): Promise<void> {
-        // A local community's listings are its members' (Marty, 2026-09-28): with no visitors' view, a guest is refused
-        // every read of them, in words that send them to the global community. Until then a guest read what the engine
-        // gives that reader, authors and places included, as before G9a.
-        console.log("── a local node: a guest is refused the listings; the rest is as before G9a ──");
+        // A local community is its members' (Marty, 2026-09-28: "nothing on a private node should be public now that we
+        // have a global node"): with no visitors' view, a guest is refused its listings (2026-09-28) and its other people
+        // reads (2026-10-01: the Commons decisions, the Pulse feed, the Beans constructs), in words that send them to the
+        // global community. The community's totals stay public, and so do faces by key (a local node does not key them yet).
+        console.log("── a local node: a guest is refused the listings and every other read that names people ──");
+        const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
             for (const p of [...postReads, `${POSTS}?author=${alice.pk}`]) {
                 const r = await call('GET', id, p);
-                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === 'https://global.beanpool.org'
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === GLOBAL_COMMUNITY
                     && r.headers.get('x-beanpool-view') === null && !r.text.includes(alice.pk) && !r.text.includes('Sentinel'),
                     `${who} ${p.replace(POSTS, '')}: refused members_only, naming the global community, with nothing of a listing (got ${r.status})`);
             }
             const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
-            assert(probe.body?.callsign === 'SentinelAlice', `${who}: the membership probe names the member (${JSON.stringify(probe.body)})`);
-            for (const p of ['/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed']) {
+            assert(probe.body?.isMember === true && probe.body?.callsign === null, `${who}: the membership probe says the key is a member, and not its name (${JSON.stringify(probe.body)})`);
+            for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/pulse/feed', '/api/enterprises', `/api/enterprise/${enterprise}`,
+                `/api/treasury/${enterprise}`, '/api/crowdfund/projects', `/api/crowdfund/projects/${crowdfund}`, '/api/commons/projects']) {
                 const r = await call('GET', id, p);
-                assert(r.status === 200, `${who}: ${p} is public (${r.status})`);
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === GLOBAL_COMMUNITY && leaks(r.text).length === 0,
+                    `${who}: ${p} is for members, refused members_only naming the global community (${r.status} ${r.text.slice(0, 80)})`);
             }
+            const pot = await call('GET', id, '/api/commons/balance');
+            assert(pot.status === 200 && typeof pot.body?.balance === 'number', `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
-            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, as before (${face.status})`);
-            const ent = await call('GET', id, `/api/enterprise/${enterprise}`);
-            assert(ent.status === 200 && ent.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && !KEYED_FACE.test(ent.text),
-                `${who}: an enterprise is public and names its keepers, as before (${ent.status})`);
+            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, not keyed here yet (${face.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
-            assert(Array.isArray(lookup.body) && lookup.body.length === 1 && lookup.body[0].publicKey === alice.pk && lookup.body[0].avatarUrl === TINY_PNG && !!lookup.body[0].joinedAt,
-                `${who}: the recovery lookup matches a prefix, with the photo and join date, as before`);
+            assert(Array.isArray(lookup.body) && lookup.body.length === 0, `${who}: the recovery lookup finds nobody by a prefix (${lookup.text.slice(0, 80)})`);
+            const exact = await call('GET', id, '/api/recovery/lookup/sentinelalice');
+            assert(Array.isArray(exact.body) && exact.body.length === 1 && exact.body[0].publicKey === alice.pk && exact.body[0].avatarUrl === null && exact.body[0].joinedAt === null,
+                `${who}: the whole name, case forgiven, finds her, with no photo or join date (${exact.text.slice(0, 120)})`);
+        }
+        for (const p of ['/api/commons/decisions', '/api/pulse/feed', `/api/enterprise/${enterprise}`]) {
+            const r = await call('GET', bob, p);
+            assert(r.status === 200 && r.text.includes(alice.pk), `a member reads ${p}, naming its people (${r.status})`);
         }
         const members = await call('GET', bob, '/api/members');
         const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
@@ -1595,18 +1608,22 @@ async function main(): Promise<void> {
             && (await call('GET', null, `/api/marketplace/posts/${offer.id}/photos/0`)).status === 404,
             `and a listing's photo URL carries its key, which opens it unsigned, and nothing else does (${offerPhoto})`);
 
-        // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, and a
-        // code's holder still gets a member's card. A pruned account is refused every read it signs, here as on every node
-        // (#1177 settles #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its
-        // GET is on every node.
+        // Round 3's rules are every node's now (2026-10-01): here too a signer who is no member reads no trust profile (the
+        // exact lookup's key would walk the invite tree from one name), and a code's holder gets no member's card but their
+        // own. A pruned account is refused every read it signs, here as on every node (#1177 settles #1156's call: it passed
+        // the gated reads here until then). A HEAD to a gated read is refused as its GET is on every node.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         const tp = await call('POST', outsider, '/api/trust/profile', { targetPubkey: alice.pk });
-        assert(tp.status === 200 && tp.body?.callsign === 'SentinelAlice' && tp.body?.vouchedInBy?.publicKey === bob.pk,
-            `a non-member signer reads Alice's trust profile, naming Bob who brought her in, as before (${tp.status})`);
+        assert(tp.status === 403 && tp.body?.code === 'members_only' && leaks(tp.text).length === 0,
+            `a non-member signer is refused Alice's trust profile, naming nobody (${tp.status} ${tp.text.slice(0, 80)})`);
+        const memberTp = await call('POST', bob, '/api/trust/profile', { targetPubkey: alice.pk });
+        assert(memberTp.status === 200 && memberTp.body?.callsign === 'SentinelAlice', `a member reads it (${memberTp.status})`);
         const code = se.generateInvite(bob.pk)!.code;
         const card = await call('POST', null, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-        assert(card.status === 200 && card.body?.alreadyMember === true && card.body?.member?.callsign === 'SentinelAlice',
-            `an unsigned redeem naming Alice's key gets her card, as before (${card.status})`);
+        assert(card.status === 200 && card.body?.alreadyMember === true && !card.body?.member && leaks(card.text).length === 0,
+            `an unsigned redeem naming Alice's key learns she is a member, and gets no card of hers (${card.status} ${card.text.slice(0, 80)})`);
+        const ownCard = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
+        assert(ownCard.status === 200 && ownCard.body?.member?.callsign === 'SentinelAlice', `Alice, signing her own redeem, gets her own card (${ownCard.status})`);
         for (const p of ['/api/members', `${POSTS}?${ALL_TYPES}`]) {
             const prunedRead = await call('GET', pruned, p);
             assert(prunedRead.status === 403 && prunedRead.body?.code === 'account_closed' && !prunedRead.text.includes(alice.pk),

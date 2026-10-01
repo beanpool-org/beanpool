@@ -130,17 +130,62 @@ export function copyStaging(): { pid: number | null } | null {
 }
 
 /**
+ * In the data directory, beside the staging one (which a failed copy deletes): the objects a whole copy that failed had
+ * fetched, kept for the next (keepFetchedObjects).
+ */
+export const KEPT_OBJECTS_FILE = 'copy-objects-kept.json';
+
+/** The objects kept for the next whole copy (keepFetchedObjects) at `now`: those written from `since`. Null: none. */
+function keptObjects(dataDir: string, now: number): { since: number; until: number } | null {
+    let kept: { since?: unknown; until?: unknown };
+    try { kept = JSON.parse(fs.readFileSync(path.join(dataDir, KEPT_OBJECTS_FILE), 'utf-8')); } catch { return null; }
+    const since = Number(kept?.since);
+    const until = Number(kept?.until);
+    // Unreadable, or past its time: nothing kept. No row names these objects, so the sweep deleting one costs only its
+    // fetch again.
+    if (!Number.isFinite(since) || !Number.isFinite(until) || now >= until) return null;
+    return { since, until };
+}
+
+/**
+ * A whole copy failed after it had fetched listing photos' objects (services/backup-puller.ts): each object this server's
+ * store holds that was written from `since` is kept from the orphan sweep until `until`, so the next whole copy, asked for
+ * after the wait a failed one waits (RESYNC_RETRY_MS, an hour), fetches only what the store still lacks (F5 of the standby
+ * review). No row names them, and the staging that did is deleted; the sweep's hour of grace alone would have taken them
+ * by then. Kept from the earliest `since` of the copies that failed since the last whole copy landed, to the latest
+ * `until`; let go when one lands (releaseFetchedObjects) or once `until` has passed. Never throws.
+ */
+export function keepFetchedObjects(since: number, until: number): void {
+    const prev = keptObjects(DATA_DIR, Date.now());
+    const kept = { since: prev ? Math.min(prev.since, since) : since, until: Math.max(prev?.until ?? 0, until) };
+    const file = path.join(DATA_DIR, KEPT_OBJECTS_FILE);
+    try {
+        fs.writeFileSync(`${file}.tmp`, JSON.stringify(kept));
+        fs.renameSync(`${file}.tmp`, file);
+    } catch (e) {
+        console.warn(`[Stager] The objects a failed copy fetched could not be kept for the next: ${(e as Error)?.message || e}`);
+    }
+}
+
+/** A whole copy landed, or was made ready: the objects kept for it (keepFetchedObjects) are the sweep's to judge again. */
+export function releaseFetchedObjects(): void {
+    try { fs.rmSync(path.join(DATA_DIR, KEPT_OBJECTS_FILE), { force: true }); } catch { /* the sweep lets it go at its time */ }
+}
+
+/**
  * The image store objects the standby's orphan sweep (engine/storage-health.ts) must keep while a whole copy is staging in
  * `dataDir`'s staging directory, being built or made ready (review 4139589323). The stager puts each listing photo's
  * object into the one image store (data/staging/images is a link to data/images), and until the swap only the staging
  * database names it; a copy that takes longer than the sweep's hour of grace would otherwise lose them. So: every object
  * the staging database names (its listing and chat photos), and every object written since the copy started (a page's
- * photos are put before its rows commit). Null: no copy staging. Throws when the staging database is there and can't be
- * read: the sweep then judges nothing an orphan.
+ * photos are put before its rows commit). And, at `now`, those a whole copy that failed fetched, kept for the next
+ * (keepFetchedObjects): every object written since the first of them. Null: nothing kept. Throws when the staging database
+ * is there and can't be read: the sweep then judges nothing an orphan.
  */
-export function stagedObjects(dataDir: string): { since: number; keys: Set<string> } | null {
+export function stagedObjects(dataDir: string, now = Date.now()): { since: number; keys: Set<string> } | null {
     const dir = path.join(dataDir, STAGING_DIR_NAME);
-    if (!fs.existsSync(dir)) return null;
+    const kept = keptObjects(dataDir, now);
+    if (!fs.existsSync(dir)) return kept ? { since: kept.since, keys: new Set() } : null;
     // No start written yet (the directory being made), or unreadable: every object is newer than it.
     let since = 0;
     try { since = Number(JSON.parse(fs.readFileSync(path.join(dir, STARTED_FILE), 'utf-8'))?.at) || 0; } catch { since = 0; }
@@ -157,7 +202,7 @@ export function stagedObjects(dataDir: string): { since: number; keys: Set<strin
             conn.close();
         }
     }
-    return { since, keys };
+    return { since: kept ? Math.min(kept.since, since) : since, keys };
 }
 
 function removeStaging(): void {

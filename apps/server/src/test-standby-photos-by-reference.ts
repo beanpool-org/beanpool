@@ -33,10 +33,22 @@
  *     the photo named in photosOmitted, exact. S, which holds the photo, takes a whole copy keeping its own. Once M's object
  *     is its photo again, the new standby's next copy brings it (review 4148896755). (Before: every copy of the new standby
  *     refused, M silent.)
- *  8. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
+ *  8. A new standby's first copy whose pages all come and whose objects stop coming part way (M's store answering 503): the
+ *     next pull asks M for no copy until RESYNC_RETRY_MS has passed, and says when it will; the one after that lands (F4 of
+ *     the standby review). (Before: the whole copy asked for, built and sent again on the next tick.) The objects it fetched
+ *     are kept through an orphan sweep past the sweep's hour of grace, and the copy that lands fetches only the rest (F5).
+ *     (Before: swept, and every one fetched again.)
+ *  9. A standby copying with M's admin password (an install from before token-only): M checks it with scrypt once for the
+ *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
+ *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
+ * 10. A take-over confirmed while a delta fetches its objects, or a whole copy of one page does (M at its real page bounds),
+ *     stops the fetch: no object request reaches the old main server after the confirm, with the restart switched off,
+ *     and nothing of the pull is imported (review of #1370, backup-puller.ts:872). (Before: every remaining object asked
+ *     for; only a staged copy stopped.)
+ * 11. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
- *  9. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
+ * 12. The object route is under M's administrative limiter: past its requests a minute from one address, 429.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-photos-by-reference.ts
@@ -70,7 +82,15 @@ const PHOTO_BYTES = 3000;
 const MANY = 900;
 const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/58BAwAI/AL+n1z9zwAAAABJRU5ErkJggg==';
 const HASHED = ['members', 'accounts', 'posts', 'post_photos', 'messages'];
-/** Step 7's photos M gains while S's copy is fetching when the take-over is confirmed. */
+/** S's BACKUP_RESYNC_RETRY_MS: how long a first copy that came and was not taken waits for the next (60 min in production). */
+const RESYNC_RETRY_MS = 3000;
+/** Step 8's objects M sends before its store stops answering. */
+const FETCHED_BEFORE_FAILING = 15;
+/** The orphan sweep's grace (engine/storage-health.ts ORPHAN_OBJECT_GRACE_MS): an object no row names is kept this long. */
+const ORPHAN_GRACE_MS = 60 * 60_000;
+/** Step 10's photos M gains while each standby's pull is fetching when its take-over is confirmed. */
+const TAKEOVER_EACH = 60;
+/** Step 11's photos M gains while S's copy is fetching when the take-over is confirmed. */
 const TAKEOVER_PHOTOS = 200;
 /**
  * Step 3's more photos, on the last listings, from slot 10: a staged copy's references to them (about 250 bytes each) are
@@ -158,6 +178,8 @@ interface Proxy {
     corrupt: number;
     gone: Set<string>;
     stripFormat: number;
+    /** Object requests passed on before every later one is answered 503, as a main server whose store stops answering; null: all passed on. */
+    failObjectsAfter: number | null;
     opened: string[];
     pages: Map<string, Map<number, string>>;
     statuses: { path: string; status: number }[];
@@ -165,7 +187,8 @@ interface Proxy {
 }
 async function startProxy(target: string): Promise<Proxy> {
     const px: Proxy = {
-        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, opened: [], pages: new Map(), statuses: [], close: () => {},
+        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, failObjectsAfter: null, opened: [], pages: new Map(), statuses: [],
+        close: () => {},
     };
     const server = http.createServer((req, res) => {
         void (async () => {
@@ -183,10 +206,14 @@ async function startProxy(target: string): Promise<Proxy> {
             let status = 502;
             let raw: Buffer = Buffer.alloc(0);
             const outHeaders: Record<string, string> = {};
-            if (object && px.gone.has(object)) {
+            if (object && px.failObjectsAfter !== null && px.failObjectsAfter <= 0) {
+                status = 503;
+                raw = Buffer.from(JSON.stringify({ error: 'the image store is not answering' }));
+            } else if (object && px.gone.has(object)) {
                 status = 404;
                 raw = Buffer.from(JSON.stringify({ error: 'no listing photo of this server has that address', why: 'not-named' }));
             } else {
+                if (object && px.failObjectsAfter !== null) px.failObjectsAfter--;
                 try {
                     const up = await fetch(target + req.url, { method: req.method, headers, body: chunks.length > 0 ? Buffer.concat(chunks) : undefined });
                     status = up.status;
@@ -261,7 +288,7 @@ async function main(): Promise<void> {
     };
     const envS = {
         ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
-        BACKUP_RESYNC_RETRY_MS: '3000', BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
+        BACKUP_RESYNC_RETRY_MS: String(RESYNC_RETRY_MS), BACKUP_PAGE_GAP_MS: '0', BACKUP_DELTA_BYTES: String(DELTA_BYTES),
     };
     const gwen = newId('Gwen');
     const ann = newId('Ann');
@@ -304,12 +331,23 @@ async function main(): Promise<void> {
         nodes.push(standby);
         await standby.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
         const exactNow = async () => hashDiff(await standby.send('hashes'), await main.send('hashes'));
-        /** A pull (a whole one when `whole`); one that made a copy ready is waited for until S has started again on it. */
-        const pullAndSwap = async (whole: boolean) => {
-            const before = standby.swaps();
-            const p = await standby.send('pull', whole ? { whole: true } : {});
-            if (p.staged) await until('S to start again on the new copy', () => standby.swaps() > before, 60_000);
+        /** A pull by `node` (a whole one when `whole`); one that made a copy ready is waited for until it has started again on it. */
+        const pullAndSwapOn = async (node: NodeProc, whole: boolean) => {
+            const before = node.swaps();
+            const p = await node.send('pull', whole ? { whole: true } : {});
+            if (p.staged) await until('the standby to start again on the new copy', () => node.swaps() > before, 60_000);
             return p;
+        };
+        /** A pull by S; one that made a copy ready is waited for until S has started again on it. */
+        const pullAndSwap = (whole: boolean) => pullAndSwapOn(standby, whole);
+        /** Another standby of M, new, copying with the replication token, through the proxy. */
+        const newStandby = async (name: string): Promise<NodeProc> => {
+            fs.mkdirSync(dir(name), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir(name), 'genesis.json'));
+            const node = await spawnNode(SCRIPT, dir(name), envS);
+            nodes.push(node);
+            await node.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            return node;
         };
         const photosOf = async (node: NodeProc): Promise<PhotoRow[]> => node.send('photo-state');
         /** S's photos against M's: each slot's sha256, and S's object of it holding those bytes. */
@@ -580,11 +618,147 @@ async function main(): Promise<void> {
             await fresh.kill();
         });
 
-        await step('8. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
+        // Two more standbys of M: step 8's copies with the token, step 9's with the admin password; step 10 takes over on each.
+        let standbyA: NodeProc | null = null;
+        let standbyB: NodeProc | null = null;
+        /** M's recovery code, made once (a second would replace it): steps 10 and 11 take over with it. */
+        let recoveryCode: string | null = null;
+        const takeoverCode = async (): Promise<string> => (recoveryCode ??= (await main.send('make-envelope')).code as string);
+        await step('8. a first copy whose objects stop coming once its pages came waits as a refused one does; its retry fetches only the rest', async () => {
+            const a = await newStandby('standby-a');
+            standbyA = a;
+            // F4 of the standby review: every page of the first copy comes; its objects' fetch fails part way, M's store
+            // answering 503. The next pull asks for no copy until RESYNC_RETRY_MS (3 s here) has passed.
+            const o0 = px.opened.length;
+            const g0 = gets();
+            px.failObjectsAfter = FETCHED_BEFORE_FAILING;
+            const a1 = await a.send('pull', {});
+            const opened1 = px.opened.length - o0;
+            const firstFetched = new Set(px.objectGets.slice(g0));
+            require_(a1.ok === false && /HTTP 503/.test(a1.error ?? '') && opened1 === 1,
+                `the new standby's first copy comes, every page, and fails at its objects, M's store answering 503 (${JSON.stringify({ pull: a1, opened: opened1 })})`);
+            const failedAt = Date.now();
+            const a2 = await a.send('pull', {});
+            const opened2 = px.opened.length - o0 - opened1;
+            px.failObjectsAfter = null;
+            assert(a2.ok === false && opened2 === 0 && /asked for at/.test(a2.error ?? ''),
+                `the next pull asks M for no copy, and says when it will (${JSON.stringify({ pull: a2, opened: opened2 })}; before: a whole copy built and sent again at once, every tick)`);
+            // F5: the objects it fetched outlive the orphan sweep's hour of grace, which passes as the hour's wait does in
+            // production: no row names them, and the failed copy's staging is gone.
+            const mPhotos = await photosOf(main);
+            // Each fetched object's keys (a photo on two listings has two): held under any of them.
+            const keysOf = (shas: Set<string>) => [...shas].map((sha) => mPhotos.filter((r) => r.sha256 === sha).map((r) => r.storage_key!));
+            const need = new Set(mPhotos.filter((r) => !r.inline && r.sha256).map((r) => r.sha256!));
+            const swept = await a.send('sweep-orphans', { aheadMs: ORPHAN_GRACE_MS + 60_000 });
+            const heldAfterSweep: number = await a.send('has-objects', { groups: keysOf(firstFetched) });
+            assert(firstFetched.size === FETCHED_BEFORE_FAILING && heldAfterSweep === firstFetched.size && (await a.send('kept')) === true,
+                `the ${firstFetched.size} objects the failed copy fetched are kept through an orphan sweep an hour and a minute on: `
+                + `${heldAfterSweep} still held (${JSON.stringify(swept)}; before: every one swept)`);
+            await sleep(Math.max(0, failedAt + RESYNC_RETRY_MS + 200 - Date.now()));
+            const g3 = gets();
+            const a3 = await pullAndSwapOn(a, false);
+            const opened3 = px.opened.length - o0 - opened1 - opened2;
+            assert(a3.ok === true && a3.staged === true && opened3 === 1,
+                `once RESYNC_RETRY_MS has passed, the next pull asks for one copy, which lands (${JSON.stringify({ pull: a3, opened: opened3 })})`);
+            const again = px.objectGets.slice(g3);
+            const refetched = again.filter((sha) => firstFetched.has(sha));
+            assert(refetched.length === 0 && again.length === need.size - firstFetched.size && (await a.send('kept')) === false,
+                `that copy fetches only what the new standby lacked: ${again.length} object(s), of M's ${need.size}, none of the ${firstFetched.size} it had; `
+                + `and, landed, keeps them no longer (${refetched.length} fetched again; before: all ${firstFetched.size})`);
+        });
+
+        await step('9. a standby copying with the admin password: one scrypt for the whole copy; a wrong or changed password pays in full', async () => {
+            // An install from before token-only: M's flag reads as off, and a standby copies with M's admin password.
+            await main.send('token-only', { on: false });
+            fs.mkdirSync(dir('standby-b'), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby-b'), 'genesis.json'));
+            const b = await spawnNode(SCRIPT, dir('standby-b'), envS);
+            nodes.push(b);
+            standbyB = b;
+            await b.send('setup-standby-pw', { primaryUrl: px.url, password: PW_MAIN, primaryPeerId: main.ready.peerId });
+            const g0 = gets();
+            const o0 = px.opened.length;
+            const k0: number = await main.send('count-scrypts');
+            const b1 = await pullAndSwapOn(b, false);
+            const fetched = gets() - g0;
+            const pages = px.opened.length > o0 ? pagesOf(px).length : 0;
+            const k1: number = await main.send('count-scrypts');
+            assert(b1.ok === true && b1.staged === true && fetched > 20 && k1 - k0 >= 1 && k1 - k0 <= 2,
+                `its first copy lands, and M checked the admin password with scrypt ${k1 - k0} time(s) for ${pages} pages and ${fetched} objects `
+                + `(${JSON.stringify(b1)}; before: once per request, ${fetched + pages}+)`);
+            // Straight to M's copy routes: a wrong password pays its scrypt, 401, each time; the right one, remembered, none.
+            const at = (password: string) => fetch(`${main.base}/api/local/admin/sync-object/${made[0].sha256}`, { headers: { 'X-Admin-Password': password } })
+                .then(async (r) => { await r.arrayBuffer(); return r.status; });
+            const k2: number = await main.send('count-scrypts');
+            const wrong = [await at('Not-The-Main-Pw-1234!'), await at(`${PW_MAIN}x`)];
+            const k3: number = await main.send('count-scrypts');
+            const right = await at(PW_MAIN);
+            const k4: number = await main.send('count-scrypts');
+            assert(wrong.every((st) => st === 401) && k3 - k2 === 2 && right === 200 && k4 === k3,
+                `two wrong passwords are refused, 401, and pay a scrypt each (${JSON.stringify(wrong)}, ${k3 - k2}); the right one is taken with none (${right}, ${k4 - k3})`);
+            // The admin password changed on M: the old one, remembered, is refused at once; the new one pays its scrypt once.
+            const changed = 'Photos-By-Ref-Main-Pw-Changed-7731!';
+            await main.send('set-admin-password', { password: changed });
+            const old = await at(PW_MAIN);
+            const k5: number = await main.send('count-scrypts');
+            const fresh = [await at(changed), await at(changed)];
+            const k6: number = await main.send('count-scrypts');
+            await main.send('set-admin-password', { password: PW_MAIN });
+            assert(old === 401 && fresh.every((st) => st === 200) && k6 - k5 === 1,
+                `changed on M, the old password is refused at once (${old}); the new one is taken, one scrypt for two requests (${JSON.stringify(fresh)}, ${k6 - k5})`);
+            // From here on B copies with the token, and M is token-only again.
+            await b.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            await main.send('token-only', { on: true });
+        });
+
+        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: nothing more reaches the old main server', async () => {
+            const pw = { 'X-Admin-Password': PW_STANDBY };
+            /**
+             * M gains photos `node` lacks; `node` pulls at a pace (`whole`: the routine whole copy); once it has fetched 10 of
+             * their objects, its take-over is confirmed, with the restart switched off. The object requests that reach M
+             * after the confirm, and how the pull ended.
+             */
+            const takeOverDuring = async (node: NodeProc, whole: boolean, from: number) => {
+                const code = await takeoverCode();
+                require_((await node.send('envelope')) === 'stored', 'the standby holds M\'s take-over envelope');
+                await node.send('takeover-restart-off');
+                await main.send('add-photos', { posts: listings.slice(8, 12), perPost: TAKEOVER_EACH / 4, from, bytes: 200 });
+                await node.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '100' } });
+                const g0 = gets();
+                const pulling = node.send('pull', whole ? { whole: true } : {});
+                const fetchedSome = await until('the standby to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
+                const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, pw);
+                const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
+                const asksAtConfirm = px.objectAsks;
+                require_(fetchedSome && confirmT.status === 200, `the take-over is confirmed mid-fetch (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
+                const pull = await pulling;
+                await sleep(1500); // at the pull's pace, 15 more requests' time
+                const after = px.objectAsks - asksAtConfirm;
+                const rows = (await node.send('rows', { sql: `SELECT COUNT(*) AS n FROM post_photos WHERE order_num >= ${from}` }))[0].n as number;
+                await node.kill();
+                return { pull, after, rows, fetched: gets() - g0 };
+            };
+            require_(!!standbyA && !!standbyB, 'steps 8 and 9 left two standbys holding copies of M');
+            const d = await takeOverDuring(standbyA!, false, 100);
+            assert(d.pull.ok === false && d.pull.mode === 'delta' && /take-over was confirmed/.test(d.pull.error ?? '') && d.after === 0 && d.rows === 0,
+                `a delta's fetch stops at the confirm: ${d.after} object request(s) reached the old main server after it, and none of its rows landed `
+                + `(${JSON.stringify({ ...d.pull, fetched: d.fetched, rows: d.rows })}; before: every remaining object the pull named, and the pull said nothing of the take-over)`);
+            // M at its real page bounds: its whole copy is one page, imported over the copy the standby holds.
+            await main.send('set-env', { vars: { SYNC_PAGE_BYTES: null, SYNC_PAGE_ROWS: null } });
+            const w = await takeOverDuring(standbyB!, true, 120);
+            await main.send('set-env', { vars: { SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS) } });
+            // Gone again, as step 3's are: step 11 opens each of M's listing photos on the promoted S, under its limiter.
+            await main.send('sql', { sql: 'DELETE FROM post_photos WHERE order_num >= 100' });
+            assert(w.pull.ok === false && w.pull.mode === 'full' && !w.pull.staged && /take-over was confirmed/.test(w.pull.error ?? '') && w.after === 0 && w.rows === 0,
+                `so does a one-page whole copy's: ${w.after} object request(s) after the confirm, none of its rows landed `
+                + `(${JSON.stringify({ ...w.pull, fetched: w.fetched, rows: w.rows })}; before: every remaining object the copy named)`);
+        });
+
+        await step('11. a take-over confirmed during a copy\'s fetch stops it; after copies by reference, every listing\'s photo opens on the promoted server', async () => {
             const d7 = await standby.send('pull', {});
             require_(d7.ok === true && (await photosMatch()).length === 0, `S is level with M, every photo (${JSON.stringify(d7)})`);
             const mine = new Map((await photosOf(main)).map((r) => [slot(r), r]));
-            const env = await main.send('make-envelope');
+            const code = await takeoverCode();
             const held = await standby.send('envelope');
             require_(held === 'stored', `S holds M's take-over envelope (${held})`);
             await standby.send('takeover-restart-off');
@@ -597,7 +771,7 @@ async function main(): Promise<void> {
             const pulling = standby.send('pull', { whole: true });
             const fetchedSome = await until('S to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
             const pw = { 'X-Admin-Password': PW_STANDBY };
-            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: env.code }, pw);
+            const openT = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             const asksAtConfirm = px.objectAsks;
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
@@ -626,7 +800,7 @@ async function main(): Promise<void> {
                 `S starts as the main server, and every one of its ${urls.length} listing photos opens with M's bytes (${JSON.stringify({ role, of: mine.size })}; failed ${first(failed)})`);
         });
 
-        await step('9. the object route is under M\'s administrative limiter', async () => {
+        await step('12. the object route is under M\'s administrative limiter', async () => {
             let status = 0;
             let n = 0;
             const before429 = new Set<number>();
@@ -668,6 +842,27 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         }
         return scrypts;
     },
+    /** Whether copies of this main server take the replication token only (off: an install from before token-only). */
+    'token-only': async (a: { on: boolean }) => {
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        updateLocalConfig({ replicationTokenOnly: a.on ? true : undefined });
+        return true;
+    },
+    /** This server's admin password, changed as Settings changes it: a new hash and salt. */
+    'set-admin-password': async (a: { password: string }) => {
+        const { updateLocalConfig, hashPassword } = await import('./config/local-config.js');
+        const { hash, salt } = hashPassword(a.password);
+        updateLocalConfig({ adminHash: hash, salt });
+        return true;
+    },
+    /** A standby that copies with its main server's admin password, as one set up before the replication token. */
+    'setup-standby-pw': async (a: { primaryUrl: string; password: string; primaryPeerId: string }) => {
+        const { addConnector } = await import('./connector-manager.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        addConnector(`/ip4/127.0.0.1/tcp/4998/p2p/${a.primaryPeerId}`, 'mirror', 'main-server', undefined, false);
+        updateLocalConfig({ backupPrimaryUrl: a.primaryUrl, backupAdminPassword: a.password, backupReplicationToken: null });
+        return true;
+    },
     /** The replication token this main server takes, set (as the operator rotates it) or, with null, revoked. */
     'set-token': async (a: { token: string | null }) => {
         const { setReplicationToken, clearReplicationToken } = await import('./config/local-config.js');
@@ -699,6 +894,19 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         }
         return out;
     },
+    /** One pass of the orphan sweep (engine/storage-health.ts), as its clock would run it `aheadMs` from now. */
+    'sweep-orphans': async (a: { aheadMs: number }) => {
+        const { sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
+        return sweepOrphanedImageObjects({ nowMs: Date.now() + a.aheadMs });
+    },
+    /** How many of these groups of keys this server's image store holds an object under one of. */
+    'has-objects': async (a: { groups: string[][] }) => {
+        const { getImageStore } = await import('./storage/image-store.js');
+        const store = getImageStore();
+        return a.groups.filter((keys) => keys.some((k) => !!store.head(k))).length;
+    },
+    /** Whether a failed whole copy's objects are kept for the next (services/stager.ts KEPT_OBJECTS_FILE). */
+    kept: async () => fs.existsSync(path.join(process.env.BEANPOOL_DATA_DIR!, 'copy-objects-kept.json')),
     /** Every listing photo row, and the sha256 of the object it names as this server's store holds it (null: none). */
     'photo-state': async () => {
         const { db } = await import('./db/db.js');

@@ -394,6 +394,15 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(removeCommunityCaches).not.toHaveBeenCalled();
     });
 
+    it('asks the node for the name with the restored key, which the phone does not hold yet (a community names a key only to its own signer)', async () => {
+        const keys = await mnemonicToKeypair(WORDS);
+        const nameOnNode = vi.fn(async () => 'Marty');
+
+        await restoreFromWords(WORDS, NODE, { nameOnNode });
+
+        expect(nameOnNode).toHaveBeenCalledWith(keys.publicKeyHex, keys.privateKeyHex);
+    });
+
     it('onto an empty phone: nothing is unregistered or removed', async () => {
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM }]));
         mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);

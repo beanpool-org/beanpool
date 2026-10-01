@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -47,6 +47,7 @@ import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
+import { returnStrandedPledges } from './engine/stranded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
@@ -315,6 +316,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
+import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -715,6 +717,13 @@ export function initStateEngine(): void {
         try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
     }, 5 * 60 * 1000);
 
+    // Pledges a project took after reaching its goal, stuck in its escrow for good until pledges stopped at the goal
+    // (db.ts pledgeToProject), go back to their backers: exactly what each pledged, through transfer() inside
+    // conservingTransaction, or left for the operator with a log line when that can't be worked out exactly
+    // (engine/stranded-pledges.ts). Once the ledger is loaded, and before the audit below, so the audit sees the result.
+    // A main server only; never throws.
+    returnStrandedPledges({ transfer, conservingTransaction });
+
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
     // appears in the boot log and cannot go unnoticed between releases.
     // The delayed versions below handle periodic re-checks during operation.
@@ -727,6 +736,7 @@ export function initStateEngine(): void {
             console.error('╠════════════════════════════════════════════════════════╣');
             console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
             console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -1084,10 +1094,11 @@ import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
-// Deny by default: only changes to things anyone can already read unsigned — the public
-// marketplace board, commons projects, decisions, enterprise map pins — and only as a bare
-// `{ type }` doorbell with no payload, which is all a client uses them for (it re-fetches what
-// it may see). Everything else — messages, trades, amounts, members, profiles, announcements,
+// Deny by default: only changes to the marketplace board, commons projects, decisions and
+// enterprise map pins — and only as a bare `{ type }` doorbell with no payload, which is all a
+// client uses them for (it re-fetches what it may see). A socket with no member's key at all gets
+// only those of them it may read on this node (keylessSocketMayUse); a visitor's and a suspended
+// member's, which hold a key, get them all. Everything else — messages, trades, amounts, members, profiles, announcements,
 // groups — goes to member sockets only. An event scoped with `recipients` never reaches a
 // socket without a member, whatever its type.
 export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
@@ -1100,12 +1111,11 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 
 // Of PUBLIC_WS_EVENTS, the ones a socket with no member's key may still use on a node that shows visitors the
 // listings and not the people (`guestListingsOnly`). There an unsigned read, or one signed by a key that is no member
-// here, gets the listings' guest view, and the Commons decisions, projects, crowdfunds and enterprises are members-only
-// (https-server.ts MEMBERS_ONLY_ON_GUEST_LISTINGS_*) or switched off, so a doorbell for one of them changes nothing
-// such a socket can read and has every visitor's tab read the listings again for nothing. `state_synced` stays: an
-// import's counts don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so
-// one that counted only groups may still have changed a listing. Only a standby imports, so the node visitors reach
-// never sends it anyway.
+// here, gets the listings' guest view. On every node the Commons decisions, projects, crowdfunds and enterprises are
+// members-only (https-server.ts MEMBERS_ONLY_READS_*) or switched off, so a doorbell for one of them changes nothing
+// such a socket can read and has every stranger's tab read again for nothing. `state_synced` stays: an import's counts
+// don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so one that counted
+// only groups may still have changed a listing. Only a standby imports, so the node visitors reach never sends it anyway.
 const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed', 'state_synced']);
 
 // As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
@@ -1117,16 +1127,15 @@ const LISTING_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_update
 
 /**
  * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node.
- * On a node whose `guestListingsOnly` switch is on, only the listings' (GUEST_LISTINGS_WS_EVENTS). On every other node,
- * every public doorbell but the listings': the Commons' reads are public there and the listings are members-only.
- * With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell still is.
+ * On a node whose `guestListingsOnly` switch is on, only the listings' and state_synced (GUEST_LISTINGS_WS_EVENTS). On
+ * every other node, a local community's, only state_synced: its listings are its members' (2026-09-28), and so are the
+ * Commons' reads (2026-10-01). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
+ * still is.
  */
 function keylessSocketMayUse(type: string): boolean {
     if (!READ_AUTH_ON) return true;
-    const guestView = getProfileSwitches().guestListingsOnly;
-    if (LISTING_WS_EVENTS.has(type)) return guestView;
-    if (GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
-    return !guestView;
+    if (LISTING_WS_EVENTS.has(type)) return getProfileSwitches().guestListingsOnly;
+    return GUEST_LISTINGS_WS_EVENTS.has(type);
 }
 
 export type ListingDoorbell = 'post_removed' | 'post_updated';
@@ -2011,7 +2020,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
     }
-    if (amount < 0) return null;
+    // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
+    // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
+    // ledger.transfer refuses it again as a primitive.
+    if (!isBeanAmount(amount)) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
     // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
@@ -2436,7 +2448,8 @@ export function moveToCommons(
     if (!synthetic && !treasury && !opts?.allowMemberDebit) {
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through. Outside the transaction, as in transfer().
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     assertLedgerWritable();
 
@@ -2495,12 +2508,16 @@ export function payFromCommons(
     // does; the memo names them in words only (adminActorName).
     opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through, and `allowDeficit` below would then have set the pot to NaN.
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     // Before the pot is drawn down in memory. On a standby the flush below writes nothing (engine/audit.ts), so a payment
     // there wrote its recipient's credit and not the pot's debit: a member in debt deleting their own account left the
     // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
     assertLedgerWritable();
+    // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
+    const recipientNow = ledger.getAccount(to).balance;
+    if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
     if (!ledger.deductFromCommons(amount)) {
         if (!opts?.allowDeficit) return null;
         setCommonsBalance(getCommonsBalanceExact() - amount);
@@ -4475,6 +4492,9 @@ export function createPost(
         beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
+    // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
+    // number of Beans never reaches a listing, whichever route made it.
+    assertPostFields({ title, description, category, credits, priceType, lat, lng }, 'create');
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
@@ -4507,6 +4527,9 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
+    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
+    assertPostFields(updates as PostFieldsIn, 'edit');
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -7772,7 +7795,7 @@ export function persistDecayAndCommons(): void {
  * run stores a baseline in node_config and later runs alert on drift. Also flags
  * escrow wallets holding funds for settled transactions (always a bug).
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return runLedgerAuditEngine();
 }
 
@@ -7810,7 +7833,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * (boot path) can decide whether to proceed. Run once after a take-over, at the
  * next boot (services/takeover.ts, promotionAuditPending).
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return promotionSanityCheckEngine();
 }
 

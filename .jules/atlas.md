@@ -150,3 +150,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** Stack trace details toggle (`Show Details` / `Hide Details` buttons and `<pre>` block rendering) in `apps/manager/src/components/common/SectionErrorBoundary.tsx` lacked unit test coverage.
 **Learning:** Testing `SectionErrorBoundary` stack trace toggle required rendering a component that throws an `Error` instance, asserting that the error message is displayed while the stack trace is hidden initially, clicking "Show Details" to verify that the button label changes to "Hide Details" and `<pre>` stack details appear, and clicking again to confirm that the stack details hide.
 **Action:** Identify remaining untested UI component edge cases or interactive state paths across `apps/manager/src/components/`.
+
+## 2026-10-01 - [manager tests] SuggestChangePanel component unit tests
+**Gap:** Interactive user actions and edge cases in `SuggestChangePanel` (`apps/manager/src/components/modules/SuggestChangePanel.tsx`) lacked component test coverage.
+**Learning:** Testing `SuggestChangePanel` required asserting empty validation errors, checking character limit disabling logic using `FEEDBACK_TEXT_MAX`, verifying in-flight submit spinners, testing form cancelation and success view closure, and verifying payload props like `community`.
+**Action:** Continue expanding test coverage for untested manager UI components and utilities.

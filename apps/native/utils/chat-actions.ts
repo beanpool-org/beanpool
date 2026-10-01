@@ -73,6 +73,8 @@ export interface ChatMessage {
     timestamp?: string;
     /** Who said it, when the chat shows names (group, enterprise, event). */
     authorName?: string | null;
+    /** A DM line the node moved, reordered or sent again in the old format: the one line shown under it. */
+    integrityNote?: string | null;
 }
 
 /** Who the viewer is in this chat, for the action rules below. */

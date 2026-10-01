@@ -479,7 +479,7 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? ''].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -1081,20 +1081,30 @@ function ChatScreen() {
                     <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
                 ) : null}
                 status={status}
-                footer={item.type === 'image' && !item.text ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
-                        <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
-                            {item.timestamp}
-                        </Text>
-                        {isMe && item.outgoing && (
-                            <MaterialCommunityIcons
-                                name={item.readByPeer ? 'check-all' : 'check'}
-                                size={14}
-                                color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
-                                style={{ marginLeft: 3 }}
-                            />
-                        )}
-                    </View>
+                footer={(item.type === 'image' && !item.text) || item.integrityNote ? (
+                    <>
+                        {item.type === 'image' && !item.text ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
+                                <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
+                                    {item.timestamp}
+                                </Text>
+                                {isMe && item.outgoing && (
+                                    <MaterialCommunityIcons
+                                        name={item.readByPeer ? 'check-all' : 'check'}
+                                        size={14}
+                                        color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
+                                        style={{ marginLeft: 3 }}
+                                    />
+                                )}
+                            </View>
+                        ) : null}
+                        {/* A line the node moved, reordered or sent again in the old format (e2e-crypto checkDmThread). */}
+                        {item.integrityNote ? (
+                            <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
+                                ⚠️ {item.integrityNote}
+                            </Text>
+                        ) : null}
+                    </>
                 ) : null}
             />
         );

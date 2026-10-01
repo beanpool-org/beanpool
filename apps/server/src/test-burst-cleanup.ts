@@ -30,10 +30,13 @@
  *  14. a report on a post id nobody has posted is refused; one that got in anyway (filed before that rule, or copied
  *      from another server) and whose post appears later under that id, naming another member, is about the post's
  *      author: the list names the author, a freeze and "action + suspendUser" act on the author, never the one named.
- *      An enterprise's report (its key in both fields) is still taken
- *  15. an undo weighs the posts again until nothing changes, so it ends as reports would leave them, as a twin never
- *      hidden by a moderator is; a post that goes back keeps its updated_at, and the author's phone is sent only what
- *      came back
+ *      An enterprise's report (its key in both fields) is still taken. A Pulse report that also names a post is
+ *      refused; one that got in anyway is about the item's owner: listed, frozen and suspended as such, never the post's
+ *      author, whose post stays up and whose group it doesn't open
+ *  15. an undo weighs every post of the action again until nothing changes, so it ends as reports would leave them, as
+ *      a twin never hidden by a moderator is: one more post goes back when another lowers its author's standing, and
+ *      one comes back when another puts its reporter back on probation; a post that goes back keeps its updated_at, and
+ *      the author's phone is sent only what came back
  *  16. a local node: every route answers 404, even to an owner, and nothing changes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-burst-cleanup.ts
@@ -240,6 +243,17 @@ async function main(): Promise<void> {
     const est = [1, 2, 3].map(i => member(`Est${i}`, 150));
     // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
     for (const e of est) for (let i = 0; i < 3; i++) createPost('offer', 'other', `${e.name} kept ${i}`, 'kept', 0, 'fixed', e.pk);
+    /**
+     * A member who joined `daysAgo` days ago with 3 posts that stayed up: off probation, so their reports count, and
+     * standing (whole weeks) + 3. A reporter on probation counts for nothing (design 2.3).
+     */
+    const keptMember = (name: string, daysAgo: number): Id => {
+        const id = member(name, daysAgo);
+        for (let i = 0; i < 3; i++) createPost('offer', 'other', `${name} kept ${i}`, 'kept', 0, 'fixed', id.pk);
+        return id;
+    };
+    /** `n` posts by `who`, as the author wrote them. */
+    const postsOf = (who: Id, n: number) => Array.from({ length: n }, (_, i) => createPost('offer', 'other', `${who.name} thing ${i + 1}`, 'thing', 0, 'fixed', who.pk)!.id);
     let mod = as(keySession(mo));
     const adm = as(keySession(ada));
     const own = as(keySession(owner));
@@ -568,20 +582,23 @@ async function main(): Promise<void> {
 
     // ── 12. an undo weighs each post with the whole hide undone ──────────────────────────────────
     console.log('\n── 12. an undo weighs each post with the whole hide undone ──');
-    const c1 = doorRow('C1', `label-c-${crypto.randomUUID()}`);
-    const twin = member('Twin', 0);
-    const cPosts = [1, 2, 3].map(i => createPost('offer', 'other', `C1 thing ${i}`, 'thing', 0, 'fixed', c1.pk)!.id);
-    const tPosts = [1, 2, 3].map(i => createPost('offer', 'other', `Twin thing ${i}`, 'thing', 0, 'fixed', twin.pk)!.id);
-    const hC = await adm('POST', `/api/local/admin/members/${c1.pk}/burst/hide`, { members: [c1.pk], count: 1 });
+    // C1 and a twin: six weeks a member and 3 posts, standing 9, so a reporter needs 5. With the other two posts hidden,
+    // as one post would be weighed on its own, their standing would be 7, and a reporter would need only 4.
+    const c1 = doorRow('C1', `label-c-${crypto.randomUUID()}`, 43);
+    const twin = member('Twin', 43);
+    const cPosts = postsOf(c1, 3);
+    const tPosts = postsOf(twin, 3);
+    const hC = await adm('POST', `/api/local/admin/members/${c1.pk}/burst/hide`, { members: [c1.pk], count: 1, includeEstablished: true });
     assert(hC.status === 200 && hC.body?.action?.posts === 3 && cPosts.every(p => !!hiddenAt(p)), `setup: C1's 3 posts hidden in one action (${hC.status})`);
-    // Three reporters in three circles (each invited by the owner), a week and a day a member: standing 1 each.
-    const rs = [1, 2, 3].map(i => member(`Rep${i}`, 8));
+    // Three reporters in three circles (each invited by the owner), a week and a day a member with 3 kept posts: off
+    // probation, standing 4 each.
+    const rs = [1, 2, 3].map(i => keptMember(`Rep${i}`, 8));
     for (const r of rs) {
         for (const p of cPosts) if ((await report(r, p, c1)).status !== 200) throw new Error('report refused');
         for (const p of tPosts) if ((await report(r, p, twin)).status !== 200) throw new Error('report refused');
     }
     assert(tPosts.every(p => !hiddenAt(p)),
-        'setup: the same reports on a twin\'s 3 posts, never hidden, hide 0 of 3 (its standing is 3, so each needs reporters of 2)');
+        'setup: the same reports on a twin\'s 3 posts, never hidden, hide 0 of 3 (its standing is 9, so each needs reporters of 5)');
     const uC = await adm('POST', `/api/local/admin/bursts/${hC.body?.action?.id}/undo`, {});
     assert(uC.status === 200 && uC.body?.restored === 3 && uC.body?.keptHidden === 0 && cPosts.every(p => !hiddenAt(p)),
         `the undo brings all 3 back: weighed with the hide undone, reports would hide none of them (${uC.status} ${JSON.stringify(uC.body)})`);
@@ -646,20 +663,55 @@ async function main(): Promise<void> {
     assert(onFund.status === 200 && fundListed?.targetPubkey === fund.pk && !fundListed?.postId,
         `a report of an enterprise, its key in both fields, is still taken and is about the enterprise (${onFund.status} ${fundListed?.targetPubkey === fund.pk})`);
 
+    // A Pulse report that names a post too: Pat reports Pia's Pulse item with Saul's post id beside it.
+    const pia = member('Pia', 30), saul = member('Saul', 30);
+    const saulPost = createPost('offer', 'other', 'Saul bike', 'a bike', 0, 'fixed', saul.pk)!.id;
+    const insertPulse = (id: string, owner: Id) => db.prepare(
+        `INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, external_id, url, title, thumbnail_url,
+             published_at, category, source, muted, curated, created_at, updated_at)
+         VALUES (?, 'ch-test', ?, 'youtube', ?, ?, 'A clip', NULL, ?, 'craft', 'manual', 0, 0, ?, ?)`
+    ).run(id, owner.pk, `ext_${id}`, `https://www.youtube.com/watch?v=${id}`, new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+    const piaItem = `pulse-${crypto.randomUUID()}`;
+    insertPulse(piaItem, pia);
+    const onSaul = () => (db.prepare('SELECT COUNT(*) AS c FROM abuse_reports WHERE target_post_id = ?').get(saulPost) as { c: number }).c;
+    const both = await call('POST', pat, '/api/reports', { reporterPubkey: pat.pk, targetPubkey: pia.pk, targetPulseItemId: piaItem, targetPostId: saulPost, reason: 'spam' });
+    assert(both.status === 400 && onSaul() === 0,
+        `a Pulse report that also names a post is refused, and nothing is filed (${both.status} ${both.body?.error ?? ''}, ${onSaul()} row)`);
+    // One that got in anyway (filed before that rule, or copied in): it is about the item's owner, never the post's author.
+    const pulseRow = crypto.randomUUID();
+    db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at) VALUES (?, ?, ?, ?, ?, 'spam', ?)`)
+        .run(pulseRow, ivy.pk, pia.pk, saulPost, piaItem, new Date().toISOString());
+    const pListed = ((await own('GET', '/api/local/admin/reports?status=open&limit=200')).body?.reports ?? []).find((r: any) => r.id === pulseRow);
+    const who2 = (k: unknown) => k === pia.pk ? 'Pia' : k === saul.pk ? 'Saul' : String(k);
+    assert(pListed?.targetPubkey === pia.pk && pListed?.targetCallsign === 'Pia' && !pListed?.postId && !pListed?.postAuthorPubkey && !!pListed?.pulseItem,
+        `the reports list names Pia, the item's owner, and shows no post (${who2(pListed?.targetPubkey)} ${pListed?.targetCallsign}, post ${pListed?.postId ?? 'none'})`);
+    const fz2 = await own('POST', `/api/local/admin/users/${encodeURIComponent(String(pListed?.targetPubkey))}/freeze`, { freeze: true });
+    assert(fz2.status === 200 && frozen(pia) && !frozen(saul), `a freeze from it freezes Pia, never Saul (${fz2.status} Pia ${frozen(pia)}, Saul ${frozen(saul)})`);
+    await own('POST', `/api/local/admin/users/${pia.pk}/freeze`, { freeze: false });
+    await own('POST', `/api/local/admin/users/${saul.pk}/freeze`, { freeze: false });
+    const mSaul = await mod('GET', `/api/local/admin/members/${saul.pk}/burst`);
+    assert(mSaul.status !== 200, `nor does it open Saul's group to a moderator (${mSaul.status} ${mSaul.body?.code ?? ''})`);
+    const pAct = await own('POST', `/api/local/admin/reports/${pulseRow}/action`, { removePulseItem: true, suspendUser: true, deletePost: true });
+    const saulPostRow = db.prepare('SELECT active, status FROM posts WHERE id = ?').get(saulPost) as { active: number; status: string };
+    const itemGone = (db.prepare('SELECT deleted_at FROM pulse_items WHERE id = ?').get(piaItem) as { deleted_at: string | null }).deleted_at;
+    assert(pAct.status === 200 && statusOf(pia) === 'suspended' && statusOf(saul) === 'active' && saulPostRow.active === 1 && !!itemGone,
+        `"action" on it removes Pia's item and suspends Pia; Saul and his post are untouched (${pAct.status} Pia ${statusOf(pia)}, Saul ${statusOf(saul)}, post ${saulPostRow.active === 1 ? 'up' : 'down'})`);
+
     // ── 15. an undo weighs again until nothing changes; a post that goes back is as it was ───────
     console.log('\n── 15. an undo weighs again until nothing changes ──');
-    // E1 and a twin each have 3 posts: standing 3, so reporters need 2. A is reported by three of standing 2, each their
-    // own circle, B by three of standing 1. With A hidden their standing is 2, and reporters need only 1.
-    const e1 = doorRow('E1', `label-e-${crypto.randomUUID()}`);
-    const twin2 = member('Twin2', 0);
-    const ePosts = [1, 2, 3].map(i => createPost('offer', 'other', `E1 thing ${i}`, 'thing', 0, 'fixed', e1.pk)!.id);
-    const t2Posts = [1, 2, 3].map(i => createPost('offer', 'other', `Twin2 thing ${i}`, 'thing', 0, 'fixed', twin2.pk)!.id);
+    // E1 and a twin: six weeks a member and 3 posts, standing 9, so reporters need 5. A is reported by three of standing
+    // 5 (two weeks and 3 kept posts), each their own circle, B by three of standing 4 (one week and 3 kept posts). With A
+    // hidden their standing is 8, and reporters need only 4.
+    const e1 = doorRow('E1', `label-e-${crypto.randomUUID()}`, 43);
+    const twin2 = member('Twin2', 43);
+    const ePosts = postsOf(e1, 3);
+    const t2Posts = postsOf(twin2, 3);
     const updatedAt = (postId: string) => (db.prepare('SELECT updated_at FROM posts WHERE id = ?').get(postId) as any)?.updated_at as string;
-    const hE = await adm('POST', `/api/local/admin/members/${e1.pk}/burst/hide`, { members: [e1.pk], count: 1 });
+    const hE = await adm('POST', `/api/local/admin/members/${e1.pk}/burst/hide`, { members: [e1.pk], count: 1, includeEstablished: true });
     assert(hE.status === 200 && hE.body?.action?.posts === 3 && ePosts.every(p => !!hiddenAt(p)), `setup: E1's 3 posts hidden in one action (${hE.status})`);
     const stampsAfterHide = ePosts.map(updatedAt);
-    const twoes = [1, 2, 3].map(i => member(`Two${i}`, 15));
-    const ones = [1, 2, 3].map(i => member(`One${i}`, 8));
+    const twoes = [1, 2, 3].map(i => keptMember(`Two${i}`, 15));
+    const ones = [1, 2, 3].map(i => keptMember(`One${i}`, 8));
     for (const r of twoes) for (const [p, a] of [[ePosts[0], e1], [t2Posts[0], twin2]] as const) {
         if ((await report(r, p, a)).status !== 200) throw new Error('report refused');
     }
@@ -685,6 +737,34 @@ async function main(): Promise<void> {
     const deltaIds = Array.isArray(delta.body) ? delta.body.map((p: any) => p.id) : [];
     assert(delta.status === 200 && deltaIds.includes(ePosts[2]) && !deltaIds.includes(ePosts[0]) && !deltaIds.includes(ePosts[1]),
         `E1's phone, syncing from before the undo, is sent C alone (${delta.status} ${deltaIds.filter((x: string) => ePosts.includes(x)).length} of theirs)`);
+
+    // A post the undo hid again in an earlier round is weighed again too: hiding Xa's post puts Xa back on probation, so
+    // Xa's report on Ya's post stops counting, and that post comes back, as on a twin never hidden by a moderator.
+    // Ya and Xa joined from one connection 8 days ago, 3 posts each: standing 4, so a reporter needs 2. Xa, R1 and R2
+    // report Ya's Py; R1, R2 and R3 (two weeks and 3 kept posts: standing 5) report Xa's Px.
+    const lY = `label-y-${crypto.randomUUID()}`;
+    const ya = doorRow('Ya', lY, 8), xa = doorRow('Xa', lY, 8);
+    const yPosts = postsOf(ya, 3), xPosts = postsOf(xa, 3);
+    const lYb = `label-yb-${crypto.randomUUID()}`;
+    const yb = doorRow('Yb', lYb, 8), xb = doorRow('Xb', lYb, 8);
+    const ybPosts = postsOf(yb, 3), xbPosts = postsOf(xb, 3);
+    const rr = [1, 2, 3].map(i => keptMember(`R${i}`, 15));
+    const hY = await adm('POST', `/api/local/admin/members/${ya.pk}/burst/hide`, { members: [ya.pk, xa.pk], count: 2, includeEstablished: true });
+    assert(hY.status === 200 && hY.body?.action?.posts === 6, `setup: Ya's and Xa's 6 posts hidden in one action (${hY.status} ${JSON.stringify(hY.body?.action ?? hY.body)})`);
+    const must = async (r: Res) => { if (r.status !== 200) throw new Error(`report refused: ${r.status} ${JSON.stringify(r.body)}`); };
+    for (const r of rr) await must(await report(r, xPosts[0], xa));
+    for (const r of [xa, rr[0], rr[1]]) await must(await report(r, yPosts[0], ya));
+    // The twin, never hidden: Xb's post is reported first, then Yb's.
+    for (const r of rr) await must(await report(r, xbPosts[0], xb));
+    for (const r of [xb, rr[0], rr[1]]) await must(await report(r, ybPosts[0], yb));
+    assert(!!hiddenAt(xbPosts[0]) && !hiddenAt(ybPosts[0]),
+        'setup: on the twin, reports hide Xb\'s post, and then Xb counts for nothing on Yb\'s, which stays up');
+    const uY = await adm('POST', `/api/local/admin/bursts/${hY.body?.action?.id}/undo`, {});
+    assert(uY.status === 200 && uY.body?.restored === 5 && uY.body?.keptHidden === 1 && !!hiddenAt(xPosts[0]) && !hiddenAt(yPosts[0]),
+        `the undo keeps Xa's post hidden and brings Ya's back, as the twin is (${uY.status} ${JSON.stringify(uY.body)}, Py ${hiddenAt(yPosts[0]) ? 'hidden' : 'up'})`);
+    const tY = [yPosts[0], xPosts[0]].map(p => { const t = hideTally(p); return `${t.circles.length}/${t.circlesNeeded}`; });
+    assert(hideTally(yPosts[0]).circles.length < 3 && hideTally(xPosts[0]).circles.length >= 3,
+        `and right after, every post of the action is as reports would leave it (Py ${tY[0]}, Px ${tY[1]})`);
 
     // ── 16. a local node ─────────────────────────────────────────────────────────────────────────
     console.log('\n── 16. a local node ──');

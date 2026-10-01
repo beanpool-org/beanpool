@@ -6110,13 +6110,15 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                p.hidden_by_reports_at as post_hidden_at,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
-               pi.deleted_at as pulse_deleted_at
+               pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
-        LEFT JOIN posts p ON ar.target_post_id = p.id
+        -- A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is joined to it.
+        LEFT JOIN posts p ON ar.target_post_id = p.id AND ar.target_pulse_item_id IS NULL
         LEFT JOIN members mp ON p.author_pubkey = mp.public_key
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
+        LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
         ORDER BY ar.created_at DESC
     `;
@@ -6133,14 +6135,19 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
 
     const rows = db.prepare(querySql).all(...queryParams) as any[];
     const reports = rows.map(r => ({ 
-        // Who the report is about: on a post its author, read from the post (as actionReport acts on), never the key the
-        // reporter wrote beside it, so every screen that names or freezes the target names the right member.
-        id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
-        targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
+        // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
+        // wrote beside it. So every screen that names or freezes the target names the right member.
+        id: r.id, reporterPubkey: r.reporter_pubkey,
+        targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
+            : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
+        targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        targetCallsign: r.post_row_id
+        targetCallsign: r.target_pulse_item_id && r.pulse_owner_pubkey
+            ? (r.pulse_owner_callsign || `@${r.pulse_owner_pubkey.substring(0, 8)}`)
+            : r.post_row_id
             ? (r.post_author_callsign || (r.post_author_pubkey ? `@${r.post_author_pubkey.substring(0, 8)}` : 'Unknown Member'))
             : (r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
         postTitle: r.post_title || null,
@@ -6228,7 +6235,8 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
 }
 
 export function dismissReport(reportId: string): boolean {
-    const report = db.prepare("SELECT reporter_pubkey, target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
+    // A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is rechecked or named.
+    const report = db.prepare("SELECT reporter_pubkey, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -6268,14 +6276,20 @@ export function undoBurst(actionId: string): UndoOutcome {
 }
 
 /**
- * Who a report is about, as every moderator's action on it must read it. A report on a post is about the post's author,
+ * Who a report is about, as every moderator's action on it must read it. A report on a Pulse item is about the item's
+ * owner, read from the item, whatever post id the row carries: the route sets no post id on one since #1444, but a row
+ * filed before, or copied in, may carry any. A report on a post is about the post's author,
  * read from the post here, whatever key the reporter wrote beside it: POST /api/reports writes the author since #1431
  * and refuses a post id that isn't here, but a row filed before, or copied in from another server, may name anyone,
  * and a post's id is its author's choice, so a post can arrive later under an id a report named first. Otherwise (a
  * member, a Pulse item, whose owner the route sets, or an enterprise, whose key the phone sends in both fields) the key
  * the report names. Null when it names nobody.
  */
-function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null }): string | null {
+function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    if (report.target_pulse_item_id) {
+        const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
+        return item?.owner_pubkey || report.target_pubkey || null;
+    }
     const postAuthor = report.target_post_id
         ? (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(report.target_post_id) as { author_pubkey: string | null } | undefined)
         : undefined;
@@ -6307,7 +6321,8 @@ export function actionReport(
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
-        if (deletePost && report.target_post_id) {
+        // Only a post report takes a post down: a Pulse report is about its item, whatever post id it carries.
+        if (deletePost && report.target_post_id && !report.target_pulse_item_id) {
             const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s), true);
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);

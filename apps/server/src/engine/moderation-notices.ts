@@ -99,19 +99,20 @@ function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string
 }
 
 /**
- * Close every still-open report on a post the admins removed, and return who filed them. A removed post
+ * Close every still-open report on a post the admins removed, and return who filed them. A Pulse report is about its
+ * item, whatever post id it carries (state-engine reportSubjectOf), so it is never one of them. A removed post
  * leaves nothing to review, so those reports are actioned too; left open, they would keep the pending count
  * up for a post that is already gone.
  */
 export function closeOpenReportsOnPost(postId: string): string[] {
     const rows = db.prepare(
         `SELECT DISTINCT reporter_pubkey FROM abuse_reports
-          WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
     ).all(postId) as { reporter_pubkey: string }[];
     if (rows.length === 0) return [];
     db.prepare(
         `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-          WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
     ).run(postId);
     return rows.map(r => r.reporter_pubkey);
 }

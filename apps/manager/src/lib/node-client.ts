@@ -825,9 +825,10 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                 outcome: typeof r.outcome === 'string' ? r.outcome : (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open'),
                 title: r.title ?? r.postTitle ?? null,
                 postTitle: r.postTitle ?? r.title ?? null,
-                postId: typeof r.postId === 'string' ? r.postId : null,
-                postAuthorCallsign: r.postAuthorCallsign ?? null,
-                postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
+                // A Pulse report is about its item, whatever post a node joined to it (reportSubject): no post.
+                postId: typeof r.postId === 'string' && !onPulseItem(r) ? r.postId : null,
+                postAuthorCallsign: onPulseItem(r) ? null : (r.postAuthorCallsign ?? null),
+                postAuthorPubkey: onPulseItem(r) ? null : (normalizeKeeperPubkey(r.postAuthorPubkey) || null),
                 postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
             };
         });
@@ -1117,9 +1118,10 @@ export async function fetchReports(
             outcome,
             title: r.title ?? r.postTitle ?? null,
             postTitle: r.postTitle ?? r.title ?? null,
-            postId: typeof r.postId === 'string' ? r.postId : null,
-            postAuthorCallsign: r.postAuthorCallsign ?? null,
-            postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
+            // A Pulse report is about its item, whatever post a node joined to it (reportSubject): no post.
+            postId: typeof r.postId === 'string' && !onPulseItem(r) ? r.postId : null,
+            postAuthorCallsign: onPulseItem(r) ? null : (r.postAuthorCallsign ?? null),
+            postAuthorPubkey: onPulseItem(r) ? null : (normalizeKeeperPubkey(r.postAuthorPubkey) || null),
             postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
         };
     }) : [];
@@ -1265,15 +1267,24 @@ export async function fetchBurstDigest(nodeUrl: string, adminPassword?: string, 
     }
 }
 
+/** Whether a report is on a Pulse item: then it is about the item's owner, whatever post id the row carries. */
+function onPulseItem(report: { targetPulseItemId?: unknown; pulseItem?: unknown }): boolean {
+    return (typeof report.targetPulseItemId === 'string' && report.targetPulseItemId !== '')
+        || (!!report.pulseItem && typeof report.pulseItem === 'object');
+}
+
 /**
  * The member a report is about: whom a moderator suspends, freezes, names as its target or opens "Who joined with them"
- * from. A report on a post is about the post's author, as the node reads it from the post (`postAuthorPubkey`), never the
+ * from. A report on a Pulse item is about its owner, the report's target as the node sets it, whatever post id the row
+ * carries (a node before #1444 joined that post to it). A report on a post is about the post's author, as the node reads it from the post (`postAuthorPubkey`), never the
  * key the reporter sent (`targetPubkey`): a crafted report could name anyone beside a real spam post. A node that doesn't
  * say who wrote it gets null, so nothing is offered. Otherwise (a member, or a Pulse item, whose owner the node sets) the
  * report's target.
  */
-export function reportSubject(report: { postId?: unknown; postAuthorPubkey?: unknown; targetPubkey?: unknown; target_pubkey?: unknown }): string | null {
-    if (typeof report.postId === 'string' && report.postId) {
+export function reportSubject(report: {
+    postId?: unknown; postAuthorPubkey?: unknown; targetPubkey?: unknown; target_pubkey?: unknown; targetPulseItemId?: unknown; pulseItem?: unknown;
+}): string | null {
+    if (!onPulseItem(report) && typeof report.postId === 'string' && report.postId) {
         return typeof report.postAuthorPubkey === 'string' && report.postAuthorPubkey ? report.postAuthorPubkey : null;
     }
     const target = typeof report.targetPubkey === 'string' && report.targetPubkey ? report.targetPubkey

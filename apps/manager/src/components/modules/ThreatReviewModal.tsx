@@ -16,6 +16,9 @@ export interface ThreatItem {
     /** A report on a post: the post, and its author as the node read it from the post (who a freeze acts on). */
     postId?: string | null;
     postAuthorPubkey?: string | null;
+    /** A report on a Pulse item: about the item's owner, whatever post id it carries. */
+    targetPulseItemId?: string;
+    pulseItem?: unknown;
 }
 
 export interface MemberItem {

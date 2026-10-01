@@ -1950,6 +1950,14 @@ router.post('/api/reports', async (ctx) => {
             ctx.body = { error: 'targetPulseItemId must be a non-empty string' };
             return;
         }
+        // A Pulse report is about its item and names no post. One that also carried a post id would be read as a report
+        // on that post by everything keyed on posts (its author frozen or suspended, a circle towards hiding it, their
+        // group opened), and the reporter would choose which post: refused, and no app sends one.
+        if (targetPostId !== undefined && targetPostId !== null && targetPostId !== '') {
+            ctx.status = 400;
+            ctx.body = { error: 'pulse_report_names_a_post', message: 'A report on a Pulse item names no post.' };
+            return;
+        }
         const owner = getReportablePulseItemOwner(targetPulseItemId);
         if (!owner) {
             ctx.status = 404;

@@ -490,6 +490,45 @@ describe('PeopleSafetySection Component', () => {
             }
         });
 
+        it("a Pulse report names and freezes the item's owner, even with a post a node joined to it", async () => {
+            vi.useFakeTimers();
+            vi.stubGlobal('fetch', vi.fn());
+            try {
+                const [owner, postAuthor] = [mockMembers[1].publicKey as string, mockMembers[0].publicKey as string];
+                // As a node before #1444 lists a Pulse report whose row carries a post id: that post's author beside it.
+                const onItem = {
+                    id: 'rep_on_item', targetPubkey: owner, reason: 'Offensive clip', outcome: 'open', status: 'pending',
+                    targetPulseItemId: 'item_1', pulseItem: { title: 'A clip', platform: 'youtube', url: null, removed: false },
+                    postId: 'post_other', postTitle: 'Someone else', postAuthorPubkey: postAuthor, postAuthorCallsign: 'alice',
+                };
+                const onFreezeUser = vi.fn().mockResolvedValue(undefined);
+                render(
+                    <PeopleSafetySection
+                        activeNode={mockProfile}
+                        nodeData={{ reports: [onItem], members: mockMembers }}
+                        nodeDataLoading={false}
+                        onRefresh={vi.fn()}
+                        onFreezeUser={onFreezeUser}
+                        onPruneUser={vi.fn()}
+                        onUpdateTier={vi.fn()}
+                        onToggleVoucher={vi.fn()}
+                        onToggleOperator={vi.fn()}
+                        initialSubTab="moderation"
+                    />
+                );
+                expect(screen.getByText(`Target: ${owner.slice(0, 16)}...`)).toBeInTheDocument();
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                expect(onFreezeUser).toHaveBeenCalledTimes(1);
+                expect(onFreezeUser).toHaveBeenCalledWith(owner, true);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
         it("after a refresh the server's outcome wins over what this browser marked", async () => {
             vi.useFakeTimers();
             const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) });

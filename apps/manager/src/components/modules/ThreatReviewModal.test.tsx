@@ -118,6 +118,27 @@ describe('ThreatReviewModal', () => {
         expect(screen.queryByText(/Bob Ring/)).not.toBeInTheDocument();
     });
 
+    it("a Pulse report freezes the item's owner, even when the row carries a post id and a node joined that post's author", async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{
+                    id: 'r-pulse', isReport: true, reason: 'spam',
+                    // The item is Bob's; a post of Alice's was named beside it.
+                    targetPubkey: 'ring0-1784649014864567', targetPulseItemId: 'item-1',
+                    postId: 'post-1', postAuthorPubkey: 'wash1-1784649014864123',
+                }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+        });
+        expect(handleFreeze).toHaveBeenCalledWith(['ring0-1784649014864567']);
+    });
+
     it('a report on a post whose author the node did not say offers nobody to freeze', async () => {
         const handleFreeze = vi.fn().mockResolvedValue(undefined);
         render(

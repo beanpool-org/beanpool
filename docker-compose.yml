@@ -66,6 +66,11 @@ services:
       # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.
       # See apps/server/src/config/expo-access-token.ts.
       - EXPO_ACCESS_TOKEN=${EXPO_ACCESS_TOKEN:-}
+      # The key vault's PUBLIC ticket keys the open door takes (comma-separated, newest first, at most two). EMPTY on
+      # every node but BeanPool's own global one: its door then takes only its own nonce, as it always has, and needs
+      # nothing of BeanPool's. From .env only: never stored, never in a backup or a standby's copy; a standby gets the
+      # same line in its own .env. See apps/server/src/services/vault-ticket-keys.ts.
+      - BEANPOOL_VAULT_TICKET_KEYS=${BEANPOOL_VAULT_TICKET_KEYS:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

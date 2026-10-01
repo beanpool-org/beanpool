@@ -110,6 +110,12 @@ export interface ForceUpdateGate {
  * a held answer still goes up on that return unless it was a safe moment of its own (then the community is asked anew).
  * A door's prompt (the member's words, a payment) is not App Lock's, and still counts as leaving: the block never lands
  * in the middle of what the member started.
+ *
+ * Leaving counts from the safe moment to the answer, not only at the answer: a door's prompt that opened and closed
+ * before a slow answer landed is a leave all the same, and the app back in front by then does not make the answer's
+ * moment safe again (#1415's re-review: the block landed on the words just confirmed, and mid-payment). So each ordinary
+ * leave is counted, and a "block" answer goes up only if none was counted since its safe moment; otherwise it is dropped,
+ * and the next safe moment asks anew.
  */
 export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGate {
     let blocked: { version: string } | null = null;
@@ -119,6 +125,8 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
     /** The app left the front while App Lock's prompt was open, and has not come back yet. */
     let promptAway = false;
     let leftAt: number | null = null;
+    /** Ordinary leaves so far (not App Lock's prompt): a safe moment's answer stands only if none came since it. */
+    let leaves = 0;
     let asks = 0;
     /** A block decided at a safe moment while App Lock's prompt was up: it goes up once the prompt has closed. */
     let held: { version: string } | null = null;
@@ -160,6 +168,7 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         const ask = ++asks;
         held = null;
         const at = deps.now();
+        const leavesAt = leaves;
         let decision: ForceUpdateDecision;
         try { decision = await deps.check(); } catch { decision = { kind: 'unknown' }; }
         // A later ask has the newer answer.
@@ -170,10 +179,10 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
             return;
         }
         if (decision.kind !== 'block') return;
-        // Raised only at the safe moment itself: the app is still in front (App Lock's prompt aside) and the answer came
-        // in time. NaN is not.
+        // Raised only at the safe moment itself: the app has stayed in front since (App Lock's prompt aside: no ordinary
+        // leave, however short, counted since `at`) and the answer came in time. NaN is not.
         const took = deps.now() - at;
-        if (!inFront || !(took <= DECIDE_WITHIN_MS)) return;
+        if (!inFront || leaves !== leavesAt || !(took <= DECIDE_WITHIN_MS)) return;
         if (promptAway || promptOpen()) {
             held = { version: decision.version };
             afterPrompt();
@@ -220,6 +229,7 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
                 }
                 inFront = false;
                 held = null;
+                leaves++;
                 leftAt = deps.now();
             }
         },

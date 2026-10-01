@@ -15,7 +15,11 @@
  *      one is refused 429. Claims whose body the parser never reads past 16 KiB (bodiless signed reads, small forged
  *      writes, /ws connect tokens) don't spend that allowance: after twice the limit of each from one address, a
  *      member's 20 KB chat line from it is answered 200, and forged claims with 1 MB bodies are still refused 429 past
- *      the limit (review 4150386879: a community event behind one NAT address).
+ *      the limit (review 4150386879: a community event behind one NAT address). Only what the parser actually reads past
+ *      16 KiB is charged (the confirm review of #1384, finding 2): after twice the limit of chunked forged claims carrying
+ *      `{}`, and twice the limit declaring 1 MB that send 5 bytes and drop the connection, the member's chat line is
+ *      still answered 200; chunked forged claims carrying 20 KB are refused 429 past the limit; and of two large claims
+ *      let in together with one place left, the second is refused 429 once its body passes 16 KiB.
  *   5. M-4: fresh keypairs signing a public read from one address are charged to its unsigned bucket (429 on the sixth);
  *      members behind one address each keep their own.
  *   6. F4: /api/community/info and /health have a per-address bucket (429 past five times the minute's limit); a burst of
@@ -32,6 +36,10 @@
  *      buckets that start its prune, prunes at most once a request and once a second, and costs a small fraction of the
  *      CPU it did at 06491de5 (three full prunes a request); flooding on, the buckets stay under GATEWAY_MAX_BUCKETS; the
  *      limiter still limits afterwards.
+ *  10. The cap forgets the least-counted buckets first (the confirm review of #1384, finding 1): an address at its
+ *      unsigned limit, a member at theirs, an address at its signed ceiling, one that spent its large claims and one at
+ *      its peer reads are each still refused 429 after a flood from rotating /64s, inside the same minute, that asked
+ *      for several times GATEWAY_MAX_BUCKETS new buckets.
  *
  * On origin/main every numbered section fails (its modules are loaded here only if they exist, so the suite runs there).
  *
@@ -100,6 +108,25 @@ async function closeAll(list: Outcome[]): Promise<void> {
     for (const o of open) o.ws.close();
     await Promise.all(open.map(o => Promise.race([o.closed, sleep(2000)])));
     await sleep(150);
+}
+
+/**
+ * A request written by hand to `port`, for bodies fetch can't send: chunked ones, or a length declared and never sent.
+ * The status the server answered, or 0 when none came; with `drop`, the connection is closed 100 ms after the bytes are
+ * written, answered or not.
+ */
+function rawRequest(port: number, bytes: string, drop = false): Promise<number> {
+    return new Promise((resolve) => {
+        const sock = net.connect(port, '127.0.0.1', () => {
+            sock.write(bytes);
+            if (drop) setTimeout(() => sock.destroy(), 100);
+        });
+        let buf = '';
+        sock.on('data', d => { buf += d.toString(); });
+        sock.on('error', () => { /* answered on close */ });
+        sock.on('close', () => resolve(Number(/^HTTP\/1\.1 (\d{3})/.exec(buf)?.[1] ?? 0)));
+        setTimeout(() => sock.destroy(), 5000);
+    });
 }
 
 /** The code a socket closes with, or -1 if it is still open after `ms`. */
@@ -320,6 +347,74 @@ async function main() {
         for (let i = 0; i <= LIMIT; i++) bigForged.push((await call('POST', PATH, HALL, signedHeaders(ada, 'POST', PATH, huge, keypair().privateKey), huge)).status);
         assert(bigForged.slice(0, LIMIT).every(s => s === 401 || s === 403) && bigForged[LIMIT] === 429,
             `forged claims with 1 MB bodies from it still get the unsigned rate: 429 on the ${LIMIT + 1}th (${bigForged.join(',')})`);
+
+        // Only what the body parser actually reads past 16 KiB is charged (the confirm review of #1384, finding 2): at 2
+        // requests a second, chunked junk claims of a few bytes, or lengths declared and dropped, shut off every member's
+        // writes over 16 KiB from that address (photos in a listing) for a minute.
+        const NAT = '198.51.100.64';
+        const forgedBy = (ip: string, body: string, framing: string, id: Id = ada, signer: crypto.KeyObject | undefined = keypair().privateKey) =>
+            `POST ${PATH} HTTP/1.1\r\nHost: x\r\nCF-Connecting-IP: ${ip}\r\nContent-Type: application/json\r\n${framing}\r\n`
+            + Object.entries(signedHeaders(id, 'POST', PATH, body, signer)).map(([k, v]) => `${k}: ${v}\r\n`).join('') + 'Connection: close\r\n\r\n';
+        const chunk = (s: string) => `${Buffer.byteLength(s).toString(16)}\r\n${s}\r\n`;
+        const freshLine = () => JSON.stringify({ conversationId: conv?.id, authorPubkey: ada.pubKeyHex, ...lockedDm(15_000) });
+        const adaSends = (ip: string) => { const l = freshLine(); return call('POST', '/api/messages/send', ip, signedHeaders(ada, 'POST', '/api/messages/send', l), l); };
+
+        resetGatewayRateLimit();
+        const tinyChunked: number[] = [];
+        for (let i = 0; i < LIMIT * 2; i++) tinyChunked.push(await rawRequest(httpPort, forgedBy(NAT, '{}', 'Transfer-Encoding: chunked') + chunk('{}') + '0\r\n\r\n'));
+        const afterTiny = await adaSends(NAT);
+        assert(tinyChunked.every(s => s === 401 || s === 403) && afterTiny.status === 200,
+            `${LIMIT * 2} forged chunked claims carrying {} from one address reach the signature check (${[...new Set(tinyChunked)].join(',')}), and then a member's 20 KB chat line from it is answered 200 (got ${afterTiny.status} ${afterTiny.text.slice(0, 80)})`);
+
+        resetGatewayRateLimit();
+        const dropped: number[] = [];
+        for (let i = 0; i < LIMIT * 2; i++) dropped.push(await rawRequest(httpPort, forgedBy(NAT, '{}', 'Content-Length: 1000000') + '{"a":', true));
+        await sleep(200);
+        const afterDropped = await adaSends(NAT);
+        assert(afterDropped.status === 200,
+            `${LIMIT * 2} forged claims declaring 1 MB that send 5 bytes and drop the connection spend nothing: a member's 20 KB chat line from that address is then answered 200 (got ${afterDropped.status} ${afterDropped.text.slice(0, 80)}; the dropped ones saw ${[...new Set(dropped)].join(',')})`);
+
+        resetGatewayRateLimit();
+        const pad = JSON.stringify({ type: 'offer', title: 'Forged', authorPublicKey: ada.pubKeyHex, pad: 'z'.repeat(20 * 1024) });
+        const bigChunked: number[] = [];
+        for (let i = 0; i <= LIMIT; i++) {
+            bigChunked.push(await rawRequest(httpPort, forgedBy(NAT, pad, 'Transfer-Encoding: chunked') + chunk(pad.slice(0, 10_000)) + chunk(pad.slice(10_000)) + '0\r\n\r\n'));
+        }
+        assert(bigChunked.slice(0, LIMIT).every(s => s === 401 || s === 403) && bigChunked[LIMIT] === 429,
+            `forged chunked claims carrying 20 KB are charged once the parser reads past 16 KiB: 429 on the ${LIMIT + 1}th (${bigChunked.join(',')})`);
+
+        // A member's chunked large write is charged the same way and given back when it verifies: with one place left,
+        // it is answered 200 and the place is still there for the next forged claim, which then fills it.
+        resetGatewayRateLimit();
+        const statusesBefore: number[] = [];
+        for (let i = 0; i < LIMIT - 1; i++) statusesBefore.push(await rawRequest(httpPort, forgedBy(NAT, pad, 'Transfer-Encoding: chunked') + chunk(pad) + '0\r\n\r\n'));
+        const own = freshLine();
+        const adaChunked = await rawRequest(httpPort,
+            `POST /api/messages/send HTTP/1.1\r\nHost: x\r\nCF-Connecting-IP: ${NAT}\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n`
+            + Object.entries(signedHeaders(ada, 'POST', '/api/messages/send', own)).map(([k, v]) => `${k}: ${v}\r\n`).join('')
+            + 'Connection: close\r\n\r\n' + chunk(own.slice(0, 9_000)) + chunk(own.slice(9_000)) + '0\r\n\r\n');
+        const lastPlace = await rawRequest(httpPort, forgedBy(NAT, pad, 'Transfer-Encoding: chunked') + chunk(pad) + '0\r\n\r\n');
+        const full = await rawRequest(httpPort, forgedBy(NAT, pad, 'Transfer-Encoding: chunked') + chunk(pad) + '0\r\n\r\n');
+        assert(statusesBefore.every(s => s === 401 || s === 403) && adaChunked === 200 && (lastPlace === 401 || lastPlace === 403) && full === 429,
+            `with one place left, a member's chunked 20 KB chat line is answered 200 and gives its place back: the next forged claim takes it, the one after is 429 (${statusesBefore.join(',')}, member ${adaChunked}, ${lastPlace}, ${full})`);
+
+        // Two large claims let in together with one place left: the one whose body passes 16 KiB second is refused then,
+        // through the gateway's own admit and charge, as https-server.ts calls them.
+        const gw: any = await import('./gateway-rate-limit.js');
+        resetGatewayRateLimit();
+        const T = Date.now();
+        const largeClaim = () => ({
+            method: 'POST', path: PATH, ip: '198.51.100.65', state: {} as Record<string, unknown>, status: 404, body: undefined as unknown,
+            get: (h: string) => h.toLowerCase() === 'content-length' ? String(1024 * 1024) : '', set: () => { /* headers */ },
+        }) as any;
+        const charge: ((ctx: unknown, now: number) => boolean) | null = typeof gw.gatewayChargeLargeClaim === 'function' ? gw.gatewayChargeLargeClaim : null;
+        for (let i = 0; i < LIMIT - 1; i++) { const c = largeClaim(); gw.gatewayAdmit(c, LIMIT, true, T); charge?.(c, T); }
+        const first = largeClaim(), second = largeClaim();
+        const admittedBoth = [gw.gatewayAdmit(first, LIMIT, true, T), gw.gatewayAdmit(second, LIMIT, true, T)];
+        const readPast = charge ? [charge(first, T), charge(second, T)] : [];
+        assert(admittedBoth.every(Boolean) && readPast[0] === true && readPast[1] === false && second.status === 429,
+            `two large claims let in together with one place left: both are admitted (${admittedBoth.join(',')}), the first is charged as its body passes 16 KiB and the second is refused 429 then (${charge ? `${readPast.join(',')}, ${second.status}` : 'no charge at the read'})`);
+        resetGatewayRateLimit();
         updateGatewayConfig(unlimited);
     }
 
@@ -495,7 +590,9 @@ async function main() {
         const counted = typeof gw.gatewayPruneRuns === 'function' && typeof gw.gatewayBucketCount === 'function';
         resetGatewayRateLimit();
         // A forged claim with a 1 MB body from its own IPv6 /64, as the review's flood (each charges sig:, claim: and
-        // ip:), through the gateway's own admit and settle, as https-server.ts calls them. The clock is the one passed in.
+        // ip:), through the gateway's own admit, charge (the body parser's, as the body passes 16 KiB) and settle, as
+        // https-server.ts calls them. The clock is the one passed in.
+        const chargeRead = (ctx: unknown, now: number) => { if (typeof gw.gatewayChargeLargeClaim === 'function') gw.gatewayChargeLargeClaim(ctx, now); };
         const forged = (i: number) => ({
             method: 'POST', path: '/api/marketplace/posts', ip: `2001:db8:${(i >>> 16) & 0xffff}:${i & 0xffff}::1`,
             state: {} as Record<string, unknown>, status: 404, body: undefined as unknown,
@@ -509,7 +606,7 @@ async function main() {
             const now = T0 + i; // 1 ms apart: the flood spans 20 s of the limiter's clock
             const before = counted ? gw.gatewayPruneRuns() : 0;
             const ctx = forged(i) as any;
-            if (gw.gatewayAdmit(ctx, 120, true, now)) gw.gatewaySettle(ctx, now);
+            if (gw.gatewayAdmit(ctx, 120, true, now)) { chargeRead(ctx, now); gw.gatewaySettle(ctx, now); }
             if (counted) maxPerRequest = Math.max(maxPerRequest, gw.gatewayPruneRuns() - before);
         }
         const cpu = process.cpuUsage(cpu0);
@@ -529,8 +626,8 @@ async function main() {
             for (let i = N; i < N + more; i++) {
                 const now = T0 + N + Math.floor((i - N) / 10); // about 4 s more: all within the first bucket's minute
                 const ctx = forged(i) as any;
-                if (gw.gatewayAdmit(ctx, 120, true, now)) gw.gatewaySettle(ctx, now);
-                peak = Math.max(peak, gw.gatewayBucketCount());
+                if (gw.gatewayAdmit(ctx, 120, true, now)) { chargeRead(ctx, now); gw.gatewaySettle(ctx, now); }
+                peak =Math.max(peak, gw.gatewayBucketCount());
             }
             assert(peak <= cap, `${more} more claims inside the minute (${(N + more) * 3} buckets asked for, all live) hold the buckets at ${cap} or fewer (peak ${peak})`);
         } else assert(false, `the limiter has a hard cap on its buckets (GATEWAY_MAX_BUCKETS: ${cap || 'none'})`);
@@ -541,6 +638,64 @@ async function main() {
         const admitted: boolean[] = [];
         for (let i = 0; i <= LIMIT; i++) admitted.push(gw.gatewayAdmit({ ...plain, state: {} } as any, LIMIT, false, later + i));
         assert(admitted.slice(0, LIMIT).every(Boolean) && admitted[LIMIT] === false, `the limiter still limits afterwards: 429 on the ${LIMIT + 1}th (${admitted.join(',')})`);
+        resetGatewayRateLimit();
+    }
+
+    // ── 10. The cap keeps the buckets that limit someone ────────────────────────────────────────────────
+    console.log('\n— 10. the cap forgets the least counted first —');
+    {
+        const gw: any = await import('./gateway-rate-limit.js');
+        resetGatewayRateLimit();
+        const MAX = 120; // the default
+        const cap: number = gw.GATEWAY_MAX_BUCKETS ?? 100_000;
+        const T = Date.now() + 10 * 60_000; // a minute of its own on the limiter's clock
+        const fake = (ip: string, method = 'GET', length = '') => ({
+            method, path: method === 'GET' ? '/api/version' : '/api/marketplace/posts', ip, state: {} as Record<string, unknown>,
+            status: 404, body: undefined as unknown, get: (h: string) => h.toLowerCase() === 'content-length' ? length : '', set: () => { /* headers */ },
+        }) as any;
+        const charge = (ctx: unknown, now: number): boolean => typeof gw.gatewayChargeLargeClaim === 'function' ? gw.gatewayChargeLargeClaim(ctx, now) : true;
+        // Each victim, one request at a time, true when admitted. The member's requests come from addresses of their own.
+        let memberHop = 0;
+        const victims: Array<{ name: string; limit: number; once: (now: number) => boolean }> = [
+            { name: 'an address at its unsigned limit (ip:)', limit: MAX, once: (now) => gw.gatewayAdmit(fake('198.51.105.1'), MAX, false, now) },
+            {
+                name: 'a member at theirs (m:)', limit: MAX, once: (now) => {
+                    const c = fake(`198.51.106.${memberHop++ % 250}`);
+                    c.state.gatewaySignedClaim = true;
+                    c.state.actor = ada.pubKeyHex;
+                    return gw.gatewayAdmitMember(c, MAX, true, now);
+                },
+            },
+            { name: 'an address at its signed ceiling (sig:)', limit: MAX * 10, once: (now) => gw.gatewayAdmit(fake('198.51.105.3'), MAX, true, now) },
+            {
+                name: 'an address that spent its large claims (claim:)', limit: MAX, once: (now) => {
+                    const c = fake('198.51.105.4', 'POST', String(1024 * 1024));
+                    return gw.gatewayAdmit(c, MAX, true, now) && charge(c, now);
+                },
+            },
+            { name: 'an address at its peer reads (peer:)', limit: MAX * 5, once: (now) => gw.gatewayAdmitPeerRead(fake('198.51.105.5'), MAX, now) },
+        ];
+        const filled = victims.map(v => { let n = 0; while (n <= v.limit && v.once(T)) n++; return n; });
+        assert(victims.every((v, i) => filled[i] === v.limit),
+            `each victim is let in to its limit and refused after it (${victims.map((v, i) => `${filled[i]}/${v.limit}`).join(', ')})`);
+
+        // The flood: a fresh IPv6 /64 for each request, within the same minute.
+        const FLOOD = Math.ceil(cap * 2.5);
+        let peak = 0;
+        const cpu0 = process.cpuUsage();
+        for (let i = 0; i < FLOOD; i++) {
+            const now = T + 1 + Math.floor(i * 40_000 / FLOOD); // over 40 s: every bucket stays live
+            gw.gatewayAdmit(fake(`2001:db8:${(i >>> 16) & 0xffff}:${i & 0xffff}::1`), MAX, false, now);
+            if (i % 1000 === 0) peak = Math.max(peak, gw.gatewayBucketCount());
+        }
+        const cpu = process.cpuUsage(cpu0);
+        const cpuMs = Math.round((cpu.user + cpu.system) / 1000);
+        assert(peak <= cap, `a flood of ${FLOOD} requests from as many /64s in one minute keeps the buckets at ${cap} or fewer (peak ${peak}, ${cpuMs} ms of CPU)`);
+        const later = T + 45_000;
+        const after = victims.map(v => v.once(later));
+        for (const [i, v] of victims.entries()) {
+            assert(!after[i], `after the flood, ${v.name} is still refused inside its minute (${after[i] ? 'let in again: its bucket was forgotten' : 'refused'})`);
+        }
         resetGatewayRateLimit();
     }
 

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 85,
-  "hash": "cd5840bd82e090e294df6a09e90c4140c7d61ae59d21f9cea0498ed1bfac2c83",
+  "version": 86,
+  "hash": "1041a714dd219b5c61de28e6ee67df3b3e1e54c4e19761cb78518bba307b00b2",
   "sections": [
     {
       "id": "setup",
@@ -316,7 +316,7 @@
         {
           "type": "ul",
           "items": [
-            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
+            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords. It is slowed down by wrong two-factor codes: after 5 for your key, each try waits a little longer, up to an hour. The message says how long. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
             "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD (or with it empty, and read the one it makes up from data/first-admin-password.txt), then set those things again. Members, posts and beans are not touched: they are in data/state.db."
           ]
         }
@@ -653,6 +653,7 @@
             "Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.",
             "Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.",
             "Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.",
+            "Wrong codes at the app's Manage button, or when approving a computer's sign-in from the phone, are counted too, for that person's key and for the internet address they come from. After 5 wrong codes, each further try waits: 2 seconds, then 4, 8 and so on, up to an hour. A right code clears it. If this happens and it wasn't you, someone else has that person's key: remove their role, or sign them out everywhere, and add their new key.",
             "There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.",
             "The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.",
             "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first."
@@ -664,11 +665,19 @@
         },
         {
           "type": "p",
-          "text": "A break-glass code belongs to one owner. It starts with **bg-** and works in place of the admin password, recorded against that owner's name. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners."
+          "text": "A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners, when their key is added."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Using it shows every member a notice: \"Break-glass recovery used to authorise a new admin key for @callsign\". The server's log records whose code it was.",
+            "The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.",
+            "If two-factor sign-in is on, it still asks for the code."
+          ]
         },
         {
           "type": "p",
-          "text": "If you do hold one, keep it offline, like a spare key. Anyone who has it can do what the password can. If two-factor sign-in is on, it still asks for the code."
+          "text": "Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning."
         },
         {
           "type": "h2",
@@ -903,6 +912,10 @@
         {
           "type": "p",
           "text": "Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows."
+        },
+        {
+          "type": "p",
+          "text": "Joining with a code is signed by the new member's own key, from the app or the web app they join in. So someone holding a code can only join as themselves: they can't use it to add a key that belongs to somebody else."
         },
         {
           "type": "h2",
@@ -2441,7 +2454,11 @@
         },
         {
           "type": "p",
-          "text": "Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app."
+          "text": "Signing in from the app's Manage button never goes through the brake. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app. A break-glass code is checked only when adding an admin key, even from an address that is waiting (at most once every 10 seconds from one address); anywhere else it counts as a wrong password."
+        },
+        {
+          "type": "p",
+          "text": "The two-factor code typed at the Manage button, or when approving a computer's sign-in from the phone, has a brake of its own. It counts wrong codes for each person's key and for each internet address: 5 are free, then each further try waits 2 seconds, then 4, 8 and so on, up to an hour. A right code clears both, and so does a day with no wrong code. Wrong passwords never slow this down, and wrong codes here never slow down the password."
         },
         {
           "type": "p",

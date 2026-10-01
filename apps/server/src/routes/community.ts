@@ -986,7 +986,8 @@ router.post('/api/invite/generate', async (ctx) => {
         return;
     }
     // 20 made a day and 50 unused at once, per member (W-main, engine/writer-bounds.ts), checked once the maker is known
-    // to be a member who may invite at all (their 403 below comes first), before anything is written.
+    // to be a member who may invite at all (their 403 below comes first), before anything is written. Where only admins
+    // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
     let invite: ReturnType<typeof generateInvite>;
     try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {

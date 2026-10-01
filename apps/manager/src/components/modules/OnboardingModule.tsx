@@ -55,6 +55,7 @@ const FAILURE_LABELS: Record<string, string> = {
     malformed: 'Broken offline ticket',
     wrong_key: 'Invite made for someone else',
     key_invalidated: 'Key replaced by a re-key',
+    admins_only: "Member's ticket, and only admins invite here",
 };
 
 /** Why the open door turned someone away (server: routes/open-join.ts, the `open_join_failed` variant). */

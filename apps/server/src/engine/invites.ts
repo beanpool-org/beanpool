@@ -5,6 +5,7 @@
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
 import { assertFeatureOn } from '../config/node-profile.js';
+import { assertMayInviteHere, mayInviteHere, ADMINS_ONLY_TICKET_MESSAGE } from '../config/door.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -55,12 +56,16 @@ function assertInvitesOn(): void {
  * `beforeWrite`: a caller's own limit on new codes (the route's 20 a day and 50 unused, W-main), run once the inviter is
  * known to be a member who may bring someone in and before anything is written, so a limit never answers for someone
  * who may not invite at all.
+ *
+ * Where only admins invite (the door, config/door.ts), a member who is no owner or admin here gets DoorClosedError (403
+ * `admins_only`), after the member check and before the limit: a knock's answer included (engine/knocks.ts).
  */
 export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void): InviteCode | null {
     assertPlainTablesWritable();
     assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
+    assertMayInviteHere(inviterPubkey);
     beforeWrite?.();
 
     recordActivity(inviterPubkey);
@@ -312,6 +317,14 @@ export function redeemOfflineTicket(
     if (existingInvite?.used_by) {
         recordFunnelEvent('invite_failed', 'already_used');
         return { success: false, error: 'This exact mathematical offline ticket has already been redeemed' };
+    }
+    // Where only admins invite (the door, config/door.ts), a ticket made by a member is refused. A code is made here, so
+    // one made before the door closed still joins; a ticket is made on the phone and this server first sees it now, and
+    // the date it carries is its maker's own claim, so it can't show it was made before. Nothing is written and the
+    // ticket stays unused: should the door open again, it joins.
+    if (!mayInviteHere(inviterPubkey)) {
+        recordFunnelEvent('invite_failed', 'admins_only');
+        return { success: false, error: ADMINS_ONLY_TICKET_MESSAGE };
     }
     // A ticket is an invite its maker makes on the phone, which this server first sees when someone joins with it, so it
     // counts against the maker's 20 invites a day then (W-main, engine/writer-bounds.ts). Past it, nothing is written and

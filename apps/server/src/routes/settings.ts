@@ -23,6 +23,7 @@ import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, typ
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
+import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
@@ -239,7 +240,7 @@ router.get('/', async (ctx) => {
 // contact), which no reader of this route uses. Who reads what:
 //   - serviceRadius: the web app's map and marketplace, the phone's map (unsigned), the manager, static/settings.js
 //   - the directory switches, push interval and last push: the manager's Node Identity screen and static/settings.js
-//   - acceptKnocks (withKnockSetting, below): the manager's Node Identity screen
+//   - acceptKnocks and door (withKnockSetting, below): the manager's Node Identity screen and People & Safety → Invites
 // The operator's public address is read from the admin route /api/local/admin/public-address/status.
 function publicNodeConfig(config: NodeConfig) {
     const r = config.serviceRadius;
@@ -259,8 +260,10 @@ function publicNodeConfig(config: NodeConfig) {
 // the `knocks` profile switch as configured, so it travels with the profile record (config/node-profile.ts), and it
 // is said here beside the directory settings because Settings shows them together. Public, like the switch itself in
 // /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks).
-function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean } {
-    return { ...config, acceptKnocks: getConfiguredSwitches().knocks };
+// `door`: who may invite here (config/door.ts): `members`, `admins`, or `open` where the profile opens the door and takes
+// no invites. Public, as `features.door` in /api/community/info is.
+function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean; door: ReturnType<typeof getDoor> } {
+    return { ...config, acceptKnocks: getConfiguredSwitches().knocks, door: getDoor() };
 }
 
 router.get('/api/node/config', async (ctx) => {
@@ -274,12 +277,24 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         return;
     }
     // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
-    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks } = (ctx as any).requestBody || {};
+    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door } = (ctx as any).requestBody || {};
     // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
     if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'acceptKnocks must be true or false' };
         return;
+    }
+    // Who may invite (config/door.ts): only when sent, only by an owner (the node password is an owner's), and only a door
+    // this node can have; refused before anything in this request is written. An admin runs the community day to day
+    // but doesn't decide who may bring people into it (design §5: "an owner can also set each dial").
+    if (door !== undefined) {
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change who may invite.')) return;
+        const refusal = doorSettingRefusal(door);
+        if (refusal) {
+            ctx.status = refusal.status;
+            ctx.body = { error: refusal.error, code: refusal.code };
+            return;
+        }
     }
     // The contact switches are an owner's choice to publish, so only a real true or false is taken.
     for (const [name, v] of [['publishContactEmail', publishContactEmail], ['publishContactPhone', publishContactPhone]] as const) {
@@ -296,8 +311,13 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door });
     if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
+    if (door !== undefined && door !== getDoor()) {
+        setDoor(door as CommunityDoor);
+        // Who changed who may bring people in, for the owners: a member key under a key session, the password otherwise.
+        console.log(`🚪 Who may invite is now ${door === 'admins' ? 'only admins' : 'any member'}, set by ${(ctx.state as any)?.actor || 'owner:password'}.`);
+    }
     // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and the
     // location, member count and health switches read unset as "publish": a request that changed one switch published
     // the member count the community had turned off. Settings sends every field (null clears the service area).

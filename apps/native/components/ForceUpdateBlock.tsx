@@ -19,6 +19,7 @@ import {
     leaveFromUpdateBlock, otherCommunitiesOnPhone, planLeaveFromUpdateBlock, switchFromUpdateBlock, type BlockLeavePlan,
     type OtherCommunity,
 } from '../utils/update-block-escape';
+import { holdStatusBarStyle } from '../utils/status-bar-hold';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { usePutAwayAfterLeave } from '../utils/words-put-away';
@@ -100,7 +101,7 @@ function WordsWindow({ children, onClose, background }: { children: ReactNode; o
 }
 
 export default function ForceUpdateBlock() {
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
     const insets = useSafeAreaInsets();
     const { identity, setIdentity } = useIdentity();
     const { recheck } = useNodeStatus();
@@ -168,6 +169,37 @@ export default function ForceUpdateBlock() {
     const wordsPage = wordsShown || page.kind === 'add-words';
 
     const showing = !!block;
+
+    /**
+     * The status bar's icons over the block: dark on its light background, light on its dark one, the rule every screen
+     * uses (app/_layout.tsx and the rest). Held on top of the screens' own StatusBars while the block is up, whatever
+     * mounts beneath it meanwhile, and given back to them when it comes down (utils/status-bar-hold.ts).
+     *
+     * On Android the block is a Modal, a window of its own, which copies the app window's icons once, as it opens
+     * (ReactModalHostView updateSystemAppearance, RN 0.83), and never again. Opened at once, it copied the screen
+     * beneath's (white icons on the block's light page). So it opens BAR_SETTLE_MS after the hold starts, and opens
+     * afresh if the theme flips while it is up. The words' window opens later, with the hold still on, and copies the
+     * same.
+     */
+    const barStyle = theme === 'dark' ? 'light' : 'dark';
+    useEffect(() => {
+        if (!showing) return;
+        return holdStatusBarStyle(barStyle === 'light' ? 'light-content' : 'dark-content');
+    }, [showing, barStyle]);
+    const [barsSetFor, setBarsSetFor] = useState<'light' | 'dark' | null>(null);
+    useEffect(() => {
+        if (!showing || Platform.OS !== 'android') { setBarsSetFor(null); return; }
+        const timer = setTimeout(() => setBarsSetFor(barStyle), BAR_SETTLE_MS);
+        return () => clearTimeout(timer);
+    }, [showing, barStyle]);
+    const barsSet = Platform.OS !== 'android' || barsSetFor === barStyle;
+    /**
+     * Android: the block's own window is open (its Modal's onShow). The words' window, a Modal inside it, opens only after
+     * that: two windows opened in one go can open inner first, and the block's would then cover the words. That happens
+     * when the block opens afresh for a theme flip with the words on screen.
+     */
+    const [blockWindowOpen, setBlockWindowOpen] = useState(false);
+    useEffect(() => { if (!barsSet) setBlockWindowOpen(false); }, [barsSet]);
 
     useEffect(() => {
         if (!showing || Platform.OS !== 'android') return;
@@ -542,7 +574,7 @@ export default function ForceUpdateBlock() {
         <View style={[styles.fill, { backgroundColor: colors.surface.app }]} accessibilityViewIsModal>
             {/* A page in a window of its own (Android, the words) leaves the block's screen under it; any other replaces it. */}
             {page.kind === 'main' || (Platform.OS === 'android' && wordsPage) ? main : null}
-            {pageView}
+            {Platform.OS === 'android' && wordsPage && !blockWindowOpen ? null : pageView}
         </View>
     );
 
@@ -555,8 +587,16 @@ export default function ForceUpdateBlock() {
             </FullWindowOverlay>
         );
     }
+    if (!barsSet) return null;
     return (
-        <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => BackHandler.exitApp()}>
+        <Modal
+            key={barStyle}
+            visible
+            animationType="fade"
+            statusBarTranslucent
+            onShow={() => setBlockWindowOpen(true)}
+            onRequestClose={() => BackHandler.exitApp()}
+        >
             {screen}
         </Modal>
     );
@@ -564,6 +604,12 @@ export default function ForceUpdateBlock() {
 
 /** Space around each page's card, inside the safe area. */
 const PAGE_PADDING = 16;
+/**
+ * How long the Android block waits, after asking for its status bar icons, before its window opens and copies them:
+ * the request reaches the app's window through the native modules' thread, and the window opens from the UI thread's
+ * next frame, so a few frames' margin. The block comes up at a safe moment, never in a hurry.
+ */
+const BAR_SETTLE_MS = 120;
 
 const styles = StyleSheet.create({
     fill: { ...StyleSheet.absoluteFillObject },

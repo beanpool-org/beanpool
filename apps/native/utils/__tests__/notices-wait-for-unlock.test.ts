@@ -33,7 +33,8 @@ type AlertButton = { text?: string; onPress?: () => void };
 function phoneAlert() {
     const raised: Array<{ title: string; buttons: AlertButton[] }> = [];
     const native = (title: string, _message?: string, buttons?: AlertButton[]) => { raised.push({ title, buttons: buttons ?? [] }); };
-    const alert = lockAwareAlert(native);
+    // The app calls it with react-native's AlertButton (text, style, onPress); the wrapper only needs onPress.
+    const alert = lockAwareAlert(native) as unknown as (title: string, message?: string, buttons?: AlertButton[]) => void;
     const tap = (title: string, text: string) => raised.find((a) => a.title === title)?.buttons.find((b) => b.text === text)?.onPress?.();
     return { raised, alert, tap };
 }

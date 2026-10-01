@@ -253,7 +253,8 @@ describe('app/_layout.tsx', () => {
         expect(screenLayout).toContain("if (options.presentation && options.presentation !== 'card') return <AppLockSurface>{children}</AppLockSurface>;");
         expect(screenLayout.match(/<AppLockSurface>/g)).toHaveLength(2);
         expect(s).toMatch(/<AppLockSurface>\s*<NavThemeProvider value=\{navTheme\}>/);
-        expect(s).toMatch(/<\/NavThemeProvider>\s*<\/AppLockSurface>/);
+        // The forged-notice line (components/PushNoticeWarning.tsx) sits inside the same surface, so the lock covers it too.
+        expect(s).toMatch(/<\/NavThemeProvider>\s*(\{\/\*[\s\S]*?\*\/\}\s*)?<PushNoticeWarning \/>\s*<\/AppLockSurface>/);
         // The lock screen is no longer a view of the root layout's own, which every pop-up sat above.
         expect(s).not.toContain('isLocked && identity &&');
     });

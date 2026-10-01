@@ -56,6 +56,11 @@ export async function runPagedCopyChild(extra: Record<string, (args: any) => Pro
             }
             return true;
         },
+        /** A main server's copy `id` closed now, as its standby's DELETE closes it (engine/copy-pages.ts): whether it served it. */
+        'close-copy': async (a: { id: string }) => {
+            const { closeCopy } = await import('./engine/copy-pages.js');
+            return closeCopy(a.id);
+        },
         /** One pull of the kind the loop makes next; `whole` asks the routine whole copy. */
         pull: async (a: { whole?: boolean }) => {
             const { pullNow, getBackupStatus } = await import('./services/backup-puller.js');

@@ -47,8 +47,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
 import {
-    PW_STANDBY, COPY_IDLE_MS, assert, require_, step, sleep, until, snapDiff, first,
-    newPair, startMain, startStandby, pairHelpers, closePair, auditCommand,
+    PW_STANDBY, assert, require_, step, sleep, until, snapDiff, first,
+    newPair, startMain, startStandby, pairHelpers, closeLeftCopy, closePair, auditCommand,
 } from './standby-pair-test-harness.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -79,7 +79,7 @@ async function main(): Promise<void> {
         const newStandby = async (name: string, opts: { maxFileBytes?: number } = {}) => {
             standby = await startStandby(pair, name, main, opts);
             standbyDir = dir(name);
-            await sleep(COPY_IDLE_MS + 500); // a copy the standby before it left open on M closes first
+            await closeLeftCopy(pair, main); // a copy the standby before it left open on M closes first
             const p = await pullAndSwap(false);
             require_(p.ok === true && p.staged === true && (await exactNow()).length === 0, `a new standby's first copy lands (${JSON.stringify(p)})`);
             return name;

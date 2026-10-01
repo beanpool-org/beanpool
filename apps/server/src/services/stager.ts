@@ -41,6 +41,7 @@
  * Run as a child: `node <this file> --stage-copy`, with BEANPOOL_DATA_DIR the staging directory.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -54,7 +55,10 @@ const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data
 export const STAGING_DIR_NAME = 'staging';
 /** Written by the puller once the stager's closing checks pass: the copy may be swapped in. */
 export const READY_FILE = 'READY';
-/** Written when the staging directory is made: when the copy started (`at`, ms), which the orphan sweep reads (stagedObjects). */
+/**
+ * Written when the staging directory is made: when the copy started (`at`, ms), which the orphan sweep reads (stagedObjects),
+ * and which copy made it (`copy`, StagedCopy's stagingId), which a stopped copy reads before it deletes it (removeOwnStaging).
+ */
 const STARTED_FILE = 'STARTED';
 /** Where the database the last swap replaced is kept until the new one passes its first check (services/backup-puller.ts deletePreviousDatabase). */
 export const PREVIOUS_DB = 'state.previous.db';
@@ -211,12 +215,27 @@ function removeStaging(): void {
     }
 }
 
-/** The staging directory, made afresh: the stager's files copied in, and the one image store linked. */
-function prepareStagingDir(): string {
+/**
+ * The staging directory deleted by the copy that made it (`stagingId`, STARTED's `copy`), never by one before it. A stopped
+ * copy's stager is seen to exit only once this process's event loop gets to it, tens of ms after the kill on a busy machine,
+ * and the next pull's copy can make its own staging sooner: a pull that follows a failed one at once (the next tick, an
+ * operator's resync) needs only an answer from the main server. That copy, its staging deleted under it, failed at its
+ * first page (ENOENT) or wherever it was (CI runs 36794955035, 36808165404, 36807832381, 36809568179). A staging that
+ * names no copy (unreadable, or made again by a stager killed as it wrote) is nobody's, and goes. Never throws.
+ */
+function removeOwnStaging(stagingId: string): void {
+    let maker: unknown = null;
+    try { maker = JSON.parse(fs.readFileSync(path.join(stagingDir(), STARTED_FILE), 'utf-8'))?.copy; } catch { /* none: nobody's */ }
+    if (typeof maker === 'string' && maker !== stagingId) return;
+    removeStaging();
+}
+
+/** The staging directory, made afresh by the copy `stagingId`: the stager's files copied in, and the one image store linked. */
+function prepareStagingDir(stagingId: string): string {
     const dir = stagingDir();
     fs.rmSync(dir, { recursive: true, force: true });
     fs.mkdirSync(path.join(dir, 'pages'), { recursive: true });
-    fs.writeFileSync(path.join(dir, STARTED_FILE), JSON.stringify({ at: Date.now() }));
+    fs.writeFileSync(path.join(dir, STARTED_FILE), JSON.stringify({ at: Date.now(), copy: stagingId }));
     for (const name of FILES_FOR_THE_STAGER) {
         const from = path.join(DATA_DIR, name);
         if (!fs.existsSync(from)) continue;
@@ -271,7 +290,11 @@ export class StagedCopy {
     /** The stager has stopped, and its output is read to the end (its last answer included). */
     private readonly closed: Promise<number | null>;
 
-    private constructor(readonly copyId: string, readonly dir: string, private readonly proc: ChildProcess, private readonly ready: Promise<void>) {
+    private constructor(
+        readonly copyId: string, readonly dir: string, private readonly proc: ChildProcess, private readonly ready: Promise<void>,
+        /** This copy's own mark on the staging directory it made (STARTED's `copy`): it deletes that one only. */
+        private readonly stagingId: string,
+    ) {
         this.exited = new Promise((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
         this.closed = new Promise((resolve) => proc.on('close', (code, signal) => resolve(code ?? (signal ? -1 : null))));
         // A page written to a stager that has stopped fails (EPIPE); what the copy reports is the stop itself, below.
@@ -288,7 +311,8 @@ export class StagedCopy {
     /** The staging directory made afresh, and a stager started on it. One at a time. */
     static async start(copyId: string): Promise<StagedCopy> {
         if (current) throw new Error('A whole copy is already being built');
-        const dir = prepareStagingDir();
+        const stagingId = crypto.randomUUID();
+        const dir = prepareStagingDir(stagingId);
         const script = fileURLToPath(import.meta.url);
         const proc = spawn(process.execPath, [...process.execArgv, script, '--stage-copy'], {
             // A standby, whatever told this process so (its .env, its local config, or a role set while it runs).
@@ -298,7 +322,7 @@ export class StagedCopy {
         let readyResolve!: () => void;
         let readyReject!: (e: Error) => void;
         const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
-        const staged = new StagedCopy(copyId, dir, proc, ready);
+        const staged = new StagedCopy(copyId, dir, proc, ready, stagingId);
         current = staged;
         readline.createInterface({ input: proc.stdout! }).on('line', (line) => {
             if (!line.startsWith('@@ ')) {
@@ -406,9 +430,10 @@ export class StagedCopy {
         if (this.proc.exitCode === null && this.proc.signalCode === null) {
             try { this.proc.kill('SIGKILL'); } catch { /* gone */ }
         }
-        removeStaging();
-        // What the stager was writing when it was killed goes too, once it has stopped.
-        void this.exited.then(() => { if (!fs.existsSync(path.join(stagingDir(), READY_FILE))) removeStaging(); });
+        removeOwnStaging(this.stagingId);
+        // What the stager was writing when it was killed goes too, once it has stopped: unless the next copy has made its
+        // own staging by then (removeOwnStaging).
+        void this.exited.then(() => { if (!fs.existsSync(path.join(stagingDir(), READY_FILE))) removeOwnStaging(this.stagingId); });
         console.warn(`[Stager] The whole copy being built was stopped and its staging deleted: ${why}`);
     }
 

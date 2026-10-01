@@ -220,6 +220,7 @@ export const SUITES = [
     'test-apple-return',
     'test-recovery-backup-durability',
     'test-public-address',
+    'test-clean-label',
     'test-tunnel-connector',
     'test-no-docker-socket',
     'test-node-config-public',
@@ -431,10 +432,12 @@ export const SERIAL = {
     // Its unpaced copy must make 300 requests inside a scaled 20 s limiter window (11.6 s alone, 15 s with all 12 cores
     // busy): a loaded neighbour can push it past the window, and the check then says nothing about the code (#1334).
     'test-standby-paged-copies-pacing': 'request rate inside a scaled 20 s window',
-    // Its stager boots in ~8 s under load against M's copy idle time scaled to 3 s: M closes the copy (404) and the steps
-    // after it cascade (48/77 in the pool, 93/93 alone, #1334).
-    'test-standby-paged-copies': 'stager boot against a scaled 3 s copy idle time',
+    // Here for its stager's boot, ~8 s under load, against M's copy idle time scaled to 3 s: M closed the copy (404) and
+    // the steps after it cascaded (48/77 in the pool, 93/93 alone, #1334). M's idle time is two minutes now, as in
+    // production (standby-pair-test-harness.ts), and the steps close a copy a standby left; it stays serial until it has
+    // been measured in the pool.
+    'test-standby-paged-copies': 'many node processes and stagers; was a scaled 3 s copy idle time',
     // Steps 17-25 of the suite above, split from it to keep each well inside the runner's 300 s (255 s on CI run
-    // 36747148280): the same pair, the same stager boot against the same 3 s copy idle time.
-    'test-standby-swap-at-boot': 'stager boot against a scaled 3 s copy idle time',
+    // 36747148280): the same pair, built the same way.
+    'test-standby-swap-at-boot': 'many node processes and stagers; was a scaled 3 s copy idle time',
 };

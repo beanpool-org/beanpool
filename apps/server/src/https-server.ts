@@ -154,7 +154,7 @@ import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
-    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade,
+    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
 } from './gateway-rate-limit.js';
 import { wsLimits, wsHasRoom, admitWsSocket, admitLogSocket, frameAllowed } from './ws-limits.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
@@ -1319,8 +1319,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                // A signature claim the gateway didn't charge to its address's unverified claims carries a small body
-                // at most (gateway-rate-limit.ts CLAIM_SMALL_BODY_BYTES), whatever its length said.
+                // A signature claim the gateway let in as small carries a small body at most (gateway-rate-limit.ts
+                // CLAIM_SMALL_BODY_BYTES), whatever its length said. One it let in as possibly large is charged to its
+                // address's unverified claims once more than that has been read, never for what it only declared.
                 const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
                 const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
@@ -1329,8 +1330,9 @@ export async function startHttpsServer(port: number): Promise<number> {
                     ctx.body = { error: 'Request body too large' };
                     return;
                 }
+                const pastSmall = ctx.state.gatewayLargeClaim ? () => gatewayChargeLargeClaim(ctx) : undefined;
                 try {
-                    const body = await readBody(ctx.req, routeLimit);
+                    const body = await readBody(ctx.req, routeLimit, pastSmall);
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
@@ -1356,6 +1358,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                         ctx.body = { error: 'Request body too large' };
                         return;
                     }
+                    if (e instanceof BodyRefusedError) return; // gatewayChargeLargeClaim answered 429
                     (ctx as any).requestBody = {};
                     (ctx.request as any).body = {};
                 }
@@ -1851,8 +1854,14 @@ function routeBodyLimit(path: string): number {
 }
 
 class BodyTooLargeError extends Error { constructor() { super('Request body too large'); this.name = 'BodyTooLargeError'; } }
+/** `pastSmall` refused the body: the response is already set. */
+class BodyRefusedError extends Error { constructor() { super('Request body refused'); this.name = 'BodyRefusedError'; } }
 
-function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES): Promise<string> {
+/**
+ * `pastSmall`, when given, is asked once, as the body read passes CLAIM_SMALL_BODY_BYTES (a signature claim the gateway
+ * charges only then, gatewayChargeLargeClaim); false stops the read as BodyRefusedError.
+ */
+function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES, pastSmall?: () => boolean): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -1860,6 +1869,15 @@ function readBody(req: import('node:http').IncomingMessage, maxBytes: number = M
         req.on('data', (chunk: Buffer) => {
             if (aborted) return; // already over limit — discard without buffering
             total += chunk.length;
+            if (pastSmall && total > CLAIM_SMALL_BODY_BYTES) {
+                const go = pastSmall();
+                pastSmall = undefined;
+                if (!go) {
+                    aborted = true;
+                    reject(new BodyRefusedError()); // as for an over-limit body, stop buffering without destroying the socket
+                    return;
+                }
+            }
             if (total > maxBytes) {
                 aborted = true;
                 reject(new BodyTooLargeError()); // stop buffering; do NOT destroy the

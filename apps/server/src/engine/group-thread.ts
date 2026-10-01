@@ -409,7 +409,14 @@ export function postGroupThreadMessage(
     }, groupId, GROUP_THREAD_REMOVED_TEXT);
 
     broadcastToChat(cb, groupId, msg);
-    pushGroupMessage(cb, group, authorPubkey, sender?.callsign || 'A member', mentions);
+    // After the answer, never inside it: the push skips anyone who has blocked the author (state-engine.ts
+    // dispatchPushNotification), and their badge count's work in the answer would make a line's answer faster when
+    // someone in the group has blocked its author, which would tell them (#1403 review).
+    const senderName = sender?.callsign || 'A member';
+    setImmediate(() => {
+        try { pushGroupMessage(cb, group, authorPubkey, senderName, mentions); }
+        catch (e: any) { console.warn('[Push] A group line push failed:', e?.message ?? e); }
+    });
     return msg;
 }
 

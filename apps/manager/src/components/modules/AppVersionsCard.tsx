@@ -145,7 +145,7 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
             )}
 
             <p className="text-xs text-nature-400 m-0 mt-3">
-                Counted by this server from the app's own requests: how many members run each version, never who, and
+                Counted by this server from the app's own requests: how many members (and visitors) run each version, never who, and
                 kept only until the server restarts. Apps from before the full-screen update don't say their version, so
                 they aren't counted: no floor can stop them, they show a banner only.
             </p>

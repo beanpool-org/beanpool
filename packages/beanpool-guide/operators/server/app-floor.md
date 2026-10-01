@@ -28,7 +28,7 @@ A floor that is not a version is ignored. A grace date that is not a date turns 
 
 ## Raising it safely
 
-- **Look first.** Home's **Phone app versions** card shows, for Android and iPhone, how many members run each version, how many are below the floor, and what each floor is doing now. It counts the members seen in the last 30 days, or since the server last started.
+- **Look first.** Home's **Phone app versions** card shows, for Android and iPhone, how many people run each version, how many are below the floor, and what each floor is doing now. It counts the members and visitors seen in the last 30 days, or since the server last started.
 - **Check the store has it.** The card says what Google Play and the App Store have. A floor above that waits by itself, and the card and the log say so.
 - **Give a grace date** a week or so ahead, and tell members before it, with an announcement.
 - **One kind of phone at a time** when the stores differ. If the App Store does not have the new version yet, give iPhones a later grace date of their own (MIN_APP_VERSION_FROM_IOS): an iPhone floor that waited for the store applies as soon as the store has the version, so without a later date iPhones would stop with no banner first.

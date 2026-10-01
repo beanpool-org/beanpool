@@ -97,7 +97,7 @@ Home shows how many times the web app was opened on your server each day for the
 
 ## Phone app versions
 
-The phone app says which version it is, and whether it is Android or iPhone, on each request to its community, so Home can show how many members run each version before you raise the app's floor (see Raising the app's floor). Your server counts only members' requests whose signature it has checked, and keeps the counts in memory only: never in the database, a file or the logs, and gone when the server restarts. To count each member once it scrambles their key with a key of its own, made when the server starts and never written down, so the counts cannot be matched to a member. A member not seen for 30 days drops out. The server never refuses an app because of its version.
+The phone app says which version it is, and whether it is Android or iPhone, on each request to its community, so Home can show how many people run each version before you raise the app's floor (see Raising the app's floor). Your server counts only requests from members and visitors whose signature it has checked: visitors run the app too, and a floor would stop them as well. On the global node most of the people counted are visitors. It keeps the counts in memory only: never in the database, a file or the logs, and gone when the server restarts. To count each person once it scrambles their key with a key of its own, made when the server starts and never written down, so the counts cannot be matched to anyone. Someone not seen for 30 days drops out. The server never refuses an app because of its version.
 
 ## What your server sends elsewhere
 

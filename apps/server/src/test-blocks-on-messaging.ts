@@ -106,8 +106,8 @@ function newId(name: string): Id {
     return { pk: (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex'), priv: privateKey, name };
 }
 let owner: Id;
-function member(name: string): Id {
-    const id = newId(name);
+function member(name: string, made?: Id): Id {
+    const id = made ?? newId(name);
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, avatar_url)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0, ?)`)
         .run(id.pk, name, owner.pk, `https://example.org/${name}.jpg`);
@@ -650,8 +650,12 @@ async function main(): Promise<void> {
     // #1403 re-review, NON-BLOCKING: a real conversation's participants and read cursors come in key order; this one put its
     // owner first, so for about half of all pairs the order alone told a scripted sender. Hi's key sorts after Ann's.
     console.log('── 13. participants in a real conversation\'s order ──');
-    let hi = member('Hi0');
-    for (let i = 1; hi.pk < ann.pk && i < 40; i++) hi = member(`Hi${i}`);
+    // Draw keys until one sorts after Ann's, with no cap: Ann's key is random, and when it lands near the top a capped
+    // loop gave up (about once in 16 runs) and the check then failed for want of a fixture, not for a fault. Only the
+    // winner becomes a member.
+    let hiKey = newId('Hi');
+    while (hiKey.pk <= ann.pk) hiKey = newId('Hi');
+    const hi = member('Hi', hiKey);
     await call('POST', ann, '/api/blocks', { targetPubkey: hi.pk });
     const hc = await call('POST', hi, '/api/messages/conversation', { type: 'dm', participants: [hi.pk, ann.pk], createdBy: hi.pk });
     const hiConv: string = hc.body?.conversation?.id;

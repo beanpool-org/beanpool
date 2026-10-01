@@ -62,6 +62,9 @@ import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
+import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 
 
@@ -991,13 +994,19 @@ export default function SettingsScreen() {
     const [newNodeAlias, setNewNodeAlias] = useState('');
     const [redeemInviteCode, setRedeemInviteCode] = useState('');
     const [redeemLoading, setRedeemLoading] = useState(false);
-    
+    // The global community's door for the account on this phone (utils/global-join-existing.ts), beside adding a
+    // community by hand: once the global community has said its door is open, unless the phone is a member there.
+    const [globalStanding, setGlobalStanding] = useState<GlobalStanding>('unknown');
+    const globalDoorOpen = useGlobalDoorOpen(mode === 'advanced' && !!identity);
+    const offerGlobal = doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
+
     React.useEffect(() => {
         if (mode === 'advanced') {
             AsyncStorage.getItem('beanpool_anchor_url').then(val => {
                 setAnchorUrl(val || 'Local discovery (or offline)');
                 if (val) setNewAnchorInput(val);
             });
+            globalStandingOnPhone().then(setGlobalStanding).catch(() => {});
             
             // Load and ping all saved nodes
             getSavedNodes().then(async nodes => {
@@ -2419,6 +2428,17 @@ export default function SettingsScreen() {
                     })}
 
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
+
+                    {offerGlobal && (
+                        <>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>Join the global community</Text>
+                            <Text style={styles.infoText}>Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.</Text>
+                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
+                                <Text style={styles.primaryBtnText}>🌍 Join the global community</Text>
+                            </Pressable>
+                            <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
+                        </>
+                    )}
 
                     <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>Add Manual Node</Text>
                     <Text style={styles.infoText}>You can manually append an offline Node IP Address to your keychain bypass, directly executing a forced sync pipeline setup.</Text>

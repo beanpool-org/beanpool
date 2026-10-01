@@ -11,7 +11,7 @@ import { bootClockMs } from '../modules/boot-clock';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { checkCommunityForUpdate, createForceUpdateGate, STORE_URLS } from '../utils/force-update';
 import { hasMnemonic } from '../utils/identity';
-import { authenticateUser, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
+import { authenticateUser, doorPrompts, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import {
     leaveFromUpdateBlock, otherCommunitiesOnPhone, planLeaveFromUpdateBlock, switchFromUpdateBlock, type BlockLeavePlan,
@@ -128,6 +128,8 @@ export default function ForceUpdateBlock() {
             // App Lock's own unlock prompt is not the member leaving (utils/force-update.ts).
             appLockPromptOpen: isAppLockPromptOpen,
             whenAppLockPromptsClose,
+            // A door's prompt (the words, a payment) is the member leaving, even where it never changes AppState.
+            doorPrompts,
         });
         void gate.start(AppState.currentState);
         const sub = AppState.addEventListener('change', (next) => { void gate.appStateChanged(next); });

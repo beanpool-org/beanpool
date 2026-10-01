@@ -85,7 +85,7 @@ Anyone can join the global community with a sign-in, so one person can make seve
 
 **Tick, then act.** A shared connection can be a household, a meetup, a campus or a phone network, so real people can be in a group with a spammer:
 
-- Accounts that are established (standing 4 or more: a month as a member, or a week with posts that stayed up) start unticked. Anyone who holds a role (owner, admin or moderator) can never be included. Untick anyone you are not sure of.
+- Accounts that are established (standing 4 or more: a month as a member, or a week with posts that stayed up) start unticked. Here a post hidden for review still counts as up, so hiding an account's posts first never makes it easier to remove. Anyone who holds a role (owner, admin or moderator) can never be included. Untick anyone you are not sure of.
 - Before anything happens you are told again how many accounts, their standing, and which of them are established.
 - The server acts only on the accounts you ticked: one that joined after you opened the list is never included. It does nothing at all if one of them is no longer in the group, or if an established account is included without your saying so.
 

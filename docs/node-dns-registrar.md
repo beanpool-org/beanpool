@@ -355,14 +355,16 @@ lands on us. So abuse controls ship **with** the registrar, not after.
    sweeps in a row, about an hour, pause it, and only in sweeps that saw the verifier working, the canary `ok` or
    with none some name `ok`); and `unverifiable` (anything else: down, 5xx, an unknown signing format — never
    evidence). While a run is open, an `ok` is asked again (three answers in all), so a second connector on a copy
-   of the tunnel token can't hide behind the owner's answers. A sweep with too many foreign answers at once
+   of the tunnel token can't hide behind the owner's answers, if it answers the attest with another key or a page. One that
+   answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, which never opens a run, so it is not detected. A sweep with too many foreign answers at once
    (impostors and swaps together > max(2, 10% of live), or every live name) is the registrar's fault and acts on
    none. A pause deletes the tunnel and the record; the owner's node asks for the name back by itself (a heal,
    never a claim: on the agent's next tick, or when its dead tunnel is noticed), and it is routed again once the
    node proves its key — on a fresh tunnel only its signed request gets the token of, or (a direct name) through
    an attest at the name under its key. Only an admin pause needs the admin. The holder can also **rotate**
    (Settings' New tunnel key): its name onto a fresh tunnel, the old token dead at once — for a token that may
-   have leaked (a copied data folder or backup, a standby given away). See `apps/registrar/README.md`.
+   have leaked (a standby given away, a token seen on a screen). It does not lock out a copied data folder or backup:
+   that holds the node key, and `/status` gives that key the new token within a tick. See `apps/registrar/README.md`.
 2. **Approval gate.** Manual approval on `gated` names now (paper trail, bound to pubkey + contact);
    auto for the rest. Fast one-click **revoke** always available.
 3. **Raise the cost of anonymity.** Registration binds `name → node_pubkey` + a contact / an existing

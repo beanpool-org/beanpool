@@ -24,7 +24,7 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   or JSON with no signature): something other than a BeanPool node answers at the name — a stranger's server at a
   direct name's old IP address, or a connector running on a copy of the tunnel's token. A BeanPool node never answers
   one. While a run (below) is open on a name, an `ok` is asked again, up to three answers in all: two connectors on
-  one tunnel share its visitors, and the owner's answer must not hide the other one. Phase 2 runs only if the sweep
+  one tunnel share its visitors, and the owner's answer must not hide the other one. This holds only for a wrong key or a page: a second connector that answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, never opens a run, and is not detected (New tunnel key cuts it off). Phase 2 runs only if the sweep
   is believable: a configured `CANARY_NAME` attested `ok`, impostors and content swaps together ≤ max(2, 10% of
   live) and not every live name, unverifiable ≤ half of live. Otherwise it acts on no row and logs
   `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: `ATTEST_FAIL_LIMIT` (2)
@@ -104,8 +104,8 @@ reports the owner's row in any state with `reason` and `since` (and `held_until`
 
 **Rotate** — `POST /api/registrar/rotate {name?, origin?}`, signed by the name's key (M3 of the 2026-10-01 review):
 its own tunnel name, live or paused by anything but the admin, onto a fresh tunnel. The old tunnel is deleted at
-Cloudflare first, so every connector running on a copy of its token (a copied data folder or backup, a standby given
-away, a token shown on a screen) is cut off; then the owner's heal makes the new one, re-points the record at it (the
+Cloudflare first, so every connector running on a copy of its token (a standby given
+away, a token shown on a screen) is cut off (a copied data folder or backup is not: it holds the node key, and `/status` hands that key the new token on its own); then the owner's heal makes the new one, re-points the record at it (the
 record is kept, never deleted: a resolver that saw the name missing would remember that for up to half an hour) and
 answers with its `tunnelToken`. `origin` moves the tunnel's destination at the same time. Row first: the old tunnel
 leaves the row (a decision) before Cloudflare deletes it, so a request that read the row earlier misses its write. If

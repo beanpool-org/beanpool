@@ -618,6 +618,9 @@ describe('PublicAddressPanel Component', () => {
         const button = await screen.findByRole('button', { name: /New tunnel key/i });
         fireEvent.click(button);
         expect(screen.getByText('Give the tunnel a new key')).toBeInTheDocument();
+        // Honest about its limit: it does not lock out a copied data folder or backup.
+        expect(screen.getByText(/does NOT protect you from a copy of this server’s data folder or a backup/)).toBeInTheDocument();
+        expect(screen.queryByText(/nobody can use a copy/)).not.toBeInTheDocument();
         expect(screen.getByText(/the old key stops working at once/i)).toBeInTheDocument();
         expect(rotateCalls).toBe(0);
         fireEvent.click(screen.getByRole('button', { name: 'New key now' }));

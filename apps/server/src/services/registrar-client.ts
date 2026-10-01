@@ -202,7 +202,8 @@ export const healAddress = (name: string, origin?: string) =>
     signedFetch('POST', '/api/registrar/heal', { name, ...(origin ? { origin } : {}) });
 /**
  * Move this server's tunnel name onto a fresh tunnel: a new token, and the old tunnel deleted, so a copy of its token
- * (a copied data folder or backup, a standby given away) stops working. `origin` re-points the tunnel at the same time.
+ * (a standby given away, a token seen on a screen) stops working. A copied data folder or backup is not cut off: it holds
+ * the node key, which /status gives the new token. `origin` re-points the tunnel at the same time.
  */
 export const rotateAddress = (name: string, origin?: string) =>
     signedFetch('POST', '/api/registrar/rotate', { name, ...(origin ? { origin } : {}) });

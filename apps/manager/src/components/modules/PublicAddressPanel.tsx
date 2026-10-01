@@ -329,7 +329,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         setConfirmModal({
             isOpen: true,
             title: 'Give the tunnel a new key',
-            message: 'Replace the tunnel’s key? Do this if a copy of this server’s data folder, a backup, or the key itself may have reached someone else: the old key stops working at once, so nobody can use a copy to answer at this address. This server switches to the new key by itself; visitors’ connections drop for a few seconds.',
+            message: 'Replace the tunnel’s key? Do this if only the tunnel’s key may have reached someone else (it was shown on this screen, or a standby you gave away): the old key stops working at once. This does NOT protect you from a copy of this server’s data folder or a backup: that copy holds the server’s own key and gets the new tunnel key by itself. This server switches to the new key by itself; visitors’ connections drop for a few seconds.',
             actionType: 'rotate',
             confirmButtonText: 'New key now',
         });

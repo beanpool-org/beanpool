@@ -274,7 +274,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
     });
 
     // Settings' "New tunnel key": the name onto a fresh tunnel (the registrar's rotate). The old tunnel is deleted, so a copy
-    // of its token (a copied data folder or backup, a standby given away, the token shown on this screen) stops working;
+    // of its token (a standby given away, the token shown on this screen) stops working. A copy of the data folder or a backup
+    // is NOT cut off: it holds the node key, and /status hands that key the new token;
     // the tunnel inside this server restarts on the new one. Only the main server runs the tunnel, so only it rotates.
     router.post('/api/local/admin/public-address/rotate', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;

@@ -840,8 +840,8 @@ async function handleHeal(request, env, bodyText) {
 }
 
 // POST /api/registrar/rotate {name?, origin?} — the owner's name onto a fresh tunnel (M3 of the 2026-10-01 review): a new
-// token, and the old tunnel deleted at Cloudflare, so a connector running on a copy of its token (a copied data folder or
-// backup, a standby given away, a token shown on a screen) is cut off. `origin` re-points the tunnel at the same time.
+// token, and the old tunnel deleted at Cloudflare, so a connector running on a copy of its token (a standby given away,
+// a token shown on a screen) is cut off. A copied data folder or backup is NOT: it holds the node key, and /status gives it the new token. `origin` re-points the tunnel at the same time.
 // Signed by the name's key, for its own tunnel name that is live, or paused by anything but the admin (then the rotate is
 // its heal, on a fresh tunnel). The record at the hostname is kept and re-pointed, never deleted: a resolver that saw the
 // name missing would remember that for up to half an hour.

@@ -204,6 +204,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
 
     const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
     const { installOpenJoinKeyAtBoot } = await import('./services/open-join-key.js');
+    const { announceVaultTicketKeysAtBoot } = await import('./services/vault-ticket-keys.js');
     const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
@@ -217,9 +218,10 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     }
     const boot = resumeTakeoverAtBoot();
     // index.ts step 2.65: the recovery seal and the open door's key for the role as it now stands (a take-over finished at
-    // this boot), and GitHub's rows.
+    // this boot), which key vault tickets the door takes, and GitHub's rows.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
     installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
+    announceVaultTicketKeysAtBoot();
     removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();

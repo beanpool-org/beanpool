@@ -62,6 +62,7 @@ export const SUITES = [
     'test-recovery-seal-removed',
     'test-keeper-http',
     'test-open-join',
+    'test-open-join-vault-ticket',
     'test-open-door-counters',
     'test-web-door',
     'test-web-visits',

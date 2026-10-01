@@ -121,9 +121,68 @@ export function _clearNoncesForTests(): void {
     issuedNonces.clear();
 }
 
+// ─── key vault tickets (the open door, key vault V5) ─────────────────────────────────────────
+//
+// A sign-in at the open door may be bound to a key vault deposit ticket instead of a nonce this node issued
+// (routes/open-join.ts): the token's nonce is then the ticket's hash (@beanpool/core vaultTicketNonce). The route checks
+// the ticket itself (signed by a pinned vault key, unexpired, for a deposit, naming the joining key); what is here is
+// what the shared verifier needs: the ticket the sign-in in flight was presented with, and the tickets already used.
+//
+// Its own verifier, sharing the one key cache, consumes only those, and the nonce verifier above only the nonces this
+// node issued: a nonce this node issued is never accepted as a ticket's and a ticket's never as an issued one, by
+// construction rather than by the odds of two random values colliding.
+//
+// In memory only, as the nonces are: never persisted, never replicated. A restart within a ticket's ten minutes forgets
+// it, which hands its key holder nothing a fresh sign-in would not: the join must be signed by the ticket's key, a key
+// joins once, and a sign-in account once (engine/open-join.ts). The set makes "used once" literally true, and a second
+// submit a clean refusal rather than one that blames the sign-in account.
+
+interface PendingTicket {
+    n: string;
+    exp: number;
+    subject: string;
+}
+
+/** The ticket each sign-in being checked was presented with, by the ticket's nonce. */
+const pendingTickets = new Map<string, PendingTicket>();
+/** Tickets used, by their `n`, until they expire (an expired ticket is refused as expired anyway). */
+const usedTickets = new Map<string, number>();
+let lastTicketSweep = 0;
+
+function consumeTicket(nonce: string, subject: string): boolean {
+    const ticket = pendingTickets.get(nonce);
+    // Another subject's ticket is not spent, as for a nonce (consumeNonce).
+    if (ticket === undefined || ticket.subject !== subject || usedTickets.has(ticket.n)) return false;
+    // The same throttled sweep as issueNonce's.
+    const now = Date.now();
+    if (usedTickets.size > 1000 && now - lastTicketSweep > NONCE_SWEEP_INTERVAL_MS) {
+        lastTicketSweep = now;
+        for (const [n, exp] of usedTickets) if (exp <= now) usedTickets.delete(n);
+    }
+    usedTickets.set(ticket.n, ticket.exp);
+    return true;
+}
+
+/** Whether the ticket with this `n` was used for a sign-in here (since this process started). */
+export function vaultTicketUsed(n: string): boolean {
+    return usedTickets.has(n);
+}
+
+export function _clearUsedTicketsForTests(): void {
+    usedTickets.clear();
+}
+
+/** A key vault ticket a sign-in is bound to: its nonce (vaultTicketNonce), its `n` and its expiry, as the route checked it. */
+export interface VaultTicketSignIn {
+    nonce: string;
+    n: string;
+    exp: number;
+}
+
 // ─── verification ─────────────────────────────────────────────────────────────────────────────
 
 const verifier = createSignInVerifier({ jwks, consumeNonce });
+const ticketVerifier = createSignInVerifier({ jwks, consumeNonce: consumeTicket });
 
 /**
  * Verify a provider `id_token` (packages/beanpool-signin/src/verify.ts has what is checked, and why).
@@ -154,6 +213,29 @@ export function verifySignIn(
     subject: string,
 ): Promise<SsoIdentity> {
     return verifier.verifySignIn(provider, credential, allowedAudiences, expectedNonce, subject);
+}
+
+/**
+ * Verify a sign-in bound to a key vault ticket the caller has already checked (routes/open-join.ts): the same checks as
+ * verifySignIn, with the ticket's nonce as the expected nonce, and the ticket used once it matches. A mismatch spends
+ * nothing, as for a nonce.
+ */
+export async function verifySignInWithVaultTicket(
+    provider: SsoProvider,
+    credential: SignInCredential,
+    allowedAudiences: string[],
+    ticket: VaultTicketSignIn,
+    subject: string,
+): Promise<SsoIdentity> {
+    if (!subject) throw new SsoVerificationError('A sign-in must be bound to a member.');
+    const pending: PendingTicket = { n: ticket.n, exp: ticket.exp, subject };
+    pendingTickets.set(ticket.nonce, pending);
+    try {
+        return await ticketVerifier.verifySignIn(provider, credential, allowedAudiences, ticket.nonce, subject);
+    } finally {
+        // Only this request's entry: a second submit of the same ticket in flight keeps its own.
+        if (pendingTickets.get(ticket.nonce) === pending) pendingTickets.delete(ticket.nonce);
+    }
 }
 
 // ─── keeper lookup ────────────────────────────────────────────────────────────────────────────

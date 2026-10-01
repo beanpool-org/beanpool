@@ -122,6 +122,8 @@ const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
     photos: new Map<string, { data: string; nonce: string }>(),
+    /** The node answering every send 503 (a phone's send then stays on it as failed). */
+    refuseSends: false,
 };
 let clock = Date.parse('2026-10-01T09:00:00.000Z');
 const tick = () => new Date(clock += 60_000).toISOString();
@@ -136,6 +138,7 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     const u = new URL(url);
     const method = init.method ?? 'GET';
     if (method === 'POST' && u.pathname === '/api/messages/send') {
+        if (node.refuseSends) return answer(503, { error: 'Service unavailable' });
         const b = JSON.parse(init.body);
         const id = typeof b.id === 'string' ? b.id.toLowerCase() : randomUUID();   // the node keeps a client's UUID v4, lowered
         const line: Line = {
@@ -215,7 +218,7 @@ beforeEach(async () => {
     ana = person('Ana');
     ben = person('Ben');
     dm = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
-    Object.assign(node, { lines: [], convs: [dm], photos: new Map() });
+    Object.assign(node, { lines: [], convs: [dm], photos: new Map(), refuseSends: false });
     (globalThis as any).fetch = fetchMock;
     await getDb();
 });
@@ -421,5 +424,23 @@ describe('the phone and the web app read each other', () => {
         expect(webCrypto.openDmLine({ ciphertext: photo.data, nonce: photo.nonce }, { myEdPrivHex: ben$.privateKey, peerEdPubHex: ana.publicKey },
             { conversationId: dm.id, senderPubHex: ana.publicKey, messageId: fromPhone.id, part: 'attachment' }, [view.format!]).text)
             .toBe('data:image/jpeg;base64,UEhPTkU=');
+    });
+});
+
+describe('a line of mine the node hasn\'t had', () => {
+    it('is never marked, though this phone\'s clock is an hour behind the node\'s and sorts it before the line it follows', async () => {
+        clock = Date.now() + 3_600_000;   // the node's clock, an hour ahead of this phone's
+        await phoneOf(ben);
+        const bens = await says(ben, dm, 'Are you coming?');
+        await phoneOf(ana);
+        node.refuseSends = true;
+        await insertMessage(dm.id, ana.publicKey, 'Yes');
+        await vi.waitFor(async () => expect((await getMessages(dm.id)).some((m: any) => m.sendState === 'failed')).toBe(true));
+        const thread = (await getMessages(dm.id)).map((m: any) => ({ id: m.id, text: m.text, note: m.integrityNote ?? null, sendState: m.sendState }));
+        // sorted by this phone's clock, before the line it was written after, and still not marked
+        expect(thread).toEqual([
+            { id: expect.any(String), text: 'Yes', note: null, sendState: 'failed' },
+            { id: bens.id, text: 'Are you coming?', note: null, sendState: undefined },
+        ]);
     });
 });

@@ -3934,7 +3934,9 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             if (lineViews) {
                 const view = lineViews.get(row.id);
                 displayTxt = view?.text ?? DM_LINE_NOT_VERIFIED_TEXT;
-                integrityNote = dmLineMarkText(view?.mark);
+                // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
+                // not had it, so it is never marked (a clock behind the node's would sort it before the line it follows).
+                integrityNote = isUndeliveredRow(row.metadata) ? null : dmLineMarkText(view?.mark);
             } else {
                 displayTxt = '[Encrypted — update your app to read]';
             }

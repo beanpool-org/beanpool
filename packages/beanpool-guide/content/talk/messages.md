@@ -60,6 +60,7 @@ Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **Fo
 - The server also knows who messaged whom, and when, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.
 - Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.
 - Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.
+- Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See "Leaving or deleting your account".
 - A group's chat can also be read by the group's members.
 - An event's chat can also be read by the host and everyone going.
 - An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers.

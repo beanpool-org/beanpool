@@ -17,7 +17,7 @@ import {
     getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner, findPendingReport, isReportRateLimited,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -1950,6 +1950,12 @@ router.post('/api/reports', async (ctx) => {
             return;
         }
         targetPubkey = owner;
+    } else {
+        // A report on a post is about its author, whatever targetPubkey the client sent: the moderators' screens open
+        // that member's group from it (engine/burst-cleanup.ts), so a reporter must not be able to pair a post with
+        // someone else. Every app sends the author already.
+        const author = getReportablePostAuthor(targetPostId);
+        if (author) targetPubkey = author;
     }
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;

@@ -228,6 +228,35 @@ export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string
     tell(cb, [post.authorPubkey], POST_BACK_TITLE, postBackBody(post.title), { kind: 'post_restored', screen: 'post', postId: post.id });
 }
 
+// ── Clean-up by burst (engine/burst-cleanup.ts) ─────────────────────────────────────────────────
+
+export const POSTS_HIDDEN_TITLE = '🛡️ Your posts are hidden for review';
+export const POSTS_BACK_TITLE = '🛡️ Your posts are back';
+
+/** A moderator hid a member's posts with others' in one action. Never why, nor who else, nor who acted. */
+export function postsHiddenBody(count: number): string {
+    return count === 1
+        ? "One of your posts is hidden while the community's moderators look at it. It has not been removed, and you can still see it."
+        : `${count} of your posts are hidden while the community's moderators look at them. They have not been removed, and you can still see them.`;
+}
+
+export function postsBackBody(count: number): string {
+    return count === 1
+        ? "The community's moderators looked at one of your posts, and everyone can see it again."
+        : `The community's moderators looked at ${count} of your posts, and everyone can see them again.`;
+}
+
+/** One notice per author, however many of their posts the action hid, so nobody's app stacks an alert per post. */
+export function notifyPostsHiddenForReview(cb: ModerationNoticeCallbacks, authorPubkey: string, count: number): void {
+    if (count < 1) return;
+    tell(cb, [authorPubkey], POSTS_HIDDEN_TITLE, postsHiddenBody(count), { kind: 'post_hidden', reason: 'moderators', count });
+}
+
+export function notifyPostsBack(cb: ModerationNoticeCallbacks, authorPubkey: string, count: number): void {
+    if (count < 1) return;
+    tell(cb, [authorPubkey], POSTS_BACK_TITLE, postsBackBody(count), { kind: 'post_restored', count });
+}
+
 export function notifyMuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {
     tell(cb, [memberPubkey], MUTED_TITLE, mutedBody(), { kind: 'moderation_muted' });
 }

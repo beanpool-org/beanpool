@@ -71,6 +71,7 @@ export const SUITES = [
     'test-web-visits',
     'test-global-moderation',
     'test-report-rings',
+    'test-burst-cleanup',
     'test-community-me',
     'test-distance-search',
     'test-distance-query-parsing',

@@ -43,6 +43,7 @@ The owners and admins who run your community's server can still see what is stor
 - Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.
 - If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. The server's own daily copies made before then keep them for up to 14 days. A backup an owner downloaded keeps them until the owner deletes it. See "Leaving or deleting your account".
 - If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See "Getting your account back".
+- On the global community, its moderators can see which accounts joined from the same internet connection within a day of each other, but never the connection itself, so they can deal with a burst of fake accounts in one go. See "Reporting a problem".
 
 ## Read more
 

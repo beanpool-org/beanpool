@@ -30,8 +30,13 @@ import {
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
     restoreHiddenPost, liftModerationMute, pushServiceRefusals,
+    hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import {
+    BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
+    type BurstActorRole, type BurstRefusal,
+} from '../engine/burst-cleanup.js';
 import { decisionsOn } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
@@ -1159,6 +1164,130 @@ router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
     }
     logger.info('ADMIN', `Lifted the mute on ${pubkey.substring(0, 12)} by ${actor ? actor.substring(0, 12) : 'owner:password'} (${(ctx.state as any)?.adminRole})`);
     ctx.body = { success: true };
+});
+
+// ── Clean-up by burst (engine/burst-cleanup.ts; global two-doors design §4.4, slice S9) ──────────────────────────────
+// From one account, the others that joined through the open door from the same connection within a day of it: hide all
+// their posts (and undo that), or remove them, in one action. Owners, admins and moderators, except removing, which is
+// the owners' and admins' as removing one member is. Where the door labels no joins (every local community) each route
+// is 404 once the caller is signed in, as every admin route asks checkAdminAuth first (test-moderator-routes).
+
+function burstsHere(ctx: any): boolean {
+    if (burstCleanupOn()) return true;
+    ctx.status = 404;
+    ctx.body = { error: 'Not Found' };
+    return false;
+}
+
+/** The role this request acts with: a key session's live role, or 'owner' for the password (admin-auth.ts). */
+function burstActorRole(ctx: any): BurstActorRole | null {
+    const role = ctx.state?.adminRole;
+    return role === 'owner' || role === 'admin' || role === 'moderator' ? role : null;
+}
+
+/**
+ * The account a burst is opened from, from the path: null after answering 400 (no key), 404 (no member here) or 403 (a
+ * moderator, for an account with no open report by someone else and in no burst the digest lists).
+ */
+function burstAnchor(ctx: any): string | null {
+    const key = burstKey(ctx.params.pubkey);
+    if (!key) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'That is not a member key', code: 'bad_key' };
+        return null;
+    }
+    if (!isBurstAccount(key)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'No member here has that key', code: 'not_found' };
+        return null;
+    }
+    // A moderator's own report doesn't count: a moderator is always a key session, so `actor` is their member key.
+    const actor = typeof ctx.state?.actor === 'string' ? ctx.state.actor : null;
+    if (burstActorRole(ctx) === 'moderator' && !moderatorMayOpen(key, actor)) {
+        ctx.status = 403;
+        ctx.body = {
+            success: false,
+            error: 'A moderator sees who joined together from an account with an open report, or from a group listed at the top of Reports.',
+            code: 'not_reported',
+        };
+        return null;
+    }
+    return key;
+}
+
+function answerBurstRefusal(ctx: any, refusal: BurstRefusal): void {
+    ctx.status = refusal.status;
+    ctx.body = { success: false, error: refusal.error, code: refusal.code, ...(refusal.established ? { established: refusal.established } : {}) };
+}
+
+/** The digest: recent bursts of 5 or more, and the burst actions of the last 30 days. */
+router.get('/api/local/admin/bursts', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { success: true, ...burstDigest() };
+});
+
+/** One account's burst, each account with its standing, for the moderator to look at before acting. */
+router.get('/api/local/admin/members/:pubkey/burst', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const anchor = burstAnchor(ctx);
+    if (!anchor) return;
+    const burst = readBurst(anchor)!;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { success: true, ...burst, count: burst.others.length, establishedStanding: BURST.establishedStanding };
+});
+
+/** Hide every post of the named accounts of this burst, in one action that can be undone. Body: { members, count, includeEstablished? }. */
+router.post('/api/local/admin/members/:pubkey/burst/hide', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const role = burstActorRole(ctx);
+    const anchor = burstAnchor(ctx);
+    if (!anchor || !role) return;
+    const selection = checkBurstSelection(anchor, (ctx as any).requestBody || {});
+    if (!selection.ok) return answerBurstRefusal(ctx, selection);
+    const action = hideBurst(anchor, selection.keys, role);
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Hid ${action.posts} post(s) of ${action.accounts} account(s) that joined together with ${anchor.substring(0, 12)} (action ${action.id}) by ${by} (${role})`);
+    ctx.body = { success: true, action };
+});
+
+/** Undo a burst hide: its posts back, but for one reports would hide now. */
+router.post('/api/local/admin/bursts/:id/undo', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const outcome = undoBurst(String(ctx.params.id));
+    if (!outcome.ok) {
+        ctx.status = outcome.status;
+        ctx.body = { success: false, error: outcome.error, code: outcome.code };
+        return;
+    }
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Undid burst hide ${ctx.params.id}: ${outcome.restored} post(s) back, ${outcome.keptHidden} kept hidden, by ${by} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true, restored: outcome.restored, keptHidden: outcome.keptHidden };
+});
+
+/**
+ * Remove the named accounts of this burst, each as one removal removes a member (adminPruneUser, with its rules and the
+ * signed actor): owners and admins only. A removed account's sign-in can't join again. Body: { members, count,
+ * includeEstablished? }.
+ */
+router.post('/api/local/admin/members/:pubkey/burst/remove', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Removing accounts is for the owners and admins. Hide their posts, and tell them.')) return;
+    const actor = resolveAdminActor(ctx);
+    const role = burstActorRole(ctx);
+    if (!actor || !role) return;
+    const anchor = burstAnchor(ctx);
+    if (!anchor) return;
+    const selection = checkBurstSelection(anchor, (ctx as any).requestBody || {});
+    if (!selection.ok) return answerBurstRefusal(ctx, selection);
+    const result = removeBurst((pubkey) => adminPruneUser(pubkey, actor), anchor, selection.keys, role);
+    logger.info('ADMIN', `Removed ${result.removed} account(s) that joined together with ${anchor.substring(0, 12)} (action ${result.action.id}) by ${actor.substring(0, 12)} (${role})${result.failed.length ? `; ${result.failed.length} refused` : ''}`);
+    ctx.body = { success: true, action: result.action, removed: result.removed, failed: result.failed };
 });
 
 /**

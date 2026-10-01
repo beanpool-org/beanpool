@@ -41,6 +41,7 @@ You open Settings from the app's **🛡️ Moderate** button, or on a computer b
 - **Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
 - **Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
+- **Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See "On the global community: accounts that joined together" below.
 
 The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
 
@@ -73,6 +74,28 @@ Reporters who joined through the open door from the same internet address within
 So three new accounts can hide a newcomer's spam, but not the posts of someone who has been there for months: those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits.
 
 A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once fewer than three circles count; **Remove the post** takes it down as above.
+
+## On the global community: accounts that joined together
+
+Anyone can join the global community with a sign-in, so one person can make several accounts in a row from one place and fill the Market with spam. The server notes which accounts joined through the open door from the same internet connection within a day of the first of them (see Privacy and what your server can see). You are shown only that they joined together: never the connection, its address or anything else about the network. On a local community none of this exists.
+
+**Who joined with them.** On a report, **Who joined with them** lists the other accounts that joined from the same connection within a day of the reported one, oldest first. For each you see when they joined, their standing (the same points as above: weeks as a member, posts that stayed up, people they finished a deal with), how many of their posts are up or hidden, and their open reports. On a report about a post, the account is always the post's author, whoever the reporter named. A moderator sees this from an account with an open report filed by someone else (about them, or about a post they wrote: a moderator's own report doesn't count), or from a group listed at the top of Reports; owners and admins from any account. That is a limit that leaves a record, not a wall: a moderator could file a report from a second account, but every report names who filed it. Someone who joined another way, by invite or before the server noted this, has nobody listed.
+
+**At the top of Reports** (in **Triage & Moderation** for owners and admins): a line for each group of 5 or more accounts that joined together in the last 7 days, saying how many were reported, how many of their posts are hidden and how many were removed, with **See them**; and a line for each action taken on such a group in the last 30 days.
+
+**Tick, then act.** A shared connection can be a household, a meetup, a campus or a phone network, so real people can be in a group with a spammer:
+
+- Accounts that are established (standing 4 or more: a month as a member, or a week with posts that stayed up) start unticked. Here a post hidden for review still counts as up, so hiding an account's posts first never makes it easier to remove. Anyone who holds a role (owner, admin or moderator) can never be included. Untick anyone you are not sure of.
+- Before anything happens you are told again how many accounts, their standing, and which of them are established.
+- The server acts only on the accounts you ticked: one that joined after you opened the list is never included. It does nothing at all if one of them is no longer in the group, or if an established account is included without your saying so. The list then loads again as the group is now, with the reason on screen; **Load again** reads it again at any time.
+
+**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, "Your posts are hidden for review", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden.
+
+**Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with can't join again. You type the number of accounts to confirm. A removal can't be undone.
+
+What removal can't do: someone determined can come back with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that a few reports hide. Removing it again is one more action.
+
+If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 
 ## Be fair
 

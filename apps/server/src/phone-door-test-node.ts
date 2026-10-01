@@ -9,13 +9,16 @@
  * and says so (`BLOCKED-FETCH`). No provider is asked either: the test's Google key is primed into sso.ts's cache from
  * PHONE_DOOR_GOOGLE_JWK, as the server suites do.
  *
- * It prints `PHONE-DOOR-NODE-PORT <port>` once it listens. Then one JSON command a line on stdin, each answered on
- * stdout as `PHONE-DOOR-NODE-REPLY {"id":…,"result":…}`:
- *   limiters            clear the gateway's and the door's limiters (every request here comes from one address)
- *   member {key}        the member's row and its open_joins row (door, network hash, how long the hash is kept)
- *   probation {key}     the member's new-account limits, as /api/community/me reports them
- *   prune {key}         a moderator removes the member (adminPruneUser), as the moderation screen does
- *   quit                exit
+ * It prints `PHONE-DOOR-NODE-PORT <port>` once it listens (and, with PHONE_DOOR_HTTP_PORT set, for an emulator,
+ * `PHONE-DOOR-NODE-HTTP-PORT <port>` for plain HTTP on that port). Then one JSON command a line on stdin, each answered
+ * on stdout as `PHONE-DOOR-NODE-REPLY {"id":…,"result":…}`:
+ *   limiters                    clear the gateway's and the door's limiters (every request here comes from one address)
+ *   member {key}                the member's row and its open_joins row (door, network hash, how long the hash is kept)
+ *   probation {key}             the member's new-account limits, as /api/community/me reports them
+ *   prune {key}                 a moderator removes the member (adminPruneUser), as the moderation screen does
+ *   doorNumber {name, value}    a `doorNumbers.<name>` override, as an operator sets one in node_config
+ *   removedNewcomers {ips}      a 12-words newcomer from each address, removed minutes after joining (design §2.4)
+ *   quit                        exit
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -37,9 +40,13 @@ globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
 async function main(): Promise<void> {
     // Loaded after the environment above is set: these modules read it as they load.
     const readline = await import('node:readline');
+    const crypto = await import('node:crypto');
     const { initTls } = await import('./services/tls.js');
-    const { initStateEngine, adminPruneUser } = await import('./state-engine.js');
+    const { initStateEngine, adminPruneUser, broadcast } = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
+    const { startHttpServer } = await import('./http-server.js');
+    const { openJoinAddressHash, registerOpenJoin, wordsJoinHash } = await import('./engine/open-join.js');
+    const { limiterKeyForIp } = await import('./client-ip.js');
     const { db } = await import('./db/db.js');
     const { _resetJwksCacheForTests } = await import('./sso.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
@@ -54,8 +61,14 @@ async function main(): Promise<void> {
     if (jwk) _resetJwksCacheForTests('google', { keys: [JSON.parse(jwk)], expiresAt: Date.now() + 3600_000 });
 
     console.log(`PHONE-DOOR-NODE-PORT ${port}`);
+    // The emulator's session: plain HTTP on a port it names, reached through `adb reverse` (a dev client takes no
+    // self-signed certificate). The API is the same Koa app (http-server.ts hands /api to it).
+    if (process.env.PHONE_DOOR_HTTP_PORT) {
+        const httpPort = await startHttpServer(Number(process.env.PHONE_DOOR_HTTP_PORT));
+        console.log(`PHONE-DOOR-NODE-HTTP-PORT ${httpPort}`);
+    }
 
-    const commands: Record<string, (args: { key?: string }) => unknown> = {
+    const commands: Record<string, (args: any) => unknown> = {
         limiters: () => {
             resetGatewayRateLimit();
             pruneAuthAttempts(Date.now() + 120_000);
@@ -70,6 +83,21 @@ async function main(): Promise<void> {
             adminPruneUser(String(key), 'owner:password');
             return true;
         },
+        // For the emulator's busy-level screens: a door number (`doorNumbers.<name>`, as an operator would set it), and a
+        // 12-words newcomer removed minutes after joining from each of these addresses (design §2.4), so the next 12-words
+        // join from one of them is asked `removedNetworkLevel`.
+        doorNumber: ({ name, value }: { name?: string; value?: string }) => {
+            db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+                .run(`doorNumbers.${String(name)}`, String(value));
+            return true;
+        },
+        removedNewcomers: ({ ips }: { ips?: string[] }) => (ips ?? []).map((ip) => {
+            const key = crypto.randomBytes(32).toString('hex');
+            const ipHash = openJoinAddressHash(limiterKeyForIp(ip));
+            const outcome = registerOpenJoin(broadcast, { publicKey: key, callsign: `Gone ${key.slice(0, 4)}`, provider: 'words', joinHash: wordsJoinHash(), ipHash });
+            if (outcome.ok) adminPruneUser(key, 'owner:password');
+            return { ip, joined: outcome.ok };
+        }),
         quit: () => process.exit(0),
     };
 

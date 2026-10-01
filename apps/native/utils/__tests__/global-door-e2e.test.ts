@@ -92,7 +92,7 @@ import { BUSY_LEVEL, busyLevelSentence, startDoorWork, type DoorWorkRun, type Do
 import { linkSignIn } from '../join-link';
 import { noVault } from './fake-vault';
 
-const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url));
+const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
 const GOOGLE_KID = 'phone-door-e2e-google';
 const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
 const START_MS = 120_000;

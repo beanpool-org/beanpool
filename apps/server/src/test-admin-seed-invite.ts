@@ -34,7 +34,7 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else { console.error(`✗ ${msg}`); process.exitCode = 1; }
 }
 
-async function postJson(path: string, body: any, headers: Record<string, string> = {}): Promise<{ status: number; body: any }> {
+async function postJson(path: string, body: any, headers: Record<string, string> = {}): Promise<{ status: number; body: any; cookie: string }> {
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
@@ -42,7 +42,7 @@ async function postJson(path: string, body: any, headers: Record<string, string>
     });
     let resBody: any = {};
     try { resBody = await res.json(); } catch { /* empty */ }
-    return { status: res.status, body: resBody };
+    return { status: res.status, body: resBody, cookie: res.headers.get('set-cookie') || '' };
 }
 
 /** A redeem as the apps send one: signed by the key it registers (the node registers no key a redeem isn't signed by). */
@@ -74,7 +74,10 @@ async function keySession(kp: ReturnType<typeof makeKeypair>): Promise<string> {
     if (solved.status !== 200) throw new Error(`verify-challenge refused: ${solved.status} ${JSON.stringify(solved.body)}`);
     const ex = await postJson('/api/local/admin/auth/exchange', { token: solved.body.handshakeToken });
     if (ex.status !== 200) throw new Error(`exchange refused: ${ex.status}`);
-    return ex.body.sessionId;
+    // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+    const sessionId = ex.cookie.match(/admin_session=([0-9a-f]+)/)?.[1];
+    if (!sessionId) throw new Error('exchange set no admin_session cookie');
+    return sessionId;
 }
 
 function issuedByOf(code: string): string | null {

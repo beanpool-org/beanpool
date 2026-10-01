@@ -1177,7 +1177,10 @@ function verifyTransactionAuthorship(tx: Transaction): boolean {
         const signed = JSON.parse(body || '{}');
         if (String(signed.to) !== String(tx.to)) return false;
         if (Number(signed.amount) !== Number(tx.amount)) return false;
-        if (String(signed.memo ?? '') !== String(tx.memo ?? '')) return false;
+        // The note stored is the one signed, or none: a note the main server kept from someone who had blocked its sender
+        // is stored blank (engine/withheld-notes.ts). Who signed it and the Beans it moved are checked above either way.
+        const stored = String(tx.memo ?? '');
+        if (stored !== '' && String(signed.memo ?? '') !== stored) return false;
         return true;
     } catch {
         return false;

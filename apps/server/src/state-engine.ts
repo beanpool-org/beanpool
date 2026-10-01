@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
 export type { EscrowRefundShortfall };
@@ -50,6 +50,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
+import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
@@ -1360,6 +1361,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey : null;
+    // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
+    // own sockets only, which it still makes member sockets below. The versions above moved all the same.
+    const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1387,7 +1391,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
+        const joinersOwn = !!joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey);
+        if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
@@ -1396,6 +1401,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 ws._pendingMemberPubkey = null;
             }
         }
+        if (joinToJoinerOnly && !joinersOwn) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -2129,6 +2135,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
     const feeExempt = isFeeExempt || !isEscrow;
+    // A note to someone who has blocked its sender is kept for the sender alone, never in the row the recipient reads
+    // (engine/withheld-notes.ts). Decided here, before the transaction: it refuses nothing and moves nothing, and the
+    // Beans go as any send's.
+    const withheldNote = withholdsNote(from, to, memo);
 
     // ATOMICITY (money). Everything from the in-memory `ledger.transfer` through the last persisted row is
     // ONE unit. It used to be five autocommitted statements, and every gap between them was a way to destroy
@@ -2171,9 +2181,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // transaction's authorship is re-verifiable on import. NULL for
             // system/internal transfers (those become node-signed in a later step).
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                built.id, built.from, built.to, built.amount, built.taxFee, built.memo, built.timestamp,
+                built.id, built.from, built.to, built.amount, built.taxFee, withheldNote ? '' : built.memo, built.timestamp,
                 auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
             );
+            if (withheldNote) keepWithheldNote(built.id, built.memo);
         }
 
         // Sync ledger account balances to DB
@@ -2216,10 +2227,16 @@ export function transfer(from: string, to: string, amount: number, memo: string,
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
-    broadcast({
-        type: 'transaction',
-        txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
-    }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
+    const live = { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' };
+    // A2-20: a transfer is visible only to its two parties on the live feed. A withheld note goes to its sender's sockets
+    // alone; the recipient's hear the Beans with BLOCKED_BEANS_NOTE, as their history reads them.
+    if (withheldNote) {
+        broadcast({ type: 'transaction', txn: live }, [from]);
+        broadcast({ type: 'transaction', txn: { ...live, memo: BLOCKED_BEANS_NOTE } }, [to]);
+    } else {
+        broadcast({ type: 'transaction', txn: live }, [from, to]);
+    }
+    // The sender's own answer: their note as they wrote it (built.memo), in the shape any send's has.
     return txn;
 }
 
@@ -2606,14 +2623,19 @@ export function payFromCommons(
     return txn;
 }
 
+/**
+ * An account's history, or every account's. Read as the account named: a note withheld from someone who blocked its
+ * sender is its sender's to read, and its recipient reads BLOCKED_BEANS_NOTE (engine/withheld-notes.ts).
+ */
 export function getTransactions(publicKey?: string, limit = 50, offset = 0): Transaction[] {
     let rows;
     if (publicKey) {
-        rows = db.prepare(`SELECT * FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
+        rows = db.prepare(`SELECT t.*, ${WITHHELD_NOTE_COLUMN} FROM transactions t ${WITHHELD_NOTE_JOIN}
+                           WHERE t.from_pubkey=? OR t.to_pubkey=? ORDER BY t.timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
     } else {
         rows = db.prepare(`SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(limit, offset) as any[];
     }
-    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: r.memo, timestamp: r.timestamp }));
+    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: publicKey ? noteAsReadBy(r, publicKey) : r.memo, timestamp: r.timestamp }));
 }
 // ===================== MARKETPLACE =====================
 
@@ -7167,6 +7189,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropBlocksOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
+        dropWithheldNotesOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7339,6 +7363,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropBlocksOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
+        dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);

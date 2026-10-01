@@ -271,7 +271,9 @@ async function main() {
         assert(exchangeRes.status === 200, 'POST /api/local/admin/auth/exchange returns 200');
         const exchangeBody: any = await exchangeRes.json();
         assert(exchangeBody.success === true, 'Exchange response has success: true');
-        assert(typeof exchangeBody.sessionId === 'string', 'Returns sessionId');
+        // The session id travels in the httpOnly cookie only: in the body a script could read it and use it anywhere,
+        // without the cookie or a CSRF token (Fable's web review, L3). Until 2026-10-01 this asserted it was returned.
+        assert(exchangeBody.sessionId === undefined, 'Does not return the session id in the body');
         assert(typeof exchangeBody.csrfToken === 'string', 'Returns csrfToken');
         assert(exchangeBody.memberPubkey === aliceKeys.pub, 'Session is attributed to Alice');
         assert(exchangeBody.role === 'owner', "Session role is 'owner'");
@@ -280,7 +282,10 @@ async function main() {
 
         const sessionCookie = exchangeRes.headers.get('set-cookie');
         assert(Boolean(sessionCookie && sessionCookie.includes('admin_session=')), 'Exchange sets admin_session cookie');
-        const aliceSessionId = exchangeBody.sessionId;
+        assert(/httponly/i.test(sessionCookie || '') && /samesite=strict/i.test(sessionCookie || ''), 'The cookie is HttpOnly and SameSite=Strict');
+        const aliceSessionId = (sessionCookie || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? '';
+        assert(aliceSessionId.length === 64, 'The cookie carries the session id');
+        assert(!JSON.stringify(exchangeBody).includes(aliceSessionId), 'The body never mentions it');
 
         // Verify active session via GET /api/local/admin/auth/session
         const sessionCheckRes = await fetch(`${base}/api/local/admin/auth/session`, {

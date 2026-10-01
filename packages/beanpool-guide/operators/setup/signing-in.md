@@ -15,7 +15,7 @@ The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, 
 
 - The password counts as an **owner**. Whoever has it can do everything an owner can.
 - Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.
-- Your browser keeps the password for this tab only. Close the tab and you sign in again.
+- Your browser keeps no copy of the password. The server checks it once and gives this browser a sign-in that only the server can read. It ends when you press **Log Out**, after **2 hours** without use, after **12 hours** at most, and when the server restarts. Changing the password, or turning two-factor sign-in on or off, ends every other password sign-in; the browser that made the change stays signed in. Then you type the password again.
 - Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds.
 
 ![The sign-in screen in node Settings](images/sign-in.webp)

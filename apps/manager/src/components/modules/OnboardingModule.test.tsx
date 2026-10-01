@@ -330,8 +330,9 @@ describe('OnboardingModule', () => {
         expect(mockSelectNode).toHaveBeenCalledWith('node-2');
     });
 
-    it('forwards 2FA session token when available in sessionStorage', async () => {
-        sessionStorage.setItem('bp_tfa_session_node-1', 'tfa-session-token-123');
+    it('forwards the 2FA session token the page holds for the profile', async () => {
+        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
+        nodeClient.setTfaSessionToken('node-1', 'tfa-session-token-123');
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
             days: 30,
             rows: [],
@@ -348,6 +349,6 @@ describe('OnboardingModule', () => {
             );
         });
 
-        sessionStorage.removeItem('bp_tfa_session_node-1');
+        nodeClient.setTfaSessionToken('node-1', undefined);
     });
 });

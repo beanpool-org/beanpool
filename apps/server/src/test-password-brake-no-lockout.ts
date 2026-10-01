@@ -13,7 +13,8 @@
  *     with no failure on record is always checked;
  *   - fresh /64s inside one /48 do not each count as clean;
  *   - key sign-in and break-glass codes are unaffected;
- *   - /ws/logs?auth= follows the same rules;
+ *   - /ws/logs?auth= is no door at all (Fable's web review, L5): the password in its query is never checked, so it
+ *     opens nothing and costs the brake nothing;
  *   - the guesses an attacker gets per hour (the maths in docs/admin-surface.md §2.6), by simulation.
  *
  * The HTTP parts drive the real servers on the tunnel-origin port: the test client connects from loopback (a trusted
@@ -304,7 +305,9 @@ async function part3Http() {
             method: 'POST', headers: viaTunnel(A), body: { challengeId: chal.json?.challengeId, memberPubkey: owner.pub, signature: owner.sign(chal.json?.challenge || '') },
         });
         const exchanged = await req('/api/local/admin/auth/exchange', { method: 'POST', headers: viaTunnel(A), body: { token: solved.json?.handshakeToken } });
-        const session = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-session': exchanged.json?.sessionId || '', ...viaTunnel(A) } });
+        // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+        const exchangedId = (exchanged.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] || '';
+        const session = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-session': exchangedId, ...viaTunnel(A) } });
         assert(chal.status === 200 && solved.status === 200 && exchanged.status === 200 && session.status === 200,
             `key sign-in from the braked address works: challenge ${chal.status}, signed ${solved.status}, session ${exchanged.status}, admin route ${session.status}`);
 
@@ -323,20 +326,22 @@ async function part3Http() {
         assert(bgWrong.status === 429, `a wrong code from it gets the brake's 429, not a password check (got ${bgWrong.status})`);
     }
 
-    console.log('\n— /ws/logs?auth= follows the same rules —');
+    // Until 2026-10-01 ?auth=<password> opened the socket with 2FA off, under this brake; that door is gone. These
+    // asserted it was braked (429) and that the right password opened it (101).
+    console.log('\n— /ws/logs?auth= is no door: never checked, never braked —');
     resetPasswordBrake();
     {
         const W = '203.0.113.80';
         const logs = (pw: string, ip: string) => upgradeStatus(`${WS_BASE}/ws/logs?auth=${encodeURIComponent(pw)}`, viaTunnel(ip));
         const s: number[] = [];
         for (let i = 0; i <= SOURCE_FREE_FAILURES; i++) s.push(await logs('ws-wrong-' + i, W));
-        assert(s.every(x => x === 401), `${SOURCE_FREE_FAILURES + 1} wrong ?auth= from W are checked and refused (${s.join(',')})`);
+        assert(s.every(x => x === 401), `${SOURCE_FREE_FAILURES + 1} wrong ?auth= from W are refused (${s.join(',')})`);
         const wRight = await logs(PW, W);
-        assert(wRight === 429, `then W is braked, even with the right password (got ${wRight})`);
+        assert(wRight === 401, `the right password in the query is refused too: the socket takes a ticket only (got ${wRight})`);
         const x = await logs(PW, '198.51.100.81');
-        assert(x === 101, `the right ?auth= from another address opens (got ${x})`);
+        assert(x === 401, `from any address (got ${x})`);
         const viaHttp = await verify(PW, W);
-        assert(viaHttp.status === 429, `W's brake is the same one HTTP uses (got ${viaHttp.status})`);
+        assert(viaHttp.status === 200, `and none of them was a password check: W's brake is untouched, its right password works over HTTP (got ${viaHttp.status})`);
     }
     resetPasswordBrake();
     resetAdminAuthTarpit();

@@ -277,8 +277,14 @@ describe('checkCommunityForUpdate: asking the active community', () => {
         expect(d).toEqual({ kind: 'block', version: '1.2.61' });
     });
 
-    it('no community on the phone, or no answer: unknown', async () => {
-        expect(await checkCommunityForUpdate({ ...base, anchorUrl: async () => null, fetchJson: vi.fn() })).toEqual({ kind: 'unknown' });
+    it('no community on the phone: clear, and nothing is asked (a block still up comes down at the next ask)', async () => {
+        const fetchJson = vi.fn();
+        expect(await checkCommunityForUpdate({ ...base, anchorUrl: async () => null, fetchJson })).toEqual({ kind: 'clear' });
+        expect(await checkCommunityForUpdate({ ...base, anchorUrl: async () => '', fetchJson })).toEqual({ kind: 'clear' });
+        expect(fetchJson).not.toHaveBeenCalled();
+    });
+
+    it('no answer, or a phone whose storage cannot be read: unknown', async () => {
         expect(await checkCommunityForUpdate({ ...base, anchorUrl: async () => 'https://mullum.test', fetchJson: async () => { throw new Error('timeout'); } }))
             .toEqual({ kind: 'unknown' });
         expect(await checkCommunityForUpdate({ ...base, anchorUrl: async () => { throw new Error('storage'); }, fetchJson: vi.fn() })).toEqual({ kind: 'unknown' });

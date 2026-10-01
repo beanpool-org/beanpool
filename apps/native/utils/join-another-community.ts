@@ -94,6 +94,8 @@ export async function joinAnotherCommunity(
         if (opts.returnUrl && isPlainNodeAddress(opts.returnUrl)) await AsyncStorage.setItem('beanpool_anchor_url', opts.returnUrl);
         else await AsyncStorage.removeItem('beanpool_anchor_url');
         await deps.initDB();
+        // Back where it was, or on no community: the update screen asks again (utils/community-switch.ts).
+        communitySwitched();
         throw err;
     }
     // The phone is on the new community now: the update screen asks it (utils/community-switch.ts).

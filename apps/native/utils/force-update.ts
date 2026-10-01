@@ -256,7 +256,9 @@ export async function checkCommunityForUpdate(opts: {
 }): Promise<ForceUpdateDecision> {
     let anchor: string | null;
     try { anchor = await opts.anchorUrl(); } catch { return { kind: 'unknown' }; }
-    if (!anchor) return { kind: 'unknown' };
+    // No community on the phone: nothing can hold this app, and a block still up (its community removed by a way that
+    // didn't say so) comes down at the next ask rather than staying until a cold start (#1415's re-review).
+    if (!anchor) return { kind: 'clear' };
     let health: unknown;
     try { health = await opts.fetchJson(`${anchor}/api/community/health`, CHECK_TIMEOUT_MS); } catch { return { kind: 'unknown' }; }
     // The answer is about the community asked: one the member switched away from meanwhile says nothing.

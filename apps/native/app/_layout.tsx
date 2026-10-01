@@ -40,6 +40,7 @@ import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { appVersionHeaderValue } from '../utils/force-update';
 import ForceUpdateBlock from '../components/ForceUpdateBlock';
+import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -363,6 +364,8 @@ function RootLayoutNav() {
                                     closeDB()
                                         .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
                                         .then(() => initDB())
+                                        // The update screen's block was the community left's (utils/community-switch.ts).
+                                        .then(() => { communitySwitched(); })
                                         .then(async () => {
                                             if (!isComponentMounted.current) return;
                                             
@@ -452,6 +455,8 @@ function RootLayoutNav() {
                                                         try {
                                                             await clearDB();
                                                             await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                            // No community on the phone: the update screen's block comes down.
+                                                            communitySwitched();
                                                             const { removeSavedNode } = await import('../utils/nodes');
                                                             await removeSavedNode(targetOrigin);
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });

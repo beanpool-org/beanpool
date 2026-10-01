@@ -219,7 +219,7 @@ describe('every way a member moves the phone to another community tells the upda
     const sites: Array<[string, RegExp]> = [
         ['utils/use-communities.ts', /await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', targetUrl\);\s*await initDB\(\);\s*communitySwitched\(\);/],
-        ['app/(tabs)/settings.tsx', /await closeDB\(\);\s*await initDB\(\);\s*communitySwitched\(\);/],
+        ['app/(tabs)/settings.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', finalAnchorUrl\);\s*communitySwitched\(\);/],
         ['app/node-mismatch.tsx', /await AsyncStorage\.setItem\('beanpool_anchor_url', url\);\s*await initDB\(\);\s*communitySwitched\(\);/],
         ['utils/join-another-community.ts', /communitySwitched\(\);\s*await deps\.clearGuestNode\(targetUrl\)/],
         ['utils/delete-here.ts', /await leaveThisCommunity\(plan\.here, plan\.next\.url\);\s*const \{ initDB \} = await import\('\.\/db'\);\s*await initDB\(\);\s*communitySwitched\(\);/],
@@ -273,6 +273,47 @@ describe('a switch of community, on the gate', () => {
         p.answer = { kind: 'unknown' };
         p.switched(2_000);
         await p.run(3_000);
+        expect(p.current).toBeNull();
+    });
+
+    it('the community removed while the block is up, by a way that never said so: it comes down at the next return', async () => {
+        vi.resetModules();
+        const { checkCommunityForUpdate, createForceUpdateGate } = await import('../force-update');
+        let anchor: string | null = 'https://mullum.test';
+        let t = 0;
+        const shown: Array<{ version: string } | null> = [];
+        const gate = createForceUpdateGate({
+            now: () => t,
+            check: () => checkCommunityForUpdate({
+                anchorUrl: async () => anchor,
+                fetchJson: async () => ({
+                    appFloors: { android: { min: '1.2.61', blocking: true } }, appVersions: { android: '1.2.61' },
+                }),
+                localVersion: '1.2.57',
+                platform: 'android',
+            }),
+            show: (b) => shown.push(b),
+        });
+        await gate.start('active');
+        expect(shown).toEqual([{ version: '1.2.61' }]);
+        // Taken off the phone with no word to the gate, then a short trip away and back.
+        anchor = null;
+        await gate.appStateChanged('background');
+        t = 2_000;
+        await gate.appStateChanged('active');
+        expect(shown).toEqual([{ version: '1.2.61' }, null]);
+    });
+
+    it('a removal that says so takes it down at once, and with no community nothing puts it back', async () => {
+        const p = phone({ answerMs: 300 });
+        p.start(0);
+        await p.run(1_000);
+        expect(p.current).toEqual({ version: '1.2.61' });
+        p.answer = CLEAR;
+        p.switched(2_000);
+        await p.run(2_000);
+        expect(p.current).toBeNull();
+        await p.run(10_000);
         expect(p.current).toBeNull();
     });
 

@@ -1416,6 +1416,9 @@ export default function SettingsScreen() {
             // Only a plain host[:port] becomes the phone's community (utils/node-url.ts); refused before anything moves.
             if (!isPlainNodeAddress(finalAnchorUrl)) throw new Error(UNSAFE_NODE_ADDRESS_MESSAGE);
             await AsyncStorage.setItem('beanpool_anchor_url', finalAnchorUrl);
+            // A switch too: the update screen asks the community now in use at once, whatever fails below
+            // (utils/community-switch.ts).
+            communitySwitched();
             // Inject alias to native node matrix
             const { addSavedNode, markGuestNode, clearGuestNode } = await import('../../utils/nodes');
             await addSavedNode(finalAnchorUrl, newNodeAlias.trim() || undefined);
@@ -1446,8 +1449,6 @@ export default function SettingsScreen() {
             const { closeDB, initDB } = await import('../../utils/db');
             await closeDB();
             await initDB();
-            // A switch too: the update screen asks the community now in use (utils/community-switch.ts).
-            communitySwitched();
 
             const { requestSync } = await import('../../services/pillar-sync');
             requestSync()

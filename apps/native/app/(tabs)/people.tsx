@@ -34,6 +34,7 @@ import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
+import { communitySwitched } from '../../utils/community-switch';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -623,7 +624,9 @@ export default function PeopleScreen() {
                             
                             const activeUrl = anchorUrl;
                             await AsyncStorage.removeItem('beanpool_anchor_url');
-                            
+                            // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
+                            communitySwitched();
+
                             if (activeUrl) {
                                 const { removeSavedNode } = await import('../../utils/nodes');
                                 await removeSavedNode(activeUrl);

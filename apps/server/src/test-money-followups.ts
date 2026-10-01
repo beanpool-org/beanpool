@@ -11,6 +11,9 @@
  *      every door that takes one: the request, the one-step accept, and both completion routes, on a fixed deal as on an
  *      hourly one. A fixed deal used to ignore it at the request and accept, and every deal ignored a negative or text
  *      quantity at completion (sync check F3).
+ *      A quantity below 0.01 of a unit (5e-324 hours) is refused at the same doors, and a deal whose booked quantity
+ *      can't give a rate that round-trips pays nothing at it: 5e-324 hours rounded the rate, and a 0.4 Beans/h Offer
+ *      paid 0 for 10 hours (#1445 review, BLOCKING 2).
  *   4. A take-over's audit record and journal carry the count of balances that are not a finite number, and say so,
  *      where they said "adds up" (decide N3). The Commons pot is never written as 0 when it isn't a number (decide N1).
  *   5. A pledge to an enterprise that has reached its goal, through the door both apps use, gets the plain "already
@@ -105,7 +108,7 @@ const rowBalance = (pk: string): unknown => (db.prepare('SELECT balance FROM acc
 const txRow = (id: string) => db.prepare('SELECT status, credits, hours FROM marketplace_transactions WHERE id = ?').get(id) as { status: string; credits: unknown; hours: number | null } | undefined;
 const dealsOn = (postId: string): number => (db.prepare('SELECT COUNT(*) AS n FROM marketplace_transactions WHERE post_id = ?').get(postId) as { n: number }).n;
 const brief = (r: { status: number; body: any }) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 220)}`;
-const QUANTITY_REFUSAL = /quantity must be a number above 0, at most 10000/;
+const QUANTITY_REFUSAL = /^The (final )?quantity must be a number from 0\.01 to 10000$/;
 
 /** The conservation check after a money step: no drift, nothing stranded, every balance a finite number. */
 function ledgerAddsUp(step: string): void {
@@ -166,20 +169,43 @@ async function main(): Promise<void> {
     // 2. A payout that overflows at the deal's rate: plain words, and the way out works
     // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. a completion whose payout overflows says what happened and what to do ──');
+    // (a) A deal row written by hand (or before #1379) whose credits are near the largest number: its rate is real, but
+    //     the rate times the confirmed days is Infinity. A daily deal, so the words say days.
+    const loan = createPost('offer', 'tools', 'Trailer hire', 'By the day', 2, 'daily', seller.pk)!;
+    const loanDeal = acceptPost(loan.id, buyer.pk, 2);
+    assert(bal(`escrow_${loanDeal.id}`) === 4, `2 days at 2 are held (${bal(`escrow_${loanDeal.id}`)})`);
+    db.prepare('UPDATE marketplace_transactions SET credits = 1e308 WHERE id = ?').run(loanDeal.id);
+    const beforeLoan = { buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${loanDeal.id}`) };
+    const overflow = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: loanDeal.id, confirmerPublicKey: buyer.pk, finalHours: 4 });
+    const words = String(overflow.body?.error);
+    assert(overflow.status === 400 && /^Paying for 4 days at this deal's rate comes to more Beans than one payment can carry, so nothing has moved\./.test(words),
+        `the refusal says what happened, in days (${brief(overflow)})`);
+    assert(/Confirm the days you booked, or cancel the deal and the Beans held for it go back\.$/.test(words)
+        && !/fewer|can't be completed, cancelled or disputed/.test(words),
+        'and what the member can do: the days booked, or cancel; never "fewer", never "can\'t be cancelled"');
+    assert(JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${loanDeal.id}`) }) === JSON.stringify(beforeLoan)
+        && txRow(loanDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
+    db.prepare('UPDATE marketplace_transactions SET credits = 4 WHERE id = ?').run(loanDeal.id);   // put the row back
+    const loanCancel = await signed('/api/marketplace/transactions/cancel', buyer, { transactionId: loanDeal.id, cancellerPublicKey: buyer.pk });
+    assert(loanCancel.status === 200 && bal(buyer.pk) === beforeLoan.buyer + 4 && bal(`escrow_${loanDeal.id}`) === 0,
+        `cancelling gives the buyer the 4 back (${brief(loanCancel)}, buyer ${bal(buyer.pk)})`);
+    ledgerAddsUp('the overflow and its cancel');
+
+    // (b) A booked quantity so small (1e-320) that the deal's rate (4 / 1e-320) is Infinity: no rate is worked out from
+    //     it, whatever the quantity confirmed (0.5 h used to get "Confirm fewer hours", which couldn't work).
     const weeding = createPost('offer', 'garden', 'Weeding', 'By the hour', 2, 'hourly', seller.pk)!;
     const weedDeal = acceptPost(weeding.id, buyer.pk, 2);
     assert(bal(`escrow_${weedDeal.id}`) === 4, `2 hours at 2 are held (${bal(`escrow_${weedDeal.id}`)})`);
-    // A booked quantity so small that the deal's rate (4 / 1e-320) times any real number of hours is Infinity.
     db.prepare('UPDATE marketplace_transactions SET hours = 1e-320 WHERE id = ?').run(weedDeal.id);
     const before2 = { buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${weedDeal.id}`) };
-    const overflow = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: weedDeal.id, confirmerPublicKey: buyer.pk, finalHours: 2 });
-    const words = String(overflow.body?.error);
-    assert(overflow.status === 400 && /comes to more Beans than one payment can carry, so nothing has moved/.test(words),
-        `the refusal says what happened (${brief(overflow)})`);
-    assert(/Confirm fewer hours, or cancel the deal/.test(words) && !/can't be completed, cancelled or disputed/.test(words),
-        'and what the member can do, without saying the deal can\'t be cancelled');
-    assert(JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${weedDeal.id}`) }) === JSON.stringify(before2)
-        && txRow(weedDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
+    for (const finalHours of [2, 0.5]) {
+        const r = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: weedDeal.id, confirmerPublicKey: buyer.pk, finalHours });
+        const w = String(r.body?.error);
+        assert(r.status === 400 && /^This deal's rate per hour can't be worked out from what it holds, so nothing has moved\. Confirm the hours you booked, or cancel the deal and the Beans held for it go back\.$/.test(w),
+            `confirming ${finalHours} h is refused in plain words, with the way out (${brief(r)})`);
+        assert(JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${weedDeal.id}`) }) === JSON.stringify(before2)
+            && txRow(weedDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
+    }
     const cancel = await signed('/api/marketplace/transactions/cancel', buyer, { transactionId: weedDeal.id, cancellerPublicKey: buyer.pk });
     assert(cancel.status === 200 && bal(buyer.pk) === before2.buyer + 4 && bal(`escrow_${weedDeal.id}`) === 0,
         `cancelling the deal, as the words say, gives the buyer the 4 back (${brief(cancel)}, buyer ${bal(buyer.pk)})`);
@@ -193,6 +219,8 @@ async function main(): Promise<void> {
     const BAD: [string, string][] = [
         ['"Infinity"', '"Infinity"'], ['1e400', '1e400'], ['-1e400', '-1e400'], ['-2', '-2'], ['0', '0'],
         ['"abc"', '"abc"'], ['20000', '20000'], ['""', '""'], ['true', 'true'], ['[2]', '[2]'],
+        // Below 0.01 of a unit (#1445 review, BLOCKING 2): a subnormal, a tiny normal number, and just under the floor.
+        ['5e-324', '5e-324'], ['1e-320', '1e-320'], ['1e-300', '1e-300'], ['0.009', '0.009'], ['"5e-324"', '"5e-324"'],
     ];
     const withHours = (fields: Record<string, string>, hoursKey: string, hoursJson: string) =>
         `{${Object.entries(fields).map(([k, v]) => `${JSON.stringify(k)}:${JSON.stringify(v)}`).join(',')},${JSON.stringify(hoursKey)}:${hoursJson}}`;
@@ -257,10 +285,12 @@ async function main(): Promise<void> {
     // The legacy spelling `hours` on the same door is held to the same rule.
     const mowing2 = createPost('offer', 'garden', 'Hedging', 'By the hour', 1, 'hourly', seller.pk)!;
     const hedgeDeal = acceptPost(mowing2.id, third.pk, 1);
-    const legacy = await signedRaw('/api/marketplace/transactions/complete', third,
-        withHours({ transactionId: hedgeDeal.id, confirmerPublicKey: third.pk }, 'hours', '-1e400'));
-    assert(legacy.status === 400 && QUANTITY_REFUSAL.test(String(legacy.body?.error)) && txRow(hedgeDeal.id)?.status === 'pending',
-        `the same door's "hours" spelling refuses -1e400 too (${brief(legacy)})`);
+    for (const json of ['-1e400', '5e-324', '0.009']) {
+        const legacy = await signedRaw('/api/marketplace/transactions/complete', third,
+            withHours({ transactionId: hedgeDeal.id, confirmerPublicKey: third.pk }, 'hours', json));
+        assert(legacy.status === 400 && QUANTITY_REFUSAL.test(String(legacy.body?.error)) && txRow(hedgeDeal.id)?.status === 'pending',
+            `the same door's "hours" spelling refuses ${json} too (${brief(legacy)})`);
+    }
     const hedgeDone = await signed('/api/marketplace/transactions/complete', third, { transactionId: hedgeDeal.id, confirmerPublicKey: third.pk });
     assert(hedgeDone.status === 200 && txRow(hedgeDeal.id)?.status === 'completed', `and with no quantity it pays the booked hour (${brief(hedgeDone)})`);
     ledgerAddsUp('the hourly completions');
@@ -290,6 +320,60 @@ async function main(): Promise<void> {
         && bal(helper.pk) > 24.9 && bal(helper.pk) <= 25,
         `with no quantity it pays the helper the 5, less the fee (${shelfDone.status}, helper ${bal(helper.pk)})`);
     ledgerAddsUp('the enterprise\'s completion');
+
+    // (f) The review's measured cases (#1445, BLOCKING 2): an hourly Offer at 1.49, 0.4 and 2.5 Beans/h, asked for or
+    //     one-step accepted at 5e-324 hours, then confirmed at 10. It paid 10, 0 and 20 for what lists at 14.90, 4 and 25.
+    const near = (a: number, b: number) => Math.abs(a - b) < 0.0001;
+    const goodBooked: [string, number][] = [['1', 1], ['"2"', 2], ['2.5', 2.5]];
+    for (const [i, price] of [1.49, 0.4, 2.5].entries()) {
+        const pruning = createPost('offer', 'garden', `Pruning at ${price}`, 'By the hour', price, 'hourly', seller.pk)!;
+        const snap = () => JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk) });
+        const beforeF = snap();
+        for (const json of ['5e-324', '1e-320', '0.009']) {
+            for (const door of ['/api/marketplace/posts/accept', '/api/marketplace/posts/request']) {
+                const r = await signedRaw(door, buyer, withHours({ postId: pruning.id, buyerPublicKey: buyer.pk }, 'hours', json));
+                assert(r.status === 400 && QUANTITY_REFUSAL.test(String(r.body?.error)) && dealsOn(pruning.id) === 0 && snap() === beforeF,
+                    `${price} Beans/h: ${door.split('/').pop()} for ${json} hours is refused, no deal is written and nothing moves (${brief(r)})`);
+            }
+        }
+        // A good quantity books it, as the apps send it: a number, a numeric string, a fraction.
+        const [bookedJson, booked] = goodBooked[i];
+        const accepted = await signedRaw('/api/marketplace/posts/accept', buyer, withHours({ postId: pruning.id, buyerPublicKey: buyer.pk }, 'hours', bookedJson));
+        const dealId = accepted.body?.transaction?.id as string;
+        assert(accepted.status === 200 && txRow(dealId)?.hours === booked && near(bal(`escrow_${dealId}`), price * booked),
+            `${price} Beans/h: accepted for ${bookedJson} hours, ${r4(price * booked)} held (${brief(accepted)})`);
+        ledgerAddsUp(`the accept at ${price}`);
+
+        // The row as the old accept wrote it at 5e-324 hours: credits price × 5e-324, which can only be a whole multiple
+        // of 5e-324 (5e-324 at 1.49, 0 at 0.4, 1e-323 at 2.5). No rate is worked out from it.
+        const rowBefore = txRow(dealId)!;
+        db.prepare('UPDATE marketplace_transactions SET hours = 5e-324, credits = ? WHERE id = ?').run(price * 5e-324, dealId);
+        const beforeConfirm = JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${dealId}`) });
+        const tenHours = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: dealId, confirmerPublicKey: buyer.pk, finalHours: 10 });
+        assert(tenHours.status === 400 && /rate per hour can't be worked out from what it holds, so nothing has moved/.test(String(tenHours.body?.error))
+            && txRow(dealId)?.status === 'pending'
+            && JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${dealId}`) }) === beforeConfirm,
+            `${price} Beans/h: such a row confirmed at 10 hours is refused and nothing moves, never paid at a rounded rate (${brief(tenHours)})`);
+        ledgerAddsUp(`the refused confirmation at ${price}`);
+        db.prepare('UPDATE marketplace_transactions SET hours = ?, credits = ? WHERE id = ?').run(rowBefore.hours, rowBefore.credits, dealId);   // put it back
+
+        // A good final quantity, " 3 " as text, pays 3 hours at the deal's own rate.
+        const buyerBefore = bal(buyer.pk), sellerBefore = bal(seller.pk);
+        const done = await signedRaw('/api/marketplace/transactions/complete', buyer,
+            withHours({ transactionId: dealId, confirmerPublicKey: buyer.pk }, 'finalHours', '" 3 "'));
+        assert(done.status === 200 && txRow(dealId)?.status === 'completed' && near(bal(buyer.pk), buyerBefore - price * (3 - booked))
+            && bal(seller.pk) - sellerBefore > price * 3 * 0.98 && bal(seller.pk) - sellerBefore <= price * 3 && bal(`escrow_${dealId}`) === 0,
+            `${price} Beans/h: confirmed at " 3 " hours it pays ${r4(price * 3)} (${brief(done)}, buyer ${bal(buyer.pk)}, seller ${bal(seller.pk)})`);
+        ledgerAddsUp(`the completion at ${price}`);
+    }
+    // The floor itself is a quantity: 0.01 hours books and pays.
+    const quick = createPost('offer', 'general', 'Quick look', 'By the hour', 2.5, 'hourly', seller.pk)!;
+    const quickDeal = await signed('/api/marketplace/posts/accept', buyer, { postId: quick.id, buyerPublicKey: buyer.pk, hours: 0.01 });
+    const quickId = quickDeal.body?.transaction?.id as string;
+    const quickDone = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: quickId, confirmerPublicKey: buyer.pk, finalHours: null });
+    assert(quickDeal.status === 200 && quickDone.status === 200 && txRow(quickId)?.status === 'completed' && near(Number(txRow(quickId)?.credits), 0.025),
+        `0.01 hours, the floor, books and pays its 0.025, with a null final quantity paying the booked hours (${brief(quickDeal)}; ${brief(quickDone)})`);
+    ledgerAddsUp('the 0.01-hour deal');
 
     // ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
     // 5. A pledge to a funded enterprise, through the door both apps use
@@ -347,16 +431,20 @@ async function main(): Promise<void> {
     const broken = makeMember('BrokenRow', 0);
     db.prepare(`UPDATE accounts SET balance = 'abc' WHERE public_key = ?`).run(broken.pk);
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
-    const steps: Record<string, { at: string }> = {};
-    for (const s of ['opened', 'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door',
-        'community-settings', 'role', 'pull-config', 'restart']) steps[s] = { at: new Date().toISOString() };
-    fs.writeFileSync(path.join(dataDir, TAKEOVER_JOURNAL_FILE), JSON.stringify({
-        v: 1, id: crypto.randomUUID(), state: 'restarting', startedAt: new Date().toISOString(), completedAt: null,
-        authorisedBy: { type: 'code', codeId: 1 }, sealedAt: null, peerId: 'peer', progressTokenHash: 'x', undoDir: path.join(dataDir, 'undo'),
-        steps, error: null,
-        result: { roles: { written: 0, owners: [], skipped: [] }, connectors: 0, publicAddress: null, tunnel: null, audit: null, announcement: null, reseal: null },
-    }), { mode: 0o600 });
-    updateLocalConfig({ promotionAuditPending: true, lastPromotionAudit: null });
+    /** A take-over's journal at `restarting`, and its audit pending, as the restart leaves them. */
+    const restartingTakeover = () => {
+        const steps: Record<string, { at: string }> = {};
+        for (const s of ['opened', 'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door',
+            'community-settings', 'role', 'pull-config', 'restart']) steps[s] = { at: new Date().toISOString() };
+        fs.writeFileSync(path.join(dataDir, TAKEOVER_JOURNAL_FILE), JSON.stringify({
+            v: 1, id: crypto.randomUUID(), state: 'restarting', startedAt: new Date().toISOString(), completedAt: null,
+            authorisedBy: { type: 'code', codeId: 1 }, sealedAt: null, peerId: 'peer', progressTokenHash: 'x', undoDir: path.join(dataDir, 'undo'),
+            steps, error: null,
+            result: { roles: { written: 0, owners: [], skipped: [] }, connectors: 0, publicAddress: null, tunnel: null, audit: null, announcement: null, reseal: null },
+        }), { mode: 0o600 });
+        updateLocalConfig({ promotionAuditPending: true, lastPromotionAudit: null });
+    };
+    restartingTakeover();
     const boot = resumeTakeoverAtBoot();
     const record = getLocalConfig().lastPromotionAudit as any;
     assert(boot.auditRan && record?.ok === false && record?.badBalances === 1,
@@ -368,6 +456,34 @@ async function main(): Promise<void> {
     const auditStep = progress.steps.find((s) => s.step === 'audit');
     assert(/1 balance\(s\) that are not a finite number/.test(String(auditStep?.detail)),
         `and the step's words name the count (${auditStep?.detail})`);
+
+    // An infinite balance (#1445 review, BLOCKING 1): the sum and the drift are Infinity, which local-config.json holds as
+    // null. The audit's words called null.toFixed and the take-over stopped at `restarting`. (A real two-process
+    // take-over: test-takeover-infinite-balance.)
+    const infinite = makeMember('InfiniteRow', 0);
+    db.prepare('UPDATE accounts SET balance = 9e999 WHERE public_key = ?').run(infinite.pk);
+    restartingTakeover();
+    const boot2 = resumeTakeoverAtBoot();
+    const record2 = getLocalConfig().lastPromotionAudit as any;
+    const progress2 = getTakeoverProgress();
+    const audit2 = progress2.result?.audit as any;
+    const step2 = String(progress2.steps.find((s) => s.step === 'audit')?.detail);
+    assert(boot2.auditRan && record2?.drift === null && record2?.badBalances === 2 && record2?.ok === false,
+        `with a balance of Infinity the audit record holds drift null and both bad balances (${JSON.stringify(record2 && { ok: record2.ok, drift: record2.drift, sum: record2.sumBalances, bad: record2.badBalances })})`);
+    assert(progress2.steps.find((s) => s.step === 'audit')?.done === true && audit2?.addsUp === false && audit2?.ok === false && audit2?.badBalances === 2,
+        `the audit step is done and says the ledger doesn't add up (${JSON.stringify(audit2 && { ok: audit2.ok, addsUp: audit2.addsUp, bad: audit2.badBalances, drift: audit2.drift })})`);
+    assert(/the ledger does NOT add up \(drift not a number, 0 stranded escrow\(s\), 2 balance\(s\) that are not a finite number\)/.test(step2) && !/null|NaN|Infinity/.test(step2),
+        `in words, with "not a number" for the difference (${step2})`);
+    // The operator's ledger audit answers the same, and a new baseline can't be set at an infinite sum.
+    const liveAudit = await adminPost('/api/local/admin/ledger-audit', {});
+    assert(liveAudit.status === 200 && liveAudit.body?.ok === false && liveAudit.body?.badBalances === 2 && liveAudit.body?.drift === null,
+        `the admin ledger audit: not ok, 2 not a number, drift null (${brief(liveAudit)})`);
+    const baselineRow = () => (db.prepare(`SELECT value FROM node_config WHERE key = 'ledger_audit_baseline'`).get() as { value: string } | undefined)?.value;
+    const baselineBefore = baselineRow();
+    const rebase = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from an infinite row' });
+    assert(rebase.status === 409 && /2 account balance\(s\) are not a number, so the ledger has no total to set a new baseline at\. Nothing was changed\./.test(String(rebase.body?.error))
+        && baselineRow() === baselineBefore,
+        `a rebaseline is refused in plain words, and the baseline stays ${baselineBefore} (${brief(rebase)}, now ${baselineRow()})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

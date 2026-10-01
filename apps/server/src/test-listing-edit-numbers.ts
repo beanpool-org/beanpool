@@ -214,7 +214,9 @@ async function main() {
     const s3 = ledgerState(everyone);
     const infReq = attempt(() => requestPost(zeroHourly.id, buyer, Infinity));
     const infAcc = attempt(() => acceptPost(zeroHourly.id, third, Infinity));
-    check(!infReq.ok && /valid quantity/.test(infReq.error) && !infAcc.ok && /valid quantity/.test(infAcc.error),
+    // A quantity given and out of range gets the quantity's own words, with its range (#1445 review); none given, "valid quantity".
+    const asQuantity = /valid quantity|quantity must be a number from 0\.01 to 10000/;
+    check(!infReq.ok && asQuantity.test(infReq.error) && !infAcc.ok && asQuantity.test(infAcc.error),
         `a request or one-step accept for Infinity hours is refused as a quantity (${JSON.stringify([infReq, infAcc])})`);
     const hReq = attempt(() => requestPost(hourly.id, buyer, 2));
     const hAppr = hReq.ok ? attempt(() => approvePostRequest(hReq.value.id, seller)) : hReq;

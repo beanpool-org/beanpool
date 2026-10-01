@@ -12,7 +12,7 @@ import { assertLocalSettlement, assertTradableHere } from '../federation-settlem
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
-import { isDealQuantity, DEAL_QUANTITY_ERROR, POST_HOURS_MAX } from './post-fields.js';
+import { isDealQuantity, DEAL_QUANTITY_ERROR } from './post-fields.js';
 import { hasBlocked } from './member-blocks.js';
 import crypto from 'node:crypto';
 import {
@@ -260,10 +260,12 @@ export function requestPost(
 
     // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed price ignores the
     // quantity, but one that is given and isn't one (Infinity, a negative, text) is refused there too, not ignored (F3).
+    // A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours rounded the deal's rate) gets the
+    // quantity's own words, on a priced-per-unit listing as on a fixed one.
+    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
     if (post.price_type !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.price_type} post`);
     }
-    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
 
     const requester = getMember(db, requesterPublicKey);
     const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
@@ -645,10 +647,10 @@ export function acceptPost(
 
     if (!hasListedOffer(db, buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 
+    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
     if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
     }
-    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
 
     const buyer = getMember(db, buyerPublicKey);
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
@@ -865,20 +867,30 @@ export function completePostTransaction(
     // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
     // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
     if (finalHours != null && !isDealQuantity(finalHours)) {
-        throw new Error(`The final quantity must be a number above 0, at most ${POST_HOURS_MAX}`);
+        throw new Error(DEAL_QUANTITY_ERROR.replace(/^The quantity/, 'The final quantity'));
     }
     assertDealRowAmount(row.credits, 'pending');
+    const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
+    // The way out of either refusal below: the booked quantity pays what the escrow holds, with no rate worked out.
+    const wayOut = `Confirm the ${units} you booked, or cancel the deal and the Beans held for it go back.`;
     let releaseCredits = row.credits;
     if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
-        releaseCredits = (row.credits / bookedHours) * finalHours;
+        // The rate must be one the row really holds (#1445 review, BLOCKING 2): its booked quantity a real one (a row from
+        // before POST_HOURS_MIN, or written by hand, may hold 5e-324, and then credits / hours had rounded to a whole
+        // number of Beans, or to 0), the rate finite, and the rate times the booked quantity the credits again. Otherwise
+        // nothing is paid at it: a wrong amount would move for good.
+        const rate = row.credits / bookedHours;
+        const roundTrips = Number.isFinite(rate) && Math.abs(rate * bookedHours - row.credits) <= 1e-9 * Math.max(1, row.credits);
+        if (!isDealQuantity(bookedHours) || !roundTrips) {
+            throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. ${wayOut}`);
+        }
+        releaseCredits = rate * finalHours;
     }
-    // A healthy row whose rate times the confirmed hours is more than any number can hold (a booked quantity near 0 under
-    // an old price above POST_CREDITS_MAX): the row is fine and the deal can still be cancelled, so the words say that,
-    // not assertDealRowAmount's "can't be cancelled" (sync check F2).
+    // A healthy row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits
+    // near the largest number): the row is fine and the deal can still be cancelled, so the words say that, not
+    // assertDealRowAmount's "can't be cancelled" (sync check F2).
     if (!isBeanAmount(releaseCredits)) {
-        const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
-        throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. `
-            + `Confirm fewer ${units}, or cancel the deal and the Beans held for it go back.`);
+        throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. ${wayOut}`);
     }
 
     const completedAt = new Date().toISOString();

@@ -45,6 +45,8 @@ import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
+import { blankMessagesOf } from './engine/message-tombstone.js';
+import { truncateWalAfterDelete } from './db/wal-truncate.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { returnStrandedPledges } from './engine/stranded-pledges.js';
@@ -7156,10 +7158,12 @@ export function adminPruneUser(publicKey: string, actor: string) {
  *    it deleted by its owner.
  * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
  *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
+ *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
  *    longest-serving active keeper, or the enterprise pauses with nobody left. Closes the keeper changes naming them.
+ * Once it has committed, empties the WAL, which still holds what the transaction replaced (db/wal-truncate.ts).
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
@@ -7276,6 +7280,10 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
         // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
         scrubPostsOf(publicKey, now);
+        // And every line they wrote, in a group's, an enterprise's or an event's chat and their half of each DM, reads
+        // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
+        // Not in a try either, for the same reason.
+        blankMessagesOf(publicKey);
 
         // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
         // with a tombstone each, so a standby drops them too.
@@ -7361,6 +7369,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     }
     // Their listings, cancelled above, leave the board (and an enterprise they led alone, paused, rings its own).
     ringListingDoorbell('post_removed');
+    // What the transaction replaced is zeroed in state.db, but state.db-wal still holds it as it was (report F2).
+    truncateWalAfterDelete('a member deleted their account');
 
     return { ok: true, message: 'Account successfully purged from node.' };
 }

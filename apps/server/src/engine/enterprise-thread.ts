@@ -9,6 +9,7 @@ import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
 import { avatarUrlFor } from '@beanpool/core';
 
 export interface EnterpriseThreadMessage {
@@ -120,7 +121,8 @@ export function getEnterpriseThreadMessages(
     return rows.reverse().map(r => {
         let displayCiphertext = r.ciphertext;
         if (r.type === 'removed') {
-            displayCiphertext = Buffer.from('removed by a keeper', 'utf8').toString('base64');
+            // A keeper's removal, or the author's own when they deleted their account (engine/message-tombstone.ts).
+            displayCiphertext = Buffer.from(blankedWithAccount(r.metadata) ? ACCOUNT_DELETED_TEXT : 'removed by a keeper', 'utf8').toString('base64');
         }
         return {
             id: r.id,

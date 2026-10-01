@@ -340,7 +340,7 @@ export function isPeerProtocolRead(ctx: { method: string; path: string }): boole
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
 export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
-    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member? (its name only to the key's own signer)
+    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member? (answered only to the key's own signer; the route refuses anyone else)
     /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability (rate-limited)
     /^\/api\/crowdfund\/projects\/[^/]+$/,                  // members only (MEMBERS_ONLY_READS_PATTERNS); here for its 404 when switched off
     /^\/api\/treasury\/[^/]+$/,                             // members only; here for its 404 when switched off

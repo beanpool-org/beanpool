@@ -30,7 +30,9 @@ vi.mock('../lib/api', async () => {
 });
 vi.mock('../lib/identity', async () => {
     const actual = await vi.importActual('../lib/identity');
-    return { ...actual, wipeIdentity: vi.fn(async () => {}) };
+    // The membership probe reads the stored key to sign with (lib/api.ts fetchMembershipAt): none here, so it goes
+    // unsigned, and the stub node below answers it all the same.
+    return { ...actual, wipeIdentity: vi.fn(async () => {}), loadIdentity: vi.fn(async () => null) };
 });
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];

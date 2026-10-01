@@ -25,6 +25,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('../db', () => ({
     applyDelta: vi.fn().mockResolvedValue(undefined),
+    communityCachesRenamed: vi.fn().mockResolvedValue(true),
     fetchFriendsFromServer: vi.fn().mockResolvedValue([]),
     getDb: vi.fn().mockResolvedValue({ getFirstAsync: vi.fn().mockResolvedValue({ count: 0 }) }),
 }));

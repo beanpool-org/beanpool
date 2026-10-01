@@ -106,6 +106,26 @@ export function isPlainNodeAddress(url: unknown): url is string {
     return typeof url === 'string' && PLAIN_ADDRESS.test(url);
 }
 
+const DEFAULT_PORTS: Record<string, string> = { http: '80', ws: '80', https: '443', wss: '443' };
+
+/**
+ * The origin a plain address names, in one spelling: `scheme://host[:port]`, scheme and host in lower case, the port
+ * without leading zeros and left out when it is the scheme's default (80, 443). Null for an address that isn't plain
+ * ({@link isPlainNodeAddress}). A plain string reading, like core's `audienceOf`, so Hermes and Node agree.
+ *
+ * Two addresses are the same community's when their origins are equal: not when one string starts with the other
+ * (`https://a.org` is a prefix of `https://a.org.evil.example`), and not when the two read the same once every
+ * character but a letter or digit is blotted out (`mullum.beanpool.org` and `mullum-beanpool.org`).
+ */
+export function plainOriginOf(url: unknown): string | null {
+    if (!isPlainNodeAddress(url)) return null;
+    const m = /^([a-z]+):\/\/(\[[^\]]+\]|[^/:]+)(?::(\d+))?/i.exec(url);
+    if (!m) return null;
+    const scheme = m[1].toLowerCase();
+    const port = m[3] === undefined ? '' : String(Number(m[3]));
+    return `${scheme}://${m[2].toLowerCase()}${port && port !== DEFAULT_PORTS[scheme] ? `:${port}` : ''}`;
+}
+
 /** Why an address was refused. Shown as is. */
 export const UNSAFE_NODE_ADDRESS_MESSAGE =
     "That community address isn't a plain web address (it has something like @ or \\ in it), so BeanPool won't " +

@@ -100,10 +100,13 @@ export async function buildSignedWsParams(wsUrl: string): Promise<string> {
     return buildBoundWsParams({ wsUrl, publicKeyHex: identity.publicKey, sign: memberSigner(identity.privateKey) });
 }
 
-/** The signed-request headers for `method path` with `bodyString`, for the node this web app talks to. */
-function signedHeaders(method: string, path: string, bodyString: string, privateKeyHex: string, publicKeyHex: string) {
+/**
+ * The signed-request headers for `method path` with `bodyString`, for the node this web app talks to, or for the one at
+ * `base` (an origin) when a request goes to another.
+ */
+function signedHeaders(method: string, path: string, bodyString: string, privateKeyHex: string, publicKeyHex: string, base: string = nodeAddress()) {
     return buildBoundRequestHeaders({
-        method, url: `${nodeAddress()}${path}`, body: bodyString, publicKeyHex, sign: memberSigner(privateKeyHex),
+        method, url: `${base}${path}`, body: bodyString, publicKeyHex, sign: memberSigner(privateKeyHex),
     });
 }
 
@@ -451,6 +454,21 @@ export async function getCommunityHealth(): Promise<any> {
 
 export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
     return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
+}
+
+/**
+ * GET /api/community/membership/<key> at `community` (an origin, any community, not only the one this web app talks to),
+ * signed by the key this browser keeps when it is that key, for that community's host: a community answers the probe
+ * only to the key it asks about (multi-community review F3). Any other key goes unsigned, and is refused.
+ */
+export async function fetchMembershipAt(community: string, publicKey: string, signal?: AbortSignal): Promise<Response> {
+    const path = `/api/community/membership/${encodeURIComponent(publicKey)}`;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const identity = await loadIdentity();
+    if (identity?.privateKey && identity.publicKey === publicKey) {
+        Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
+    }
+    return fetch(`${community}${path}`, { headers, cache: 'no-store', ...(signal ? { signal } : {}) });
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {

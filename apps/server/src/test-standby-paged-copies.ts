@@ -68,9 +68,9 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
 import {
-    PW_STANDBY, PAGE_BYTES, PAGE_ROWS, CAP, COPY_IDLE_MS, type Id,
+    PW_STANDBY, PAGE_BYTES, PAGE_ROWS, CAP, type Id,
     assert, require_, step, newId, api, built, sleep, until, alive, snapDiff, first, counts, TINY_PNG,
-    newPair, startMain, startStandby, pairHelpers, closePair, auditCommand,
+    newPair, startMain, startStandby, pairHelpers, closeLeftCopy, closePair, auditCommand,
 } from './standby-pair-test-harness.js';
 
 delete process.env.CF_RECORD_NAME;
@@ -180,10 +180,10 @@ async function main(): Promise<void> {
             const after = await snapS();
             assert(stagerGone && !st3b.staging && snapDiff(before, after).length === 0,
                 `S starts again with no staging, its stager gone, and its copy as it was, row for row (differences ${first(snapDiff(before, after))}; ${JSON.stringify(st3b)})`);
-            // M still serves the copy S left: busy until it idles out.
+            // M still serves the copy S left: busy until it idles out, two minutes on, as closeLeftCopy closes it here.
             const busy = await standby.send('pull', { whole: true });
             assert(busy.ok === false && /HTTP 409/.test(busy.error ?? ''), `M answers the next whole copy "busy" while the one S left is open (${JSON.stringify(busy)})`);
-            await sleep(COPY_IDLE_MS + 500);
+            require_(await closeLeftCopy(pair, main), 'M was still serving the copy S left, and closes it');
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
             const p3 = await wholeCopy();
             assert(p3.ok === true && p3.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p3)})`);
@@ -393,7 +393,7 @@ async function main(): Promise<void> {
         const newStandby = async (name: string, opts: { maxFileBytes?: number } = {}) => {
             standby = await startStandby(pair, name, main, opts);
             standbyDir = dir(name);
-            await sleep(COPY_IDLE_MS + 500); // a copy the standby before it left open on M closes first
+            await closeLeftCopy(pair, main); // a copy the standby before it left open on M closes first
             const p = await pullAndSwap(false);
             require_(p.ok === true && p.staged === true && (await exactNow()).length === 0, `a new standby's first copy lands (${JSON.stringify(p)})`);
             return name;
@@ -497,8 +497,9 @@ async function main(): Promise<void> {
                 `the pull fails ${secs.toFixed(1)} s after the kill, at page 2 (${JSON.stringify(p14)}): its staging deleted, S as it was, the record "refused" `
                 + `(differences ${first(snapDiff(before, after))}; ${JSON.stringify(st14b)}; before: it waited PAGE_TIMEOUT_MS, 15 minutes)`);
             await standby.send('set-env', { vars: { BACKUP_PAGE_GAP_MS: '0' } });
-            // S's close of the copy it left waits out its page gap; M has closed it, or idled it out, by then.
-            await sleep(COPY_IDLE_MS + 500);
+            // S's close of the copy it left waits out its page gap.
+            const left = px.opened[opened] ?? '';
+            require_(await until('S to close the copy it left', () => px.closed.includes(left)), `S closes the copy it left on M (${left.slice(0, 8)})`);
             const p14b = await wholeCopy();
             assert(p14b.ok === true && p14b.staged === true && (await exactNow()).length === 0, `the next whole copy lands, and S is M's (${JSON.stringify(p14b)})`);
         });

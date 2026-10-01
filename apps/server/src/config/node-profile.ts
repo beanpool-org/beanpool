@@ -70,8 +70,18 @@ export interface ProfileSwitches {
     crowdfund: boolean;
     /** This node takes "ask to join" requests from non-members, which any member may answer with an invite (G6,
      *  routes/knocks.ts; D4 = a: on for every community). Off: every /api/join/knock route is 404. The operator's
-     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). */
+     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). A knock is
+     *  answered with an invite, so with `invites` off it is off too, whatever its own setting says. */
     knocks: boolean;
+    /** Invites (engine/invites.ts): a member makes a code or an offline ticket, an owner or admin a seed invite, and
+     *  whoever holds one joins with it. Off: nobody here makes one, members and node roles alike, and none joins
+     *  anyone, a code already in the database included (the routes are 404 `feature_off`, and the engine refuses
+     *  underneath). The invites already made, and the invite tree, still read. Off on the global node (Marty,
+     *  2026-10-01): an invite needs no sign-in, so one sign-in account minting 20 a day grew into hundreds of accounts
+     *  that no sign-in stood behind, past the door's one-account-one-member rule (D1) and its per-address limit
+     *  (FABLE-sec-global-abuse HIGH-1). There the open door is the only way in. A member of the global node joining a
+     *  LOCAL community with that community's invite (a knock answered there) is the local node's invite, unchanged. */
+    invites: boolean;
     /** A post listing read with a point (`lat`, `lng`) and no `sort` comes nearest first; off, it keeps the most
      *  recently updated first. Without a point every profile keeps that order (routes/marketplace.ts). Not the same as
      *  `features.distanceSearch`, which every node reports. */
@@ -130,6 +140,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         treasuries: true,
         crowdfund: true,
         knocks: true,
+        invites: true,
         distanceSortDefault: false,
         directoryMirror: false,
         publishToDirectory: true,
@@ -150,6 +161,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         crowdfund: false,
         // Nobody knocks on the lobby: people knock on a local community from here.
         knocks: false,
+        // The door is the only way in (Marty, 2026-10-01): one sign-in account, one member. Share the link instead.
+        invites: false,
         distanceSortDefault: true,
         directoryMirror: true,
         // The lobby is not a place, so it is not a pin on the directory map.
@@ -205,6 +218,10 @@ export interface NodeFeatures {
     /** Members can propose and vote on formal Decisions here. Off, the apps show no way into Decide. An app that
      *  finds no `decisions` (a server from before it) treats it as on: every such server allows them. */
     decisions: boolean;
+    /** Members make and join with invites here. Off (the global node), the apps show no way to make one: no code, no
+     *  QR, no ticket, only the community's plain link to share. An app that finds no `invites` (a server from before
+     *  it) treats it as on: every such server takes them. */
+    invites: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -293,7 +310,13 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
  * money kept on and the open door shut wherever the ledger has moved.
  */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET });
+    return lockKnocksToInvites(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET }));
+}
+
+/** A knock is answered with an invite (engine/knocks.ts approveKnock), so a node that makes none takes no knocks. */
+function lockKnocksToInvites(s: ProfileSwitches): ProfileSwitches {
+    if (!s.invites) s.knocks = false;
+    return s;
 }
 
 export function getNodeFeatures(): NodeFeatures {
@@ -313,6 +336,7 @@ export function getNodeFeatures(): NodeFeatures {
         guestListingsOnly: s.guestListingsOnly,
         exampleListings: s.exampleListings,
         decisions: s.decisions,
+        invites: s.invites,
     };
 }
 
@@ -432,7 +456,13 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     decisions: 'Community votes are switched off on this node, so nothing here can be proposed or voted on. Its moderators look after it instead.',
 };
 
+/** Invites off, to a member who would make one and to someone holding a code: what to do instead. */
+export const INVITES_OFF_MESSAGE = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+/** The same, where the open door is shut too: nobody new can join here at all, and saying "sign in" would be false. */
+export const INVITES_OFF_DOOR_SHUT_MESSAGE = 'This community doesn’t use invites, and it isn’t taking new members right now.';
+
 export function featureOffMessage(feature: ProfileSwitch): string {
+    if (feature === 'invites') return getProfileSwitches().openJoin ? INVITES_OFF_MESSAGE : INVITES_OFF_DOOR_SHUT_MESSAGE;
     return FEATURE_OFF_MESSAGES[feature] ?? `${feature} is switched off on this node.`;
 }
 
@@ -616,6 +646,14 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (configured.openJoin) {
         if (history) loudly(doorShutMessage(history));
         else console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+    }
+    if (!configured.invites) {
+        if (configured.openJoin && !history) {
+            console.log('🎟️  Invites are off: nobody here makes an invite or joins with one, and the open door is the only way in.');
+        } else {
+            loudly(`⚠️  Invites are off and the open door is shut, so nobody new can join this node. To let people in, turn invites `
+                + `back on with the node_config row ${NODE_PROFILE_KEY}.invites = true.`);
+        }
     }
     return { profile, previous };
 }

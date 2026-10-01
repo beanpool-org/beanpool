@@ -41,6 +41,7 @@ async function main() {
         guestListingsOnly: true,
         exampleListings: true,
         decisions: false,
+        invites: false,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',
@@ -73,6 +74,22 @@ async function main() {
         "with decisions off, the admin's list and the brake (halt) still answer");
     assert(featureOffFor('/api/commons/decisions/d1/vote', { ...mockSwitchesOff, decisions: true }, 'POST') === null,
         'with decisions on, voting is served');
+
+    // Invites (the global node): making one and joining with one are off; reading the ones already made is not.
+    const inviteRoutes: Array<[string, string]> = [
+        ['/api/invite/generate', 'POST'], ['/api/invite/redeem', 'POST'], ['/api/invite/redeem-offline', 'POST'],
+        ['/api/invite/check', 'GET'], ['/api/admin/seed-invite', 'POST'], ['/api/invite/generate/', 'POST'],
+    ];
+    assert(inviteRoutes.every(([p, m]) => featureOffFor(p, mockSwitchesOff, m) === 'invites'),
+        `with invites off, generate, both redeems, the pre-flight and the admin's seed invite are off (${inviteRoutes.map(([p, m]) => `${m} ${p} → ${featureOffFor(p, mockSwitchesOff, m)}`).join(', ')})`);
+    assert(featureOffFor('/api/invite/mine/abc', mockSwitchesOff, 'GET') === null && featureOffFor('/api/invite/tree', mockSwitchesOff, 'GET') === null,
+        "with invites off, a member's own invites and the invite tree still read");
+    assert(inviteRoutes.every(([p, m]) => featureOffFor(p, { ...mockSwitchesOff, invites: true }, m) === null),
+        'with invites on, every one of them is served');
+    assert(featureOffFor('/api/join/knock', mockSwitchesOff, 'POST') === 'invites'
+        && featureOffFor('/api/join/knock', { ...mockSwitchesOff, invites: true }, 'POST') === 'knocks'
+        && featureOffFor('/api/join/knock', { ...mockSwitchesOff, invites: true, knocks: true }, 'POST') === null,
+        'a knock is answered with an invite: where invites are off it gets their answer, where only knocks are off, theirs');
 
     console.log('\n── 2. Unit tests for respondProfileRefusal ──');
     const ctx1 = { status: 200, body: null as unknown };
@@ -108,6 +125,15 @@ async function main() {
 
     const resUngated = await fetch(`${BASE}/api/community/info`);
     assert(resUngated.status === 200, 'ungated route GET /api/community/info passes through gate with 200');
+
+    // The redeems skip the signature middleware, so the gate is the first to answer them: before the route's own
+    // refusal of an unsigned redeem (401 redeem_unsigned on a node that takes invites).
+    const resRedeem = await fetch(`${BASE}/api/invite/redeem`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'INV-GATE-TEST', publicKey: 'a'.repeat(64), callsign: 'Gate' }),
+    });
+    const bodyRedeem = await resRedeem.json();
+    assert(resRedeem.status === 404 && bodyRedeem.code === 'feature_off' && bodyRedeem.feature === 'invites',
+        `POST /api/invite/redeem on the global profile → 404 feature_off invites (got ${resRedeem.status} ${JSON.stringify(bodyRedeem)})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

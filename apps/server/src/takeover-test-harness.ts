@@ -200,7 +200,12 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const { createOwnerUnlockRoutes } = await import('./routes/owner-unlock.js');
     const { checkAdminAuth } = await import('./admin-auth.js');
-    const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
+    const epochModule: { identityReadOnlyGuard: any; startIdentityEpochWatch: any; neverAskCommunityAddressForTests?: () => void } = await import('./services/identity-epoch.js');
+    const { identityReadOnlyGuard, startIdentityEpochWatch } = epochModule;
+    // Before a take-over a standby asks the community's web address whether another server took over already: a suite's
+    // main servers have real-looking hostnames, so it asks only BEANPOOL_TEST_IDENTITY_EPOCH_URL, when a suite gives one,
+    // and the main server's URL (this machine). Optional: a tree from before it still starts.
+    epochModule.neverAskCommunityAddressForTests?.();
 
     const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
     const { installOpenJoinKeyAtBoot } = await import('./services/open-join-key.js');

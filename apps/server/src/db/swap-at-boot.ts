@@ -21,8 +21,10 @@
  * - Killed after the swap, before the staging directory went: READY and no staging database: the staging goes.
  * - A staging directory with no READY (a copy that was being built when the server stopped), or a staging database that
  *   fails its check: the staging goes, and the live copy is as it was.
- * - A take-over that is under way (its journal, services/takeover.ts, not complete): the staging goes. A copy made
- *   before a take-over must never replace what the take-over wrote.
+ * - A take-over that is under way (its journal, services/takeover.ts, neither complete nor rolled back): the staging
+ *   goes. A copy made before a take-over must never replace what the take-over wrote. One that stopped and was rolled back
+ *   is not under way: this server is a standby again, and its next whole copy is swapped in as any other (F2 of the
+ *   2026-10-01 standby review: a 'failed' journal used to discard every copy, each after a restart).
  * - Any of these after a swap stopped between its renames (the staged copy torn, or a take-over under way): the staging
  *   goes and `state.previous.db`, which is this server's copy, becomes `state.db` again (putPreviousBack).
  * - `state.db` missing or empty and `state.previous.db` there with no staging: taken away from outside (by hand, or the
@@ -47,10 +49,16 @@ export type SwapOutcome = 'none' | 'swapped' | 'discarded' | 'failed';
 
 let done: SwapOutcome | null = null;
 
-function takeoverUnderWay(dataDir: string): boolean {
+/**
+ * Whether a take-over journal (services/takeover.ts journalUnderWay) says one is under way: anything but one that finished,
+ * or one that stopped and was rolled back (this server a standby again, as it was). A journal an older build left 'failed'
+ * counts until the start after it resolves it (resumeTakeoverAtBoot). Read from the file, so the swap and the puller can
+ * ask without loading the take-over. Never throws.
+ */
+export function takeoverUnderWay(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): boolean {
     try {
-        const j = JSON.parse(fs.readFileSync(path.join(dataDir, TAKEOVER_JOURNAL), 'utf-8')) as { state?: unknown };
-        return j?.state !== 'complete';
+        const j = JSON.parse(fs.readFileSync(path.join(dataDir, TAKEOVER_JOURNAL), 'utf-8')) as { state?: unknown; rolledBack?: unknown };
+        return j?.state !== 'complete' && !(j?.state === 'failed' && !!j?.rolledBack);
     } catch {
         return false;
     }

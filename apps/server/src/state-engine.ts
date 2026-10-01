@@ -7599,6 +7599,11 @@ export const PUBLIC_URL_RULES = {
     community: { publicAddress: 'any', cfRecordName: 'in-zone', lostNames: 'skip' },
     /** Where this server asks for its own identity-epoch statement (services/identity-epoch.ts ownPublicEpochUrl). */
     identityEpoch: { publicAddress: 'hostname', cfRecordName: 'as-set', lostNames: 'skip' },
+    /**
+     * Where a standby, before it takes over, asks whether another server took over with the same keys (services/identity-
+     * epoch.ts newerTakeoverAnswering): the community's address from the keys only, never this standby's own CF_RECORD_NAME.
+     */
+    takeoverCheck: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'skip' },
     /** The `buyerHomeNode` a cross-community purchase or commission sends (routes/federation-*.ts); the peer works it out when null. */
     buyerHomeNode: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'keep' },
 } as const satisfies Record<string, PublicUrlRules>;

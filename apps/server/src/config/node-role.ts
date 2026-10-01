@@ -11,9 +11,10 @@ let nodeRole: NodeRole | null = null;
 /**
  * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
  * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
- * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process.
+ * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process. A take-over
+ * rolled back at boot (services/takeover.ts) reads it again, after putting the standby's own `nodeRole` back.
  */
-function resolveNodeRole(): NodeRole {
+export function resolveNodeRole(): NodeRole {
     try {
         const configured = getLocalConfig().nodeRole;
         if (configured === 'primary' || configured === 'backup') return configured;

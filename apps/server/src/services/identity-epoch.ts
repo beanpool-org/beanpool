@@ -16,6 +16,13 @@
  * - **What it ignores.** An address it cannot reach, an old server with no such route, and anything not signed by
  *   its own key (a forgery, logged) change nothing: no hard gate. So the manual still says: don't start the old
  *   main server again after a take-over.
+ * - **Two take-overs to one epoch** (MEDIUM-2 of the 2026-10-01 replication review). Every standby holds the same locked
+ *   keys, so two standbys can each take over, and both write the keys' epoch + 1. The statement's `since` (when that
+ *   take-over started, signed with the rest) tells them apart. A main server that sees its OWN epoch at its address with
+ *   another `since` answers 'conflict', never 'current': the earlier take-over stays the main server, and the later one
+ *   goes read-only as a replaced one does, saying why, and remembers it. Both compare the same two signed times, so they
+ *   agree on which is which. Before a take-over, a standby asks too (newerTakeoverAnswering): a higher epoch than its
+ *   keys were locked at, signed by them, means another server took over already, and the take-over is refused.
  *
  * Read-only covers members' writes over HTTP (every POST/PUT/PATCH/DELETE under /api/ except the admin control
  * plane, /api/local/ and /api/manager/, so the operator can still sign in, read what happened, and take the
@@ -27,7 +34,7 @@ import path from 'node:path';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import type Koa from 'koa';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
-import { getNodeRole, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
+import { getNodeRole, resolvePublicNodeUrl, PUBLIC_URL_RULES, type NodeConfig } from '../state-engine.js';
 import { logger } from '../logger.js';
 import { readNodeIdentity, type NodeIdentity } from './takeover-envelope.js';
 
@@ -35,8 +42,12 @@ export const IDENTITY_EPOCH_PATH = '/api/node/identity-epoch';
 const DOMAIN = 'beanpool-identity-epoch-v1\n';
 const CHECK_INTERVAL_MS = Number(process.env.IDENTITY_EPOCH_CHECK_INTERVAL_MS) || 60 * 60_000;
 const FETCH_TIMEOUT_MS = Number(process.env.IDENTITY_EPOCH_FETCH_TIMEOUT_MS) || 10_000;
-/** A tunnel run from two machines at once is load-balanced between them, so one answer may be our own. */
-const ASKS_PER_CHECK = 3;
+/**
+ * A tunnel run from two machines at once is load-balanced between them, so one answer may be our own. Six asks miss the
+ * other machine one time in 64 when the two share it evenly (three missed it one time in 8), and a check stops at the
+ * first proof.
+ */
+const ASKS_PER_CHECK = 6;
 
 export interface EpochStatement {
     v: 1;
@@ -169,11 +180,13 @@ export type EpochCheck =
     | { state: 'no-epoch-route'; url: string }
     | { state: 'forged'; url: string; why: string }
     | { state: 'current'; url: string; seen: number; own: number }
-    | { state: 'replaced'; url: string; seen: number; own: number; since: string | null };
+    | { state: 'replaced'; url: string; seen: number; own: number; since: string | null }
+    /** Another take-over to this server's own epoch. `readOnly`: it came first, so this server refuses members' writes. */
+    | { state: 'conflict'; url: string; epoch: number; ownSince: string | null; otherSince: string | null; readOnly: boolean };
 
-async function askOnce(url: string): Promise<{ status: number; body: unknown } | { error: string }> {
+async function askOnce(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<{ status: number; body: unknown } | { error: string }> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
         const text = await res.text();
@@ -181,9 +194,72 @@ async function askOnce(url: string): Promise<{ status: number; body: unknown } |
         try { body = JSON.parse(text); } catch { body = null; }
         return { status: res.status, body };
     } catch (e: any) {
-        return { error: e?.name === 'AbortError' ? `no answer in ${FETCH_TIMEOUT_MS / 1000}s` : (e?.cause?.code || e?.message || String(e)) };
+        return { error: e?.name === 'AbortError' ? `no answer in ${timeoutMs / 1000}s` : (e?.cause?.code || e?.message || String(e)) };
     } finally {
         clearTimeout(timer);
+    }
+}
+
+// ── Before a take-over ────────────────────────────────────────────────────────────────────
+
+/** A server holding a take-over's keys that answers a newer take-over than they were locked at. */
+export interface NewerTakeover {
+    url: string;
+    /** In words, for the refusal: "the community's web address (https://…)" or "the main server's address (https://…)". */
+    where: string;
+    statement: EpochStatement;
+    sealedEpoch: number;
+}
+
+/** Tests only: a suite's main servers have real-looking hostnames, which a take-over must never ask. */
+let askCommunityAddress = true;
+export function neverAskCommunityAddressForTests(): void {
+    askCommunityAddress = false;
+}
+
+/**
+ * Before a take-over (services/takeover.ts, at the preview and again at the confirm): ask the community's web address from
+ * the keys (PUBLIC_URL_RULES.takeoverCheck; a suite's stand-in in BEANPOOL_TEST_IDENTITY_EPOCH_URL) and the main server's
+ * URL this standby copies from, at once, for the identity-epoch statement. The first signed by the keys' own node key with
+ * a higher epoch than they were locked at: another server took over with them already (another standby). Null when none
+ * does, or none answers in `timeoutMs`: no hard gate, since the main server is most likely gone and its address with it.
+ * A server answering the keys' own epoch is the main server itself, which the preview warns about already. Never throws.
+ */
+export async function newerTakeoverAnswering(opts: {
+    identity: NodeIdentity; sealedEpoch: number; publicAddress: unknown; registrarNames: unknown; mainServerUrl: string | null; timeoutMs: number;
+}): Promise<NewerTakeover | null> {
+    try {
+        const asks: { url: string; where: string }[] = [];
+        const test = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL;
+        if (test) {
+            asks.push({ url: test, where: `the community's web address (${test})` });
+        } else if (askCommunityAddress) {
+            const config = { publicAddress: opts.publicAddress, registrarNames: opts.registrarNames } as unknown as NodeConfig;
+            const origin = resolvePublicNodeUrl(PUBLIC_URL_RULES.takeoverCheck, config);
+            if (origin) asks.push({ url: `${origin}${IDENTITY_EPOCH_PATH}`, where: `the community's web address (${origin})` });
+        }
+        if (opts.mainServerUrl) {
+            const base = opts.mainServerUrl.replace(/\/+$/, '');
+            const url = `${base}${IDENTITY_EPOCH_PATH}`;
+            if (!asks.some((a) => a.url === url)) asks.push({ url, where: `the main server's address (${base})` });
+        }
+        // A few asks each: an address shared by two servers (one tunnel run from both) answers either.
+        const ask = async (a: { url: string; where: string }): Promise<NewerTakeover | null> => {
+            for (let i = 0; i < 3; i++) {
+                const got = await askOnce(a.url, opts.timeoutMs);
+                if ('error' in got || got.status !== 200) return null;
+                const verdict = verifyEpochStatement(got.body, opts.identity);
+                if (verdict.ok && verdict.statement.epoch > opts.sealedEpoch) {
+                    return { url: a.url, where: a.where, statement: verdict.statement, sealedEpoch: opts.sealedEpoch };
+                }
+            }
+            return null;
+        };
+        const found = await Promise.all(asks.map(ask));
+        return found.find((f) => f !== null) ?? null;
+    } catch (e: any) {
+        logger.warn('SYS', `[Split-brain] Could not ask whether another server took over already: ${e?.message || e}`);
+        return null;
     }
 }
 
@@ -205,9 +281,12 @@ export async function checkIdentityEpoch(): Promise<EpochCheck> {
         if (!identity) return { state: 'no-identity' };
         const url = ownPublicEpochUrl();
         if (!url) return { state: 'no-address' };
-        const own = ownIdentityEpoch().epoch;
+        const ownNow = ownIdentityEpoch();
+        const own = ownNow.epoch;
 
         let best: EpochStatement | null = null;
+        // The same epoch from another take-over (another `since`): only a take-over has an epoch above 0.
+        let rival: EpochStatement | null = null;
         let forged: string | null = null;
         let unreachable: string | null = null;
         let noRoute = false;
@@ -223,17 +302,37 @@ export async function checkIdentityEpoch(): Promise<EpochCheck> {
             }
             if (!best || verdict.statement.epoch > best.epoch) best = verdict.statement;
             if (best.epoch > own) break; // proof enough
+            if (own > 0 && verdict.statement.epoch === own && verdict.statement.since !== ownNow.since) {
+                rival = verdict.statement;
+                break; // proof enough
+            }
         }
 
         if (best && best.epoch > own) {
             markReplaced(identity.peerId, best, own, url);
             return { state: 'replaced', url, seen: best.epoch, own, since: best.since };
         }
+        if (rival) {
+            const other = rival;
+            const first = firstTakeover(ownNow.since, other.since) < 0;
+            if (first) {
+                logOnce(`conflict-first|${url}|${own}|${other.since}`, () => logger.security('SYS', `[Split-brain] ⚠️ ${url} answers identity epoch ${own} `
+                    + `from another take-over (${when(other.since)}), signed with this server's own node key: two servers took over with the same keys. `
+                    + `This one took over first (${when(ownNow.since)}) and stays the main server; the other goes read-only once it sees this one. `
+                    + 'Stop the other server, and set it up again as a standby of this one.'));
+            } else {
+                markConflict(identity.peerId, other, ownNow, url);
+            }
+            return { state: 'conflict', url, epoch: own, ownSince: ownNow.since, otherSince: other.since, readOnly: !first };
+        }
         if (forged) {
             logger.security('SYS', `[Split-brain] Ignored ${forged} at ${url}. This server carries on as the main server.`);
             if (!best) return { state: 'forged', url, why: forged };
         }
         if (best) {
+            // A take-over this server lost, seen before: still read-only, so never "current" (the address answered this server).
+            const lost = getReplacedInfo();
+            if (lost?.conflict) return { state: 'conflict', url, epoch: lost.epoch, ownSince: lost.ownSince, otherSince: lost.since, readOnly: true };
             logOnce(`current|${url}|${best.epoch}`, () => logger.info('SYS', `[Split-brain] ${url} answers identity epoch ${best!.epoch}; this server is at ${own}. No other server has taken over.`));
             return { state: 'current', url, seen: best.epoch, own };
         }
@@ -252,11 +351,47 @@ export async function checkIdentityEpoch(): Promise<EpochCheck> {
 
 function markReplaced(peerId: string, seen: EpochStatement, own: number, url: string): void {
     const prev = getLocalConfig().identityReplaced;
-    if (prev && prev.peerId === peerId && prev.epoch >= seen.epoch) return;
+    if (prev && prev.peerId === peerId && prev.epoch >= seen.epoch && !prev.conflict) return;
     const record = { peerId, epoch: seen.epoch, ownEpoch: own, since: seen.since, detectedAt: new Date().toISOString(), url };
     updateLocalConfig({ identityReplaced: record });
     readOnlyMemo = null;
     logger.security('SYS', `[Split-brain] 🛑 ${replacedMessage(record)} ${url} answers identity epoch ${seen.epoch}, signed with this server's own node key; this server is at ${own}. Members' writes are refused from now on. Don't run this server as the main server again.`);
+}
+
+/**
+ * Of two take-overs to one epoch, which came first: negative when `a` did. The earlier `since` (each signed in its
+ * server's statement), so both servers decide the same; a time that does not read as one sorts last. 0 only when the two
+ * cannot be told apart, which is no conflict at all.
+ */
+export function firstTakeover(a: string | null, b: string | null): number {
+    const ta = a ? Date.parse(a) : NaN;
+    const tb = b ? Date.parse(b) : NaN;
+    if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta - tb;
+    if (Number.isFinite(ta) !== Number.isFinite(tb)) return Number.isFinite(ta) ? -1 : 1;
+    if (a === b) return 0;
+    return (a ?? '') < (b ?? '') ? -1 : 1;
+}
+
+/** "2026-10-02 09:14 UTC", or "an unknown time". */
+function when(since: string | null): string {
+    return since && Number.isFinite(Date.parse(since)) ? `${since.slice(0, 16).replace('T', ' ')} UTC` : 'an unknown time';
+}
+
+/** This server took over second, with the same keys as the server at its address: read-only from now on, remembered. */
+function markConflict(peerId: string, other: EpochStatement, own: { epoch: number; since: string | null }, url: string): void {
+    const prev = getLocalConfig().identityReplaced;
+    if (prev && prev.peerId === peerId && (prev.conflict
+        ? prev.epoch === other.epoch && prev.since === other.since && prev.conflict.ownSince === own.since
+        : prev.epoch > own.epoch)) return; // recorded already, or a newer take-over replaced this server anyway
+    const record = {
+        peerId, epoch: other.epoch, ownEpoch: own.epoch, since: other.since, detectedAt: new Date().toISOString(), url,
+        conflict: { ownSince: own.since },
+    };
+    updateLocalConfig({ identityReplaced: record });
+    readOnlyMemo = null;
+    logger.security('SYS', `[Split-brain] 🛑 ${replacedMessage(record)} ${url} answers identity epoch ${other.epoch} from that take-over, signed with `
+        + `this server's own node key. Members' writes are refused here from now on: they go to the other server. Stop this server, and set it `
+        + 'up again as a standby of the other one.');
 }
 
 // ── Read-only ─────────────────────────────────────────────────────────────────────────────
@@ -264,13 +399,22 @@ function markReplaced(peerId: string, seen: EpochStatement, own: number, url: st
 export interface ReplacedInfo {
     epoch: number;
     ownEpoch: number;
+    /** When the other server took over. */
     since: string | null;
     detectedAt: string;
     url: string;
     message: string;
+    /** Another take-over to this server's own epoch, made first (two standbys, one set of keys). */
+    conflict: boolean;
+    /** When this server took over: set for a conflict. */
+    ownSince: string | null;
 }
 
-function replacedMessage(r: { since: string | null; detectedAt: string }): string {
+function replacedMessage(r: { since: string | null; detectedAt: string; conflict?: { ownSince: string | null } | null }): string {
+    if (r.conflict) {
+        return `Another server took over this community with the same keys on ${when(r.since)}, before this server did (${when(r.conflict.ownSince)}). `
+            + 'This server is now read-only.';
+    }
     const date = (r.since || r.detectedAt).slice(0, 10);
     return `This server was replaced on ${date}. It is now read-only.`;
 }
@@ -283,8 +427,17 @@ export function getReplacedInfo(): ReplacedInfo | null {
     let peerId: string | null = null;
     try { peerId = readNodeIdentity()?.peerId ?? null; } catch { peerId = null; }
     if (peerId !== r.peerId) return null; // a new identity since: the record is about a server this no longer is
-    if (ownIdentityEpoch().epoch >= r.epoch) return null;
-    return { epoch: r.epoch, ownEpoch: r.ownEpoch, since: r.since, detectedAt: r.detectedAt, url: r.url, message: replacedMessage(r) };
+    const own = ownIdentityEpoch();
+    if (r.conflict) {
+        // About this server's own take-over only: one it made since (a higher epoch, or another `since`) is not the one that lost.
+        if (own.epoch !== r.epoch || own.since !== r.conflict.ownSince) return null;
+    } else if (own.epoch >= r.epoch) {
+        return null;
+    }
+    return {
+        epoch: r.epoch, ownEpoch: r.ownEpoch, since: r.since, detectedAt: r.detectedAt, url: r.url, message: replacedMessage(r),
+        conflict: !!r.conflict, ownSince: r.conflict?.ownSince ?? null,
+    };
 }
 
 let readOnlyMemo: { at: number; info: ReplacedInfo | null } | null = null;
@@ -307,8 +460,8 @@ export async function identityReadOnlyGuard(ctx: Koa.Context, next: Koa.Next): P
                 ctx.status = 503;
                 ctx.set('Cache-Control', 'no-store');
                 ctx.body = {
-                    error: `${info.message} Another server took over this community; use that one.`,
-                    readOnly: true, replacedSince: info.since, detectedAt: info.detectedAt,
+                    error: `${info.message} ${info.conflict ? "Members' changes go to the other server; use that one." : 'Another server took over this community; use that one.'}`,
+                    readOnly: true, replacedSince: info.since, detectedAt: info.detectedAt, ...(info.conflict ? { conflict: true } : {}),
                 };
                 return;
             }

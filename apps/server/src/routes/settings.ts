@@ -417,9 +417,14 @@ async function backgroundUpdateCheck() {
     }
 }
 
-// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit)
-setTimeout(() => backgroundUpdateCheck(), 30000).unref();
-setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
+// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit).
+// DISABLE_UPDATE_CHECK=true turns the background lookup off (the server-suites runner sets it: a test node must never
+// ask GitHub, and a slow run used to outlive the 30s delay and trip the suites' "nothing leaves this machine" check).
+// Unset, a real node behaves exactly as before. The manual "check for updates" route is unaffected.
+if (process.env.DISABLE_UPDATE_CHECK !== 'true') {
+    setTimeout(() => backgroundUpdateCheck(), 30000).unref();
+    setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
+}
 
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');

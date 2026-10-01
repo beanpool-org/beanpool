@@ -29,6 +29,11 @@
       "types": "./dist/sso-share-vectors.d.ts",
       "import": "./dist/sso-share-vectors.js",
       "default": "./dist/sso-share-vectors.js"
+    },
+    "./dm-line-vectors": {
+      "types": "./dist/dm-line-vectors.d.ts",
+      "import": "./dist/dm-line-vectors.js",
+      "default": "./dist/dm-line-vectors.js"
     }
   },
   "scripts": {

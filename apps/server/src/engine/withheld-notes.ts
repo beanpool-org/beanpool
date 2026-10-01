@@ -20,7 +20,7 @@
  *   (`auth_payload`, SRV-20) still holds the words it was signed with: it is the sender's signature, which a standby
  *   re-checks for who moved the Beans (engine/sync.ts verifyTransactionAuthorship takes a note kept blank), and no
  *   member's read ever serves it.
- * - Gone with its sender on a prune or a self-deletion (dropWithheldNotesOf). A re-key moves the ledger row, which names
+ * - Its words gone with its sender on a prune or a self-deletion (dropWithheldNotesOf); the recipient keeps the neutral line. A re-key moves the ledger row, which names
  *   the sender (engine/key-move.ts); the note, kept by the row's id, follows it.
  */
 import { BLOCKED_BEANS_NOTE, isSyntheticAccount } from '@beanpool/core';
@@ -36,15 +36,18 @@ function isTreasuryKey(key: string): boolean {
  * Whether the note on this send is kept from its recipient: a note (any text but blank), from one person to another who
  * has blocked them. Decided before the send's transaction (state-engine transfer); it refuses nothing.
  */
-export function withholdsNote(from: string, to: string, memo: string | null | undefined): boolean {
-    if (typeof memo !== 'string' || memo.trim() === '') return false;
+export function withholdsNote(from: string, to: string, memo: unknown): boolean {
+    // The same rule as isNote (routes/profile-feature-gate.ts): the transfer route takes a memo of any JSON type and the
+    // ledger stores a number as text, so 412345678 is a note as '412345678' is.
+    if (memo == null || String(memo).trim() === '') return false;
     if (!from || !to || from === to || isSyntheticAccount(from) || isSyntheticAccount(to)) return false;
     // The block first: one lookup on its key, and false for nearly every send.
     return hasBlocked(to, from) && !isTreasuryKey(from) && !isTreasuryKey(to);
 }
 
 /** The send's note, kept for its sender: in the send's own transaction, with the row that names them. */
-export function keepWithheldNote(transactionId: string, memo: string): void {
+export function keepWithheldNote(transactionId: string, memo: unknown): void {
+    // The value as given: SQLite stores it as the same text an unblocked send's row holds, so the sender reads the same.
     db.prepare('INSERT INTO withheld_notes (transaction_id, memo) VALUES (?, ?)').run(transactionId, memo);
 }
 
@@ -66,7 +69,10 @@ export function noteAsReadBy(row: { from_pubkey: string; to_pubkey: string; memo
     return row.memo ?? '';
 }
 
-/** A prune or a self-deletion: the notes kept for them alone go, as nobody can read them now. Their ledger rows stay. */
+/**
+ * A prune or a self-deletion: the words kept for them alone go, as nobody can read them now. Their ledger rows stay, and so
+ * do the withheld_notes rows, blank: a row's existence is what makes the recipient read BLOCKED_BEANS_NOTE (noteAsReadBy).
+ */
 export function dropWithheldNotesOf(sender: string): void {
-    db.prepare('DELETE FROM withheld_notes WHERE transaction_id IN (SELECT id FROM transactions WHERE from_pubkey = ?)').run(sender);
+    db.prepare("UPDATE withheld_notes SET memo = '' WHERE transaction_id IN (SELECT id FROM transactions WHERE from_pubkey = ?)").run(sender);
 }

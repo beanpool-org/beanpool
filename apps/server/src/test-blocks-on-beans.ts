@@ -17,7 +17,9 @@
  *  5. a standby's copy: the row comes over (its signed request re-checked) with no note, and on the standby's own server
  *     Ann's reads have no note; the copy carries no withheld note
  *  6. after the unblock nothing old arrives: the old send still shows the neutral line; a note sent after it arrives
- *  7. a prune takes Bo's withheld notes, and a self-deletion Eve's; Ann still never sees one
+ *  7. a note sent as a JSON number (412345678) is withheld as a string note is: it never reaches Ann (history, export,
+ *     socket, the ledger row, a standby's copy), and Bo reads it as an unblocked send's number note reads
+ *  8. a prune takes Bo's words, and a self-deletion Eve's; Ann still never sees one and still reads the neutral line
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-blocks-on-beans.ts
@@ -116,6 +118,11 @@ async function child(): Promise<void> {
                     .get(a.recipient, like, like, like) as { n: number }).n),
                 pushNoticesToRecipient: await maybe(() => (db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(a.recipient) as { n: number }).n),
                 withheld: await maybe(() => (db.prepare('SELECT COUNT(*) AS n FROM withheld_notes WHERE memo LIKE ?').get(like) as { n: number }).n),
+                /** The withheld_notes rows kept for sends to this recipient, blank or not. */
+                withheldRows: await maybe(() => (db.prepare('SELECT COUNT(*) AS n FROM withheld_notes WHERE transaction_id IN (SELECT id FROM transactions WHERE to_pubkey = ?)')
+                    .get(a.recipient) as { n: number }).n),
+                /** Every withheld_notes row's words, to see that none of a deleted member's remain. */
+                withheldWords: await maybe(() => (db.prepare('SELECT memo FROM withheld_notes').all() as { memo: string }[]).map(r => r.memo)),
             };
         },
         pushes: async () => pushes,
@@ -347,13 +354,55 @@ async function main(): Promise<void> {
         const annLater = await historyOf(ann);
         assert(later.status === 200 && rowIn(annLater, laterTx)?.memo === LATER, `a note sent after it arrives (${show(later)})`);
 
-        // ── 7. a prune ──────────────────────────────────────────────────────────────────────────
-        console.log('── 7. a prune ──');
+        // ── 7. a note sent as a JSON number ─────────────────────────────────────────────────────
+        console.log('── 7. a note sent as a JSON number ──');
+        const NUM = 412345678;
+        const blkAgain = await signedCall(base, 'POST', '/api/blocks', ann, { targetPubkey: bo.pk });
+        require_(blkAgain.status === 200, `Ann blocks Bo again (${show(blkAgain)})`);
+        annSock.events.length = 0;
+        const control = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: dee.pk, amount: 1, memo: NUM });
+        const controlTx: string = control.body?.transaction?.id;
+        require_(control.status === 200 && !!controlTx, `Bo sends Dee (who has not blocked him) a number note: the shape to hold his send to Ann to (${show(control)})`);
+        const numSend = await signedCall(base, 'POST', '/api/ledger/transfer', bo, { to: ann.pk, amount: 1, memo: NUM });
+        const numTx: string = numSend.body?.transaction?.id;
+        require_(numSend.status === 200 && numSend.body?.success === true && !!numTx, `Bo sends Ann a number note; accepted (${show(numSend)})`);
+        await sleep(200);
+        const annNum = await historyOf(ann);
+        assert(rowIn(annNum, numTx)?.memo === NEUTRAL && rowIn(annNum, numTx)?.amount === 1, `Ann's history has the send with the neutral line (${JSON.stringify(rowIn(annNum, numTx)?.memo)})`);
+        assert(!annNum.text.includes(String(NUM)), 'and no digit of the number note');
+        const annNumExport = await exportOf(ann);
+        assert(annNumExport.status === 200 && annNumExport.text.includes(numTx) && !annNumExport.text.includes(String(NUM)), 'her export has the send and not the number');
+        assert(txnEvents(annSock, numTx).length === 1 && txnEvents(annSock, numTx)[0].txn?.memo === NEUTRAL && !annSock.events.some(e => JSON.stringify(e).includes(String(NUM))),
+            `her socket hears it with the neutral line, and never the number (${JSON.stringify(txnEvents(annSock, numTx).map(e => e.txn?.memo))})`);
+        const numLedger = await main.send('ledger', { txId: numTx, keys: [ann.pk] });
+        assert(numLedger.row?.memo === '' && numLedger.row?.amount === 1, `the ledger row stores no note (${JSON.stringify(numLedger.row?.memo)})`);
+        const numCopy = await main.send('copy', { nodeId: main.ready.peerId });
+        const numCopied = (JSON.parse(numCopy).transactions ?? []).find((t: any) => t.id === numTx);
+        assert(!!numCopied && numCopied.memo === '' && !JSON.stringify(numCopied, (k, v) => (k === 'authPayload' ? undefined : v)).includes(String(NUM))
+            && JSON.stringify(JSON.parse(numCopy).transactions.find((t: any) => t.id === controlTx)?.memo) !== '""',  // the unblocked send's number is in the copy, as any note is
+            `a standby's copy (exportSyncState) carries the send with no note (${JSON.stringify(numCopied?.memo)})`);
+        const boNum = rowIn(await historyOf(bo), numTx);
+        const boControl = rowIn(await historyOf(bo), controlTx);
+        assert(boNum?.memo === boControl?.memo && typeof boNum?.memo === typeof boControl?.memo && keysOf(boNum) === keysOf(boControl),
+            `Bo's history reads it exactly as the unblocked send's (${JSON.stringify(boNum?.memo)} vs ${JSON.stringify(boControl?.memo)})`);
+        const boNumExport = (await exportOf(bo)).text.split('\n');
+        const lineEnd = (id: string) => (boNumExport.find(l => l.includes(id)) ?? '').split(',').pop();
+        assert(lineEnd(numTx) === lineEnd(controlTx) && lineEnd(numTx) !== '', `his export line ends the same (${lineEnd(numTx)} vs ${lineEnd(controlTx)})`);
+        assert(txnEvents(boSock, numTx)[0]?.txn?.memo === numSend.body.transaction.memo && JSON.stringify(txnEvents(boSock, numTx)[0]?.txn?.memo) === JSON.stringify(txnEvents(boSock, controlTx)[0]?.txn?.memo),
+            `his socket event carries the number as the unblocked send's did (${JSON.stringify(txnEvents(boSock, numTx)[0]?.txn?.memo)})`);
+
+        // ── 8. a prune and a self-deletion ──────────────────────────────────────────────────────
+        console.log('── 8. a prune and a self-deletion ──');
+        const rowsBefore = (await main.send('holding', { text: NOTE, recipient: ann.pk })).withheldRows;
         await main.send('prune', { key: bo.pk, actor: gwen.pk });
         const pruned = await main.send('holding', { text: NOTE, recipient: ann.pk });
-        assert(pruned.withheld === 0, `a prune takes his withheld notes (${pruned.withheld})`);
+        assert(pruned.withheld === 0 && !pruned.withheldWords.includes(String(NUM)) && !pruned.withheldWords.some((w: string) => w.includes('412345678')),
+            `a prune takes his words (${pruned.withheld})`);
+        assert(pruned.withheldRows === rowsBefore, `but keeps the rows, blank (${rowsBefore} -> ${pruned.withheldRows})`);
         const annPruned = await historyOf(ann);
         assert(annPruned.status === 200 && !annPruned.text.includes(NOTE) && !!rowIn(annPruned, boTx), 'Ann still has the Beans and never the note');
+        assert(rowIn(annPruned, boTx)?.memo === NEUTRAL && rowIn(annPruned, numTx)?.memo === NEUTRAL, `and still reads the neutral line after the prune (${JSON.stringify(rowIn(annPruned, boTx)?.memo)})`);
+        assert((await exportOf(ann)).text.split(NEUTRAL).length - 1 >= 2, 'her export still says it');
         const EVE_NOTE = `from eve ${crypto.randomBytes(4).toString('hex')}`;
         const blkEve = await signedCall(base, 'POST', '/api/blocks', ann, { targetPubkey: eve.pk });
         const eveSend = await signedCall(base, 'POST', '/api/ledger/transfer', eve, { to: ann.pk, amount: 2, memo: EVE_NOTE });
@@ -363,8 +412,11 @@ async function main(): Promise<void> {
         const gone = await main.send('delete-account', { key: eve.pk });
         const afterDelete = await main.send('holding', { text: EVE_NOTE, recipient: ann.pk });
         const annEve = await historyOf(ann);
-        assert(gone?.ok === true && afterDelete.withheld === 0 && !!rowIn(annEve, eveSend.body?.transaction?.id) && !annEve.text.includes(EVE_NOTE),
-            `a self-deletion takes it too; Ann keeps the Beans and never sees the note (${JSON.stringify(gone)?.slice(0, 80)}, ${afterDelete.withheld})`);
+        const eveTx = eveSend.body?.transaction?.id;
+        assert(gone?.ok === true && afterDelete.withheld === 0 && !afterDelete.withheldWords.includes(EVE_NOTE) && !!rowIn(annEve, eveTx) && !annEve.text.includes(EVE_NOTE),
+            `a self-deletion takes his words too; Ann keeps the Beans and never sees the note (${JSON.stringify(gone)?.slice(0, 80)}, ${afterDelete.withheld})`);
+        assert(rowIn(annEve, eveTx)?.memo === NEUTRAL && (await exportOf(ann)).text.includes(NEUTRAL) && !(await exportOf(ann)).text.includes(EVE_NOTE),
+            'and still reads the neutral line in her history and export');
         const audit = await main.send('ledger', { keys: [] });
         assert(audit.audit?.ok === true, `the ledger audit holds after it all (${JSON.stringify(audit.audit)})`);
     } finally {

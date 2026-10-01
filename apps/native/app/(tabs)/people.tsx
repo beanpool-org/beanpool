@@ -20,6 +20,8 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { invitesOn } from '../../utils/node-profile';
+import { communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -184,6 +186,9 @@ export default function PeopleScreen() {
     const nodeProfile = useNodeProfile();
     const isGlobalNode = nodeProfile?.profile === 'global';
     const takesKnocks = !isGlobalNode && nodeProfile?.features.knocks !== false;
+    // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
+    // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
+    const makesInvites = invitesOn(nodeProfile?.features);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -393,6 +398,14 @@ export default function PeopleScreen() {
                         setGenerating(false);
                         return;
                     }
+                } else {
+                    // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
+                    // make no offline ticket, which it would refuse just the same.
+                    const refusal = invitesOffRefusal(res.status, await res.json().catch(() => null));
+                    if (refusal) {
+                        Alert.alert('No invites here', refusal);
+                        return;
+                    }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
@@ -438,6 +451,11 @@ export default function PeopleScreen() {
         message += `Node URL: ${anchorUrl}`;
 
         await Share.share({ message });
+    };
+
+    // A node with no invites: its plain address, which opens its front door. No code rides along.
+    const shareCommunityLink = () => {
+        if (anchorUrl) Share.share({ message: communityLinkMessage(anchorUrl) }).catch(() => {});
     };
 
     const handleRedeem = async () => {
@@ -889,6 +907,23 @@ export default function PeopleScreen() {
                             )}
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
 
+                            {!makesInvites ? (
+                                // No invites here: anyone joins with a sign-in, so the community's link is all there is to share.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>This community doesn’t use invites. Anyone can join it with a sign-in in the BeanPool app, so just share its link.</Text>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Share this community's link"
+                                        style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                        onPress={shareCommunityLink}
+                                        disabled={!anchorUrl}
+                                    >
+                                        <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                    </Pressable>
+                                </>
+                            ) : (
+                            <>
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
@@ -952,6 +987,8 @@ export default function PeopleScreen() {
                                         </View>
                                     ))}
                                 </View>
+                            )}
+                            </>
                             )}
                         </>
                     )}

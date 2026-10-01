@@ -39,11 +39,12 @@ function stopApi(): boolean {
 /** From the image's own api.json and keyholder.json; undefined (nothing of the API's is removed) if either is unusable. */
 function apiDirs(): ApiDirs | undefined {
     try {
-        const c = JSON.parse(readFileSync(API_CONFIG, 'utf8')) as { releasesDir?: string; backupDir?: string; restoreDir?: string; backupMaxBytes?: number };
+        const c = JSON.parse(readFileSync(API_CONFIG, 'utf8')) as { releasesDir?: string; backupDir?: string; restoreDir?: string; backupMaxBytes?: number; settingsFile?: string };
         const k = JSON.parse(readFileSync(KEYHOLDER_CONFIG, 'utf8')) as { stateDir?: string };
         if (!c.releasesDir || !c.backupDir || !c.restoreDir || !Number.isFinite(c.backupMaxBytes) || !k.stateDir) return undefined;
         return {
             releases: c.releasesDir, backups: c.backupDir, restore: c.restoreDir, backupMaxBytes: c.backupMaxBytes as number,
+            settings: c.settingsFile ? path.dirname(c.settingsFile) : undefined,
             restoreMarker: path.join(k.stateDir, RESTORE_MARKER_NAME),
         };
     } catch {

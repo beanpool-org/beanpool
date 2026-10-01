@@ -1,6 +1,7 @@
 import {
+    appLockLocks,
+    appLockWasOn,
     authenticateForAppLock,
-    getAppLockEnabled,
     isLocalAuthPromptOpen,
     localAuthPromptStretches,
     PROMPT_COVER_MAX_MS,
@@ -145,8 +146,17 @@ function promptsSettled(): Promise<void> {
  *
  * Times are read on App Lock's clock (utils/app-lock-clock.ts), which setting the phone's date and time can't move. A
  * phone that can't read it asks after every leave.
+ *
+ * The cover: the phone's app switcher and recents show the screen the app drew as it left, to whoever holds the phone,
+ * and App Lock never ran for that (FABLE-sec-native LOW-4, 2026-10-01). So with App Lock on (as last read: there is no
+ * time to read it as the app leaves) and an account on the phone, setCovered(true) as the app leaves, and
+ * setCovered(false) once the return is decided, unless the app has left again since: the lock screen, if this return
+ * put it up, stays (utils/app-lock-screen.ts: the cover never takes it down).
  */
-export function createReturnLock(setLocked: (locked: boolean) => void): (next: string, hasIdentity: boolean) => Promise<void> {
+export function createReturnLock(
+    setLocked: (locked: boolean) => void,
+    setCovered: (covered: boolean) => void = () => {},
+): (next: string, hasIdentity: boolean) => Promise<void> {
     let leftAt: number | null = null;
     let setBacksAtLeave = 0;
     let failuresAtLeave = 0;
@@ -157,9 +167,22 @@ export function createReturnLock(setLocked: (locked: boolean) => void): (next: s
             leftAt = appLockNow();
             setBacksAtLeave = wallClockSetBacks();
             failuresAtLeave = clockReadFailures();
+            if (hasIdentity && appLockWasOn()) setCovered(true);
             return;
         }
-        if (next !== 'active' || !hasIdentity) return;
+        if (next !== 'active') return;
+        try {
+            if (hasIdentity) await decideReturn(change);
+        } catch (e) {
+            // Nothing in the decision throws today. If it ever does, the lock screen, whose Unlock App asks: never the
+            // app unasked, and never a cover with no way past it.
+            setLocked(true);
+            throw e;
+        }
+        if (change === changes) setCovered(false);
+    };
+
+    async function decideReturn(change: number): Promise<void> {
         const thisReturn = ++returnsSeen;
         const activeAt = appLockNow();
         const from = leftAt;
@@ -175,7 +198,7 @@ export function createReturnLock(setLocked: (locked: boolean) => void): (next: s
             // The rule counts the open prompt as not passed: if that locks, up now, not after the wait, in case the answer
             // is slow or never comes.
             const ifNotPassed = returnLockAction(from, activeAt, localAuthPromptStretches(), clockUntrusted());
-            if (ifNotPassed !== 'none' && (await getAppLockEnabled())) {
+            if (ifNotPassed !== 'none' && (await appLockLocks())) {
                 setLocked(true);
                 raised = true;
             }
@@ -187,11 +210,11 @@ export function createReturnLock(setLocked: (locked: boolean) => void): (next: s
             if (raised && change === changes) setLocked(false);
             return;
         }
-        if (!raised && !(await getAppLockEnabled())) return;
+        if (!raised && !(await appLockLocks())) return;
         lockedForReturn = Math.max(lockedForReturn, thisReturn);
         setLocked(true);
         // The app left again while this was deciding: locked, and Unlock App asks. A prompt is open: it isn't asked twice.
         if (action !== 'ask' || change !== changes || isLocalAuthPromptOpen()) return;
         if (await unlockWithPhoneLock('Unlock BeanPool')) setLocked(false);
-    };
+    }
 }

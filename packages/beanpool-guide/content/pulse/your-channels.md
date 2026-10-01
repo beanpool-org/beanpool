@@ -17,7 +17,7 @@ related: the-pulse, learn, your-profile, privacy
 Each site works a little differently. The screen says which:
 
 - **Updates itself** (YouTube, SoundCloud, a blog): new posts appear on the Pulse by themselves.
-- **A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead.
+- **A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead. The link is kept on this phone only. Signing out of the phone removes it, so connect again when you come back.
 - **Shows as a card** (a website).
 
 ## On each channel

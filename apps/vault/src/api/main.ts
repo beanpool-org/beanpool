@@ -22,10 +22,14 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  *   `restoreDir` (then required, outside `dataDir`) keeps a restore from backup waiting for the unlock off it.
  * - `socketPath`: listen on a Unix socket behind that symlink (the image; Caddy connects through it), so a newer API
  *   can take over (updater.ts, launcher.ts). Without it, `port` and `host` (tests, a rehearsal).
- * - `backupDir` is a local directory standing in for the object store until its client and credentials exist (design
- *   §4: a second provider in another country). `backupMaxBytes` bounds it: a backup larger than it is refused (the
- *   last good one stays, and /v1/report says why); after each backup the oldest go until the rest fit. On the image
- *   it shares the state partition with a new image waiting, and root's monthly step applies the same rule.
+ * - `backupDir` is the vault's own copy of its backups (the image: the state partition). `backupMaxBytes` bounds it: a
+ *   backup larger than it is refused (the last good one stays, and /v1/report says why); after each backup the oldest
+ *   go until the rest fit. On the image it shares the state partition with a new image waiting, and root's monthly
+ *   step applies the same rule. Each backup is also copied off the box (design §4) once two custodians have set a
+ *   store (`settingsFile`).
+ * - `settingsFile`: where the operator settings are kept (shared/settings.ts: the off-box store, the alert channels),
+ *   set by two custodians through `/v1/unlock/settings`. The image: `/var/lib/beanpool-vault/settings/settings.json`.
+ *   None of either is built in or needed: without them backups stay on this machine and no alert goes out.
  * - `feed`: `{"github": "owner/name"}` or `{"directory": "..."}`; without it releases aren't checked.
  * - `stagedDir`: where a new image is staged for the monthly restart (updater.ts); without it, only reported.
  * - `installResultFile`: what root's install step did at the last monthly restart (the image:
@@ -37,7 +41,8 @@ import { Updater, type LauncherLink, type SwitchRequest } from './updater.js';
  *   and nothing is handed over or staged. Without it the API looks at the machine itself (image-identity.ts).
  * - `imageHash`: the image this machine booted, for tests and rehearsals; it overrides both.
  *
- * Every hour: a backup, and holds, deletion records and nonces expire; and the release check (at start too).
+ * Every hour: a backup, and holds, deletion records and nonces expire; and the release check (at start too). Every
+ * minute: what the custodians are told about (server.ts checkAlerts).
  */
 
 interface ApiConfig {
@@ -61,6 +66,7 @@ interface ApiConfig {
     rootKeys?: string[];
     requireDataMount?: boolean;
     restoreDir?: string;
+    settingsFile?: string;
 }
 
 function argValue(name: string): string | undefined {
@@ -129,6 +135,7 @@ async function main(): Promise<void> {
         expoAccessToken: config.expoAccessToken,
         requireDataMount: config.requireDataMount,
         restoreDir: config.restoreDir,
+        settingsFile: config.settingsFile,
         about: () => ({ api: own ?? 'source', update: updater?.status ?? null, nextRestart: new Date(nextMonthlyRestart(Date.now())).toISOString() }),
     });
     const where = config.socketPath ? await api.listenUnix(config.socketPath) : `${config.host ?? '127.0.0.1'}:${await api.listen(config.port ?? 8443, config.host ?? '127.0.0.1')}`;
@@ -136,6 +143,10 @@ async function main(): Promise<void> {
     const hourly = setInterval(() => {
         api.maintenance().catch(e => console.error(`vault-api: maintenance: ${(e as Error).message}`));
     }, 60 * 60 * 1000);
+    // Only the API in service tells the custodians: one that hands over stops here, before it drains.
+    const alerting = setInterval(() => {
+        api.checkAlerts().catch(e => console.error(`vault-api: alerts: ${(e as Error).message}`));
+    }, 60 * 1000);
     const check = () => {
         updater?.check().then(s => {
             if (s.handover && !s.handover.ok) console.error(`vault-api: release ${s.handover.to.version} not taken: ${s.handover.reason}`);
@@ -147,6 +158,7 @@ async function main(): Promise<void> {
         if (leaving) return;
         leaving = true;
         clearInterval(hourly);
+        clearInterval(alerting);
         clearInterval(updates);
         const done = how === 'drain' ? api.drain() : api.close();
         void done.finally(() => process.exit(0));

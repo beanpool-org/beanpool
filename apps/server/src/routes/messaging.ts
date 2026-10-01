@@ -30,7 +30,7 @@ import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import {
-    withheldConversationOwnedBy, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
+    withheldConversationOwnedBy, withheldConversationById, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
 } from '../engine/withheld-lines.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
@@ -422,6 +422,12 @@ router.post('/api/messages/mark-read', async (ctx) => {
             ctx.body = { success: true };
             return;
         }
+        // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
+        if (withheldConversationById(conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not a participant in this conversation' };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -493,6 +499,12 @@ router.post('/api/messages/mute', async (ctx) => {
                 : { success: true, mute: setChatMute(conversationId, actor, duration) };
             return;
         }
+        // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
+        if (withheldConversationById(conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not in this conversation' };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -528,6 +540,18 @@ router.get('/api/messages/:conversationId', async (ctx) => {
                 conversation: withheldConversationView(kept),
                 messages: pageWithOwnWithheld(conversationId, viewer, clampLimit(ctx.query.limit), clampOffset(ctx.query.offset), () => []),
             };
+            return;
+        }
+        // Someone else's: answered as a real DM answers someone who isn't in it (#1403 re-review): refused under read
+        // auth, and with it off served as any DM is, with none of its lines (the sender's own are theirs alone).
+        const other = withheldConversationById(conversationId);
+        if (other) {
+            if (ENFORCE_READ_AUTH) {
+                ctx.status = 403;
+                ctx.body = { error: 'You are not a participant in this conversation' };
+                return;
+            }
+            ctx.body = { conversation: withheldConversationView(other), messages: [] };
             return;
         }
         ctx.status = 404;

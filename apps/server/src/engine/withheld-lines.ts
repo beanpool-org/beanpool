@@ -69,6 +69,12 @@ export function withheldConversationOwnedBy(id: unknown, owner: string | undefin
     return db.prepare('SELECT * FROM withheld_conversations WHERE id = ? AND owner_pubkey = ?').get(id, owner) as WithheldConversation | undefined;
 }
 
+/** The withheld conversation `id`, whoever opened it: for answering anyone else as a real conversation answers a non-participant. */
+export function withheldConversationById(id: unknown): WithheldConversation | undefined {
+    if (typeof id !== 'string' || !id) return undefined;
+    return db.prepare('SELECT * FROM withheld_conversations WHERE id = ?').get(id) as WithheldConversation | undefined;
+}
+
 /** A withheld conversation between these two, opened by either: the older first, when each opened one. */
 export function withheldConversationOfPair(a: string, b: string): WithheldConversation | undefined {
     return db.prepare(`SELECT * FROM withheld_conversations

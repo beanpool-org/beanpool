@@ -778,9 +778,10 @@ export function editMessage(
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) {
         // A withheld line (engine/withheld-lines.ts): its author edits it as any DM line of theirs, under the same rules,
-        // heard on their own sockets only. To anyone else it is an id nobody has.
+        // heard on their own sockets only. Anyone else's edit of it is refused as a real line's is: only the author may
+        // (#1403 re-review: "not found" would tell a second account that the id is a withheld one).
         const own = ownWithheldLine(messageId, authorPubkey);
-        if (!own) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+        if (!own) throw new MessagingError(withheldLine(messageId) ? 'Only the author can edit a message' : MESSAGE_NOT_FOUND_ERROR);
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
         refuseUnencryptedDm(ciphertext, nonce);
         const sentMs = new Date(own.timestamp).getTime();
@@ -922,9 +923,13 @@ export function deleteOwnMessage(
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
     if (!row) {
         // A withheld line (engine/withheld-lines.ts): its author takes it down as any DM line of theirs, to the same
-        // tombstone, heard on their own sockets only. To anyone else it is an id nobody has.
+        // tombstone, heard on their own sockets only. Anyone else is refused as a non-participant of a real DM is
+        // (#1403 re-review: "not found" would tell a second account that the id is a withheld one).
         const own = ownWithheldLine(messageId, authorPubkey);
-        if (!own) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        if (!own) {
+            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        }
         // A withheld line has no system type: null, as a stored line's answer has it, so the two answers have one shape.
         if (own.type === 'removed') return { ...toMessage(own), systemType: null as any };
         const { ciphertext, metadata } = tombstoneFields(own, authorPubkey, GROUP_THREAD_DELETED_TEXT);

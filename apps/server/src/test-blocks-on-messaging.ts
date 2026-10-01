@@ -29,11 +29,18 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
-delete process.env.ENFORCE_READ_AUTH;
+// The child run (BLOCKS_OPEN_NODE) is a node with read auth off: a second account is not needed there to tell a withheld
+// conversation from a real one, an unsigned read does.
+if (process.env.BLOCKS_OPEN_NODE) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 const PW = 'BlocksOnMessagingPass123!';
 process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
@@ -203,6 +210,20 @@ async function main(): Promise<void> {
     assert(bc.status === 200 && bc.body?.success === true && !!boConv && keysOf(bc.body) === keysOf(cc.body)
         && keysOf(bc.body.conversation) === keysOf(cc.body.conversation) && bc.body.conversation.participants?.includes(ann.pk),
         `answered as any new conversation is (${show(bc)})`);
+    if (process.env.BLOCKS_OPEN_NODE) {
+        // Read auth off (#1403 re-review): an unsigned read of a withheld conversation answers as a real DM's does.
+        const unsignedWithheld = await call('GET', null, `/api/messages/${boConv}`);
+        const unsignedReal = await call('GET', null, `/api/messages/${deeConv}`);
+        assert(unsignedWithheld.status === 200 && unsignedReal.status === 200 && keysOf(unsignedWithheld.body) === keysOf(unsignedReal.body)
+            && keysOf(unsignedWithheld.body?.conversation) === keysOf(unsignedReal.body?.conversation),
+            `with read auth off, an unsigned read of the withheld conversation answers as a real one (${unsignedWithheld.status} vs ${unsignedReal.status})`);
+        const unsignedNone = await call('GET', null, `/api/messages/${crypto.randomUUID()}`);
+        assert(unsignedNone.status === 404, 'and an id nobody has is still a 404');
+        for (const s of [annSock, boSock, deeSock]) s.ws.close();
+        console.log(`\n${passed}/${run} checks passed.`);
+        if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+        return;
+    }
     const again = await call('POST', bo, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: bo.pk });
     assert(again.status === 200 && again.body?.conversation?.id === boConv, 'asked again, the same conversation');
     await sleep(150);
@@ -240,8 +261,11 @@ async function main(): Promise<void> {
     assert(heard(annSock, boConv, ...boIds).length === 0, 'her socket hears nothing');
     const unknown = await call('GET', ann, `/api/messages/${crypto.randomUUID()}`);
     const annRead = await call('GET', ann, `/api/messages/${boConv}`);
-    assert(annRead.status === unknown.status && JSON.stringify(annRead.body) === JSON.stringify(unknown.body),
-        `Ann's read of the conversation is the answer an id nobody has gets (${show(annRead)})`);
+    // Someone who isn't its owner is answered as a real DM answers a non-participant (#1403 re-review: "not found" told a
+    // second account the id was a withheld one). Ann reads Cy's chat with Dee as a control.
+    const annOnReal = await call('GET', ann, `/api/messages/${cc.body?.conversation?.id}`);
+    assert(annRead.status === 403 && annRead.status === annOnReal.status && JSON.stringify(annRead.body) === JSON.stringify(annOnReal.body),
+        `Ann's read of the conversation is the answer a real DM she isn't in gets (${show(annRead)}; ${show(annOnReal)})`);
     const boRead = await call('GET', bo, `/api/messages/${boConv}`);
     assert(boRead.status === 200 && JSON.stringify(boRead.body?.messages?.map((m: any) => m.id)) === JSON.stringify(boIds)
         && boRead.body?.conversation?.participants?.includes(ann.pk),
@@ -274,6 +298,22 @@ async function main(): Promise<void> {
         `the orphan sweep leaves it, and it still comes back to him (removed ${swept.removed}; ${afterSweep.status})`);
     const boMark = await call('POST', bo, '/api/messages/mark-read', { conversationId: boConv });
     assert(boMark.status === 200, `Bo marks it read as any chat (${show(boMark)})`);
+    // A second account (Cy) asks about Bo's withheld conversation and line as about Dee's real chat with Ann, which he is not
+    // in either (#1403 re-review): the same refusals, word for word.
+    const realConv: string = deeConv, realLine: string = d1.body?.message?.id;
+    const probes: [string, (id: string, line: string) => Promise<Res>][] = [
+        ['read', (c) => call('GET', cy, `/api/messages/${c}`)],
+        ['mark-read', (c) => call('POST', cy, '/api/messages/mark-read', { conversationId: c })],
+        ['mute', (c) => call('POST', cy, '/api/messages/mute', { conversationId: c, duration: '8h' })],
+        ['edit', (_c, l) => call('POST', cy, '/api/messages/edit', { messageId: l, ...lockedDm() })],
+        ['delete', (_c, l) => call('POST', cy, '/api/messages/delete', { messageId: l })],
+    ];
+    for (const [what, probe] of probes) {
+        const w = await probe(boConv, boIds[0]);
+        const r = await probe(realConv, realLine);
+        assert(w.status === r.status && w.status !== 404 && JSON.stringify(w.body) === JSON.stringify(r.body),
+            `a second account's ${what} of Bo's withheld chat answers as of a real one it isn't in (${show(w)} vs ${show(r)})`);
+    }
     // Mute and his own read marker answer and show as a real conversation's do (#1403 review, NON-BLOCKING): Cy's chat
     // with Dee is the control.
     const ccConv: string = cc.body?.conversation?.id;
@@ -383,9 +423,10 @@ async function main(): Promise<void> {
         && keysOf(ownDelAgain.body?.message) === keysOf(ctrlDelAgain.body?.message) && ownDelAgain.body?.message?.systemType === null,
         `the delete answers, first and again, have a stored line's shape, systemType null (${keysOf(ownDel.body?.message)})`);
     const annDel = await call('POST', ann, '/api/messages/delete', { messageId: boIds[0] });
-    const nobodyDel = await call('POST', ann, '/api/messages/delete', { messageId: crypto.randomUUID() });
-    assert(annDel.status === nobodyDel.status && JSON.stringify(annDel.body) === JSON.stringify(nobodyDel.body),
-        `to Ann a withheld line's id is one nobody has (${show(annDel)})`);
+    // As a line of a real DM she isn't in (Cy's with Dee), not as an id nobody has (#1403 re-review).
+    const realDel = await call('POST', ann, '/api/messages/delete', { messageId: cs.body?.message?.id });
+    assert(annDel.status === 403 && annDel.status === realDel.status && JSON.stringify(annDel.body) === JSON.stringify(realDel.body),
+        `to Ann a withheld line's id answers as a real DM line she isn't in does (${show(annDel)})`);
 
     // ── 5. the unblock ──────────────────────────────────────────────────────────────────────────
     console.log('── 5. after the unblock ──');
@@ -585,6 +626,18 @@ async function main(): Promise<void> {
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Blocks on messaging checks PASSED.');
+
+    // The same on a node with read auth off, in a fresh process and data dir.
+    if (!process.env.BLOCKS_OPEN_NODE) {
+        console.log('\nAgain with ENFORCE_READ_AUTH=false...\n');
+        const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-blocks-open-'));
+        const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
+            env: { ...process.env, BLOCKS_OPEN_NODE: '1', ENFORCE_READ_AUTH: 'false', BEANPOOL_DATA_DIR: dataDir },
+            stdio: 'inherit',
+        });
+        fs.rmSync(dataDir, { recursive: true, force: true });
+        if (child.status !== 0) throw new Error(`the read-auth-off run failed (exit ${child.status})`);
+    }
 }
 
 main().then(() => process.exit(0)).catch((e) => {

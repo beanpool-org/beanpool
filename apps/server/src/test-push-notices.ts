@@ -347,6 +347,52 @@ async function main() {
         const catAfter = (attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE recipient = ?').get(cat.pk)) as any)?.n;
         assert(catBefore > 0 && catAfter === 0, `a pruned member's notice details go with them (${catBefore} → ${catAfter})`);
 
+        // A member who deletes their account no longer leaves their name in the notices kept for the people they wrote to.
+        const wren = member('Wren Calloway'), juniper = member('Juniper Holt');
+        const wrenOldKey = crypto.randomBytes(32).toString('hex');
+        db.prepare(`INSERT INTO invalidated_keys (public_key, reason, rekeyed_to) VALUES (?, 'rekey', ?)`).run(wrenOldKey, wren.pk);
+        const phoneJuniper = tokenOf('juniper');
+        register(juniper, phoneJuniper);
+        toWhom.set(phoneJuniper, juniper);
+        const wrenConv = se.createConversation('dm', [wren.pk, juniper.pk], wren.pk)!;
+        const wrenLine = lockedDm();
+        const wrenDm = await caught(() => se.sendMessage(wrenConv.id, wren.pk, wrenLine.ciphertext, wrenLine.nonce));
+        const juniperNoticeId = wrenDm.find(m => toWhom.get(m.to) === juniper)?.data?.i;
+        const juniperBefore = notices?.readPushNotice(juniperNoticeId, juniper.pk);
+        assert(juniperBefore?.body === 'Wren Calloway sent you a message', `Wren DMs Juniper: Juniper's kept notice names Wren (${juniperBefore?.body})`);
+        // Every other kind whose details can name a member: a title, a body, and the name or a key inside the data.
+        const wrenText = 'wren calloway';
+        const otherKinds = [
+            ['group.lead', '👥 Wren Calloway\'s group', 'Wren Calloway asked to lead', { by: 'Wren Calloway' }],
+            ['market.request', '🙋 Request', 'Wren Calloway requested "Jam"', { from: wren.pk, nested: { name: 'Wren Calloway', n: 3 } }],
+            ['trade.update', 'Trade', 'Wren Calloway accepted "Jam" - 7 Beans are now in escrow.', { peer: wrenOldKey.slice(0, 12) }],
+            ['review.new', '⭐ Review from Wren Calloway', 'wren calloway left a review', {}],
+        ] as const;
+        const insertNotice = db.prepare("INSERT INTO push_notices (id, recipient, kind, title, body, data, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        const kindIds = otherKinds.map(([kind, title, body, data], i) => {
+            const id = crypto.randomBytes(16).toString('hex');
+            insertNotice.run(id, juniper.pk, kind, title, body, JSON.stringify(data), Math.floor(Date.now() / 1000) - i);
+            return id;
+        });
+        const bystander = crypto.randomBytes(16).toString('hex');
+        insertNotice.run(bystander, juniper.pk, 'chat.group', '👥 Wrenfield Farm', 'Juniper Holt sent a message', JSON.stringify({ n: 12, ok: true }), Math.floor(Date.now() / 1000));
+        const bystanderBefore = JSON.stringify(db.prepare('SELECT title, body, data FROM push_notices WHERE id = ?').get(bystander));
+        const wrenOwn = crypto.randomBytes(16).toString('hex');
+        insertNotice.run(wrenOwn, wren.pk, 'chat.message', 'Wren Calloway', 'to Wren Calloway', '{}', Math.floor(Date.now() / 1000));
+        assert(se.purgeMemberSelf(wren.pk).ok, 'Wren deletes their account');
+        const juniperAfter = notices?.readPushNotice(juniperNoticeId, juniper.pk);
+        assert(juniperAfter && !/wren/i.test(JSON.stringify(juniperAfter)) && juniperAfter.body === 'A member sent you a message',
+            `Juniper's stored notice no longer names Wren: "${juniperAfter?.body}"`);
+        assert(juniperAfter?.data?.conversationId === wrenConv.id && juniperAfter?.kind === 'chat.message', 'and still says which chat and kind it is');
+        const everyKind = kindIds.map(id => JSON.stringify(db.prepare('SELECT title, body, data FROM push_notices WHERE id = ?').get(id)));
+        assert(everyKind.every(t => !t.toLowerCase().includes(wrenText) && !t.includes(wren.pk) && !t.includes(wrenOldKey.slice(0, 12))),
+            `no other kind keeps their name or a key in its title, body or data (${everyKind.join(' | ')})`);
+        assert(everyKind.every(t => { const r = JSON.parse(t); try { JSON.parse(r.data); return true; } catch { return false; } }), "and each kind's data is still JSON");
+        assert(JSON.parse(everyKind[1]).data.includes('"n":3'), 'a number beside a name in the data is untouched');
+        assert(JSON.stringify(db.prepare('SELECT title, body, data FROM push_notices WHERE id = ?').get(bystander)) === bystanderBefore,
+            "a notice that does not name Wren (a longer word that starts like it, a number, a boolean) is exactly as it was");
+        assert(!db.prepare('SELECT 1 FROM push_notices WHERE id = ?').get(wrenOwn), "Wren's own notices are gone");
+
         // ── 5. Expo's tickets ──────────────────────────────────────────────────────────────────────────────
         console.log("\n--- 5. Expo's tickets ---");
         // A row names its phone by the token's id (services/push-token-seal.ts): each id read back to the token it is.

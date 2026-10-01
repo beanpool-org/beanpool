@@ -1751,7 +1751,7 @@
                         </label>
                     </div>
                     <p style="font-size:0.72rem;color:#64748b;margin-bottom:0.6rem;">
-                        Periodically write a local DB snapshot into <code>data/snapshots/</code>, keeping the most recent few. On by default — daily, keeping 7.
+                        Periodically write a local DB snapshot into <code>data/snapshots/</code>, keeping the most recent few. On by default — daily, keeping 7, at most 14. None is kept past 14 days, and a standby takes none.
                     </p>
                     <div style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;">
                         <div style="flex:1;min-width:120px;">
@@ -1760,7 +1760,7 @@
                         </div>
                         <div style="flex:1;min-width:120px;">
                             <label style="font-size:0.7rem;color:#94a3b8;display:block;margin-bottom:0.2rem;">Keep (count)</label>
-                            <input type="number" id="autosnap-keep" min="1" step="1" value="7" style="width:100%;">
+                            <input type="number" id="autosnap-keep" min="1" max="14" step="1" value="7" style="width:100%;">
                         </div>
                         <button class="btn btn-outline" onclick="saveAutoSnapConfig()" style="flex:0 0 auto;">Save</button>
                         <button class="btn btn-primary" onclick="createSnapshotNow()" style="flex:0 0 auto;">📸 Snapshot now</button>

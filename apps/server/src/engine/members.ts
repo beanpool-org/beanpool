@@ -270,8 +270,14 @@ export function registerMemberInternal(
         // A visitor joining for real, through a door (an invite, an offline ticket, the open door): its row becomes a
         // member's, as a new member's would be, and keeps what was sent to it (messages, Beans). Joined now, so a new
         // member's limits start now; the name is uniquified against everyone else, as at any join.
+        //
+        // A member's here, so no longer another community's: a federation visitor's row carries its home community's
+        // address (registerVisitor), and every federation path reads a row with one as that community's member, never
+        // this one's (its DMs relayed there, a peer's relay "from" it taken as genuine, its spending refused as a
+        // visitor's, and the join funnel leaving it out). A member of another community joining the global community
+        // with the same key is that row, so the address goes, as a new member's row has none.
         callsign = uniquifyCallsign(callsign, publicKey);
-        db.prepare("UPDATE members SET is_visitor = 0, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
+        db.prepare("UPDATE members SET is_visitor = 0, home_node_url = NULL, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
             .run(invitedBy, inviteCode, callsign, new Date().toISOString(), publicKey);
         return announceJoin(broadcast, publicKey, callsign, invitedBy, 'Visitor joined');
     }

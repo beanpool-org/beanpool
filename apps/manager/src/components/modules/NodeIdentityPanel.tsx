@@ -54,6 +54,8 @@ export function NodeIdentityPanel({
     // "Ask to join" (G6): null until the node says it takes requests to join at all (a node from before G6 doesn't).
     const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
     const [openKnocks, setOpenKnocks] = useState<number | null>(null);
+    // Who answers a request to join follows who may invite (`door`, set under People & Safety → Invites & QR).
+    const [onlyAdminsAnswer, setOnlyAdminsAnswer] = useState(false);
 
     // Actions & status
     const [saving, setSaving] = useState(false);
@@ -125,6 +127,7 @@ export function NodeIdentityPanel({
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
                     }
+                    setOnlyAdminsAnswer(cfg.door === 'admins');
                     if (typeof cfg.acceptKnocks === 'boolean') {
                         setAcceptKnocks(cfg.acceptKnocks);
                         // How many are waiting is the operator's only, so it is its own admin read.
@@ -776,7 +779,9 @@ export function NodeIdentityPanel({
                                     <span>🚪 Take Requests to Join</span>
                                 </label>
                                 <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                    People who find your community on the global node can ask to join, with a short message. Any member can answer by inviting them. Turned off, nobody can ask, and members don&apos;t see requests.
+                                    People who find your community on the global node can ask to join, with a short message. {onlyAdminsAnswer
+                                        ? 'Only owners and admins can answer, since only they invite here (People & Safety → Invites & QR → Who may invite).'
+                                        : 'Any member can answer by inviting them.'} Turned off, nobody can ask, and members don&apos;t see requests.
                                 </p>
                                 {openKnocks !== null && (
                                     <p id="open-knocks" className="text-[11px] text-nature-300 ml-6 mt-1 leading-normal">

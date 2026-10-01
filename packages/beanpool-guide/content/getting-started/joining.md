@@ -10,7 +10,7 @@ related: finding-a-community, your-12-words, your-profile, communities, how-it-w
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
 - **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities.
 
-No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See "Finding a community near you".
+No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See "Finding a community near you".
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
@@ -39,6 +39,8 @@ You can join in the phone app or in a web browser. In a browser, open global.bea
 
 The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see "Getting your account back". After joining you don't sign in to open the app: your account is the key on your phone, like any other.
 
+**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
+
 ## The four steps
 
 The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.
@@ -55,6 +57,7 @@ If you close the app halfway, it carries on from the same step next time.
 - **Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.
 - **Expired:** invites last 30 days. Ask for a new one.
 - **Not recognised:** check you copied all of it, and that the community name or address is right.
+- **Made by a member, and only the admins bring people in now:** the community has chosen that only its admins invite, and a ticket a member made without a connection no longer works. Ask an admin for a fresh invite.
 - **Failed to register identity** (after you tap **Next**): usually no connection, or no answer in time. Check your connection and tap **Next** again. If your first try got through, the app carries on to **Your Photo** and **Safety Backup** with the same account.
 
 ## If joining the global community does not work
@@ -63,13 +66,14 @@ If you close the app halfway, it carries on from the same step next time.
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
 - **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.
+- **This sign-in already joined the global community with a different BeanPool account** (joining from the account on your phone): that sign-in has its own account there. Tap **Use a different sign-in**.
 - **This community can't check sign-ins right now:** the global community has moved to another server and can't yet tell a returning account from a new one, so for now it takes nobody new this way. Nothing was saved. Try again later.
 - **Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
 - **Not taking new members right now:** join a community with an invite instead.
 
 ## Inviting someone
 
-Any member can invite people. Your trust badge does not matter.
+Any member can invite people, unless the community has chosen that only its admins do (see below). Your trust badge does not matter.
 
 - Tap the invite icon (a person with a plus) at the top right of the screen. This opens **Invites**.
 - If you like, write who the invite is for, just for your own records.
@@ -80,6 +84,11 @@ Any member can invite people. Your trust badge does not matter.
 
 A community's admins can turn invites off for the whole community.
 
+**Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
+
+- Invite codes you made before the community chose this still work until their 30 days are up.
+- A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.
+
 The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
 
 ## Requests to join
@@ -89,4 +98,4 @@ People can ask to join your community from the global community. When someone ha
 - **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".
 
-Any member can answer. See "Finding a community near you".
+Any member can answer. In a community where only the admins invite, only its owners and admins see the requests and answer them. See "Finding a community near you".

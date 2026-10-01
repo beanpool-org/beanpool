@@ -4,8 +4,10 @@
  *
  * Local communities stay invite-only, and anyone can invite (tiers gate nothing), so a knock creates no new authority:
  * a member who answers "Invite" makes an ordinary invite (`generateInvite`), for the applicant's key, and the
- * applicant's app redeems it through today's redeem path. The global node plays no part: the app signs the knock with
- * the applicant's own key (the same key on every node) and sends it to the community itself.
+ * applicant's app redeems it through today's redeem path. Where the community has chosen that only its admins invite
+ * (the door, config/door.ts), only an owner or admin answers, either way (`admins_only`), and only they read the list.
+ * The global node plays no part: the app signs the knock with the applicant's own key (the same key on every node) and
+ * sends it to the community itself.
  *
  * ## Who may knock
  *
@@ -120,6 +122,7 @@ import crypto from 'node:crypto';
 import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
+import { mayInviteHere } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
 import { isMemberKeySpelling } from './member-key.js';
@@ -371,7 +374,7 @@ export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
 }
 
-export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated';
+export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated' | 'admins_only';
 
 export type AnswerOutcome =
     | { ok: true; knockId: string; status: 'approved'; invite: { code: string; expiresAt: string } }
@@ -399,6 +402,9 @@ function answerable(id: string, now: number): { row: KnockRow } | { reason: Answ
  */
 export function approveKnock(id: string, member: string, now = Date.now()): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
+        // Where only admins invite (config/door.ts), a member who is no owner or admin answers nothing, before the
+        // knock is looked at: the invite below would be refused just the same.
+        if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
         const invite = generateInvite(member, found.row.pubkey);
@@ -415,6 +421,8 @@ export function approveKnock(id: string, member: string, now = Date.now()): Answ
 /** "Not now": declined, by `member`. Nothing reaches the applicant; their status reads `pending` for the block. */
 export function declineKnock(id: string, member: string, now = Date.now()): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
+        // "Not now" is an answer too: where only admins invite, only they give it (approveKnock).
+        if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
         const at = iso(now);

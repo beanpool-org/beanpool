@@ -129,6 +129,8 @@ export type DoorAnswer =
     | { kind: 'removed'; message: string }
     /** 403 `key_invalidated`: this key was replaced by a re-key. */
     | { kind: 'key_invalidated'; message: string }
+    /** 403 `account_closed`: global closed this key's account (deleted by its owner, or removed). It can't join again. */
+    | { kind: 'account_closed'; message: string }
     /** 404 (`invite_only`) or another 403: the door is shut. */
     | { kind: 'door_closed'; message: string }
     /** 429: too many joins from this network, or the sign-in limiter. */
@@ -155,6 +157,7 @@ export const DOOR_MESSAGES = {
     unreachable: GLOBAL_DOOR_MESSAGES.unreachable,
     doorClosed: GLOBAL_DOOR_MESSAGES.door_closed,
     alreadyJoined: 'This sign-in already has a BeanPool identity in the global community. Restore it with your 12 words or your sign-in instead.',
+    accountClosed: 'This account\'s place in the global community was closed, so it can\'t join again.',
     removed: 'The BeanPool identity this sign-in joined with was removed from the global community, so it can\'t join again. You can still join a community with an invite.',
     keyInvalidated: 'This phone\'s key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.',
     rateLimited: 'Too many new accounts have joined from this network. Please try again later.',
@@ -202,6 +205,7 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 409 && code === 'already_joined') return { kind: 'already_joined', message: said(body) ?? DOOR_MESSAGES.alreadyJoined };
     if (status === 403 && code === 'removed') return { kind: 'removed', message: said(body) ?? DOOR_MESSAGES.removed };
     if (status === 403 && code === 'key_invalidated') return { kind: 'key_invalidated', message: said(body) ?? DOOR_MESSAGES.keyInvalidated };
+    if (status === 403 && code === 'account_closed') return { kind: 'account_closed', message: DOOR_MESSAGES.accountClosed };
     if (status === 403 || status === 404) return { kind: 'door_closed', message: DOOR_MESSAGES.doorClosed };
     if (status === 429) {
         return { kind: 'rate_limited', message: said(body) ?? DOOR_MESSAGES.rateLimited, retryAfterSeconds: retryAfter };
@@ -216,6 +220,7 @@ export function nextStepFor(answer: DoorAnswer): DoorNext {
         case 'already_joined': return 'restore';
         case 'removed':
         case 'key_invalidated':
+        case 'account_closed':
         case 'door_closed': return 'closed';
         default: return 'retry';
     }
@@ -237,7 +242,8 @@ export type DoorPhase = 'checking' | 'unavailable' | 'signIn' | 'name' | 'joinin
  * Which ways off the door's screen are open: "← Back to Home", and "Use a different sign-in" on the name step.
  * - The name step never closes them, not even while its check is out: leaving stops the check (`checkNameAtDoor`).
  * - While the join itself is out, neither is offered. The key is on the phone and the join is counted, and its
- *   answer, bounded by JOIN_TIMEOUT_MS, decides where the member goes.
+ *   answer decides where the member goes: bounded by JOIN_TIMEOUT_MS, except the backstop's second sheet
+ *   ({@link submitJoin}), which the member can cancel.
  * - At the sign-in, Back waits for the nonce (bounded too) and the provider's own sheet.
  */
 export function doorWaysOut(phase: DoorPhase, busy: boolean): { back: boolean; otherSignIn: boolean } {
@@ -486,6 +492,7 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
         case 'already_joined':
         case 'removed':
         case 'key_invalidated':
+        case 'account_closed':
         case 'door_closed':
         case 'rate_limited':
         case 'sign_in_again':

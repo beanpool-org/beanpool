@@ -12,6 +12,7 @@ import {
 import { resetCapturedAuthReturn } from '../lib/web-join';
 import { registerMember } from '../lib/api';
 import { openWithNodeName } from '../lib/member-name';
+import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 type Call = { path: string; body: any; headers: Record<string, string> };
@@ -185,6 +186,18 @@ describe('an invite join saves its key only once the node has taken the invite (
         await submitInvite();
 
         expect(await screen.findByText(/This invite has already been used — each one works exactly once/)).toBeInTheDocument();
+        expect(node.redeems()).toHaveLength(0);
+        expect(await loadIdentity()).toBeNull();
+        expect(peekPending()).toBeUndefined();
+    });
+
+    it('a ticket a member made, where only admins invite now: the pre-flight says so, and nothing is made, sent or saved', async () => {
+        const node = stubNode(LOCAL, { '/api/invite/check': () => json(200, { valid: false, reason: 'admins_only' }) });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        await submitInvite();
+
+        expect(await screen.findByText(MEMBER_TICKET_REFUSED_TEXT)).toBeInTheDocument();
+        expect(MEMBER_TICKET_REFUSED_TEXT).toMatch(/only its admins bring people in/);
         expect(node.redeems()).toHaveLength(0);
         expect(await loadIdentity()).toBeNull();
         expect(peekPending()).toBeUndefined();

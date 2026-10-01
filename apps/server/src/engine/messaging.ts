@@ -274,6 +274,19 @@ export function createConversation(
     return conv;
 }
 
+/** `metadata` (a JSON string a client sent) without the keys only the node's own tombstone carries. */
+export function withoutTombstoneKeys(metadata: string | undefined): string | undefined {
+    if (typeof metadata !== 'string' || !metadata) return metadata;
+    let obj: any;
+    try { obj = JSON.parse(metadata); } catch { return metadata; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return metadata;
+    let hit = false;
+    for (const k of ['removed', 'removedBy', 'removedAt', 'accountDeleted']) {
+        if (k in obj) { delete obj[k]; hit = true; }
+    }
+    return hit ? JSON.stringify(obj) : metadata;
+}
+
 export function sendMessage(
     cb: MessagingCallbacks,
     conversationId: string,
@@ -386,6 +399,9 @@ export function sendMessage(
     if (!opts.nodeAuthored) {
         refuseUnencryptedDm(ciphertext, nonce);
         if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
+        // A tombstone is written only by the node (message-tombstone.ts), never sent: a client's `removed`, `removedBy`,
+        // `removedAt` and `accountDeleted` would pose its line as one (#1407 review: a phone read it as a deleted account).
+        metadata = withoutTombstoneKeys(metadata);
     }
     opts.beforeStore?.({ ciphertext, metadata });
 

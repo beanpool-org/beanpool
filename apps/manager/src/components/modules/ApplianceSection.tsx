@@ -1066,7 +1066,7 @@ export function ApplianceSection({
                                     <span>Automated Backup Schedule</span>
                                 </h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Autonomous on-disk point-in-time snapshots using crash-consistent SQLite VACUUM INTO
+                                    Autonomous on-disk point-in-time snapshots using crash-consistent SQLite VACUUM INTO. Taken on the main server only; none is kept past 14 days.
                                 </p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -1129,7 +1129,6 @@ export function ApplianceSection({
                                         <option value={3}>Keep last 3 snapshots</option>
                                         <option value={7}>Keep last 7 snapshots (1 week)</option>
                                         <option value={14}>Keep last 14 snapshots (2 weeks)</option>
-                                        <option value={30}>Keep last 30 snapshots (1 month)</option>
                                     </select>
                                     <button
                                         type="submit"

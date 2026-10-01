@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 93,
-  "hash": "40cc899e5f949696606ba1260f3235ed063aded65a8d1231f19be133b402b8a7",
+  "version": 94,
+  "hash": "594d2c889cea70b2493c3dbcafbddff21ffd4a3f22d2885b17335a49508e5e67",
   "sections": [
     {
       "id": "about",
@@ -874,7 +874,7 @@
         },
         {
           "type": "p",
-          "text": "No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See \"Finding a community near you\"."
+          "text": "No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See \"Finding a community near you\"."
         },
         {
           "type": "p",
@@ -930,6 +930,10 @@
           "text": "The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see \"Getting your account back\". After joining you don't sign in to open the app: your account is the key on your phone, like any other."
         },
         {
+          "type": "p",
+          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
+        },
+        {
           "type": "h2",
           "text": "The four steps"
         },
@@ -960,6 +964,7 @@
             "**Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.",
             "**Expired:** invites last 30 days. Ask for a new one.",
             "**Not recognised:** check you copied all of it, and that the community name or address is right.",
+            "**Made by a member, and only the admins bring people in now:** the community has chosen that only its admins invite, and a ticket a member made without a connection no longer works. Ask an admin for a fresh invite.",
             "**Failed to register identity** (after you tap **Next**): usually no connection, or no answer in time. Check your connection and tap **Next** again. If your first try got through, the app carries on to **Your Photo** and **Safety Backup** with the same account."
           ]
         },
@@ -974,6 +979,7 @@
             "**Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.",
             "**The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.",
             "**This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.",
+            "**This sign-in already joined the global community with a different BeanPool account** (joining from the account on your phone): that sign-in has its own account there. Tap **Use a different sign-in**.",
             "**This community can't check sign-ins right now:** the global community has moved to another server and can't yet tell a returning account from a new one, so for now it takes nobody new this way. Nothing was saved. Try again later.",
             "**Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.",
             "**Not taking new members right now:** join a community with an invite instead."
@@ -985,7 +991,7 @@
         },
         {
           "type": "p",
-          "text": "Any member can invite people. Your trust badge does not matter."
+          "text": "Any member can invite people, unless the community has chosen that only its admins do (see below). Your trust badge does not matter."
         },
         {
           "type": "ul",
@@ -1001,6 +1007,17 @@
         {
           "type": "p",
           "text": "A community's admins can turn invites off for the whole community."
+        },
+        {
+          "type": "p",
+          "text": "**Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Invite codes you made before the community chose this still work until their 30 days are up.",
+            "A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin."
+          ]
         },
         {
           "type": "p",
@@ -1023,7 +1040,7 @@
         },
         {
           "type": "p",
-          "text": "Any member can answer. See \"Finding a community near you\"."
+          "text": "Any member can answer. In a community where only the admins invite, only its owners and admins see the requests and answer them. See \"Finding a community near you\"."
         }
       ]
     },
@@ -1707,8 +1724,33 @@
           "text": "Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**."
         },
         {
+          "type": "h2",
+          "text": "Joining the global community from your account"
+        },
+        {
           "type": "p",
-          "text": "The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: when the global community is open, tap **Explore BeanPool worldwide** there. See \"Joining BeanPool\". Joining it from an account you already have is not possible yet."
+          "text": "The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it only when the global community is open."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.",
+            "Sign in once with Google, Apple (on an iPhone) or Facebook. The app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
+            "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
+            "Then choose your photo for the global community, as for any new community."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nothing changes in your other communities, and your 12 words stay the same. The sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See \"Getting your account back\". A sign-in you linked to your account before keeps working."
+        },
+        {
+          "type": "p",
+          "text": "If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community."
+        },
+        {
+          "type": "p",
+          "text": "On a new phone with no account yet, use **Explore BeanPool worldwide** on the first screen instead. See \"Joining BeanPool\"."
         },
         {
           "type": "h2",
@@ -1750,7 +1792,7 @@
         },
         {
           "type": "p",
-          "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite."
+          "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with a sign-in instead: see \"Joining the global community from your account\" above."
         }
       ]
     },
@@ -2419,7 +2461,7 @@
         },
         {
           "type": "p",
-          "text": "You both get an alert and a line in your chat saying how it was settled. It names the admin by their callsign, or says \"a community admin\"."
+          "text": "You both get an alert (\"There is news on one of your trades.\") and a line in your chat saying how it was settled. The chat line names the admin by their callsign, or says \"a community admin\". The alert itself names no one."
         },
         {
           "type": "h2",
@@ -4791,7 +4833,7 @@
         },
         {
           "type": "p",
-          "text": "These alerts come under **Marketplace Activity** in your notification settings. See \"Notifications\". The web app has no notifications: it shows each alert while it is open, or the next time you open it."
+          "text": "These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only \"Your community has a notice for you.\"; open BeanPool to read it. See \"Notifications\". The web app has no notifications: it shows each alert while it is open, or the next time you open it."
         },
         {
           "type": "p",
@@ -4863,6 +4905,31 @@
         {
           "type": "p",
           "text": "Alerts about someone trying to recover your account always come through. You cannot turn those off."
+        },
+        {
+          "type": "h2",
+          "text": "What an alert says"
+        },
+        {
+          "type": "p",
+          "text": "An alert on your phone says only what kind of news it is, for example:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "\"You have a new message.\"",
+            "\"There is news on one of your trades.\"",
+            "\"An event you're going to starts soon.\"",
+            "\"Your community has a notice for you.\""
+          ]
+        },
+        {
+          "type": "p",
+          "text": "It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it."
+        },
+        {
+          "type": "p",
+          "text": "BeanPool never asks for your 12 words or a password in an alert."
         },
         {
           "type": "h2",

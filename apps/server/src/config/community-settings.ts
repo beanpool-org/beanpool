@@ -13,7 +13,7 @@
  *   old host's), so it stays with each server: taken over, it could lock the owners out of the Settings they need
  *   right then.
  * - node_config rows: the accepted audit baseline and its note, the pricing guide's source and seasonality, the snapshot
- *   schedule. The baseline travels only where the main server has one (every main server writes one at its first
+ *   schedule, and the door (who may invite, config/door.ts). The baseline travels only where the main server has one (every main server writes one at its first
  *   boot): installing "none" would make the next audit accept whatever the ledger sums to, and hide a drift.
  * - The `node_config` row's object: the service area, the four directory switches and how often the directory is told.
  *
@@ -33,7 +33,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig, type GatewayConfig } from './local-config.js';
 import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
-import { isAutoSnapshotInterval, restartScheduler } from '../services/snapshot-scheduler.js';
+import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 
 export type { SyncCommunitySettings };
@@ -47,7 +47,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 
 /** node_config rows that are the community's. */
 export const COMMUNITY_NODE_CONFIG_KEYS = [
-    'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config',
+    'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -173,7 +173,8 @@ const snapshotSchedule: Check<string> = (v) => {
     let s: unknown;
     try { s = JSON.parse(v); } catch { return BAD; }
     if (!isObject(s) || typeof s.enabled !== 'boolean' || !isAutoSnapshotInterval(s.intervalHours) || !finite(s.keep) || s.keep < 1) return BAD;
-    return JSON.stringify({ enabled: s.enabled, intervalHours: s.intervalHours, keep: Math.round(s.keep) });
+    // A main server from before the cap may keep more: its record is taken, keeping at most MAX_SNAPSHOTS_KEPT.
+    return JSON.stringify({ enabled: s.enabled, intervalHours: s.intervalHours, keep: Math.min(MAX_SNAPSHOTS_KEPT, Math.round(s.keep)) });
 };
 
 const radius: Check<{ lat: number; lng: number; radiusKm: number }> = (v) => {
@@ -200,6 +201,8 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     pricing_data_source: orNull(oneOf('local', 'federation', 'all')),
     pricing_show_seasonality: orNull(oneOf('true', 'false')),
     autosnapshot_config: orNull(snapshotSchedule),
+    // Never `open`: a community never stores it (config/door.ts). Null is the default door, any member.
+    door: orNull(oneOf('members', 'admins')),
 };
 
 /**

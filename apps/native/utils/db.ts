@@ -21,7 +21,8 @@ import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey,
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { GroupSuccessionData } from './group-succession';
-import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from './chat-sync';
+import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, type LocalMessageRow } from './chat-sync';
+import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -3222,6 +3223,60 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
     if (merged.contentReplaced && merged.type === 'removed') await forgetCachedChatImage(m.id);
 }
 
+// Deleted accounts already blanked on this phone, per community copy. The conversation list names them on every sync from
+// then on, and an open chat's page can carry their tombstones on every poll: a pass already done is not run again.
+const deletedAccountsBlanked = new Set<string>();
+
+/**
+ * Every line on this phone by an account its owner deleted reads "This message was deleted", and the copies of their photos
+ * this phone decrypted go (Marty, 2026-10-01: "Yes, blank lines and photos").
+ *
+ * The node blanks every line of theirs (apps/server/src/engine/message-tombstone.ts blankMessagesOf), but a sync brings only
+ * the newest 50 lines of a conversation and the delete sends no event per line: the older lines of a DM, which the chat
+ * reads from here as you scroll up, kept their words, still decryptable, and their photos. So the phone blanks them itself,
+ * in every conversation it holds (a group's and an event's lines are kept here too), from what a sync tells it: the
+ * conversation list's `deletedAccounts`, or a tombstone of theirs in a conversation's answer (chat-sync.ts
+ * accountDeletedAuthor). Both are state, not a socket event, so a phone that was offline when it happened catches it on its
+ * next sync. Never this phone's own lines. Each line keeps its id, conversation and time; the node's own tombstone replaces
+ * this one when a later sync carries it. Returns how many lines it blanked.
+ */
+async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys: Iterable<string>, myPubkey: string | null | undefined): Promise<number> {
+    const copy = currentDbName ?? '';
+    const pending = [...new Set(keys)].filter(k => typeof k === 'string' && k !== '' && k !== myPubkey && !deletedAccountsBlanked.has(`${copy}\u0001${k}`));
+    if (pending.length === 0) return 0;
+    const rows = await database.getAllAsync<{ id: string; author_pubkey: string; type: string | null; nonce: string | null; metadata: string | null }>(
+        `SELECT id, author_pubkey, type, nonce, metadata FROM messages WHERE author_pubkey IN (${pending.map(() => '?').join(',')})`,
+        pending
+    );
+    const toBlank = rows.filter(stillHoldsWords);
+    const blanked: string[] = [];
+    if (toBlank.length > 0) {
+        // Stored as the node stores its tombstones: plain text, readable without the DM's key.
+        const ciphertext = encodeBase64(encodeUtf8(DELETED_BY_AUTHOR_TEXT));
+        const removedAt = new Date().toISOString();
+        await acquireSyncLock();
+        try {
+            await database.withTransactionAsync(async () => {
+                for (const r of toBlank) {
+                    // Checked again here: a sync may have put the node's own tombstone in since the read above, and it stays.
+                    const res = await database.runAsync(
+                        `UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ?
+                         WHERE id = ? AND author_pubkey = ? AND NOT (IFNULL(type, '') = 'removed' AND IFNULL(nonce, '') LIKE 'plaintext%')`,
+                        [ciphertext, accountDeletedMetadata(r.metadata, r.author_pubkey, removedAt), r.id, r.author_pubkey]
+                    );
+                    if (res.changes > 0) blanked.push(r.id);
+                }
+            });
+        } finally {
+            releaseSyncLock();
+        }
+    }
+    for (const id of blanked) await forgetCachedChatImage(id);
+    for (const k of pending) deletedAccountsBlanked.add(`${copy}\u0001${k}`);
+    if (blanked.length > 0) console.log(`[Sync] Blanked ${blanked.length} line(s) of ${pending.length} deleted account(s)`);
+    return blanked.length;
+}
+
 export async function syncMessages(publicKey: string) {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -3300,6 +3355,19 @@ export async function syncMessages(publicKey: string) {
         // Identity, so we can attribute the peer's read cursor (read receipts).
         const myIdentity = await loadIdentity();
         const database = await getDb();
+
+        // The people in these chats who deleted their accounts: the older lines of theirs this phone holds are blanked here,
+        // since no page below brings them again (blankLinesOfDeletedAccounts). A node from before this sends none.
+        const deletedAccounts = new Set<string>(
+            Array.isArray(convData.deletedAccounts) ? convData.deletedAccounts.filter((k: unknown): k is string => typeof k === 'string') : []
+        );
+        try {
+            await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
+        } catch (e) {
+            console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
+        }
+        // And anyone a page below shows as deleted (a tombstone of theirs), who may no longer be in that chat.
+        const seenDeleted = new Set<string>();
 
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
@@ -3422,6 +3490,10 @@ export async function syncMessages(publicKey: string) {
             const msgData = await msgRes.json();
             const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
+            for (const m of messages) {
+                const gone = accountDeletedAuthor(m, conv.type);
+                if (gone && !deletedAccounts.has(gone)) seenDeleted.add(gone);
+            }
 
             // Diff outside the lock — unchanged conversations skip the write queue.
             const changed = await diffChangedMessages(database, conv.id, messages);
@@ -3436,6 +3508,14 @@ export async function syncMessages(publicKey: string) {
                 });
             } finally {
                 releaseSyncLock();
+            }
+        }
+
+        if (seenDeleted.size > 0) {
+            try {
+                await blankLinesOfDeletedAccounts(database, seenDeleted, myIdentity?.publicKey);
+            } catch (e) {
+                console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
             }
         }
 
@@ -3542,7 +3622,29 @@ export async function syncSingleConversation(conversationId: string) {
             });
         }
 
-        if (changed.length === 0 && cursorAdvances.length === 0) return;
+        // A tombstone of a deleted account on this page: the older lines of theirs on this phone go too
+        // (blankLinesOfDeletedAccounts, which runs once per account, not on every poll).
+        const gone = new Set<string>();
+        for (const m of messages) {
+            const k = accountDeletedAuthor(m, msgData.conversation?.type);
+            if (k) gone.add(k);
+        }
+        let blanked = 0;
+        if (gone.size > 0) {
+            try {
+                blanked = await blankLinesOfDeletedAccounts(database, gone, myIdentity?.publicKey);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not blank the lines of deleted accounts: ${e?.message || e}`);
+            }
+        }
+
+        if (changed.length === 0 && cursorAdvances.length === 0) {
+            if (blanked > 0) {
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            }
+            return;
+        }
 
         await acquireSyncLock();
         try {
@@ -4223,7 +4325,8 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }

@@ -122,16 +122,17 @@ async function main() {
     initStateEngine();
     migrateAdminConversations();
 
-    // Step 2.55: Auto-snapshot scheduler — periodic local DB snapshots into
-    // data/snapshots/ (Backup tab). Defaults to daily, keeping the last 7.
-    // Wired after initStateEngine() so the DB connection + node_config exist.
-    initSnapshotScheduler();
-
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
     // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over
     // NODE_ROLE in .env), and run the ledger conservation audit once if a take-over left it pending. Never blocks
     // the boot; a failure is in data/takeover-journal.json and Settings.
     resumeTakeoverAtBoot();
+
+    // Step 2.61: Auto-snapshot scheduler — periodic local DB snapshots into data/snapshots/ (Backup tab), on the main
+    // server only. Defaults to daily, keeping the last 7, none older than 14 days. After the take-over step (2.6), so it
+    // arms for the role as it now stands; a role change after re-arms it (services/snapshot-scheduler.ts). On every
+    // role it removes, each hour, the snapshots past their count or age.
+    initSnapshotScheduler();
 
     // Step 2.65: the recovery seal for the role as it now stands. initStateEngine installed it for the role it read; a
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.

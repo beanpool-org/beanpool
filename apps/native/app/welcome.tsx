@@ -58,6 +58,7 @@ import { returnToApp } from '../utils/sso-signin';
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
@@ -76,6 +77,8 @@ function inviteProblemMessage(reason?: string): string {
             return 'This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
         case 'unknown_inviter':
             return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
+        case 'admins_only':
+            return MEMBER_TICKET_REFUSED_TEXT;
         default:
             return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
     }

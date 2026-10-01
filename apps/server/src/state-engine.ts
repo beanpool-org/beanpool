@@ -45,7 +45,8 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
-import { dropBlocksOf } from './engine/member-blocks.js';
+import { dropBlocksOf, blockersOf } from './engine/member-blocks.js';
+import { dropWithheldOf } from './engine/withheld-lines.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
@@ -5707,8 +5708,8 @@ function getMessagingCb() {
     };
 }
 
-export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void, opts: { asNode?: boolean } = {}): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite, opts);
 }
 
 export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
@@ -7131,6 +7132,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
+        // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
+        dropWithheldOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7297,6 +7300,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropKeptNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
+        // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
+        dropWithheldOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
@@ -7425,7 +7430,8 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
-    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
+    // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
+    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
     // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
     // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
     if (conv) {
@@ -8420,8 +8426,11 @@ export function dispatchPushNotification(
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
 ): number {
     if (getNodeRole() === 'backup') return 0;
-    // Filter out the actor and SYSTEM from targets
-    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
+    // Filter out the actor and SYSTEM from targets. A chat push never reaches someone who has blocked whoever caused it
+    // (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and shows them the line, comes
+    // with no push. A trade's, a recovery's and every other category's still go: a deal under way must be heard.
+    const blockers = categoryId === 'chat' ? blockersOf(actorPubkey) : null;
+    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
     if (recipients.length === 0) return 0;
 
     const prefKey = `notify_${categoryId}`;

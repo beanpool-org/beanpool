@@ -5,10 +5,14 @@
  * any browser after signing in, and nothing about it stays on a shared computer.
  *
  * - The member's own: read, added to, removed from and cleared only with their own signed request (routes/blocks.ts).
- *   The member comes from the signature, never the body. Nothing else here reads it: no other member, no visitor, no
- *   unsigned request, not the activity feed, and no broadcast but a bare doorbell to the owner's own sockets. The
- *   blocked member is never told, and nothing they can read changes. The community's operator can see it, as they see
- *   reports (the trade Marty accepted).
+ *   The member comes from the signature, never the body. No other member, no visitor and no unsigned request reads it,
+ *   nor the activity feed, and no broadcast carries it but a bare doorbell to the owner's own sockets. The blocked
+ *   member is never told, and nothing they can read changes. The community's operator can see it, as they see reports
+ *   (the trade Marty accepted).
+ * - What the node does with it (hasBlocked, blockersOf): a direct message from a blocked member is kept for its sender
+ *   alone and never reaches the owner, then or after an unblock (engine/withheld-lines.ts); no chat push and no new
+ *   deal request's push reaches the owner from them; and they can't address a listing to the owner. A shared room (a
+ *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author
  *   has no row here, yet has a Block button. Never the owner's own. At most MEMBER_BLOCKS_MAX each. The web app's one-time
@@ -93,6 +97,17 @@ export const PAIR_TOMBSTONES_OF = "table_name = 'member_blocks' AND row_key >= ?
 
 /** The later of two stamps, either possibly null. */
 const later = (a: string | null, b: string | null): string | null => (a === null ? b : b === null ? a : a > b ? a : b);
+
+/** Whether `owner` has `key` on their block list. */
+export function hasBlocked(owner: string, key: string): boolean {
+    return !!db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(owner, key);
+}
+
+/** Everyone who has `key` on their block list (idx_member_blocks_blocked). */
+export function blockersOf(key: string): Set<string> {
+    return new Set((db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ?').all(key) as { owner_pubkey: string }[])
+        .map(r => r.owner_pubkey));
+}
 
 /** A member's own list, oldest block first. */
 export function listBlocks(owner: string): MemberBlock[] {

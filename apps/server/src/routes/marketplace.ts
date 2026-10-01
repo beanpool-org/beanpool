@@ -40,6 +40,7 @@ import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
+import { withheldAttachmentFor } from '../engine/withheld-lines.js';
 import { guestPost, isTradeParty, withoutTradeParty, ONE_PASS_MAX_MEASURED, type MarketplacePost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 
@@ -174,6 +175,13 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     // The row first, for the same reason as the photo route above.
     const row = db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined;
     if (!row) {
+        // The photo of a line kept for its sender alone (engine/withheld-lines.ts): theirs, asked for signed by them.
+        const own = withheldAttachmentFor(id, ctx.state.actor as string | undefined);
+        if (own) {
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = own;
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Attachment not found' };
         return;

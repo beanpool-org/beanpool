@@ -13,6 +13,7 @@ import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isDealQuantity, POST_HOURS_MAX } from './post-fields.js';
+import { hasBlocked } from './member-blocks.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -306,8 +307,10 @@ export function requestPost(
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
+    // A request from someone the listing's author has blocked (engine/member-blocks.ts) waits in their deals with no push:
+    // it holds no Beans and carries no words of the requester's, and refusing it would tell the requester they are blocked.
     cb.dispatchPushNotification(
-        [post.author_pubkey],
+        hasBlocked(post.author_pubkey, requesterPublicKey) ? [] : [post.author_pubkey],
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,

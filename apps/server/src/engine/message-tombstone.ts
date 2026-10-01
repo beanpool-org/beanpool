@@ -38,10 +38,11 @@ function prepareTombstone(): TombstoneStatements {
     };
 }
 
-/** One row made a tombstone, inside the caller's transaction. The photo's stored object, if any, for after it commits. */
-function tombstoneRow(
-    s: TombstoneStatements, messageId: string, row: any, removedBy: string, markerText: string, mark: Record<string, unknown>,
-): { tombstone: MessageTombstone; photoKey: string | undefined } {
+/**
+ * What a row reads once it is a tombstone: the marker text and the metadata the apps read it by. Written by the caller;
+ * a withheld line's delete (engine/messaging.ts) writes the same into its own table.
+ */
+export function tombstoneFields(row: any, removedBy: string, markerText: string, mark: Record<string, unknown> = {}): MessageTombstone {
     let metaObj: any = {};
     if (row?.metadata) {
         try { metaObj = JSON.parse(row.metadata); } catch { /* keep the replacement metadata */ }
@@ -57,7 +58,14 @@ function tombstoneRow(
     Object.assign(metaObj, mark);
     const metadata = JSON.stringify(metaObj);
     const ciphertext = Buffer.from(markerText, 'utf8').toString('base64');
+    return { ciphertext, metadata, removedAt };
+}
 
+/** One row made a tombstone, inside the caller's transaction. The photo's stored object, if any, for after it commits. */
+function tombstoneRow(
+    s: TombstoneStatements, messageId: string, row: any, removedBy: string, markerText: string, mark: Record<string, unknown>,
+): { tombstone: MessageTombstone; photoKey: string | undefined } {
+    const { ciphertext, metadata, removedAt } = tombstoneFields(row, removedBy, markerText, mark);
     s.write.run(ciphertext, metadata, messageId);
     // The photo goes too, or /api/attachment/:id would still serve it after a "delete for everyone".
     // The row inside the transaction, the stored object after it commits (storage design §7): the route

@@ -28,6 +28,7 @@ import { respondProfileRefusal } from './profile-feature-gate.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
+import { withheldConversationOwnedBy, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld } from '../engine/withheld-lines.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
  *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
@@ -252,7 +253,8 @@ router.post('/api/messages/send', async (ctx) => {
         // (sendMessage may remap a legacy/consolidated conversationId to the active
         // DM). Looking up the raw request `conversationId` here would miss the
         // participants of a consolidated thread and silently skip cross-node relay.
-        const conv = getConversation(msg.conversationId);
+        // A line kept for its sender alone (engine/withheld-lines.ts) goes nowhere.
+        const conv = withheldLine(msg.id) ? undefined : getConversation(msg.conversationId);
         if (conv && conv.type === 'dm') {
             const otherPubkey = conv.participants.find(p => p !== authorPubkey);
             if (otherPubkey) {
@@ -376,7 +378,10 @@ router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     // An event hidden by reports (G3) is not there for anyone but its author, nor a group's event for someone no longer in
     // the group, and its chat is named after it (chatHiddenFrom). The unread counts leave out the same chats, as the
     // badge every push carries does (getListedUnreadCounts).
-    const convs = getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey));
+    // The member's own withheld conversations and lines (engine/withheld-lines.ts) are in their own list, read signed
+    // by them, ordered as if nothing had been withheld; nobody else's list ever names one.
+    const viewer = ctx.state.actor === publicKey ? publicKey : undefined;
+    const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
     const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
@@ -399,6 +404,11 @@ router.post('/api/messages/mark-read', async (ctx) => {
     }
     const conv = getConversation(conversationId);
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts) is read as any other, with nothing to move.
+        if (withheldConversationOwnedBy(conversationId, actor)) {
+            ctx.body = { success: true };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -488,7 +498,17 @@ router.post('/api/messages/mute', async (ctx) => {
 router.get('/api/messages/:conversationId', async (ctx) => {
     const { conversationId } = ctx.params;
     const conv = getConversation(conversationId);
+    const viewer = ctx.state.actor as string | undefined;
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts): theirs, read signed by them, as any DM.
+        const kept = withheldConversationOwnedBy(conversationId, viewer);
+        if (kept) {
+            ctx.body = {
+                conversation: withheldConversationView(kept),
+                messages: pageWithOwnWithheld(conversationId, viewer, clampLimit(ctx.query.limit), clampOffset(ctx.query.offset), () => []),
+            };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -552,9 +572,14 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
+    const page = (l: number, o: number) => getConversationMessages(conversationId, l, o);
     ctx.body = {
         conversation: conv,
-        messages: getConversationMessages(conversationId, limit, offset),
+        // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,
+        // as they sent it. Only the reader's own, so the other person's read is the lines and nothing else.
+        messages: conv.type === 'dm' && viewer && conv.participants.includes(viewer)
+            ? pageWithOwnWithheld(conversationId, viewer, limit, offset, page)
+            : page(limit, offset),
     };
 });
 

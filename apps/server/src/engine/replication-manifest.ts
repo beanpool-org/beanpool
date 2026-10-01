@@ -443,6 +443,10 @@ export const TABLES: Record<string, TableEntry> = {
     withheld_lines: { kind: 'local', reason: 'lines kept for their sender alone, because the person they were sent to had blocked them: never in a copy, so no standby can deliver one (engine/withheld-lines.ts)' },
     withheld_conversations: { kind: 'local', reason: 'conversations kept for their opener alone, because the other had blocked them: never in a copy (engine/withheld-lines.ts)' },
     withheld_overlays: { kind: 'local', reason: "a blocked member's reaction or edit on a line, kept for them alone and laid over their own reads: never in a copy (engine/withheld-lines.ts)" },
+    // A burst action's undo (engine/burst-cleanup.ts). The posts it hid travel hidden (posts.hidden_by_reports_at), so a
+    // server that takes over keeps them hidden, and its moderators restore them one at a time.
+    burst_actions: { kind: 'local', reason: "this server's record of the moderators' burst actions, for their undo, 30 days: the posts a hide hid travel hidden in posts, and after a take-over are restored one at a time (engine/burst-cleanup.ts)" },
+    burst_action_posts: { kind: 'local', reason: "the posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
 };
 
 /**

@@ -141,6 +141,16 @@ export function standingOf(pubkey: string, now: number = Date.now(), opts: { cou
     return weekPoints(row.joined_at, now) + keptPostPoints(pubkey, opts.countingPost ?? null) + tradePartnerPoints(pubkey);
 }
 
+export interface StandingParts { weeks: number; keptPosts: number; dealPartners: number; total: number }
+
+/** `standingOf`, with what it is made of, for the moderators' screens (engine/burst-cleanup.ts). */
+export function standingParts(pubkey: string, now: number = Date.now()): StandingParts {
+    const row = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(pubkey) as { joined_at: string | null } | undefined;
+    if (!row) return { weeks: 0, keptPosts: 0, dealPartners: 0, total: 0 };
+    const weeks = weekPoints(row.joined_at, now), keptPosts = keptPostPoints(pubkey, null), dealPartners = tradePartnerPoints(pubkey);
+    return { weeks, keptPosts, dealPartners, total: weeks + keptPosts + dealPartners };
+}
+
 /** Whether a moderator kept enough of what this member reported lately that their reports no longer count. */
 function keptReportsTooMany(pubkey: string, now: number): boolean {
     const since = iso(now - AUTO_HIDE.keptReportsWindowDays * DAY_MS);

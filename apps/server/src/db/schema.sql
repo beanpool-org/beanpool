@@ -865,7 +865,8 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- come straight back in.
 -- `join_cohort` is a random label, the same for everyone who joined through the door from one address within 24 hours
 -- of each other (chained: it is copied from the earliest such join still in the window). Never the address, never a
--- key. Only auto-hide reads it, so that such reporters count as one (engine/auto-moderation.ts). Replicated and
+-- key. Auto-hide reads it, so that such reporters count as one (engine/auto-moderation.ts), and the moderators' clean-up
+-- by burst, to show which accounts joined together and act on them at once (engine/burst-cleanup.ts). Replicated and
 -- bundled with the row; NULL for a join before it existed, and cleared when the member deletes their account.
 CREATE TABLE IF NOT EXISTS open_joins (
     member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
@@ -878,6 +879,33 @@ CREATE TABLE IF NOT EXISTS open_joins (
 );
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
+-- A burst: the joins that share a connection label (engine/burst-cleanup.ts reads them by label, and the digest the
+-- recent ones by time).
+CREATE INDEX IF NOT EXISTS idx_open_joins_cohort ON open_joins(join_cohort, joined_at) WHERE join_cohort IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_open_joins_cohort_joined ON open_joins(joined_at) WHERE join_cohort IS NOT NULL;
+
+-- What the moderators did to a burst of the open door's joins in one action (engine/burst-cleanup.ts): a hide of its
+-- posts, with the posts it hid so it can be undone, or a removal. This server's own record (a standby never copies it),
+-- each kept 30 days. `by_role`: the role of whoever acted, never their key. `anchor_pubkey`: the account the burst was
+-- opened from, so the screens can name it. When a member deletes their own account their posts leave the record, and
+-- so does their key as its anchor. Foreign keys are off on this database: the posts go with their action by hand.
+CREATE TABLE IF NOT EXISTS burst_actions (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('hide', 'remove')),
+    at TEXT NOT NULL,
+    by_role TEXT NOT NULL CHECK (by_role IN ('owner', 'admin', 'moderator')),
+    anchor_pubkey TEXT,
+    accounts INTEGER NOT NULL CHECK (accounts >= 0),
+    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0),
+    undone_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_burst_actions_at ON burst_actions(at);
+CREATE TABLE IF NOT EXISTS burst_action_posts (
+    action_id TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    PRIMARY KEY (action_id, post_id)
+);
+CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(post_id);
 
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --

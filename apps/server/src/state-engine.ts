@@ -61,6 +61,7 @@ import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
+import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -6206,6 +6207,16 @@ export function liftModerationMute(pubkey: string): boolean {
     return liftMuteEngine(moderationNoticeCb, pubkey);
 }
 
+/** A moderator hides the posts of a burst's accounts in one action (engine/burst-cleanup.ts), already checked. */
+export function hideBurst(anchor: string, keys: string[], byRole: BurstActorRole): BurstActionSummary {
+    return hideBurstPosts(moderationNoticeCb, anchor, keys, byRole);
+}
+
+/** A moderator undoes a burst hide (engine/burst-cleanup.ts). */
+export function undoBurst(actionId: string): UndoOutcome {
+    return undoBurstHide(moderationNoticeCb, actionId);
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
@@ -7364,7 +7375,11 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // would be a way out of the sanction with the same sign-in; never on adminPruneUser, so a member the
         // community removed cannot walk straight back in (engine/open-join.ts); and so not when that member deletes
         // the account afterwards either, nor for a visitor's row, which joined through no door.
-        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) releaseOpenJoin(publicKey);
+        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) {
+            releaseOpenJoin(publicKey);
+            // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
+            forgetBurstActionsOf(publicKey);
+        }
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {

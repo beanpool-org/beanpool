@@ -17,6 +17,10 @@
 //     /64, client-ip.ts). Only the limiter reads it, and only for a day, so it is cleared once a day old: kept
 //     beside a member's key for longer it would be that member's address to anyone holding the database and the
 //     key, because the IPv4 space is small enough to try in full.
+//   - `join_cohort`: a random label, the same for everyone who joined from one address within a day of each other
+//     (`joinCohortFor`). Not the address and not derived from it: what it keeps is only that those members joined from
+//     one connection. Auto-hide reads it so that they count as one reporter (engine/auto-moderation.ts). It is cleared
+//     with the sign-in account when a member deletes their own account (`releaseOpenJoin`).
 //
 // What travels, so a server that takes over still knows who joined (`readOpenJoinRecord`, `writeOpenJoinRecord`):
 //   - Every replication payload to a standby carries the rows changed since its last copy (`SyncPayload.openJoins`,
@@ -32,7 +36,8 @@
 //   - A file or plain backup is the database: the rows, never the key. A server restored from one keeps the door shut
 //     until the key is back (services/open-join-key.ts).
 //   - Never `ip_hash`: it is the limiter's for a day and nobody else's, so after a failover the sign-up limits
-//     start again.
+//     start again. `join_cohort` travels with its row (both ways above), so a server that takes over still counts
+//     reporters who joined from one connection as one.
 // A merge keeps, per member, whichever row is newer, and writes only rows whose member is in this database: a row
 // for a member this server does not have would lock that sign-in account out of an identity that no longer exists
 // here, when joining again gives it back one.
@@ -46,6 +51,9 @@ import { openJoinAddressKey, openJoinKey } from '../services/open-join-key.js';
 
 /** Sign-ups through the open door per address (design §2.5). Sliding windows over `open_joins`. */
 export const OPEN_JOIN_LIMITS = { perHour: 5, perDay: 20 } as const;
+
+/** Joins from one address within this many hours of each other share a `join_cohort` (`joinCohortFor`). At most a day: `ip_hash` is kept no longer. */
+export const JOIN_COHORT_HOURS = 24;
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -135,6 +143,20 @@ export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' |
 }
 
 /**
+ * The label for a join from this address now (`open_joins.join_cohort`): the label of the earliest join from the same
+ * address in the last JOIN_COHORT_HOURS, so a chain of joins a day apart or less shares one, or a new random one.
+ * Reads `ip_hash`, which is there for a day only, so the window can't be longer than that.
+ */
+export function joinCohortFor(ipHash: string, now = Date.now()): string {
+    const row = db.prepare(`
+        SELECT join_cohort FROM open_joins
+        WHERE ip_hash = ? AND joined_at >= ? AND join_cohort IS NOT NULL
+        ORDER BY joined_at ASC LIMIT 1
+    `).get(ipHash, new Date(now - Math.min(JOIN_COHORT_HOURS * HOUR_MS, DAY_MS)).toISOString()) as { join_cohort: string } | undefined;
+    return row?.join_cohort ?? crypto.randomUUID();
+}
+
+/**
  * Whether this sign-in account has already joined. `removed` when the member it joined as is gone (pruned) and
  * the row was kept on purpose: removed by the community, or deleted while suspended. That account cannot simply
  * join again. (A member in good standing who deletes their account frees it: releaseOpenJoin overwrites the hash.)
@@ -211,8 +233,8 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
         // refused. Thrown, not returned, so nothing above commits.
         if (!member) throw new Error('open join: registration was refused');
         const now = new Date().toISOString();
-        db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(publicKey, provider, joinHash, now, ipHash, now);
+        db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash, updated_at, join_cohort) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(publicKey, provider, joinHash, now, ipHash, now, joinCohortFor(ipHash, Date.parse(now)));
         return { ok: true, member };
     })();
 }
@@ -222,9 +244,10 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
  * The join stays on record: only its hash is overwritten, with a random tombstone that `openJoinTaken` never matches
  * (a real hash is base64url, with no ':'). `joined_at` and `ip_hash` still count against the address's limits until
  * the sweep clears the address. Deleting the row gave the sign-up back, so join, delete, join again never reached them.
+ * Its connection label goes too: who joined alongside a member who has left is nobody's business.
  */
 export function releaseOpenJoin(publicKey: string): void {
-    db.prepare("UPDATE open_joins SET join_hash = 'released:' || hex(randomblob(16)), updated_at = ? WHERE member_pubkey = ?")
+    db.prepare("UPDATE open_joins SET join_hash = 'released:' || hex(randomblob(16)), join_cohort = NULL, updated_at = ? WHERE member_pubkey = ?")
         .run(new Date().toISOString(), publicKey);
 }
 
@@ -245,14 +268,14 @@ export interface OpenJoinRecord {
 /** The newest `limit` rows (all of them when unset), for the take-over bundle. */
 export function readOpenJoinRecord(limit?: number): OpenJoinRecord {
     // On the index: the take-over envelope's consistency check reads this every 30 seconds.
-    const rows = db.prepare(`SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins
+    const rows = db.prepare(`SELECT member_pubkey, provider, join_hash, joined_at, updated_at, join_cohort FROM open_joins
                              ORDER BY updated_at DESC ${limit === undefined ? '' : 'LIMIT ?'}`)
         .all(...(limit === undefined ? [] : [limit])) as any[];
     const total = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
     return {
         joins: rows.map((r) => ({
             memberPubkey: r.member_pubkey, provider: r.provider, joinHash: r.join_hash,
-            joinedAt: r.joined_at, updatedAt: r.updated_at || r.joined_at,
+            joinedAt: r.joined_at, updatedAt: r.updated_at || r.joined_at, joinCohort: r.join_cohort ?? null,
         })),
         total,
     };
@@ -286,16 +309,19 @@ export function writeOpenJoinRecord(joins: unknown): OpenJoinMerge {
     const current = db.prepare('SELECT updated_at FROM open_joins WHERE member_pubkey = ?');
     const sameHash = db.prepare('SELECT member_pubkey, updated_at FROM open_joins WHERE join_hash = ? AND member_pubkey != ?');
     const drop = db.prepare('DELETE FROM open_joins WHERE member_pubkey = ?');
-    const upsert = db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, updated_at)
-                               VALUES (?, ?, ?, ?, ?)
+    const upsert = db.prepare(`INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, updated_at, join_cohort)
+                               VALUES (?, ?, ?, ?, ?, ?)
                                ON CONFLICT(member_pubkey) DO UPDATE SET
                                    provider = excluded.provider, join_hash = excluded.join_hash,
-                                   joined_at = excluded.joined_at, updated_at = excluded.updated_at`);
+                                   joined_at = excluded.joined_at, updated_at = excluded.updated_at,
+                                   join_cohort = excluded.join_cohort`);
     db.transaction(() => {
         for (const raw of Array.isArray(joins) ? joins : []) {
             const r = raw as Partial<SyncOpenJoin> | null;
             if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !isSsoProvider(r.provider) || !isText(r.joinHash, 128)
-                || !isText(r.joinedAt, 40) || !isText(r.updatedAt, 40)) {
+                || !isText(r.joinedAt, 40) || !isText(r.updatedAt, 40)
+                // A main server from before the label sends none: the row is a circle of its own, as it is there.
+                || (r.joinCohort != null && !isText(r.joinCohort, 64))) {
                 merge.invalid++;
                 continue;
             }
@@ -307,7 +333,7 @@ export function writeOpenJoinRecord(joins: unknown): OpenJoinMerge {
                 if (other.updated_at && other.updated_at > r.updatedAt) { merge.kept++; continue; }
                 drop.run(other.member_pubkey);
             }
-            upsert.run(r.memberPubkey, r.provider, r.joinHash, r.joinedAt, r.updatedAt);
+            upsert.run(r.memberPubkey, r.provider, r.joinHash, r.joinedAt, r.updatedAt, r.joinCohort ?? null);
             merge.written++;
         }
     })();

@@ -312,7 +312,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
-        columns: cols('member_pubkey provider join_hash joined_at updated_at'),
+        columns: cols('member_pubkey provider join_hash joined_at updated_at join_cohort'),
         except: { ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' } },
     },
     place_watches: {

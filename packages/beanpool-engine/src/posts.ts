@@ -198,14 +198,23 @@ export interface PostFilter {
      * of the matching posts, this many at most, before any distance is measured, and orders those: the same page
      * whenever fewer than this many match, and past that the nearest of the newest this many, with the pages beyond them
      * empty. Circles are unchanged: each already reads only a box near the reader.
+     *
+     * It bounds the read's cost only when the pass has no radius and no filter beyond the defaults: then the planner walks
+     * idx_posts_updated_at and stops at the bound. With a radius (idx_posts_lat_lng) or a filter such as a category
+     * (idx_posts_category) it sorts every matching post into a temporary B-tree before the bound applies, so only the
+     * distance calls are bounded, not the scan and sort (the review of 06491de5: at 100k posts, radiusKm=20000 with a
+     * category took 79.5 ms against main's 58.0, and with sort=recent 131.7 against 104.7, growing with the posts). F5 is
+     * still open for those reads.
      */
     measureAtMost?: number;
 }
 
 /**
  * The most posts one read with a point measures in a single pass when its caller bounds it (PostFilter.measureAtMost).
- * Measured with test-distance-search-perf's world (2026-10-01, this Mac): the one pass costs about 1.3 µs a post, so this
- * is about 13 ms at most, where every post of a 100k-post node was 130 ms. No node today has this many listings.
+ * Measured with test-distance-search-perf's world (2026-10-01, this Mac): with no radius and no filter the one pass costs
+ * about 1.3 µs a post, so about 13 ms at most, where every post of a 100k-post node was 130 ms. With a radius or a filter
+ * it bounds only the distance calls; the scan and sort before them still grow with the posts (see measureAtMost). No
+ * node today has this many listings.
  */
 export const ONE_PASS_MAX_MEASURED = 10_000;
 
@@ -760,7 +769,9 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // The one pass with a bound (PostFilter.measureAtMost): the matching posts (in the radius's box, if it has one) are
     // taken newest first, at most `cap` of them, before any is measured, and only those are measured, once each (the
     // MATERIALIZED set, so the radius test reads the distance already worked out), kept to the radius and ordered. The
-    // inner query measures nothing, so the planner can walk idx_posts_updated_at and stop at `cap`.
+    // inner query measures nothing. With no radius and no filter the planner walks idx_posts_updated_at and stops at
+    // `cap`; with a radius or a filter it takes the box's or the filter's index and sorts every match before the LIMIT,
+    // so only the distance calls are bounded there (F5 still open for those reads, see PostFilter.measureAtMost).
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [near.lat, near.lng];
         let inner = `

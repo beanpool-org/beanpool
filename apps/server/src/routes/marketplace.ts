@@ -371,6 +371,8 @@ router.get('/api/marketplace/posts', async (ctx) => {
     } else {
         // A read with a point measures at most ONE_PASS_MAX_MEASURED posts in a single pass (DoS review F5): the radius
         // is optional and the offset unbounded, so one public GET could otherwise measure and sort every post on the node.
+        // That bounds the whole read only with no radius and no filter; with either, the scan and sort before the bound
+        // still grow with the posts (engine PostFilter.measureAtMost): F5 is still open for those reads.
         posts = getPosts({
             ...listing, limit, offset, updatedAfter, sync,
             near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,

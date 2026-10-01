@@ -21,9 +21,10 @@
  *   6. F4: /api/community/info and /health have a per-address bucket (429 past five times the minute's limit); a burst of
  *      50 of each runs the member and transaction counts once, not 50 times, and never the fraud analysis; a new member
  *      shows at once (the members version); /ws greetings use the same cached counts.
- *   7. F5: a nearest-first read from a point far from every post, with a radius of the whole Earth, or in today's order
- *      with that radius, measures at most ONE_PASS_MAX_MEASURED posts on a node holding more; a page for a filter few
- *      posts match is still the brute-force page; pages past the bound are empty.
+ *   7. F5, in part: a nearest-first read from a point far from every post measures at most ONE_PASS_MAX_MEASURED posts
+ *      on a node holding more, and pages past the bound are empty; a page for a filter few posts match is still the
+ *      brute-force page. With a radius or a filter only the distance CALLS are bounded, not the scan and sort before
+ *      them (review 4150386976): those checks count calls and claim no more. F5 stays open for radius and filter reads.
  *   8. F3: a client that dribbles its headers is dropped at the header timeout; a body that takes longer than it (as the
  *      admin restore's 500 MB does) is not; the request timeout is still Node's 300 s; past the connection cap a new
  *      connection is closed at once.
@@ -426,10 +427,10 @@ async function main() {
             // the read's cost is bounded. F5 is still open for them.
             const earth = await read('lat=-28.55&lng=153.5&radiusKm=20000&sort=distance&limit=50&category=other');
             assert(earth.status === 200 && earth.ids?.length === 50 && earth.calls <= BOUND + 100,
-                `with a radius of the whole Earth and a filter circles don't take, too (${earth.calls} measured)`);
+                `with a radius of the whole Earth and a filter, distance calls stay at ${BOUND} or fewer (${earth.calls}; the scan and sort are NOT bounded)`);
             const recent = await read('lat=-28.55&lng=153.5&radiusKm=20000&sort=recent&limit=50');
             assert(recent.status === 200 && recent.ids?.length === 50 && recent.calls <= BOUND + 100,
-                `and in today's order with that radius (${recent.calls} measured)`);
+                `and in today's order with that radius, distance calls stay at ${BOUND} or fewer (${recent.calls}; the scan and sort are NOT bounded)`);
             const deep = await read(`lat=-80&lng=0&sort=distance&limit=50&offset=${BOUND}`);
             assert(deep.status === 200 && deep.ids?.length === 0 && deep.calls <= BOUND + 100,
                 `a page past the bound is empty, and costs no more (${deep.ids?.length} rows, ${deep.calls} measured)`);

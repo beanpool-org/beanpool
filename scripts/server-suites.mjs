@@ -303,6 +303,7 @@ export const SUITES = [
     'test-decisions-funding-queue',
     'test-decisions-grant-cap',
     'test-decisions-off',
+    'test-invites-off',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
     'test-process-handlers',

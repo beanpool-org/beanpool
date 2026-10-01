@@ -1,0 +1,13 @@
+{
+    "//": "For apps/native/utils/__tests__/global-door-e2e.test.ts only: runs src/phone-door-test-node.ts with tsx from the workspace packages' SOURCES, so the phone's end-to-end test never waits on (or races) a build of core, engine or signin.",
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "paths": {
+            "@beanpool/core": ["../../packages/beanpool-core/src/index.ts"],
+            "@beanpool/core/*": ["../../packages/beanpool-core/src/*"],
+            "@beanpool/engine": ["../../packages/beanpool-engine/src/index.ts"],
+            "@beanpool/signin": ["../../packages/beanpool-signin/src/index.ts"]
+        }
+    }
+}

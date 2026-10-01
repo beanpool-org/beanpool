@@ -49,6 +49,7 @@ import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf } from './engine/member-blocks.js';
+import { dropNamesListHoldOf } from './engine/names-list.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
@@ -7159,6 +7160,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
+        // Their confirmation against the names list is revoked, and a wrap of its key they held is dropped (engine/names-list.ts).
+        dropNamesListHoldOf(publicKey, 'removed');
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7389,6 +7392,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their confirmation against the names list is revoked, and a wrap of its key they held is dropped (engine/names-list.ts).
+        // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
+        dropNamesListHoldOf(publicKey, 'account_deleted');
     });
     noteTakeoverInputsChanged('member purged their account');
 

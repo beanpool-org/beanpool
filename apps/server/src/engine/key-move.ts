@@ -225,6 +225,20 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('enterprise_keeper_changes', 'member_pubkey');
     move('enterprise_keeper_changes', 'proposed_by');
     move('enterprise_keeper_changes', 'resolved_by');
+
+    // (z3) the names list (engine/names-list.ts): a member's confirmation moves with them (design §4.1, "Re-key"), and so do
+    // the admins named on entries, confirmations and the access log. Not a wrap of the list's key: it opens only for the
+    // old key, so the main server drops it at its next names-list request (reconcileHolders), and the list takes a new
+    // key, since a lost phone may still hold the old one.
+    move('confirmations', 'member_pubkey');
+    move('confirmations', 'confirmed_by');
+    move('confirmations', 'seconded_by');
+    move('confirmations', 'revoked_by');
+    move('names_entries', 'created_by');
+    move('names_entries', 'updated_by');
+    move('names_list_keys', 'wrapped_by');
+    move('names_access_log', 'actor_pubkey');
+    move('names_access_log', 'subject_pubkey');
 }
 
 // ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────

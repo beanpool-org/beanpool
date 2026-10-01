@@ -54,7 +54,7 @@ import {
     PUSH_NOTICE_WARNING_INSET, PUSH_NOTICE_WARNING_OK, PUSH_NOTICE_WARNING_TEXT_ON, PUSH_NOTICE_WARNING_TOUCH_TARGETS,
     pushNoticeWarningStyleSpec,
 } from '../push-notice-warning-style';
-import { PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY, vaultPushTokenStoreKey } from '../storage-keys';
+import { PUSH_PINS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY, vaultPushTokenStoreKey } from '../storage-keys';
 import { lightColors, darkColors, earthColors, slateColors } from '../../constants/colors';
 import { boundSignatureValid } from './server-signature-check';
 
@@ -146,6 +146,8 @@ function keep(...urls: string[]): void {
 }
 
 const saved = () => JSON.parse(mem.async.get(SAVED_NODES_STORE_KEY) ?? '[]') as Array<Record<string, unknown>>;
+/** The phone's pins as stored (utils/push-pins.ts): address → key. */
+const pinStore = () => JSON.parse(mem.async.get(PUSH_PINS_STORE_KEY) ?? '{}') as Record<string, string>;
 
 /** A push as the phone's push service delivers it, with its kind's fixed words unless told otherwise. */
 function push(data: unknown, words?: { title: string; body: string }): IncomingNotice {
@@ -196,22 +198,22 @@ afterEach(() => {
 // ── 1. The pin ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 describe('the key a community signs with is pinned from the answer to its own registration', () => {
-    it('kept on the community\'s saved record, beside what the record already held', async () => {
+    it('kept under the phone\'s pins, apart from the saved list, which is left as it was', async () => {
         keep(MULLUM, BYRON);
+        const list = mem.async.get(SAVED_NODES_STORE_KEY);
         await registerAt(MULLUM);
 
-        const record = saved().find((n) => n.url === MULLUM)!;
-        expect(record.pushKey).toBe(mullum.pushKey);
-        expect(record.alias).toBe('mullum.beanpool.org');
-        expect(saved().find((n) => n.url === BYRON)!.pushKey).toBeUndefined();
+        expect(pinStore()).toEqual({ [MULLUM]: mullum.pushKey });
+        expect(mem.async.get(SAVED_NODES_STORE_KEY)).toBe(list);
         const pins = await readPushPins(AsyncStorage);
         expect(pins.pinned).toEqual([{ community: MULLUM, pushKey: mullum.pushKey, tag: mullum.tag }]);
     });
 
-    it('the community the phone is set to gets a record if it had none yet', async () => {
+    it('the community the phone is set to is pinned with no saved record yet', async () => {
         mem.async.set(ANCHOR, `${MULLUM}/`);
         await registerAt(MULLUM);
-        expect(saved()).toEqual([expect.objectContaining({ url: `${MULLUM}/`, pushKey: mullum.pushKey })]);
+        expect(pinStore()).toEqual({ [MULLUM]: mullum.pushKey });
+        expect((await readPushPins(AsyncStorage)).pinned.map((p) => p.community)).toEqual([MULLUM]);
     });
 
     it('survives a take-over: the promoted server keeps the node key, its answer names the same one, and its notices verify', async () => {
@@ -221,7 +223,7 @@ describe('the key a community signs with is pinned from the answer to its own re
         const promoted = new Community(MULLUM, true, mullum.seed);
         communities.set(MULLUM, promoted);
         await registerAt(MULLUM);
-        expect(saved()[0].pushKey).toBe(mullum.pushKey);
+        expect(pinStore()[MULLUM]).toBe(mullum.pushKey);
 
         expect(await open(push(promoted.notice('chat.message', kim.publicKey)))).toEqual({ kind: 'show' });
     });
@@ -232,16 +234,16 @@ describe('the key a community signs with is pinned from the answer to its own re
         const rebuilt = new Community(MULLUM);
         communities.set(MULLUM, rebuilt);
         await registerAt(MULLUM);
-        expect(saved()[0].pushKey).toBe(rebuilt.pushKey);
+        expect(pinStore()[MULLUM]).toBe(rebuilt.pushKey);
 
         communities.set(MULLUM, new Community(MULLUM, false));
         await registerAt(MULLUM);
-        expect(saved()[0]).not.toHaveProperty('pushKey');
+        expect(pinStore()).not.toHaveProperty(MULLUM);
 
         for (const bad of ['../../etc', rebuilt.pushKey.toUpperCase(), rebuilt.pushKey.slice(2), 42]) {
             vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({ success: true, pushKey: bad }), { status: 200 }));
             await registerAt(MULLUM);
-            expect(saved()[0]).not.toHaveProperty('pushKey');
+            expect(pinStore()).not.toHaveProperty(MULLUM);
         }
     });
 
@@ -249,7 +251,7 @@ describe('the key a community signs with is pinned from the answer to its own re
         keep(MULLUM);
         vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({ success: false, pushKey: mullum.pushKey }), { status: 429 }));
         await expect(registerPushTokenWithCommunity(kim, PHONE_TOKEN, 'android', 12000, AsyncStorage, MULLUM)).rejects.toThrow();
-        expect(saved()[0]).not.toHaveProperty('pushKey');
+        expect(pinStore()).toEqual({});
     });
 });
 
@@ -293,7 +295,7 @@ describe('while the app is open, a push shows only when its own community signed
         const stranger = new Community('https://stranger.example.com');
         expect(await open(push(stranger.notice('chat.message', kim.publicKey)))).toEqual({ kind: 'drop', reason: 'other-community' });
 
-        // Forget Byron (Forget Community takes its saved record, and the pin with it).
+        // Forget Byron (Forget Community takes its saved record, and with it the pin's standing).
         mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify(saved().filter((n) => n.url !== BYRON)));
         expect(await open(push(byron.notice('chat.message', kim.publicKey)))).toEqual({ kind: 'drop', reason: 'other-community' });
     });

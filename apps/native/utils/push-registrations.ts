@@ -398,8 +398,8 @@ export async function registerPushTokenWithCommunity(
         clearTimeout(timer);
     }
     await landed(key, community, storage);
-    // The key this community signs its notices with, from its answer to this signed request (push-pins.ts): pinned on
-    // its saved record, or the pin taken off when it names none.
+    // The key this community signs its notices with, from its answer to this signed request (push-pins.ts): pinned
+    // under the phone's pins, or the pin taken off when it names none.
     await pinPushKey(community, pushKeyOf(answer), storage);
     return true;
 }

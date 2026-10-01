@@ -14,18 +14,22 @@
  *   - `sig:<client>` — every request that CLAIMS a signature, `maxPerMinute × SIGNED_CEILING_FACTOR` per
  *     address. The member bucket can only be charged after the signature is verified, later in the stack; this
  *     ceiling bounds what one address can push through by attaching signature headers, forged or not.
- *   - `claim:<client>` — every request that claims a signature AND may carry a body over CLAIM_SMALL_BODY_BYTES (a
- *     POST, PUT, PATCH or DELETE declaring more, or a chunked one), `maxPerMinute` per address, charged BEFORE the body
- *     is read and given back the moment the signature verifies (gatewayClaimVerified). What stays in it is the large
- *     claims that never verified (forged, stale, replayed, for another community), so an address gets no more of them a
- *     minute than unsigned requests, and the body parser reads and parses no more 2 MB bodies for them (DoS review F2).
- *     It is its own bucket, not `ip:`, because a member's signed request must never be refused for the address's
- *     unsigned traffic (a hall's members loading photos fill `ip:`): only large claims that fail count against it. A
- *     claim with no body or a small one (a signed read, a chat line, a /ws connect token) never touches it, and has its
- *     body held to CLAIM_SMALL_BODY_BYTES: the body parser's cost is what `claim:` bounds, and those cost it 16 KiB at
- *     most. So junk signatures that carry no large body, from someone sharing members' address (a carrier NAT, a hall's
- *     wifi), can't shut off the members' larger writes: nothing but the `sig:` ceiling limits them, as before (the
- *     review of 06491de5: 120 bodiless junk claims had turned a member's 20 KB chat line into 429 for a minute).
+ *   - `claim:<client>` — every request that claims a signature AND whose body the body parser reads past
+ *     CLAIM_SMALL_BODY_BYTES, `maxPerMinute` per address. A claim that may carry such a body (a POST, PUT, PATCH or
+ *     DELETE declaring more, or a chunked one) is refused BEFORE its body is read when the bucket is full; it is charged
+ *     only once the parser has read more than CLAIM_SMALL_BODY_BYTES of it (gatewayChargeLargeClaim), and given back the
+ *     moment the signature verifies (gatewayClaimVerified). What stays in it is the large claims that never verified
+ *     (forged, stale, replayed, for another community), so an address gets no more of them a minute than unsigned
+ *     requests, and the body parser reads and parses no more 2 MB bodies for them (DoS review F2). It is its own bucket,
+ *     not `ip:`, because a member's signed request must never be refused for the address's unsigned traffic (a hall's
+ *     members loading photos fill `ip:`): only large claims that fail count against it. A claim with no body or a small
+ *     one (a signed read, a chat line, a /ws connect token) never touches it, and has its body held to
+ *     CLAIM_SMALL_BODY_BYTES: the body parser's cost is what `claim:` bounds, and those cost it 16 KiB at most. Nor does
+ *     a claim whose body never gets that far, whatever it declared: a chunked `{}`, or a length of 1 MB with 5 bytes sent
+ *     and the connection dropped. So junk signatures from someone sharing members' address (a carrier NAT, a hall's
+ *     wifi) can't shut off the members' larger writes unless they send more than 16 KiB of real body for each one (the
+ *     review of 06491de5: 120 bodiless junk claims had turned a member's 20 KB chat line into 429 for a minute; the
+ *     confirm review of #1384: so had 120 chunked `{}` claims, or 120 large lengths declared and dropped).
  *   - `peer:<client>` — the peer protocol's own reads (https-server.ts GATEWAY_EXEMPT_PEER_READS), which the other
  *     buckets leave alone: `maxPerMinute × PEER_READ_FACTOR` per address, whoever signs (DoS review F4).
  *   - `noroom:<client>` — the global node's sockets refused for a cap and answered with the "no room" close
@@ -107,12 +111,18 @@ const WINDOW_MS = 60_000;
 const PRUNE_ABOVE = 20_000;
 const PRUNE_INTERVAL_MS = 1_000;
 /**
- * The most buckets the limiter holds. When every bucket is live (a flood from more addresses in a minute than this), the
- * oldest windows are forgotten, down to 90%, before a new one is made: forgetting a bucket only forgives what it counted,
- * and the oldest are the nearest to closing anyway. About 14 MB of heap when full (measured with IPv6 keys). A node's own
- * traffic is far below it (a few buckets for each address and member that made a request this minute).
+ * The most buckets the limiter holds. When it is full, the least-counted buckets are forgotten, down to 90%, before a new
+ * one is made (forgetLeastCountedBuckets): forgetting a bucket only forgives what it counted, and a flood from more
+ * addresses in a minute than this leaves buckets counted once or twice, while a caller the limiter has stopped has a full
+ * one. About 17 MB of heap when full (measured with IPv6 keys). A node's own traffic is far below it (a few buckets for
+ * each address and member that made a request this minute).
  */
 export const GATEWAY_MAX_BUCKETS = 100_000;
+/**
+ * The counts forgetLeastCountedBuckets tells apart: a bucket counted this many times or more is at the top level, forgotten
+ * only after every bucket counted fewer times (and then the oldest first).
+ */
+const COUNT_LEVELS = 1024;
 
 /** In the order their windows opened (count() moves a reopened window to the end), so the first are the oldest. */
 const buckets = new Map<string, { count: number; resetAt: number }>();
@@ -202,17 +212,31 @@ function count(key: string, now: number): number {
     if (entry && now < entry.resetAt) { entry.count++; return entry.resetAt; }
     // A new window goes to the end of the map, so the map stays in the order windows opened.
     if (entry) buckets.delete(key);
-    else if (buckets.size >= GATEWAY_MAX_BUCKETS) forgetOldestBuckets();
+    else if (buckets.size >= GATEWAY_MAX_BUCKETS) forgetLeastCountedBuckets(now);
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return now + WINDOW_MS;
 }
 
-/** At GATEWAY_MAX_BUCKETS: forget the oldest windows (the first in the map), down to 90% of it. */
-function forgetOldestBuckets(): void {
+/**
+ * At GATEWAY_MAX_BUCKETS: forget the closed windows, then the least-counted buckets (the oldest first among those counted
+ * the same), down to 90% of it. It forgot the oldest windows before, so about 25,000 rotating /64s, each opening up to
+ * four buckets, reset every limit set before them within the minute (the confirm review of #1384). Three walks of the
+ * map and no sort: a few milliseconds for each 10,000 new buckets.
+ */
+function forgetLeastCountedBuckets(now: number): void {
     const target = Math.floor(GATEWAY_MAX_BUCKETS * 0.9);
-    for (const key of buckets.keys()) {
-        if (buckets.size <= target) break;
-        buckets.delete(key);
+    for (const [key, entry] of buckets) if (now >= entry.resetAt) buckets.delete(key);
+    if (buckets.size <= target) return;
+    const atLevel = new Uint32Array(COUNT_LEVELS);
+    for (const entry of buckets.values()) atLevel[Math.min(entry.count, COUNT_LEVELS - 1)]++;
+    // Every bucket below `level` goes, and the oldest `extra` of those at it.
+    let extra = buckets.size - target;
+    let level = 0;
+    while (atLevel[level] < extra) extra -= atLevel[level++];
+    for (const [key, entry] of buckets) {
+        const at = Math.min(entry.count, COUNT_LEVELS - 1);
+        if (at < level) buckets.delete(key);
+        else if (at === level && extra > 0) { buckets.delete(key); extra--; }
     }
 }
 
@@ -281,19 +305,19 @@ const BODY_METHODS: ReadonlySet<string> = new Set(['POST', 'PUT', 'PATCH', 'DELE
 
 /**
  * A request that claims a signature, before anything is verified: the address's signed ceiling (`sig:`) must have room,
- * and when the claim may carry a body over CLAIM_SMALL_BODY_BYTES (`large`), its unverified claims (`claim:`) too. What
- * must have room is counted. The window `claim:` was counted in (0 when it wasn't), to give it back in when the signature
- * verifies; with the seconds to wait in `wait` (and nothing counted) when refused.
+ * and when the claim may carry a body over CLAIM_SMALL_BODY_BYTES (`large`), its unverified claims (`claim:`) too. Only
+ * `sig:` is counted here: `claim:` is charged once the body parser has read that much (gatewayChargeLargeClaim). The
+ * seconds to wait (and nothing counted) when refused, else 0.
  */
-function admitClaim(client: string, maxPerMinute: number, large: boolean, now: number): { wait: number; claimWindow: number } {
+function admitClaim(client: string, maxPerMinute: number, large: boolean, now: number): number {
     const sigWait = waitFor(`sig:${client}`, maxPerMinute * SIGNED_CEILING_FACTOR, now);
-    if (sigWait) return { wait: sigWait, claimWindow: 0 };
+    if (sigWait) return sigWait;
     if (large) {
         const claimWait = waitFor(`claim:${client}`, maxPerMinute, now);
-        if (claimWait) return { wait: claimWait, claimWindow: 0 };
+        if (claimWait) return claimWait;
     }
     count(`sig:${client}`, now);
-    return { wait: 0, claimWindow: large ? count(`claim:${client}`, now) : 0 };
+    return 0;
 }
 
 /**
@@ -314,11 +338,12 @@ function mayCarryLargeBody(ctx: Koa.Context): boolean {
  * Early check, before the body is read. `claimsSignature` means the request carries signature headers on a
  * path where the signature middleware will verify them.
  *
- * A claim is charged here, before the body parser reads a byte, rather than after a cheaper check of the headers: the
+ * A claim is checked here, before the body parser reads a byte, rather than after a cheaper check of the headers: the
  * signature covers the body, so nothing short of reading it tells a forger from a member. A fresh timestamp, an unused
  * nonce and a real member's key (keys are public: every listing names its author's) pass any check of the headers alone.
- * Only a claim that may carry a body over CLAIM_SMALL_BODY_BYTES is charged to the address's unverified claims; any
- * other has `ctx.state.gatewayBodyLimit` hold the body parser to that size.
+ * A claim that may carry a body over CLAIM_SMALL_BODY_BYTES is refused here when the address's unverified claims are
+ * full, and charged to them by the body parser once it has read that much (`ctx.state.gatewayLargeClaim`,
+ * gatewayChargeLargeClaim); any other has `ctx.state.gatewayBodyLimit` hold the body parser to that size.
  */
 export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): boolean {
     upkeep(now);
@@ -326,13 +351,30 @@ export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSigna
     if (claimsSignature) {
         ctx.state.gatewaySignedClaim = true;
         const large = mayCarryLargeBody(ctx);
-        const { wait, claimWindow } = admitClaim(ip, maxPerMinute, large, now);
+        const wait = admitClaim(ip, maxPerMinute, large, now);
         if (wait) return refuse(ctx, wait);
-        ctx.state.gatewayClaimWindow = claimWindow;
-        if (!large) ctx.state.gatewayBodyLimit = CLAIM_SMALL_BODY_BYTES;
+        if (large) ctx.state.gatewayLargeClaim = maxPerMinute;
+        else ctx.state.gatewayBodyLimit = CLAIM_SMALL_BODY_BYTES;
         return true;
     }
     return take(ctx, `ip:${ip}`, nonMemberPerMinute(maxPerMinute), now);
+}
+
+/**
+ * The body parser has read more than CLAIM_SMALL_BODY_BYTES of a claim gatewayAdmit let in as possibly large: charge it to
+ * the address's unverified claims now (given back by gatewayClaimVerified). False (and 429 set) when they filled up after
+ * its admission (large claims let in together), and the parser reads no more of it. True for any other request, and for a
+ * claim already charged.
+ */
+export function gatewayChargeLargeClaim(ctx: Koa.Context, now = Date.now()): boolean {
+    const maxPerMinute = ctx.state.gatewayLargeClaim as number | undefined;
+    if (!maxPerMinute) return true;
+    ctx.state.gatewayLargeClaim = 0;
+    const key = `claim:${clientLimiterKey(ctx)}`;
+    const wait = waitFor(key, maxPerMinute, now);
+    if (wait) return refuse(ctx, wait);
+    ctx.state.gatewayClaimWindow = count(key, now);
+    return true;
 }
 
 /**
@@ -389,7 +431,7 @@ function chargeKey(key: string, max: number, now: number): { wait: number; charg
 export function gatewayAdmitUpgrade(client: string, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): { wait: number; claimed: boolean; charge: GatewayCharge | null } {
     upkeep(now);
     if (claimsSignature) {
-        const { wait } = admitClaim(client, maxPerMinute, false, now);
+        const wait = admitClaim(client, maxPerMinute, false, now);
         return { wait, claimed: !wait, charge: null };
     }
     return { ...chargeKey(`ip:${client}`, nonMemberPerMinute(maxPerMinute), now), claimed: false };

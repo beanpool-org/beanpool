@@ -65,6 +65,11 @@ services:
       - WS_MAX_SOCKETS_PER_ADDRESS=${WS_MAX_SOCKETS_PER_ADDRESS:-}
       - WS_MAX_STRANGER_SOCKETS_PER_ADDRESS=${WS_MAX_STRANGER_SOCKETS_PER_ADDRESS:-}
       - WS_MAX_SOCKETS_PER_MEMBER=${WS_MAX_SOCKETS_PER_MEMBER:-}
+      # The server asks GitHub (api.github.com) for the newest BeanPool release 30 s after it starts and every 6 hours,
+      # so Settings can say whether an update is out. EMPTY = it does, as it always has. `true` = it never asks on its
+      # own: nothing else depends on it, and Settings' "check now" button still asks when an owner or admin presses it.
+      # See apps/server/src/routes/settings.ts backgroundUpdateCheck.
+      - DISABLE_UPDATE_CHECK=${DISABLE_UPDATE_CHECK:-}
       # Where photos and attachments live. EMPTY = on this node's own disk under /data/images, which is every local
       # node. `s3` = an S3-compatible bucket (Cloudflare R2; the global node), and then all five IMAGE_S3_* must be
       # set or the node refuses to start. From .env only: never stored in node_config, never put in a backup.

@@ -520,6 +520,11 @@ async function main(): Promise<void> {
             const refused = await post('/api/local/admin/public-address/rotate');
             assert(refused.status === 502 && /paused by the admin/.test(refused.body?.error || ''), `a refusal says why (${refused.status}: ${refused.body?.error})`);
             assert(pa()?.tunnelToken === T_ROT && tunnelConnectorForTests().pid === rotPid, 'and changes nothing: same key, same child');
+            // An address service from before rotate existed (404): said plainly.
+            reg.rotate = () => [404, { error: 'not found' }];
+            const older = await post('/api/local/admin/public-address/rotate');
+            assert(older.status === 502 && /doesn't offer new tunnel keys yet/.test(older.body?.error || '') && pa()?.tunnelToken === T_ROT,
+                `an older address service: said plainly, nothing changed (${older.body?.error})`);
             // A standby runs no tunnel, so it never rotates the name's.
             setNodeRole('backup');
             const r1 = rotates().length;

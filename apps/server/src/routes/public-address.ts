@@ -305,9 +305,11 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('2/2', `${ok ? '✅' : '❌'} Tunnel ${describeTunnel(tunnel)}`, ok ? 'success' : 'error');
             ctx.body = { success: true, status: 'live', name: pa.name, hostname: res.hostname || pa.hostname, tunnel };
         } catch (e: any) {
-            addProbeLog('1/2', `❌ No new tunnel key: ${e.message}`, 'error');
+            // An address service from before rotate existed answers 404 'not found'.
+            const why = e?.message === 'not found' ? 'the address service doesn\'t offer new tunnel keys yet' : e?.message;
+            addProbeLog('1/2', `❌ No new tunnel key: ${why}`, 'error');
             ctx.status = 502;
-            ctx.body = { error: e.message };
+            ctx.body = { error: `No new tunnel key: ${why}` };
         }
     });
 

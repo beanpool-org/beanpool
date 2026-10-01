@@ -80,6 +80,8 @@ Any member can invite people. Your trust badge does not matter.
 
 A community's admins can turn invites off for the whole community.
 
+The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
+
 ## Requests to join
 
 People can ask to join your community from the global community. When someone has, **Invites** shows a count, and the requests are listed at the top under **Wants to join**.

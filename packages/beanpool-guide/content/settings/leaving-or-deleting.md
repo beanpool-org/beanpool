@@ -44,7 +44,7 @@ This cannot be undone, even with your 12 words.
 - The block list your community kept for you goes too.
 - If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
-- Your community can never bring the account back. To come back, join again with a new invite.
+- Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
 
@@ -68,5 +68,5 @@ When a community removes a member, it keeps their profile, so that a vote can br
 
 - Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.
 - Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.
-- After that, your community cannot vote to bring the account back. To come back, join again with a new invite.
+- After that, your community cannot vote to bring the account back. To come back, join again with a new invite. The global community takes no invites, and a sign-in it removed cannot join it again.
 - If a deal of yours is still under way, the other member or an admin must close it first.

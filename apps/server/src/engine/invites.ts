@@ -4,6 +4,7 @@
 
 import { db } from '../db/db.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
+import { assertFeatureOn } from '../config/node-profile.js';
 import { ledger } from './ledger.js';
 import { recordActivity, registerMemberInternal } from './members.js';
 import { recordFunnelEvent } from './funnel.js';
@@ -38,6 +39,16 @@ function canInvite(inviterPubkey: string): boolean {
 const INVITER_GONE = 'The member who made this invite is no longer in this community, so it can’t be used. Ask a member for a fresh one.';
 
 /**
+ * Where the node's `invites` switch is off (the global node, config/node-profile.ts), nothing here makes an invite or
+ * joins anyone with one: each function below throws FeatureOffError (404 `feature_off`) before it reads or writes
+ * anything, a funnel count included. The routes answer the same before they get here (routes/profile-feature-gate.ts);
+ * this is the guard under them, for every caller, a knock's answer (engine/knocks.ts approveKnock) among them.
+ */
+function assertInvitesOn(): void {
+    assertFeatureOn('invites');
+}
+
+/**
  * Creates standard online invite code for an active member.
  */
 /**
@@ -47,6 +58,7 @@ const INVITER_GONE = 'The member who made this invite is no longer in this commu
  */
 export function generateInvite(inviterPubkey: string, intendedFor?: string, beforeWrite?: () => void): InviteCode | null {
     assertPlainTablesWritable();
+    assertInvitesOn();
     const inviter = getMember(db, inviterPubkey);
     if (!inviter || !canInvite(inviterPubkey)) return null;
     beforeWrite?.();
@@ -75,6 +87,7 @@ export function adminGenerateInvite(
     issuedBy?: string
 ): InviteCode | null {
     assertPlainTablesWritable();
+    assertInvitesOn();
     // `adminPubkey` is the member the code hangs off in the invite tree (the genesis member, routes/community.ts), not
     // the admin: the admin is `issuedBy`, already checked by the route (checkAdminAuth and a node role, which a prune
     // takes away). Held to the same rule, or the code would never redeem.
@@ -140,6 +153,7 @@ export function redeemInvite(
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
+    assertInvitesOn();
     // One key, one spelling (engine/member-key.ts), before any lookup or write: a member's key in capitals is no other
     // key, and no second member. The route takes the key that way first (routes/community.ts redeemKey).
     if (!isMemberKeySpelling(publicKey)) return { success: false, error: BAD_KEY_ERROR };
@@ -242,6 +256,7 @@ export function redeemOfflineTicket(
     joinerSigned = false
 ): { success: boolean; error?: string; member?: Member; alreadyMember?: boolean } {
     assertPlainTablesWritable();
+    assertInvitesOn();
     // One key, one spelling, as in redeemInvite.
     if (!isMemberKeySpelling(joinerPublicKey)) return { success: false, error: BAD_KEY_ERROR };
 

@@ -56,7 +56,7 @@ import {
 } from '../federation-link.js';
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
@@ -194,6 +194,10 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         ctx.body = { error: 'Only an owner or admin of this node can issue invites' };
         return;
     }
+    // Where invites are off (the global node) an owner or admin makes none either: the feature gate answers that
+    // before this route runs, and this says it again before anything below is written (a fresh node's genesis
+    // member included). A node there has its first members through the open door, and the password makes an owner.
+    try { assertFeatureOn('invites'); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     // Who issued it, for the audit trail: the signed member under a key session, 'owner:password' under the node
     // password — the same attribution the node-roles routes use. (A break-glass code reaches the enrol routes only.)
     const issuedBy: string = (ctx.state as any)?.actor || 'owner:password';
@@ -1091,7 +1095,9 @@ router.post('/api/invite/redeem', async (ctx) => {
     // Signed by the key it registers, before the code is looked at.
     if (!requireRedeemSignature(ctx, joiner)) return;
 
-    const result = redeemInvite(code, joiner, callsign.slice(0, 20), true);
+    // Invites off (the global node): 404 feature_off, from the feature gate before this route, and from the engine.
+    let result: ReturnType<typeof redeemInvite>;
+    try { result = redeemInvite(code, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
@@ -1114,7 +1120,8 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
     const joiner = redeemKey(ctx, publicKey);
     if (!joiner) return badRedeemKey(ctx);
     if (!requireRedeemSignature(ctx, joiner)) return;
-    const result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true);
+    let result: ReturnType<typeof redeemOfflineTicket>;
+    try { result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };

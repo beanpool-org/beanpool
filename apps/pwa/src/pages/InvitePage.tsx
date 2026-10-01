@@ -5,11 +5,16 @@
  *  1. Invite code generation & management
  *  2. Interactive invite tree visualisation
  *  3. Community health metrics & flags
+ *
+ * On a node that takes no invites (lib/node-invites.ts: the global node), none of that: the community's plain link to
+ * share, since anyone joins it with a sign-in.
  */
 
 import { useState, useEffect } from 'react';
 import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { communityLinkText, invitesOn, invitesOffRefusal } from '../lib/node-invites';
 import { QRCodeSVG } from 'qrcode.react';
 
 const QRCodeSVGComponent = QRCodeSVG as any;
@@ -37,6 +42,20 @@ export function InvitePage({ identity }: Props) {
     // Tree
     const [tree, setTree] = useState<TreeNode[]>([]);
     const [activeSection, setActiveSection] = useState<'invites' | 'tree'>('invites');
+
+    // Invites, where the node makes them (lib/node-invites.ts: off on the global node, which refuses every one). Until
+    // the node has said, on, as on every node before the switch. Where they are off the page offers the link instead.
+    const [makes, setMakes] = useState(true);
+    // The node's own words, when it refused a generate before this page had heard it takes no invites.
+    const [refused, setRefused] = useState<string | null>(null);
+    useEffect(() => {
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => communityInfoOnce())
+            .then((info) => { if (!cancelled) setMakes(invitesOn(info)); })
+            .catch(() => { /* Not answered: keep what the page shows; the node refuses an invite itself. */ });
+        return () => { cancelled = true; };
+    }, []);
 
     useEffect(() => {
         loadInvites();
@@ -106,7 +125,17 @@ export function InvitePage({ identity }: Props) {
                     setInvites(prev => [res.invite, ...prev]);
                     return;
                 }
-            } catch { /* node unreachable — offline fallback below */ }
+            } catch (e) {
+                // The node takes no invites (it said so before this page heard): its words, and no offline ticket, which
+                // it would refuse just the same.
+                const refusal = invitesOffRefusal(e);
+                if (refusal) {
+                    setRefused(refusal);
+                    setMakes(false);
+                    return;
+                }
+                /* node unreachable — offline fallback below */
+            }
 
             // A self-signed ticket for this community only (core's format 2 names its host), with the
             // `BP-` that tells it apart from an invite code.
@@ -182,8 +211,54 @@ export function InvitePage({ identity }: Props) {
         }
     }
 
+    async function handleShareLink() {
+        const text = communityLinkText(window.location.origin);
+        if (navigator.share) {
+            try { await navigator.share({ title: 'BeanPool', text }); } catch { /* cancelled */ }
+        } else {
+            handleCopy(text);
+        }
+    }
+
     const unusedInvites = invites.filter(i => !i.usedBy);
     const usedInvites = invites.filter(i => i.usedBy);
+
+    if (!makes) {
+        const link = window.location.origin;
+        return (
+            <div className="p-4 max-w-[500px] mx-auto min-h-full">
+                <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                    📤 Bring someone here
+                </h2>
+                <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                    {refused ?? 'This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.'}
+                </p>
+                <p className="font-mono text-[14px] font-bold text-nature-950 dark:text-white break-all mb-4">{link}</p>
+                <div className="flex flex-wrap gap-3">
+                    <button
+                        onClick={() => handleCopy(link)}
+                        className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                            copied
+                                ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
+                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                        }`}
+                        aria-label="Copy this community's link"
+                        title="Copy this community's link"
+                    >
+                        {copied ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                    <button
+                        onClick={handleShareLink}
+                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                        aria-label="Share this community's link"
+                        title="Share this community's link"
+                    >
+                        📤 Share
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 max-w-[500px] mx-auto min-h-full">

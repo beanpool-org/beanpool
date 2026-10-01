@@ -1039,7 +1039,11 @@ async function main(): Promise<void> {
         const tradesBefore = tradeStatuses();
         const clubEventNow = () => JSON.stringify(db.prepare('SELECT title, event_place_name, event_start_at, event_state FROM posts WHERE id = ?').get(clubEvent.id));
         const clubEventBefore = clubEventNow();
-        // A code and a paper ticket from Bob, as anyone he invites holds.
+        // A code and a paper ticket from Bob, as anyone he invites holds. The global node as it ships takes no invites
+        // (every redeem there is 404 feature_off: test-invites-off), so for the card below (11c) invites are on, as an
+        // operator may turn them back on there; the sweep (11d) runs as the node ships.
+        const invitesForTheCard = process.env.NODE_PROFILE === 'global';
+        if (invitesForTheCard) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.invites', 'true');
         const code = se.generateInvite(bob.pk)!.code;
         const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
         const ticketB64 = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), bob.priv).toString('base64') })).toString('base64');
@@ -1100,6 +1104,7 @@ async function main(): Promise<void> {
             assert([own, ownTicket].every(r => r.status === 200 && r.body?.member?.callsign === 'SentinelAlice' && r.body?.member?.avatarUrl === photo),
                 `Alice re-entering, signing with her own key, gets her own card and photo as before (${own.status} ${ownTicket.status})`);
         }
+        if (invitesForTheCard) db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.invites');
 
         // A face goes out as a keyed link or as the photo itself (the redeem card held the photo). So every member but the
         // pruned account gets a photo no listing, enterprise or crowdfund holds, and the sweep looks for it too.

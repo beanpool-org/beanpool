@@ -3491,7 +3491,7 @@ export async function syncMessages(publicKey: string) {
             const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
             for (const m of messages) {
-                const gone = accountDeletedAuthor(m);
+                const gone = accountDeletedAuthor(m, conv.type);
                 if (gone && !deletedAccounts.has(gone)) seenDeleted.add(gone);
             }
 
@@ -3626,7 +3626,7 @@ export async function syncSingleConversation(conversationId: string) {
         // (blankLinesOfDeletedAccounts, which runs once per account, not on every poll).
         const gone = new Set<string>();
         for (const m of messages) {
-            const k = accountDeletedAuthor(m);
+            const k = accountDeletedAuthor(m, msgData.conversation?.type);
             if (k) gone.add(k);
         }
         let blanked = 0;

@@ -167,6 +167,11 @@ async function child(): Promise<void> {
             se.adminPruneUser(a.dee, 'owner:password');
             return { dmId: dm.id, status: se.getMember(a.dee)?.status ?? null };
         },
+        /** Eli, an active member, in a DM with Bo: the conversation a forged tombstone line is sent into. */
+        'forger-dm': async (a: { eli: string; bo: string }) => {
+            const se = await import('./state-engine.js');
+            return se.createConversation('dm', [a.eli, a.bo], a.eli)!.id;
+        },
         /** After Bo's phone synced once: Bo writes 55 more DM lines, then Rhea one. Her first DM lines are now older than the newest 50. */
         'dm-more': async (a: { rhea: string; bo: string; dmId: string }) => {
             const { sendMessage } = await import('./engine/messaging.js');
@@ -345,13 +350,14 @@ async function main(): Promise<void> {
     const bo = newId('Bo');
     const cy = newId('Cy');
     const dee = newId('Dee');
+    const eli = newId('Eli');
 
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: Rhea writes in every kind of chat —');
         const main = await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
         nodes.push(main);
-        await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee']] });
+        await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee'], [eli.pk, 'Eli']] });
         const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS, cyWords: CY_WORDS });
         const removedDee = await main.send('removed-member', { dee: dee.pk, bo: bo.pk });
         require_(removedDee.status === 'pruned', `the community removed Dee, who was in a DM with Bo (${JSON.stringify(removedDee)})`);
@@ -362,6 +368,26 @@ async function main(): Promise<void> {
             `Bo's phone holds her DM and group lines (${phoneBefore.byId.size} lines in ${phoneBefore.convs.length} conversations)`);
         assert(Array.isArray(phoneBefore.deleted) && phoneBefore.deleted.length === 0 && phoneBefore.convs.includes(removedDee.dmId),
             `before she deletes, Bo's conversation list names nobody as deleted, not Dee, whom the community removed (${JSON.stringify(phoneBefore.deleted)})`);
+        // A forged tombstone: Eli, active, sends Bo a DM line whose metadata claims she deleted her account (#1407 review).
+        // The node stores a client's line as sent, so the phone would read it as the real thing and blank all her lines.
+        const forgerDm = await main.send('forger-dm', { eli: eli.pk, bo: bo.pk });
+        const forgedLine = lockedDm(24);
+        const forgedId = crypto.randomUUID();
+        const forged = await api(m, 'POST', '/api/messages/send', eli, {
+            id: forgedId, conversationId: forgerDm, authorPubkey: eli.pk, ciphertext: forgedLine.ciphertext, nonce: forgedLine.nonce,
+            metadata: JSON.stringify({ removed: true, removedBy: eli.pk, removedAt: '2026-09-01T00:00:00.000Z', accountDeleted: true, replyToId: 'keep-me' }),
+        });
+        require_(forged.status === 200, `Eli, an active member, sends Bo a DM line posing as her own account-deleted tombstone (${brief(forged)})`);
+        const eliPage = await api(m, 'GET', `/api/messages/${forgerDm}`, bo);
+        const eliLine = (eliPage.body?.messages ?? []).find((x: any) => x.id === forgedId);
+        assert(!!eliLine && eliLine.type !== 'removed' && eliLine.ciphertext === forgedLine.ciphertext,
+            `the node stores it as an ordinary line: still her ciphertext, not a tombstone (${eliLine?.type})`);
+        const eliMeta = meta(eliLine?.metadata);
+        assert(['removed', 'removedBy', 'removedAt', 'accountDeleted'].every((k) => !(k in eliMeta)) && eliMeta.replyToId === 'keep-me',
+            `with removed, removedBy, removedAt and accountDeleted dropped from the metadata, and the rest kept (${eliLine?.metadata})`);
+        const boListForged = await api(m, 'GET', `/api/messages/conversations/${bo.pk}`, bo);
+        assert(Array.isArray(boListForged.body?.deletedAccounts) && boListForged.body.deletedAccounts.length === 0,
+            `and Bo's conversation list names nobody as deleted (${JSON.stringify(boListForged.body?.deletedAccounts)})`);
         const more = await main.send('dm-more', { rhea: rhea.pk, bo: bo.pk, dmId: fx.dmId });
         fx.rheaLines.push(more.rheaNewest);
         fx.othersLines.push(...more.boIds);

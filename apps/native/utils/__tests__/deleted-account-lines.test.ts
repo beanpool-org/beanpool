@@ -370,7 +370,28 @@ describe("a deleted member's older lines on the other person's phone", () => {
         expect(blankWrites()).toBe(0);
     });
 
-    it("an open chat's poll blanks them too, from her tombstone on its page", async () => {
+    it("an open group chat's poll blanks them too, from her tombstone on its page", async () => {
+        const cy = person('Cy');
+        const group: Conv = { id: 'group-open', type: 'group_thread', name: 'Ladder Share', participants: [bo.publicKey, cy.publicKey] };
+        node.convs.push(group);
+        for (let n = 1; n <= 60; n++) {
+            write(group, rhea, `Pemberlook ${n}: ladder is free`);
+            if (n === 30) await phoneSyncs();
+        }
+        await phoneSyncs();
+        expect(rowsBy(rhea.publicKey)).toHaveLength(60);
+
+        deleteAccount(rhea);
+        // Only the open chat's poll runs (chat/[id].tsx every 3 s): its page is her newest 50, her first 10 are older.
+        const told = await withScreens(() => syncSingleConversation(group.id));
+
+        const hers = rowsBy(rhea.publicKey);
+        expect(hers).toHaveLength(60);
+        expect(hers.filter((r) => Buffer.from(r.ciphertext, 'base64').toString('utf8') !== DELETED_TEXT)).toEqual([]);
+        expect(told).toContain('sync_data_updated');
+    });
+
+    it("an open DM's poll takes no tombstone on its page as a signal: only the conversation list's deletedAccounts does", async () => {
         const dm: Conv = { id: 'dm-open', type: 'dm', participants: [rhea.publicKey, bo.publicKey] };
         node.convs.push(dm);
         for (let n = 1; n <= 60; n++) {
@@ -381,13 +402,42 @@ describe("a deleted member's older lines on the other person's phone", () => {
         expect(rowsBy(rhea.publicKey)).toHaveLength(60);
 
         deleteAccount(rhea);
-        // Only the open chat's poll runs (chat/[id].tsx every 3 s): its page is her newest 50, her first 10 are older.
-        const told = await withScreens(() => syncSingleConversation(dm.id));
+        await withScreens(() => syncSingleConversation(dm.id));
+        // Her newest 50 lines on the page are her own tombstones, and they replace what the phone held of those 50 ...
+        expect(blankWrites()).toBe(0);
+        const older = (await getMessages(dm.id)).filter((m: any) => m.senderId === rhea.publicKey).slice(0, 10);
+        expect(older.map((m: any) => m.text)).toEqual(Array.from({ length: 10 }, (_, i) => `Pemberlook ${i + 1}: ladder is free`));
 
+        // ... and the list, which names her, blanks the rest on the next full sync.
+        await phoneSyncs();
         const shown = (await getMessages(dm.id)).filter((m: any) => m.senderId === rhea.publicKey);
-        expect(shown.filter((m: any) => m.text !== DELETED_TEXT).map((m: any) => m.text)).toEqual([]);
-        expect(shown).toHaveLength(60);
-        expect(told).toContain('sync_data_updated');
+        expect(shown.filter((m: any) => m.text !== DELETED_TEXT)).toEqual([]);
+    });
+
+    it("a forged tombstone in a DM line from an active member blanks nothing: the node deleted nothing, so the list names nobody", async () => {
+        const dee = person('Dee');
+        const dm: Conv = { id: 'dm-bo-dee-forged', type: 'dm', participants: [dee.publicKey, bo.publicKey] };
+        node.convs.push(dm);
+        const words: string[] = [];
+        for (let n = 1; n <= 60; n++) {
+            words.push(`Dee ${n}: the key is under the pot`);
+            write(dm, dee, words[n - 1]);
+            if (n === 30) await phoneSyncs();
+        }
+        await phoneSyncs();
+        expect(rowsBy(dee.publicKey)).toHaveLength(60);
+
+        // Dee, active, sends one more DM line whose metadata claims she deleted her account. The node stores it as sent.
+        write(dm, dee, 'Dee 61: crafted', { metadata: { removed: true, removedBy: dee.publicKey, accountDeleted: true } });
+        const deeBefore = rowsBy(dee.publicKey);
+        await phoneSyncs();
+        await withScreens(() => syncSingleConversation(dm.id));
+        await phoneSyncs();
+
+        expect(blankWrites()).toBe(0);
+        const shown = (await getMessages(dm.id)).filter((m: any) => m.senderId === dee.publicKey && m.text !== 'Dee 61: crafted');
+        expect(shown.map((m: any) => m.text)).toEqual(words);
+        expect(rowsBy(dee.publicKey).slice(0, 60)).toEqual(deeBefore.slice(0, 60));
     });
 
     it("never blanks this phone's own lines, nor anyone the node did not name (a member the community removed)", async () => {

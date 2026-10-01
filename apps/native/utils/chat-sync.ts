@@ -99,10 +99,15 @@ export function mergeIncomingMessage(local: LocalMessageRow | null | undefined, 
 /**
  * The author of a line the node blanked because they deleted their account (apps/server/src/engine/message-tombstone.ts
  * blankMessagesOf: their own tombstone, `accountDeleted`), or null. One such line in any sync answer means every line
- * of theirs on this phone goes too (utils/db.ts blankLinesOfDeletedAccounts). Only ever the line's own author, so a line
- * dressed up as one can only blank its own sender's lines.
+ * of theirs on this phone goes too (utils/db.ts blankLinesOfDeletedAccounts).
+ *
+ * Only in a group or event chat (`convType` `group_thread` / `event_thread`), whose line metadata the node writes itself.
+ * A DM line's metadata is whatever the sender's app sent, so a crafted line could pose as a tombstone and blank the other
+ * person's copy of everything its sender wrote (#1407 review). For a DM the signal is the conversation list's
+ * `deletedAccounts` (members.deleted_by_owner_at) alone.
  */
-export function accountDeletedAuthor(m: IncomingMessage | null | undefined): string | null {
+export function accountDeletedAuthor(m: IncomingMessage | null | undefined, convType?: string | null): string | null {
+    if (convType !== 'group_thread' && convType !== 'event_thread') return null;
     if (!m || !isRemovedPayload(m)) return null;
     const author = m.authorPubkey ?? m.author_pubkey;
     if (typeof author !== 'string' || !author) return null;

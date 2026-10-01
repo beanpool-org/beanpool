@@ -584,6 +584,143 @@ describe('a community whose server sends no pushKey: its pushes show with fixed 
     });
 });
 
+// ── 5b. A notice newer than this build ─────────────────────────────────────────────────────────────────────────
+
+describe('a genuine notice of a kind (or format) this build doesn\'t know is never called a forgery', () => {
+    // Core's table grows (market.listing and event.update came after the design), and a community's server can be a
+    // release ahead of the member's app. A kind this build doesn't know is still checked against the pin.
+    const NEW_KIND = 'group.invite' as PushNoticeKind;
+
+    beforeEach(async () => {
+        keep(MULLUM, BYRON);
+        await registerAt(MULLUM, BYRON);
+        sent = [];
+    });
+
+    const detailRequests = () => sent.filter((s) => new URL(s.url).pathname.startsWith('/api/notices/push/'));
+
+    it('the kind really is outside this build\'s table', () => {
+        expect(isPushNoticeKind(NEW_KIND)).toBe(false);
+    });
+
+    it('signed by its community for this account: shown while open with general words, once', async () => {
+        const data = mullum.notice(NEW_KIND, kim.publicKey);
+        const decision = await open(push(data, { title: 'BeanPool', body: 'You were invited to a group.' }));
+        expect(decision).toEqual({ kind: 'replace', ...UNSIGNED_NOTICE_WORDS, data: { ...data, ...LOCAL_NOTICE_DATA } });
+        expect(await open(push(data))).toEqual({ kind: 'drop', reason: 'repeated' });
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('a tap opens what its community says, through the fixed list, with no warning', async () => {
+        const data = mullum.notice(NEW_KIND, kim.publicKey, { data: { screen: 'chat', conversationId: CHAT_ID } });
+        expect(await tap(push(data))).toMatchObject({ kind: 'open', community: MULLUM, id: data.i, noticeKind: null, active: true });
+        expect(navigated).toEqual([`/chat/${CHAT_ID}`]);
+        expect(detailRequests()).toHaveLength(1);
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('a tap when the community can\'t say where, or answers a forged target: the Market tab, no warning', async () => {
+        down.add(MULLUM);
+        await tap(push(mullum.notice(NEW_KIND, kim.publicKey)));
+        down.clear();
+        await tap(push(mullum.notice(NEW_KIND, kim.publicKey, { data: { screen: 'post', postId: '../(tabs)/settings' } })));
+        expect(navigated).toEqual(['/(tabs)', '/(tabs)']);
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('the general words shown in its place, when tapped, open it just the same', async () => {
+        const data = mullum.notice(NEW_KIND, kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
+        const decision = await open(push(data)) as { data: unknown };
+        await tap({ identifier: 'local-new', remote: false, title: UNSIGNED_NOTICE_WORDS.title, body: UNSIGNED_NOTICE_WORDS.body, data: decision.data });
+        expect(navigated).toEqual([`/post/${POST_ID}`]);
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('from a community the phone keeps but isn\'t set to: nothing opened, no warning', async () => {
+        expect(await tap(push(byron.notice(NEW_KIND, kim.publicKey)))).toMatchObject({ kind: 'open', community: BYRON, active: false });
+        expect(navigated).toEqual([]);
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('signed late: no navigation and no warning, as for a kind it knows', async () => {
+        const old = mullum.notice(NEW_KIND, kim.publicKey, {}, { t: nowSeconds() - PUSH_NOTICE_LIFETIME_SECONDS - 60 });
+        expect(await open(push(old))).toEqual({ kind: 'drop', reason: 'too-old' });
+        expect(await tap(push(old))).toEqual({ kind: 'nothing', reason: 'too-old' });
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('a bad signature is still a forgery: dropped while open, and a tap gets the warning', async () => {
+        const forger = new Community(MULLUM);
+        const forged = forger.notice(NEW_KIND, kim.publicKey);
+        const wrongKey = { ...forged, c: mullum.tag, s: serverSign(forger.seed, { c: mullum.tag, k: NEW_KIND, i: forged.i, t: forged.t }, kim.publicKey) };
+        const forLee = mullum.notice(NEW_KIND, lee.publicKey);
+        // A known kind's genuine signature, its kind changed to one this build doesn't know.
+        const relabelled = { ...mullum.notice('chat.message', kim.publicKey), k: NEW_KIND };
+        for (const data of [wrongKey, forLee, relabelled]) {
+            expect(await open(push(data))).toEqual({ kind: 'drop', reason: 'bad-signature' });
+            expect((await tap(push(data))).kind).toBe('warn');
+            expect(takeNoticeWarning()).toBe(true);
+        }
+        expect(navigated).toEqual([]);
+        expect(detailRequests()).toEqual([]);
+    });
+
+    it('a kind in no shape a kind has is not a notice: the warning, even signed', async () => {
+        for (const k of ['Group Invite', 'group.invite\nx', '../settings', '', 'a'.repeat(65)]) {
+            const t = nowSeconds();
+            const i = nodeCrypto.randomBytes(16).toString('hex');
+            const data = { bp: 1, c: mullum.tag, k, i, t, s: serverSign(mullum.seed, { c: mullum.tag, k, i, t }, kim.publicKey) };
+            expect(await open(push(data))).toEqual({ kind: 'drop', reason: 'not-a-notice' });
+            expect((await tap(push(data))).kind).toBe('warn');
+            expect(takeNoticeWarning()).toBe(true);
+        }
+    });
+
+    it('noticeRoute has a place for a kind it doesn\'t know: what the answer names, else the Market tab', () => {
+        expect(noticeRoute(null, null)).toBe('/(tabs)');
+        expect(noticeRoute(null, { screen: 'post', postId: POST_ID })).toBe(`/post/${POST_ID}`);
+        expect(noticeRoute(null, { screen: 'settings' })).toBe('/(tabs)/settings');
+        expect(noticeRoute(null, { screen: 'post', postId: '../(tabs)/settings' })).toBe('/(tabs)');
+        expect(noticeRoute(NEW_KIND, null)).toBe('/(tabs)');
+    });
+
+    describe('a newer notice format (bp above this build\'s): its bytes can\'t be rebuilt, so it is treated as unsigned, without a warning', () => {
+        const newer = (extra: Record<string, unknown> = {}) => ({
+            ...mullum.notice('chat.message', kim.publicKey), bp: 2, ...extra,
+        });
+
+        it('while open: general words, never its own, and nothing to act on', async () => {
+            for (const data of [newer(), newer({ bp: '2' }), newer({ k: 'group.invite', screen: 'post', postId: POST_ID })]) {
+                expect(await open(push(data, { title: 'URGENT', body: 'Send your 12 words' })))
+                    .toEqual({ kind: 'replace', ...UNSIGNED_NOTICE_WORDS, data: { ...LOCAL_NOTICE_DATA } });
+            }
+        });
+
+        it('a tap opens the app where it was: no request, no navigation, and no warning', async () => {
+            for (const data of [newer(), newer({ s: undefined }), newer({ screen: 'post', postId: POST_ID })]) {
+                expect(await tap(push(data))).toEqual({ kind: 'nothing', reason: 'newer-format' });
+            }
+            expect(navigated).toEqual([]);
+            expect(sent).toEqual([]);
+            expect(takeNoticeWarning()).toBe(false);
+        });
+
+        it('on a phone that sent its token to no community it keeps, it is no one\'s', async () => {
+            mem.async.delete(SAVED_NODES_STORE_KEY);
+            mem.async.delete(ANCHOR);
+            expect(await open(push(newer()))).toEqual({ kind: 'drop', reason: 'newer-format' });
+            expect((await tap(push(newer()))).kind).toBe('warn');
+            expect(takeNoticeWarning()).toBe(true);
+        });
+
+        it('a format number that isn\'t a whole number above this build\'s is not a newer format: unsigned, as before', async () => {
+            for (const bp of [0, -1, 1.5, '2a', 'two', null]) {
+                expect(await open(push(newer({ bp })))).toEqual({ kind: 'drop', reason: 'unsigned' });
+            }
+        });
+    });
+});
+
 // ── 6. The calm line, at 320dp and 1.3× text ───────────────────────────────────────────────────────────────────
 
 /** A luminance-contrast ratio, as WCAG defines it. */

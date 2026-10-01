@@ -17,6 +17,21 @@
  *   the details request, and only in its fixed shape. A push's own `screen`, `postId` or `conversationId` (what servers
  *   sent before signed notices) is never read.
  *
+ * ## Notices newer than this build
+ *
+ * A community's server updates on its own schedule, and an app in the field can't be changed, so a server can send what
+ * this build doesn't know. A genuine notice must never be called a forgery for that:
+ *
+ * - **A kind not in this build's table** (core `PUSH_NOTICE_KINDS` grows) is checked all the same: the signature over
+ *   the same bytes, with the kind as sent, by the pinned key, for this account, and the same times. Valid: shown while
+ *   open with general words ({@link UNSIGNED_NOTICE_WORDS}), and a tap opens what its community answers, through the
+ *   same fixed list, else the Market tab ({@link noticeRoute}), with no warning. Not valid: refused as any forgery is.
+ * - **A newer format** (`data.bp` above {@link PUSH_NOTICE_VERSION}) is a new tag in the signed bytes and perhaps other
+ *   fields, so this build can't rebuild what was signed and can check nothing in it. It is treated as an unsigned push
+ *   from a community that signs nothing yet (below), without the warning: general words while open, and a tap opens
+ *   the app where it was. So a forger who writes a newer `bp` escapes the warning, but still gets no navigation and no
+ *   words of its own while open. A server that needs this build to follow its taps keeps sending format 1.
+ *
  * ## Pushes no community signed
  *
  * A server from before signed notices (or one with no node key yet) sends pushes with nothing to check, and its
@@ -39,9 +54,12 @@
  * apart by how they arrived: the phone's push service marks a push it delivered (trigger `push`), and nothing a sender
  * puts in a push can change that.
  */
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import {
-    isPushNoticeId, isPushNoticeKind, PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS,
-    PUSH_NOTICE_VERSION, pushNoticeWords, verifyPushNotice, type PushNoticeKind, type PushNoticeRefusal, type PushNoticeTab,
+    isPushNoticeId, isPushNoticeKind, PUSH_COMMUNITY_TAG_PATTERN, PUSH_NOTICE_CLOCK_SKEW_SECONDS, PUSH_NOTICE_KINDS,
+    PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_VERSION, pushNoticeBytes, pushNoticeWords, verifyPushNotice, type PushNoticeKind,
+    type PushNoticeRefusal, type PushNoticeTab,
 } from '@beanpool/core';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
@@ -67,6 +85,13 @@ const LEDGER_MAX = 500;
 
 /** The key vault's notices (apps/vault api/push.ts `PushKind`). */
 const VAULT_NOTICE_TYPES = new Set(['vault-hold', 'vault-released', 'vault-replaced']);
+
+/**
+ * A kind this build's table doesn't have, in the shape every kind in core's table takes (`chat.message`,
+ * `account.recovery-started`): lower-case words joined by dots, at most 64 characters. Nothing else is a kind, so no
+ * newline or other separator of the signed bytes can be one.
+ */
+const UNKNOWN_KIND = /^(?=.{1,64}$)[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$/;
 
 /** A post or conversation id in the shape the node issues them: a UUID (utils/events.ts POST_ID_RE). */
 const NODE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,7 +120,7 @@ export interface NoticeContext {
     now?: number;
 }
 
-export type DropReason = PushNoticeRefusal | 'repeated' | 'unsigned' | 'no-account' | 'unreadable';
+export type DropReason = PushNoticeRefusal | 'repeated' | 'unsigned' | 'newer-format' | 'no-account' | 'unreadable';
 
 export type OpenDecision =
     /** Show it as it came. */
@@ -105,8 +130,11 @@ export type OpenDecision =
     | { kind: 'drop'; reason: DropReason };
 
 export type TapDecision =
-    /** A notice its community signed for this account: ask it where the tap lands. `active`: the community the phone is set to. */
-    | { kind: 'open'; community: string; id: string; noticeKind: PushNoticeKind; active: boolean }
+    /**
+     * A notice its community signed for this account: ask it where the tap lands. `active`: the community the phone is
+     * set to. `noticeKind`: null for a kind this build doesn't know (a server newer than the app).
+     */
+    | { kind: 'open'; community: string; id: string; noticeKind: PushNoticeKind | null; active: boolean }
     /** The key vault's notice, on a phone that gave the vault its token. */
     | { kind: 'settings' }
     /** Open the app where it was. */
@@ -172,6 +200,16 @@ function signedNotice(data: unknown): Record<string, unknown> | null {
     return { ...d, bp: PUSH_NOTICE_VERSION, t: wholeNumber(d.t) };
 }
 
+/**
+ * A push in a notice format newer than this build's (`data.bp` a whole number above {@link PUSH_NOTICE_VERSION}). A new
+ * format is a new tag in the signed bytes (core PUSH_NOTICE_TAG), and perhaps other fields, so this build can't rebuild
+ * what was signed and can check nothing about it.
+ */
+function isNewerFormat(data: unknown): boolean {
+    const bp = wholeNumber(asObject(data)?.bp);
+    return typeof bp === 'number' && Number.isSafeInteger(bp) && bp > PUSH_NOTICE_VERSION;
+}
+
 function isVaultNotice(data: unknown): boolean {
     const type = asObject(data)?.type;
     return typeof type === 'string' && VAULT_NOTICE_TYPES.has(type);
@@ -193,8 +231,39 @@ function pinFor(pins: PushPins, tag: unknown): PushPin | undefined {
 }
 
 type Checked =
-    | { ok: true; pin: PushPin; kind: PushNoticeKind; id: string; sentAt: number; pins: PushPins }
+    /** `kind`: null for a kind this build doesn't know. */
+    | { ok: true; pin: PushPin; kind: PushNoticeKind | null; id: string; sentAt: number; pins: PushPins }
     | { ok: false; reason: DropReason };
+
+type Verified = { ok: true; kind: PushNoticeKind | null; id: string; sentAt: number } | { ok: false; reason: PushNoticeRefusal };
+
+/**
+ * A notice of a kind this build's table doesn't have, checked as core `verifyPushNotice` checks one it has: the same
+ * fields in the same shapes, the signature over the same bytes (core `pushNoticeBytes`, with the kind as sent) by the
+ * pinned key, and the same times. Servers and apps update apart, and a build in the field can't be changed, so a
+ * genuine notice of a kind added later must not be taken for a forgery. A forger gains nothing: a changed kind breaks
+ * the signature like any other changed field.
+ */
+function verifyUnknownKind(d: Record<string, unknown>, recipient: string, pushKey: string, now: number): Verified {
+    if (!isPushNoticeId(d.i) || typeof d.t !== 'number' || !Number.isSafeInteger(d.t) || d.t <= 0
+        || typeof d.c !== 'string' || !PUSH_COMMUNITY_TAG_PATTERN.test(d.c)
+        || typeof d.s !== 'string' || !/^[0-9a-f]{128}$/.test(d.s)
+        || typeof d.k !== 'string' || !UNKNOWN_KIND.test(d.k)) {
+        return { ok: false, reason: 'not-a-notice' };
+    }
+    let valid: boolean;
+    try {
+        // pushNoticeBytes is typed for the kinds core knows; the bytes are the kind's text either way.
+        const fields = { c: d.c, k: d.k as PushNoticeKind, i: d.i, t: d.t };
+        valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes(fields, recipient), hexToBytes(pushKey));
+    } catch {
+        valid = false;
+    }
+    if (!valid) return { ok: false, reason: 'bad-signature' };
+    if (now - d.t > PUSH_NOTICE_LIFETIME_SECONDS) return { ok: false, reason: 'too-old' };
+    if (d.t - now > PUSH_NOTICE_CLOCK_SKEW_SECONDS) return { ok: false, reason: 'from-the-future' };
+    return { ok: true, kind: null, id: d.i, sentAt: d.t };
+}
 
 /** A signed notice checked against the pins and the account on the phone. */
 async function checkSigned(notice: Record<string, unknown>, ctx: NoticeContext): Promise<Checked> {
@@ -207,7 +276,9 @@ async function checkSigned(notice: Record<string, unknown>, ctx: NoticeContext):
     }
     const pin = pinFor(pins, notice.c);
     if (!pin) return { ok: false, reason: 'other-community' };
-    const check = verifyPushNotice(notice, { recipient: ctx.recipient, pushKey: pin.pushKey, now: ctx.now });
+    const check: Verified = isPushNoticeKind(notice.k)
+        ? verifyPushNotice(notice, { recipient: ctx.recipient, pushKey: pin.pushKey, now: ctx.now })
+        : verifyUnknownKind(notice, ctx.recipient, pin.pushKey, nowSeconds(ctx));
     if (!check.ok) return { ok: false, reason: check.reason };
     return { ok: true, pin, kind: check.kind, id: check.id, sentAt: check.sentAt, pins };
 }
@@ -285,10 +356,11 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             const checked = await checkSigned(notice, ctx);
             if (checked.ok) {
                 if (!(await noteOnce(ctx.storage, 'shown', checked.id, checked.sentAt, nowSeconds(ctx)))) return drop('repeated');
-                const words = pushNoticeWords(checked.kind);
-                if (n.title === words.title && n.body === words.body) return { kind: 'show' };
+                // A kind this build doesn't know has no words here: the general ones.
+                const words = checked.kind ? pushNoticeWords(checked.kind) : UNSIGNED_NOTICE_WORDS;
+                if (checked.kind && n.title === words.title && n.body === words.body) return { kind: 'show' };
                 // The words aren't signed: shown with the kind's, and the notice kept, so a tap on it opens as this would.
-                return { kind: 'replace', ...words, data: { ...notice, ...LOCAL_NOTICE_DATA } };
+                return { kind: 'replace', title: words.title, body: words.body, data: { ...notice, ...LOCAL_NOTICE_DATA } };
             }
             // Signed by no community this phone pinned: from one it sent its token to but hasn't learnt the key of yet,
             // perhaps, so it goes as an unsigned push would below. Any other refusal is final.
@@ -297,6 +369,12 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             return { kind: 'show' };
         }
         const pins = await readPushPins(ctx.storage);
+        if (!notice && isNewerFormat(n.data)) {
+            // A format newer than this build's (see the header): nothing can be checked, so it goes as a push from a
+            // community the phone sent its token to, with the general words, or as no one's on a phone with none.
+            if (pins.pinned.length === 0 && pins.unpinnedRegistered.length === 0) return drop('newer-format');
+            return { kind: 'replace', title: UNSIGNED_NOTICE_WORDS.title, body: UNSIGNED_NOTICE_WORDS.body, data: { ...LOCAL_NOTICE_DATA } };
+        }
         if (pins.unpinnedRegistered.length === 0) return drop(notice ? 'other-community' : 'unsigned');
         const named = asObject(n.data)?.k;
         const words = isPushNoticeKind(named) ? pushNoticeWords(named) : UNSIGNED_NOTICE_WORDS;
@@ -339,8 +417,14 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
         // The app's own notices carry no target: it opens where it was.
         if (!n.remote) return { kind: 'nothing', reason: 'local' };
         if (!notice && isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
-        const reason: DropReason = notice ? 'other-community' : 'unsigned';
         const pins = await readPushPins(ctx.storage);
+        if (!notice && isNewerFormat(n.data)) {
+            // Nothing in it can be checked (see the header), so nothing is followed; and it may well be genuine, so no
+            // warning, as long as the phone sent its token to a community it keeps.
+            const anyone = pins.pinned.length > 0 || pins.unpinnedRegistered.length > 0;
+            return anyone ? { kind: 'nothing', reason: 'newer-format' } : refuse('newer-format');
+        }
+        const reason: DropReason = notice ? 'other-community' : 'unsigned';
         return pins.unpinnedRegistered.length > 0 ? { kind: 'nothing', reason } : refuse(reason);
     } catch (e) {
         console.warn('[Push] Could not check a tapped notification', e);
@@ -362,15 +446,17 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
 /**
  * Where a valid notice's tap lands, from what its community answered for it (`data` of `GET /api/notices/push/<id>`,
  * or nothing when it couldn't be had): a post or a chat when the answer names one by an id in the node's own shape,
- * Settings when it says so, and otherwise the tab for the notice's kind. Every route is one of a fixed few; the only
- * text taken from the answer is an id that matched {@link NODE_ID}.
+ * Settings when it says so, and otherwise the tab for the notice's kind; the Market tab for a kind this build doesn't
+ * know (`kind` null). Every route is one of a fixed few; the only text taken from the answer is an id that matched
+ * {@link NODE_ID}.
  */
-export function noticeRoute(kind: PushNoticeKind, details: unknown): NoticeRoute {
+export function noticeRoute(kind: PushNoticeKind | null, details: unknown): NoticeRoute {
     const d = asObject(details) ?? {};
     if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
     if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
     if (d.screen === 'settings') return '/(tabs)/settings';
-    return TAB_ROUTES[PUSH_NOTICE_KINDS[kind].tab];
+    const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'market';
+    return TAB_ROUTES[tab] ?? TAB_ROUTES.market;
 }
 
 // ── Following a tap ────────────────────────────────────────────────────────────────────────────────────────────

@@ -662,15 +662,6 @@ export function restampPasswordSession(ctx: any): void {
     if (session?.kind === 'password') session.credentialStamp = passwordCredentialStamp();
 }
 
-/** Ends every password session (a test's reset, or an owner signing the password out everywhere). */
-export function revokeAllPasswordSessions(): number {
-    let n = 0;
-    for (const s of [...adminSessions.values()]) {
-        if (s.kind === 'password') { revokeAdminSession(s.sessionId); n++; }
-    }
-    return n;
-}
-
 export const ADMIN_SESSION_COOKIE = 'admin_session';
 
 /**

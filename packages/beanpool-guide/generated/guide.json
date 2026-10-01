@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 92,
-  "hash": "984b7e2a245a5e5ac98001507bc51d11a38bf5c7360de21ee761c2a28f4a3cb1",
+  "version": 93,
+  "hash": "40cc899e5f949696606ba1260f3235ed063aded65a8d1231f19be133b402b8a7",
   "sections": [
     {
       "id": "about",
@@ -468,7 +468,7 @@
             "After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.",
             "A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.",
             "When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.",
-            "The community can vote to remove anyone except the only owner of your community's server."
+            "The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote cannot take that away; the app says so if you try. An owner can take an admin's role away first, and after that they are a member like any other."
           ]
         },
         {
@@ -504,7 +504,7 @@
           "type": "ul",
           "items": [
             "An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.",
-            "If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away. If the member being removed is an owner or admin of the server, only an owner can do either.",
+            "If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.",
             "Admins can give members the right to vouch for newcomers.",
             "Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.",
             "Admins sort out stuck trades, but never one they are part of."
@@ -541,7 +541,7 @@
             "**Community admins:** an admin of your community who is not a keeper of the enterprise can approve a keeper, or remove an ordinary keeper, at once, with no 3-day window. This is so a stuck enterprise can be helped.",
             "**Stepping down:** any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.",
             "**Your pledge** backs the enterprise's credit line. It is never taken from your own balance or your own credit line.",
-            "**A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. Keeper votes cannot be changed.",
+            "**A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. Keeper votes cannot be changed.",
             "**If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.",
             "**Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons."
           ]
@@ -561,11 +561,12 @@
             "**Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.",
             "**Only the lead convenor** can remove a convenor, or take the convenor role off someone.",
             "**Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.",
+            "**A suspended convenor:** while a convenor's account is suspended, they cannot use any convenor power, and their own powers as lead wait too. They stay a convenor, and the lead stays the lead; it all works again when the suspension ends. Other convenors carry on as usual, and members keep chatting and posting. A suspended member cannot start or join a group either, until the suspension ends.",
             "**Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.",
             "**Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.",
             "The last convenor cannot step down or be removed while the group still has other members.",
             "Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.",
-            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
+            "**A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.",
             "**A rogue lead convenor** can be removed by a community Decision. This is coming in a later update."
           ]
         },
@@ -1000,6 +1001,10 @@
         {
           "type": "p",
           "text": "A community's admins can turn invites off for the whole community."
+        },
+        {
+          "type": "p",
+          "text": "The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work."
         },
         {
           "type": "h2",
@@ -2754,6 +2759,7 @@
             "The server also knows who messaged whom, and when, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
             "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
+            "Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See \"Leaving or deleting your account\".",
             "A group's chat can also be read by the group's members.",
             "An event's chat can also be read by the host and everyone going.",
             "An enterprise's chat can be read by any member of your community. It is the enterprise's public discussion, the same one its page shows, and anyone in the community can write in it too. It is not a private chat for its keepers."
@@ -2932,6 +2938,10 @@
           "text": "If a convenor removed you from a group, you cannot join it again by yourself."
         },
         {
+          "type": "p",
+          "text": "While your account is suspended, you cannot start a group, join one, ask to join one, or accept an invitation, and a convenor cannot approve a request you made before. The groups you are already in stay yours. When the suspension ends, you can start or join groups again."
+        },
+        {
           "type": "h2",
           "text": "Joining by invitation"
         },
@@ -3001,11 +3011,19 @@
         },
         {
           "type": "p",
+          "text": "**While a convenor is suspended.** If your community suspends a convenor's account, none of the convenor tools work for them until the suspension ends: approving, inviting, changing roles, removing people, posts or messages, editing the group, handing the lead over. The app says their account is suspended and that they are still a convenor. Nothing is taken from them: they stay a convenor, the lead stays the lead, and it all works again the moment the suspension ends. They can still leave the group, unless they lead it and anyone else is still in it."
+        },
+        {
+          "type": "p",
+          "text": "The group carries on meanwhile. Its members keep chatting and posting, and people can still join an open group. Any other convenor can still do everything above; only the lead's own powers wait. Requests to join and new invitations wait for a convenor. Anyone can still report a post or a person to your community's moderators. If the suspended convenor is the group's only convenor, they are its lead, and nothing they do while suspended counts as activity: 30 days after they were last active, the group can vote a new lead in, as below."
+        },
+        {
+          "type": "p",
           "text": "**When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes."
         },
         {
           "type": "p",
-          "text": "Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead."
+          "text": "Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. While the lead's account is suspended, nothing they do counts. Observers can see the panel but have no vote, and neither does the quiet lead."
         },
         {
           "type": "p",
@@ -3137,7 +3155,7 @@
           "items": [
             "Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.",
             "The host can remove any message. Tap it, then **Remove**. It then says \"removed by the host\".",
-            "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret.",
+            "An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.",
             "When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away."
           ]
         }
@@ -3573,6 +3591,7 @@
           "type": "ul",
           "items": [
             "A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.",
+            "A Decision cannot remove or suspend an owner or admin of your community's server. See \"Rules and how decisions work\".",
             "You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.",
             "You can have one open Decision at a time.",
             "The global community has no Decisions, so there is nothing to propose there. See \"Voting on a Decision\"."
@@ -3630,6 +3649,7 @@
           "items": [
             "**Complete a Trade First:** you cannot propose yet.",
             "**Limit Reached:** you already have an open Decision. Wait for it to close.",
+            "**A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.",
             "**This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.",
             "**A grant needs an amount in Beans above 0:** fill in how many beans.",
             "**Error:** check your description is at least 10 characters long."
@@ -4614,6 +4634,7 @@
             "Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See \"Messages\".",
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
+            "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. A backup of the server made before then keeps them until it is replaced. See \"Leaving or deleting your account\".",
             "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\"."
           ]
         },
@@ -5040,12 +5061,13 @@
             "If you are below zero, the Commons covers the debt.",
             "Your profile becomes \"Deleted Member\".",
             "Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as \"Deleted post\".",
-            "Events you host are cancelled and wiped the same way. The people going can still read the event's chat until 30 days after the event.",
+            "Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted: the backup keeps them until it is replaced. In a chat with a person, older messages already on the other person's phone may stay there, like a screenshot or a backup.",
+            "Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.",
             "A poll you asked is closed. It keeps its question and its votes.",
             "The block list your community kept for you goes too.",
             "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
             "It deletes your account only in the community you are using. Your accounts in other communities stay.",
-            "Your community can never bring the account back. To come back, join again with a new invite."
+            "Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in."
           ]
         },
         {
@@ -5090,7 +5112,8 @@
           "type": "ul",
           "items": [
             "Your name, photo, bio, contact details, friends and sign-in recovery copies are erased, and so are the words, photos and places of your posts, except your polls.",
-            "After that, your community cannot vote to bring the account back. To come back, join again with a new invite.",
+            "Every message you wrote reads **This message was deleted**, and the photos you sent are deleted.",
+            "After that, your community cannot vote to bring the account back. To come back, join again with a new invite. The global community takes no invites, and a sign-in it removed cannot join it again.",
             "If a deal of yours is still under way, the other member or an admin must close it first."
           ]
         }

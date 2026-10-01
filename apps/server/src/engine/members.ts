@@ -21,7 +21,14 @@ export function recordActivity(publicKey: string): void {
     // assertPlainTablesWritable). An activity it stamped would read, after a take-over, as a quiet lead or convenor come
     // back, and close the vote to replace them.
     if (getNodeRole() === 'backup') return;
-    db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    // Nothing on a suspended account either. Last activity is how a group or an enterprise tells its lead has gone quiet,
+    // and a suspended lead cannot act for either (groups' assertConvenorPowersActive, treasury's keeper guards), so what
+    // they do while suspended is no lead coming back: it neither holds off the 30-day-silence vote nor cancels one. Their
+    // first write after the suspension ends is. Without this a suspended lead who kept signing anything at all — the
+    // refused convenor calls included, stamped before the route answers — froze their group with nobody able to act.
+    const stamped = db.prepare("UPDATE members SET last_active_at=? WHERE public_key=? AND COALESCE(status, '') NOT IN ('suspended', 'disabled')")
+        .run(new Date().toISOString(), publicKey);
+    if (stamped.changes === 0) return;
     // A visitor's row is no lead or convenor coming back: it acts for no enterprise and no group (the director's rule,
     // 2026-09-26), so what it may still do (a reply in its own DM) cancels no vote to replace it (4111202724).
     if (isVisitorKey(db, publicKey)) return;

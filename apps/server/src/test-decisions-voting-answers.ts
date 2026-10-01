@@ -43,6 +43,7 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { db } from './db/db.js';
+import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { RouteDeps } from './routes/types.js';
@@ -523,14 +524,23 @@ async function run() {
     const liftRoleless = await callRouter(admin, 'POST', `/api/local/admin/users/${roleless}/status`, { actor: keyAdmin, body: { status: 'active' } });
     assert(liftRoleless.status === 200 && statusOf(roleless) === 'active' && !roleRow(roleless), 'a plain admin may lift the suspension of a member who held no role');
 
-    // A passed removal holds the role aside through its grace window; halting it gives the role back (owner only).
+    // A removal holds the role aside through its grace window; halting it gives the role back (owner only).
     const graceAdmin = makeMember('GraceAdmin');
     grantNodeRole(graceAdmin, 'admin', owner);
     const graceRole = roleRow(graceAdmin);
-    const removeAdmin = createDecision({ authorPubkey: owner, title: 'Remove GraceAdmin', description: 'Grace-window role test', touches: 'member', effect: 'remove_member', subject: graceAdmin });
-    const graceExec = decisionsEngine.executeDecision(removeAdmin.id);
-    assert(graceExec.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled' && !roleRow(graceAdmin),
-        `a passed removal suspends them for the grace window and takes the role (got ${graceExec.status})`);
+    // Since 2026-10-01 no Decision removes an admin (docs/the-commons.md §3.8): one is refused when proposed. Until then a
+    // passed one went into its grace window with the role held aside, and a node that ran that code can still have one
+    // there (decisions-from-before-test-fixture.ts): the halt guards below still answer for it.
+    let adminRemovalRefusal = '';
+    try {
+        createDecision({ authorPubkey: owner, title: 'Remove GraceAdmin', description: 'Grace-window role test', touches: 'member', effect: 'remove_member', subject: graceAdmin });
+    } catch (e: any) { adminRemovalRefusal = e?.message || String(e); }
+    assert(/can't remove or suspend an owner or admin/.test(adminRemovalRefusal) && statusOf(graceAdmin) === 'active'
+        && JSON.stringify(roleRow(graceAdmin)) === JSON.stringify(graceRole),
+        `a Decision to remove an admin is refused when proposed, and nothing changes (got "${adminRemovalRefusal}")`);
+    const removeAdmin = { id: removalInGraceFromBefore(owner, graceAdmin, 'Remove GraceAdmin') };
+    assert(getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled' && !roleRow(graceAdmin),
+        `one that passed before then is in its grace window, suspended, the role held aside (got ${getDecision(removeAdmin.id)!.status})`);
     const graceHaltPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeAdmin.id}/halt`, { actor: keyAdmin, body: { reason: 'Halting the removal of an admin' } });
     assert(graceHaltPlain.status === 403 && getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled',
         `a plain admin cannot halt it — it would hand back an admin role (got ${graceHaltPlain.status} ${JSON.stringify(graceHaltPlain.body)})`);

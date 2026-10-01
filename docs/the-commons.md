@@ -289,6 +289,18 @@ and their group carries on with a lead who cannot act. This follows directly fro
 admins hold no power over groups, and letting a suspension move a group's lead would hand them exactly
 that power through the back door — a rogue lead has to be dealt with by the community, not by the node.
 
+**Keeping the role is not keeping its powers (2026-10-01, FABLE-sec-roles).** While a convenor's account is
+suspended, every convenor power rests: approving, inviting, changing roles, removing people, posts and chat
+lines, editing the group or its join policy, editing or cancelling someone else's event in the group,
+seeing who asked to join, handing the lead over. Each refusal says the account is suspended and that they
+are still a convenor. Nothing is deleted and nothing moves — the role and the lead are theirs again the
+moment the suspension ends — and a suspended member joins no group either. The group carries on: its
+members chat, post and join an open group, its other convenors keep every power but the lead's own, and
+requests and invitations wait for a convenor. Nothing a suspended account signs counts as activity
+(`recordActivity`), so the silence below runs from the last thing the lead did before the suspension, and
+nothing they do during it cancels a vote. Before this, the convenor checks read `group_members` alone and a
+suspended convenor could remove the people who reported them.
+
 What a community actually does about one today is the **30-day-silence vote**, which both apps have had
 screens for since 2026-09-23: a suspended lead stops being active, so 30 days after their last activity
 the other convenors — or the members, when none of the other convenors was made a convenor by the lead's last
@@ -863,6 +875,13 @@ the SQLite file and the DNS. A vote that flips an `is_admin` bit is undone with 
 and shipping an in-app "depose the admin" button would be security theatre. Governance here is real
 over everything except the machine itself.
 
+In code (2026-10-01, FABLE-sec-roles): no `remove_member` or `suspend_member` Decision may name an owner
+or an admin, one whose role a suspension holds aside included. It is refused when proposed, and blocked
+when it would be carried out if its subject has come to hold the role since it opened. An owner takes the
+role away first; after that they are a member like any other. Moderators are members with a job, and a vote
+can still remove one. Until then only the sole owner was protected, and a passed `suspend_member` deleted an
+admin's role for good.
+
 **The honest remedy is a fork, not a mutiny.** A `no_confidence` Decision does not try to strip the
 admin of anything. What it does is produce a **signed community archive** — ledger, balances,
 reputation graph, membership, post history — that the community can carry to a new node under a host
@@ -1192,12 +1211,15 @@ and co-hosted nodes are a real thing. The rules are deliberately minimal:
 - **three or more owners:** removing one requires **two others**, through the destructive-action
   grace window from §3.7 — seven days, publicly visible, the target notified
 - **exactly two owners:** an owner **cannot** be removed unilaterally. It takes mutual resignation,
-  or a community Decision at 66%
+  or one owner suspends the other and the community's "Keep this suspension?" vote decides. (Until
+  2026-10-01 this said "or a community Decision at 66%"; no vote of the community's own removes or
+  suspends an owner or an admin, §3.8.)
 - never fewer than one owner; self-resignation always allowed unless you are the last
 - **a suspended owner is still an owner.** A node with no owner at all — a fresh one, or one whose
   owners were all removed — lets a signed-in admin create the first owner, because otherwise nobody
-  could. A community Decision that suspends an owner holds their role aside instead, and that still
-  counts: no admin may appoint themselves while it is parked. The node is not stuck either way, since
+  could. Suspending an owner — another owner's emergency suspension, while the community's "Keep this
+  suspension?" vote runs — holds their role aside instead, and that still counts: no admin may appoint
+  themselves while it is parked. The node is not stuck either way, since
   the admin password is owner-level (§2.5 of `admin-surface.md`) and can appoint an owner at any time
 
 **The two-owner rule is not pedantry.** Without it, two co-owners who fall out get a race: A clicks

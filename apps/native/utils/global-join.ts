@@ -31,6 +31,20 @@
  * When the vault can't give a ticket (paused or unreachable), the door uses its own nonce (`/api/join/sso-nonce`) and
  * the member joins without a copy: the vault is never a gate on joining.
  *
+ * ## Only at a door that takes the ticket (V5, scratch/global-node/DESIGN-v5-global-door-vault-fable.md §3)
+ *
+ * A door takes the vault's tickets only when its operator pinned the vault's public ticket keys
+ * (`BEANPOOL_VAULT_TICKET_KEYS`), and its nonce answer says which (`vault.ticketKeys`). So no order of rollout blocks
+ * a join:
+ * - Ask first ({@link doorTicketKeys}). The ticket path runs only when the door lists a key this build pins, and the
+ *   ticket is used only when the door lists the key that signed it. Otherwise (a door from before V5, a door with no
+ *   keys set, a stranger's door, another vault's keys) the door's own nonce, nothing asked of the vault, and the member
+ *   joins without a copy. Safety Backup then offers the ordinary connect, at the vault only.
+ * - The backstop ({@link submitJoin}). A 401 to a join that carried a ticket, whatever its code (an older door says
+ *   `sign_in`; a V5 door says `ticket_*`), opens the provider's sheet once more, by itself, with the door's own nonce
+ *   and a one-line notice, and the join goes again without the ticket. A second 401 is "sign in again", as ever.
+ * A phone at any other community never meets this: the door is the global community's alone.
+ *
  * ## A build without a vault (utils/vault.ts `signInCopiesAt`): the copy rides in the join, as before the vault
  *
  * The door's own nonce, and the join carries the seed sealed to the sign-in (`recovery: { shares }`); global stores
@@ -66,11 +80,13 @@ import {
     signInWithFacebook,
     signInWithProvider,
     SsoSignInError,
+    type NodeNonce,
     type SsoProvider,
 } from './sso-signin';
+import { checkVaultTicket } from '@beanpool/core';
 import { extractSub } from './sso-sheet-connect';
 import { enrolmentFromJoin, enrolmentFromVault, sealSsoShares, type KeeperEnrolmentResult } from './keeper-enrolment';
-import { depositWithVault, hasVault, signInCopiesAt, vaultTicket, VaultError } from './vault';
+import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError } from './vault';
 import { getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding, type PendingOnboarding } from './onboarding-state';
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
 
@@ -144,6 +160,8 @@ export const DOOR_MESSAGES = {
     rateLimited: 'Too many new accounts have joined from this network. Please try again later.',
     signInAgain: 'Your sign-in could not be used. Please sign in again.',
     tryAgain: 'Your join could not be completed, and nothing was saved. Please try again in a minute.',
+    /** Under the joining spinner while the provider's sheet opens once more, with the door's own nonce ({@link submitJoin}). */
+    signInAnotherWay: 'Checking your sign-in another way…',
 } as const;
 
 function said(body: unknown): string | undefined {
@@ -334,33 +352,52 @@ export async function joinKeyForThisPhone(held: JoinKey | null = null): Promise<
 }
 
 /**
- * A key vault deposit ticket for the joining key (design §5.4), or null when the vault can't give one: paused,
- * unreachable, or an answer that doesn't check out against its pinned keys (never used: the door's own nonce is, and
- * the member joins without a copy). Never asked in a build without a vault.
+ * The vault ticket keys this door takes that this build pins: the door's own list (its nonce answer's `vault`, V5
+ * design §1.3), kept to the keys the build has built in. Empty when the door names none (a door from before V5, or one
+ * whose operator set none) or only keys of another vault: then the phone asks the vault for nothing at this door.
  */
-async function doorVaultTicket(provider: SsoProvider, identity: BeanPoolIdentity): Promise<{ ticket: string; nonce: string } | null> {
-    if (!hasVault()) return null;
+export function doorTicketKeys(doorKeys: { ticketKeys: string[] } | null): string[] {
+    const pinned = vaultConfig()?.ticketKeys ?? [];
+    return (doorKeys?.ticketKeys ?? []).filter(key => pinned.includes(key));
+}
+
+/**
+ * A key vault deposit ticket for the joining key (design §5.4) that this door takes, or null: the door takes none of
+ * this build's keys ({@link doorTicketKeys}, and the vault is not asked), the vault can't give one (paused,
+ * unreachable, or an answer that doesn't check out against its pinned keys), or the ticket is signed by a pinned key
+ * the door doesn't list (a key rotation the door's list hasn't caught up with). Null is never a refusal: the door's own
+ * nonce is used, and the member joins without a copy.
+ */
+async function doorVaultTicket(
+    provider: SsoProvider, identity: BeanPoolIdentity, ticketKeys: string[],
+): Promise<{ ticket: string; nonce: string } | null> {
+    if (ticketKeys.length === 0) {
+        console.log(`[JOIN] ${provider}: the door takes no key vault ticket this app can get; joining with its own nonce, without a copy`);
+        return null;
+    }
+    let grant: { ticket: string; nonce: string };
     try {
-        return await vaultTicket(identity, 'deposit', provider);
+        grant = await vaultTicket(identity, 'deposit', provider);
     } catch (e) {
         console.log(`[JOIN] ${provider}: no key vault ticket (${e instanceof VaultError ? e.reason : (e as Error).message}); joining without a copy`);
         return null;
     }
+    // Checked against the door's keys as the door will check it, so a ticket it would refuse never costs a sheet.
+    const atTheDoor = checkVaultTicket(grant.ticket, { ticketKeys, now: Date.now(), key: identity.publicKey, purpose: 'deposit' });
+    if (!atTheDoor.ok) {
+        console.log(`[JOIN] ${provider}: the door would not take this key vault ticket (${atTheDoor.reason}); joining without a copy`);
+        return null;
+    }
+    return grant;
 }
 
 /**
- * Sign in at the door with `identity`'s key: a key vault deposit ticket for that key when the vault gives one (the
- * door's shared ticket), otherwise the door's own nonce (signed, bound to that key); then the provider. `answered` is
- * the door refusing before any sign-in (shut, a limit), or `joined` when this key is already a member (an earlier join
- * landed). A provider that fails or is cancelled throws `SsoSignInError`, as everywhere else.
- *
- * Global's nonce route is asked either way, first: it is how the door says it is shut before any sheet opens.
+ * The door's nonce, asked for signed by `identity`'s key, or the door's answer when it gives none: shut, a limit, this
+ * key a member already, or no answer at all. Throws `SsoSignInError` when the door doesn't take `provider`.
  */
-export async function signInAtDoor(
-    provider: SsoProvider,
-    url: string,
-    identity: BeanPoolIdentity,
-): Promise<{ kind: 'signed_in'; signin: DoorSignIn } | { kind: 'answered'; answer: DoorAnswer }> {
+async function askTheDoor(
+    provider: SsoProvider, url: string, identity: BeanPoolIdentity,
+): Promise<{ kind: 'nonce'; nonce: NodeNonce } | { kind: 'answered'; answer: DoorAnswer }> {
     let res: Response | null;
     try {
         res = await withTimeout(signedPost(url, JOIN_NONCE_PATH, {}, identity), JOIN_TIMEOUT_MS);
@@ -371,11 +408,45 @@ export async function signInAtDoor(
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return { kind: 'answered', answer: readDoorAnswer(res.status, body, retryAfterSeconds(res)) };
 
-    const { nonce: doorNonce, providers } = readNonceResponse(body);
+    const nonce = readNonceResponse(body);
     // The node's list: offering a provider it will refuse is a sign-in that succeeds and is then thrown away.
-    if (providers.length > 0 && !providers.includes(provider)) {
+    if (nonce.providers.length > 0 && !nonce.providers.includes(provider)) {
         throw new SsoSignInError('unsupported', `The global community does not accept ${provider} sign-in.`);
     }
+    return { kind: 'nonce', nonce };
+}
+
+/** The provider's sheet with `nonce` (a vault build's one call), read into a door sign-in. */
+async function providerSignIn(provider: SsoProvider, nonce: string, ticket?: string): Promise<DoorSignIn> {
+    const signin = await signInWithProvider(provider, nonce);
+    let sub: string;
+    try {
+        sub = extractSub(signin.idToken);
+    } catch {
+        // Refused here rather than sealed to nothing: a copy sealed to a missing subject can never be opened.
+        throw new SsoSignInError('provider', 'That sign-in did not say who you are, so it can\'t be used. Try again.');
+    }
+    return { provider, idToken: signin.idToken, nonce: signin.nonce, sub, email: signin.email, ...(ticket ? { vaultTicket: ticket } : {}) };
+}
+
+/**
+ * Sign in at the door with `identity`'s key: a key vault deposit ticket for that key when the door takes the vault's
+ * tickets and the vault gives one it takes (the door's shared ticket), otherwise the door's own nonce (signed, bound to
+ * that key); then the provider. `answered` is the door refusing before any sign-in (shut, a limit), or `joined` when
+ * this key is already a member (an earlier join landed). A provider that fails or is cancelled throws `SsoSignInError`,
+ * as everywhere else.
+ *
+ * Global's nonce route is asked either way, first: it is how the door says it is shut before any sheet opens, and
+ * which vault ticket keys it takes.
+ */
+export async function signInAtDoor(
+    provider: SsoProvider,
+    url: string,
+    identity: BeanPoolIdentity,
+): Promise<{ kind: 'signed_in'; signin: DoorSignIn } | { kind: 'answered'; answer: DoorAnswer }> {
+    const asked = await askTheDoor(provider, url, identity);
+    if (asked.kind === 'answered') return asked;
+    const { nonce: doorNonce, vault: doorKeys } = asked.nonce;
     // A build without a vault: the door's own nonce, exactly as before the vault (the copy rides in the join).
     if (signInCopiesAt() === 'community') {
         const signin = provider === 'apple'
@@ -392,23 +463,9 @@ export async function signInAtDoor(
         }
         return { kind: 'signed_in', signin: { provider, idToken: signin.idToken, nonce: signin.nonce, sub, email: signin.email } };
     }
-    // One sheet either way: bound to the vault's ticket when there is one, so the same token joins and protects.
-    const grant = await doorVaultTicket(provider, identity);
-    const signin = await signInWithProvider(provider, grant ? grant.nonce : doorNonce);
-    let sub: string;
-    try {
-        sub = extractSub(signin.idToken);
-    } catch {
-        // Refused here rather than sealed to nothing: a copy sealed to a missing subject can never be opened.
-        throw new SsoSignInError('provider', 'That sign-in did not say who you are, so it can\'t be used. Try again.');
-    }
-    return {
-        kind: 'signed_in',
-        signin: {
-            provider, idToken: signin.idToken, nonce: signin.nonce, sub, email: signin.email,
-            ...(grant ? { vaultTicket: grant.ticket } : {}),
-        },
-    };
+    // One sheet either way: bound to the vault's ticket when the door takes one, so the same token joins and protects.
+    const grant = await doorVaultTicket(provider, identity, doorTicketKeys(doorKeys));
+    return { kind: 'signed_in', signin: await providerSignIn(provider, grant ? grant.nonce : doorNonce, grant?.ticket) };
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
@@ -486,12 +543,46 @@ async function depositDoorCopy(identity: BeanPoolIdentity, signin: DoorSignIn): 
  *   goes to the vault with the same sign-in ({@link depositDoorCopy}). No copy rides in the join.
  * - A build without one: carrying the recovery copy sealed to the same sign-in, as before the vault.
  *
+ * The backstop (V5 design §3.A.2, Marty's answer 6): when the door answers 401 to a join that carried a ticket,
+ * whatever the code (a V5 door says why, `ticket_*`; an older one says `sign_in`), the provider's sheet opens once
+ * more, by itself, with the door's own nonce, and the join goes again without the ticket: joined, without a copy, and
+ * Safety Backup offers the ordinary connect. `onSignInAgain` is told first, with the line the screen shows meanwhile.
+ * A second 401 is "sign in again", as before: two sheets at most. A second sheet that is cancelled or fails, or a door
+ * that won't give its nonce now, leaves the first 401's "sign in again": a refusal at the sign-in is never the join's
+ * own, so it takes no key off the phone (`releaseJoinKey`); the member signs in again and meets it there.
+ *
  * A join signed by the door's own key is counted on the phone before it goes, and stops counting only when
- * the node refuses it (`joinsOut`, which `releaseJoinKey` reads).
+ * the node refuses it (`joinsOut`, which `releaseJoinKey` reads). Each of the two joins is counted on its own.
  */
 export async function submitJoin(
     url: string, identity: BeanPoolIdentity, callsign: string, signin: DoorSignIn,
+    options: { onSignInAgain?: (notice: string) => void } = {},
 ): Promise<DoorAnswer> {
+    const first = await sendJoin(url, identity, callsign, signin);
+    if (!signin.vaultTicket || first.status !== 401) return first.answer;
+
+    console.log(`[JOIN] ${signin.provider}: the door refused the key vault ticket (${first.code ?? 'no code'}); signing in once more with its own nonce`);
+    options.onSignInAgain?.(DOOR_MESSAGES.signInAnotherWay);
+    let signinAgain: DoorSignIn;
+    try {
+        const again = await askTheDoor(signin.provider, url, identity);
+        if (again.kind === 'answered') {
+            // In already (an earlier join landed), or a refusal the member can try again after: as the door said.
+            const next = nextStepFor(again.answer);
+            return next === 'continue' || next === 'retry' ? again.answer : first.answer;
+        }
+        signinAgain = await providerSignIn(signin.provider, again.nonce.nonce);
+    } catch (e) {
+        console.log(`[JOIN] ${signin.provider}: no second sign-in (${(e as { reason?: string } | null)?.reason ?? (e as Error).message})`);
+        return first.answer;
+    }
+    return (await sendJoin(url, identity, callsign, signinAgain)).answer;
+}
+
+/** One join sent ({@link submitJoin}), with the door's status and code when it answered. */
+async function sendJoin(
+    url: string, identity: BeanPoolIdentity, callsign: string, signin: DoorSignIn,
+): Promise<{ answer: DoorAnswer; status: number | null; code?: string }> {
     // A build without a vault: a copy that can't be made never stops the join: the 12 words are the key, and Safety
     // Backup offers the ordinary connect. Why it failed goes to the log; never the words or the key.
     let recovery: { shares: unknown[] } | null = null;
@@ -515,26 +606,27 @@ export async function submitJoin(
         ...(signin.vaultTicket ? { vaultTicket: signin.vaultTicket } : {}),
     };
 
-    if (!(await countJoinOut(identity.publicKey))) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
+    if (!(await countJoinOut(identity.publicKey))) return { answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain }, status: null };
     let res: Response | null;
     try {
         res = await withTimeout(signedPost(url, JOIN_PATH, body, identity), JOIN_TIMEOUT_MS);
     } catch {
         res = null;
     }
-    if (!res) return { kind: 'unreachable', message: DOOR_MESSAGES.unreachable };
+    if (!res) return { answer: { kind: 'unreachable', message: DOOR_MESSAGES.unreachable }, status: null };
     const answerBody = await res.json().catch(() => ({}));
     const answer = readDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
+    const heard = { status: res.status, code: codeOf(answerBody) };
     console.log(`[JOIN] ${signin.provider}: the door answered ${res.status} (${answer.kind})`);
     if (refusedByTheNode(answer)) await countJoinRefused(identity.publicKey);
     if (answer.kind === 'joined' && res.ok && recovery) {
         return {
-            ...answer,
-            enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed),
+            answer: { ...answer, enrolment: enrolmentFromJoin((answerBody as { recovery?: unknown }).recovery, signin.provider, wordsSealed) },
+            ...heard,
         };
     }
-    if (answer.kind === 'joined' && signin.vaultTicket) return { ...answer, enrolment: await depositDoorCopy(identity, signin) };
-    return answer;
+    if (answer.kind === 'joined' && signin.vaultTicket) return { answer: { ...answer, enrolment: await depositDoorCopy(identity, signin) }, ...heard };
+    return { answer, ...heard };
 }
 
 /**

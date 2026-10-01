@@ -16,6 +16,13 @@
 //  - The lead changes by hand-over, by stepping down or leaving (hand over first while anyone else is active),
 //    or by the 30-day-silence vote (apps/server/src/engine/group-succession.ts). No community Decision names a
 //    group's lead as its subject, so that is not a route today.
+//
+// A SUSPENDED CONVENOR (FABLE-sec-roles, 2026-10-01): while a convenor's account is suspended, every convenor power
+// rests — they keep the role, and the lead if they hold it, and it all comes back the moment the suspension ends.
+// Each mutator below asks assertConvenorPowersActive after its role test, and a suspended member joins no group
+// (not by joining, and not by a convenor approving their request).
+// Nothing about who is a convenor or who leads changes: the role tests still read group_members alone, so a
+// suspension never moves a group's lead (docs/the-commons.md, "A suspended lead is still the lead").
 // Every route goes through this file, so there is one place the rules live.
 
 import type Database from 'better-sqlite3';
@@ -32,6 +39,7 @@ import {
     isGroupMemberStatus,
     DEFAULT_GROUP_CATEGORY
 } from '@beanpool/core';
+import { isSuspendedAccount } from './members.js';
 
 export type {
     Group,
@@ -119,6 +127,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     if (!member || member.is_visitor || member.status === 'pruned') {
         throw new Error('Creator member not found or pruned');
     }
+    // A suspended account starts no group: its creator would be the lead convenor of a group listed to every member,
+    // and no route deletes a group. Same refusal as joining one.
+    if (isSuspendedAccount(db, params.createdBy)) throw new Error(`UNAUTHORIZED: ${GROUP_START_PAUSED}`);
 
     const rawSlug = params.slug ? slugifyGroupName(params.slug) : slugifyGroupName(trimmedName);
     const slug = ensureUniqueSlug(db, rawSlug);
@@ -465,6 +476,7 @@ export function handOverGroupLead(db: Db, groupId: string, leadPubkey: string, t
     if (!isGroupLead(db, groupId, leadPubkey)) {
         throw new Error('UNAUTHORIZED: Only the lead convenor can hand the lead over');
     }
+    assertConvenorPowersActive(db, leadPubkey);
     if (leadPubkey === targetPubkey) throw new Error('You already lead this group');
 
     const target = getGroupMember(db, groupId, targetPubkey);
@@ -494,6 +506,34 @@ export function isGroupConvenor(db: Db, groupId: string, memberPubkey: string): 
         "SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND role = 'convenor' AND status = 'active'"
     ).get(groupId, memberPubkey);
     return !!row;
+}
+
+/** What a suspended convenor is told when they reach for a convenor power. */
+export const CONVENOR_POWERS_PAUSED =
+    'Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.';
+
+/** What a suspended member is told when they try to join a group or accept an invitation. */
+export const GROUP_START_PAUSED = 'Your account is suspended. You can start groups again when your suspension ends.';
+export const GROUP_JOIN_PAUSED = 'Your account is suspended. You can join groups again when the suspension ends.';
+
+/** What a convenor is told when the person they would let in is suspended: the request waits. */
+export const GROUP_ADMIT_PAUSED = "This member's account is suspended. Their request can be approved when the suspension ends.";
+
+/**
+ * Refuse a convenor power to a suspended account (isSuspendedAccount), in words that say why. Ask it AFTER the role
+ * test, so someone who is no convenor at all still hears that. The `UNAUTHORIZED:` prefix is what the group routes
+ * answer 403 for.
+ */
+export function assertConvenorPowersActive(db: Db, actorPubkey: string): void {
+    if (isSuspendedAccount(db, actorPubkey)) throw new Error(`UNAUTHORIZED: ${CONVENOR_POWERS_PAUSED}`);
+}
+
+/**
+ * An active convenor whose powers are not resting: isGroupConvenor, and an account that is not suspended. For what only a
+ * convenor may SEE (a group's requests and invitations); isGroupConvenor stays the role test.
+ */
+export function isActingGroupConvenor(db: Db, groupId: string, memberPubkey: string): boolean {
+    return isGroupConvenor(db, groupId, memberPubkey) && !isSuspendedAccount(db, memberPubkey);
 }
 
 export function isGroupMember(db: Db, groupId: string, memberPubkey: string): boolean {
@@ -545,6 +585,13 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
     if (!member || member.is_visitor || member.status === 'pruned') throw new Error('Member not found or pruned');
 
     const existing = db.prepare("SELECT * FROM group_members WHERE group_id = ? AND member_pubkey = ?").get(groupId, memberPubkey) as any;
+    // A suspended member joins nothing new while it lasts: not an open group, not a request, not an invitation (which can
+    // carry the convenor role). A group's chat and its members' posts would reach them, and the join line would be a
+    // write in a chat they may not write in. Already in it, they stay; the suspension ends, they can join. Asked at each
+    // write below, so the refusals that come first (already asked, removed, invite only) keep their own words.
+    const refuseWhileSuspended = () => {
+        if (isSuspendedAccount(db, memberPubkey)) throw new Error(`UNAUTHORIZED: ${GROUP_JOIN_PAUSED}`);
+    };
 
     const now = membershipWriteAt(db, groupId, memberPubkey);
 
@@ -559,6 +606,7 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
             throw new Error('A convenor removed you from this group. Only a convenor can add you back.');
         }
         if (existing.status === 'invited') {
+            refuseWhileSuspended();
             // Accepting an invitation. The invitation may carry role = 'convenor', so THIS is the write that makes
             // the row an active convenor and re-decides the fallback — pin the lead first, as setMemberRole does.
             // Without it, a group whose lead_pubkey is NULL hands the lead to whoever the fallback prefers among
@@ -573,11 +621,13 @@ export function joinGroup(db: Db, groupId: string, memberPubkey: string): GroupM
     }
 
     if (group.join_policy === 'open') {
+        refuseWhileSuspended();
         db.prepare(`
             INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
             VALUES (?, ?, 'member', 'active', ?, ?, ?)
         `).run(groupId, memberPubkey, now, now, now);
     } else if (group.join_policy === 'request_to_join') {
+        refuseWhileSuspended();
         db.prepare(`
             INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
             VALUES (?, ?, 'member', 'pending_approval', ?, ?, ?)
@@ -597,6 +647,7 @@ export function setMemberRole(db: Db, groupId: string, convenorPubkey: string, t
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can change member roles');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
     if (!isGroupRole(newRole)) {
         throw new Error(`Invalid group role: ${newRole}`);
     }
@@ -654,6 +705,8 @@ export function removeGroupMember(db: Db, groupId: string, actorPubkey: string, 
     if (!isConvenor && !isSelf) {
         throw new Error('UNAUTHORIZED: Only a group convenor can remove members, or a member may leave themselves');
     }
+    // Leaving is the member's own business, suspended or not; removing someone else is a convenor's power.
+    if (!isSelf) assertConvenorPowersActive(db, actorPubkey);
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target) return false;
@@ -726,6 +779,7 @@ export function updateGroupPolicy(db: Db, groupId: string, convenorPubkey: strin
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can change the group join policy');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
     if (!isJoinPolicy(joinPolicy)) {
         throw new Error(`Invalid join policy: ${joinPolicy}`);
     }
@@ -742,6 +796,7 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can update group details');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
 
     const sets: string[] = [];
     const params: any[] = [];
@@ -806,6 +861,7 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can approve member join requests');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
 
     const target = getGroupMember(db, groupId, targetPubkey);
     if (!target) {
@@ -814,6 +870,8 @@ export function approveGroupMember(db: Db, groupId: string, convenorPubkey: stri
     if (target.status === 'active') {
         return target;
     }
+    // A suspended member joins no group (joinGroup), and a convenor's approval would be the same door.
+    if (isSuspendedAccount(db, targetPubkey)) throw new Error(GROUP_ADMIT_PAUSED);
 
     const now = membershipWriteAt(db, groupId, targetPubkey);
     // The membership begins now, not when the request was made (joined_at, role_since: db/schema.sql).
@@ -828,6 +886,7 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can invite members to this group');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
     if (!isGroupRole(role)) {
         throw new Error(`Invalid group role: ${role}`);
     }
@@ -843,6 +902,8 @@ export function inviteGroupMember(db: Db, groupId: string, convenorPubkey: strin
             return existing;
         }
         if (existing.status === 'pending_approval') {
+            // An approval, as approveGroupMember's: a suspended member joins no group.
+            if (isSuspendedAccount(db, targetPubkey)) throw new Error(GROUP_ADMIT_PAUSED);
             // Direct approve: status and role move in one UPDATE, so with role = 'convenor' this single write
             // makes an active convenor out of a pending request. Pin the lead before it, for the same reason
             // setMemberRole does — otherwise the convenor approving an older request loses the lead to them.
@@ -876,6 +937,7 @@ export function deleteGroupPost(db: Db, groupId: string, convenorPubkey: string,
     if (!isGroupConvenor(db, groupId, convenorPubkey)) {
         throw new Error('UNAUTHORIZED: Only a group convenor can moderate posts in this group');
     }
+    assertConvenorPowersActive(db, convenorPubkey);
 
     const post = db.prepare("SELECT id, target_group_id, audience_scope, active FROM posts WHERE id = ?").get(postId) as any;
     if (!post) return false;

@@ -23,6 +23,8 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
+import { ledgerItemNote } from '../../utils/ledger-note';
 
 // ── Trust model constants (from @beanpool/core) ──
 // Earned trust is a SATURATING CURVE over qualified, diversity-capped trade VALUE (V):
@@ -81,6 +83,8 @@ export default function LedgerScreen() {
         return () => { showSub.remove(); hideSub.remove(); };
     }, []);
     const [txns, setTxns] = useState<any[]>([]);
+    // This phone's block list for this account: Beans from someone on it show the neutral line, not their note.
+    const [blocked, setBlocked] = useState<ReadonlySet<string>>(new Set());
     const [balanceState, setBalanceState] = useState<any>({
         balance: 0, floor: 0,
         tier: { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji },
@@ -285,6 +289,7 @@ export default function LedgerScreen() {
         txnIconDebit: { backgroundColor: colors.feedback.danger.bg },
         txnPeer: { fontSize: 14, fontWeight: '800', color: colors.text.heading, marginBottom: 2 },
         txnMemo: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
+        txnMemoBlocked: { fontSize: 12, color: colors.text.muted, fontStyle: 'italic', marginBottom: 2 },
         txnTime: { fontSize: 11, color: colors.text.muted },
         txnAmount: { fontSize: 16, fontWeight: '800' },
 
@@ -319,6 +324,7 @@ export default function LedgerScreen() {
         if (identity?.publicKey) {
             getBalance(identity.publicKey).then(setBalanceState).catch(console.error);
             getTransactions(identity.publicKey).then(setTxns).catch(console.error);
+            getBlockedUsers().then(list => setBlocked(new Set(list))).catch(() => {});
             getMemberProfile(identity.publicKey).then(p => setAvatarUrl(p?.avatar_url || null)).catch(console.error);
             getEscrowTotal(identity.publicKey).then(setEscrowTotal).catch(() => {});
             getPledgeHistory(identity.publicKey).then(setPledgeHistory).catch(() => {});
@@ -356,7 +362,8 @@ export default function LedgerScreen() {
             loadData(); loadMembers();
             const s1 = DeviceEventEmitter.addListener('transaction_completed', loadData);
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
-            return () => { s1.remove(); s2.remove(); };
+            const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));
+            return () => { s1.remove(); s2.remove(); s3.remove(); };
         }, [identity])
     );
 
@@ -869,6 +876,7 @@ export default function LedgerScreen() {
 
     const renderTxn = ({ item }: { item: any }) => {
         const isCredit = item.type === 'credit';
+        const note = ledgerItemNote(item, blocked);
         return (
             <View style={styles.txnRow}>
                 <View style={[styles.txnIcon, isCredit ? styles.txnIconCredit : styles.txnIconDebit]}>
@@ -876,7 +884,7 @@ export default function LedgerScreen() {
                 </View>
                 <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.txnPeer}>{item.peer}</Text>
-                    {renderMemoText(item.memo)}
+                    {note.fromBlocked ? <Text style={styles.txnMemoBlocked}>{note.text}</Text> : renderMemoText(note.text)}
                     <Text style={styles.txnTime}>{item.timestamp}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -975,6 +983,8 @@ export default function LedgerScreen() {
                     onScroll={pageTitle.onScroll}
                     scrollEventThrottle={16}
                     data={txns}
+                    // A change of the block list redraws the lines, which read it (renderTxn).
+                    extraData={blocked}
                     keyExtractor={item => item.id}
                     renderItem={renderTxn}
                     ListHeaderComponent={renderActivityHeader()}

@@ -293,6 +293,7 @@ export const SUITES = [
     'test-member-blocks',
     'test-member-blocks-standby',
     'test-blocks-on-messaging',
+    'test-blocks-on-beans',
     'test-polls',
     'test-poll-voters-members-only',
     'test-suspended-and-visitor-reads',

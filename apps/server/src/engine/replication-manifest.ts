@@ -443,6 +443,9 @@ export const TABLES: Record<string, TableEntry> = {
     withheld_lines: { kind: 'local', reason: 'lines kept for their sender alone, because the person they were sent to had blocked them: never in a copy, so no standby can deliver one (engine/withheld-lines.ts)' },
     withheld_conversations: { kind: 'local', reason: 'conversations kept for their opener alone, because the other had blocked them: never in a copy (engine/withheld-lines.ts)' },
     withheld_overlays: { kind: 'local', reason: "a blocked member's reaction or edit on a line, kept for them alone and laid over their own reads: never in a copy (engine/withheld-lines.ts)" },
+    // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
+    // copied, stores none (engine/withheld-notes.ts).
+    withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },
 };
 
 /**

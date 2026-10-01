@@ -5,7 +5,7 @@ import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } f
 export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
+import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
 import { requestSync } from '../services/pillar-sync';
@@ -30,8 +30,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PatternBackground from '../components/PatternBackground';
 import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { getAppLockEnabled } from '../utils/LocalAuth';
+import { appLockLocks } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
+import { setAppCovered, setAppLocked, setAppUnlockAction, useAppLockScreen } from '../utils/app-lock-screen';
+import { AppLockSurface, installLockCovers } from '../components/AppLock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
@@ -96,6 +98,10 @@ Object.defineProperty(RN, 'TextInput', {
     }
 });
 
+// App Lock's lock screen inside every pop-up (Modal), each of which is its own window above this layout, and every
+// Alert's buttons waiting for the unlock: components/AppLock.tsx. Same mechanism as Text above.
+installLockCovers(RN);
+
 // The wallpaper is drawn INSIDE every pushed screen, not only behind the navigator.
 //
 // It started out behind the navigator alone, with each screen left transparent so it could
@@ -112,13 +118,19 @@ Object.defineProperty(RN, 'TextInput', {
 // Keep the branch keyed on something FIXED per route. The two arms return different trees, so a
 // route that changed its presentation while mounted (a setOptions call on a later render) would
 // remount and lose its state. Nothing does that today.
+//
+// Every screen draws App Lock's lock screen inside itself too (components/AppLock.tsx): on an
+// iPhone a sheet, and any screen pushed from one, is presented above this layout's own, so the
+// lock screen drawn around the navigator below never covered it.
 function patternScreenLayout({ options, children }: { options: { presentation?: string }; children: ReactNode }): ReactElement {
-    if (options.presentation && options.presentation !== 'card') return children as ReactElement;
+    if (options.presentation && options.presentation !== 'card') return <AppLockSurface>{children}</AppLockSurface>;
     return (
-        <View style={{ flex: 1 }}>
-            <PatternBackground />
-            {children}
-        </View>
+        <AppLockSurface>
+            <View style={{ flex: 1 }}>
+                <PatternBackground />
+                {children}
+            </View>
+        </AppLockSurface>
     );
 }
 
@@ -133,7 +145,9 @@ function RootLayoutNav() {
     const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
 
-    const [isLocked, setIsLocked] = useState(false);
+    // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
+    // draws them inside itself, not only this layout.
+    const lockScreen = useAppLockScreen();
     const [appLockChecked, setAppLockChecked] = useState(false);
 
     // null = not yet loaded; true = a join wizard was interrupted after the
@@ -154,19 +168,39 @@ function RootLayoutNav() {
     const triggerUnlock = async () => {
         const success = await unlockWithPhoneLock('Unlock BeanPool');
         if (success) {
-            setIsLocked(false);
+            setAppLocked(false);
         }
     };
+
+    // Unlock App, on whichever screen or pop-up the member sees the lock screen.
+    useEffect(() => {
+        setAppUnlockAction(() => { triggerUnlock(); });
+        return () => setAppUnlockAction(null);
+    }, []);
+
+    // With no account on the phone there is nothing to lock.
+    useEffect(() => {
+        if (!identity) setAppLocked(false);
+    }, [identity]);
+
+    // While the lock screen shows: the keyboard goes, so nothing typed lands in a field under it, and Android's back button
+    // moves nothing behind it. Registered as it goes up, so it is asked before the navigator's own.
+    useEffect(() => {
+        if (lockScreen !== 'lock') return;
+        Keyboard.dismiss();
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+        return () => sub.remove();
+    }, [lockScreen]);
 
     // Check on startup
     useEffect(() => {
         async function checkAppLock() {
-            const enabled = await getAppLockEnabled();
+            const enabled = await appLockLocks();
             if (enabled && identity) {
-                setIsLocked(true);
+                setAppLocked(true);
                 const success = await unlockWithPhoneLock('Unlock BeanPool');
                 if (success) {
-                    setIsLocked(false);
+                    setAppLocked(false);
                 }
             }
             setAppLockChecked(true);
@@ -175,9 +209,10 @@ function RootLayoutNav() {
     }, [identity]);
 
     // Check when returning to foreground (15 seconds away). Time the phone's own lock prompt was open is not time away, so
-    // a slow prompt is never followed by a second one: utils/return-lock.ts.
+    // a slow prompt is never followed by a second one: utils/return-lock.ts. It covers the app as it leaves, too, so the
+    // app switcher shows nothing of the member's.
     useEffect(() => {
-        if (!returnLock.current) returnLock.current = createReturnLock(setIsLocked);
+        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);
         const onChange = returnLock.current;
         const sub = AppState.addEventListener('change', (next) => {
             onChange(next, !!identity);
@@ -661,6 +696,9 @@ function RootLayoutNav() {
                 UNDERNEATH the contentStyle below -- so with that opaque this value no longer
                 decides anything. Left transparent so nothing here can reintroduce a colour of
                 its own behind a screen. */}
+            {/* App Lock's lock screen over the navigator; each screen and pop-up draws its own as well
+                (components/AppLock.tsx). */}
+            <AppLockSurface>
             <NavThemeProvider value={navTheme}>
             <Stack
                 // Opaque, so a screen can no longer be seen through during a push. In practice
@@ -695,69 +733,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="pulse" />
             </Stack>
             </NavThemeProvider>
-
-            {isLocked && identity && (
-                <View style={[StyleSheet.absoluteFill, {
-                    backgroundColor: isDark ? '#0a0a0a' : '#FAF9F6',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 24,
-                    zIndex: 99999
-                }]}>
-                    <StatusBar style={isDark ? 'light' : 'dark'} />
-                    <View style={{
-                        backgroundColor: isDark ? '#141414' : '#FFFFFF',
-                        padding: 32,
-                        borderRadius: 24,
-                        alignItems: 'center',
-                        borderWidth: 1,
-                        borderColor: isDark ? '#2e2e2e' : '#EBEBE6',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 12,
-                        elevation: 5,
-                        width: '100%',
-                        maxWidth: 320
-                    }}>
-                        <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-                        <Text style={{
-                            fontSize: 22,
-                            fontWeight: 'bold',
-                            color: isDark ? '#ffffff' : '#1C1D1A',
-                            marginBottom: 8,
-                            textAlign: 'center'
-                        }}>
-                            BeanPool Secure
-                        </Text>
-                        <Text style={{
-                            fontSize: 14,
-                            color: isDark ? '#a0a0a0' : '#646660',
-                            marginBottom: 32,
-                            textAlign: 'center',
-                            lineHeight: 20
-                        }}>
-                            Unlock with your device security to access your wallet.
-                        </Text>
-                        <Pressable
-                            style={{
-                                backgroundColor: '#10b981',
-                                paddingVertical: 14,
-                                paddingHorizontal: 28,
-                                borderRadius: 12,
-                                width: '100%',
-                                alignItems: 'center'
-                            }}
-                            onPress={triggerUnlock}
-                            accessibilityRole="button"
-                        >
-                            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
-                                Unlock App
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
+            </AppLockSurface>
         </View>
     );
 }

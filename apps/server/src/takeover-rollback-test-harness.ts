@@ -86,6 +86,10 @@ export async function rollbackChild(): Promise<void> {
             const { requestResync } = await import('./services/backup-puller.js');
             return requestResync();
         },
+        'backup-status': async () => {
+            const { getBackupStatus } = await import('./services/backup-puller.js');
+            return getBackupStatus();
+        },
         state: async () => standbyState(),
         inspect: (a) => inspectNode(a),
     });

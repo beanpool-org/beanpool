@@ -187,7 +187,7 @@ async function main(): Promise<void> {
         await main.kill('SIGKILL');
 
         let a = track(await spawnNode(SCRIPT, dir('a'), envA));
-        let b = track(await spawnNode(SCRIPT, dir('b'), envB));
+        const b = track(await spawnNode(SCRIPT, dir('b'), envB));
         const bOpened = await openKeys(b, setup.code, PW_B);
         assert(bOpened.status === 200 && bOpened.body.preview?.sessionId, `B opens the keys while the web address leads nowhere (${bOpened.status})`);
 

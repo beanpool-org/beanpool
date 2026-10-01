@@ -19,6 +19,9 @@
  *     taken over again, it is the main server with the main server's PeerId.
  *  C. A crash while rolling back (SIGKILL, with the journal 'rolling-back'; and once the files are back but the settings
  *     and database not yet): the next start finishes the roll-back before anything else, and it is the standby it was.
+ *  D. A roll-back that can't finish (local-config.json refuses writes, no test hook for that): the server still starts,
+ *     as the standby; it copies nothing from the main server while the journal says 'rolling-back', and its status and
+ *     a force-resync say why. With the file writable again, the next start finishes the roll-back.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-failure-rolls-back.ts
@@ -163,6 +166,43 @@ async function crashWhileRollingBack(world: World, root: string, step: string, p
     }
 }
 
+async function rollBackRefused(world: World, root: string): Promise<void> {
+    const label = 'a roll-back that cannot finish';
+    const dir = standbyCopy(world, root, 'd-refused');
+    const configFile = path.join(dir, 'local-config.json');
+    let node = await spawnNode(SCRIPT, dir, { ...STANDBY_ENV, BEANPOOL_TEST_TAKEOVER_FAIL_AT: 'public-address', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'rolling-back' });
+    try {
+        await openAndConfirm(node, world.code);
+        await node.exited;
+        fs.chmodSync(configFile, 0o444);
+        node = await spawnNode(SCRIPT, dir, STANDBY_ENV);
+        assert(node.ready.role === 'backup', `[${label}] the server still starts, as the standby (${node.ready.role})`);
+        assert(/Rolling back did not finish: local-config\.json could not be written/.test(node.output()), `[${label}] its log says the roll-back did not finish, and why`);
+        const s = await node.send('state');
+        assert(s.journal?.state === 'rolling-back' && s.progress.state === 'rolling-back', `[${label}] the journal and Settings say it is still rolling back (${s.journal?.state})`);
+        const resync = await node.send('resync');
+        assert(!resync.ok && /A take-over is under way on this server, or one that stopped is not yet rolled back/.test(resync.error ?? ''),
+            `[${label}] a force-resync copies nothing, and says why (${resync.error})`);
+        assert(node.swaps() === 0, `[${label}] no whole copy, so no restart to swap one in`);
+        assert(/not yet rolled back/.test((await node.send('backup-status')).heldByTakeover ?? ''), `[${label}] the copy status says why too`);
+        await node.kill();
+
+        fs.chmodSync(configFile, 0o644);
+        node = await spawnNode(SCRIPT, dir, STANDBY_ENV);
+        assert(/Finishing the roll-back of a take-over that stopped/.test(node.output()) && node.ready.role === 'backup',
+            `[${label}] writable again, the next start finishes the roll-back`);
+        assertRolledBack(world, await node.send('state'), label, 'public-address');
+        const copies = await node.send('resync');
+        assert(copies.ok && copies.restarting === true, `[${label}] and it copies again (${JSON.stringify(copies)})`);
+    } catch (e: any) {
+        console.error(`[${label}]\n${node.output().slice(-6000)}`);
+        throw e;
+    } finally {
+        if (fs.existsSync(configFile)) fs.chmodSync(configFile, 0o644);
+        await node.kill();
+    }
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -185,6 +225,9 @@ async function main(): Promise<void> {
             crashWhileRollingBack(world, root, 'public-address', 'rolling-back'),
             crashWhileRollingBack(world, root, 'pull-config', 'rollback-files'),
         ]);
+
+        console.log("\n— D. a roll-back local-config.json won't let finish —");
+        await rollBackRefused(world, root);
     } finally {
         await world.main.kill();
     }

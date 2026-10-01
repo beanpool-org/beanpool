@@ -1886,13 +1886,18 @@ export function putPullCursorBack(cursor: string | null): void {
  * whose roll-back did not finish: the next start finishes it, and copying goes on. Said in the log once a process.
  */
 let heldLogged = false;
+function takeoverHold(): string | null {
+    return takeoverUnderWay()
+        ? 'A take-over is under way on this server, or one that stopped is not yet rolled back: it copies nothing from the '
+            + 'main server until that ends (see Take over as the main server; a restart finishes a roll-back).'
+        : null;
+}
 function heldByTakeover(): string | null {
-    if (!takeoverUnderWay()) {
+    const why = takeoverHold();
+    if (!why) {
         heldLogged = false;
         return null;
     }
-    const why = 'A take-over is under way on this server, or one that stopped is not yet rolled back: it copies nothing from the '
-        + 'main server until that ends (see Take over as the main server; a restart finishes a roll-back).';
     if (!heldLogged) {
         heldLogged = true;
         logger.warn('P2P', `[Backup] ${why}`);
@@ -1924,6 +1929,8 @@ export function getBackupStatus(): {
     lastSuccessAt: number | null; consecutiveFailures: number; running: boolean; consistency: ReplicaConsistency | null; cursor: string | null;
     lastFullReconcileAt: number; reconcileDisabledForSize: boolean; pullSeconds: number; reconcileMinutes: number; lastPullMode: PullMode | null;
     wholeRetryAt: number | null; resyncRetryAt: number | null; lastWholePages: number; swapReady: boolean;
+    /** Why no copy is made now: a take-over journal under way here (heldByTakeover); null when copies go on. */
+    heldByTakeover: string | null;
 } {
     restoreCadence();
     const now = Date.now();
@@ -1931,6 +1938,7 @@ export function getBackupStatus(): {
         // How many pages the last whole copy took, and a whole copy made ready to swap in at the restart under way.
         lastWholePages,
         swapReady,
+        heldByTakeover: getNodeRole() === 'backup' ? takeoverHold() : null,
         lastSuccessAt,
         consecutiveFailures,
         lastPullMode,

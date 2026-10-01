@@ -23,6 +23,13 @@
  *
  * Nothing here is load-bearing: an unknown version means no banner, which is what
  * a phone that could not reach the store had anyway.
+ *
+ * The floors (getAppFloors) are what can stop an app: from the build that has it, an app
+ * below its platform's floor shows a full-screen "Update required" at a safe moment
+ * (apps/native/utils/force-update.ts). So every rule here fails towards NOT stopping
+ * anyone: a floor is enforced only once that platform's store has a build that meets it
+ * (an unknown store version enforces nothing), a grace date that is not a date turns the
+ * block off, and nothing on the server ever refuses a request for the app's version.
  */
 
 import { logger } from './logger.js';
@@ -43,6 +50,120 @@ const DEFAULT_MIN_APP_VERSION = '1.0.75';
 
 export function getMinAppVersion(): string {
     return normaliseVersion(process.env.MIN_APP_VERSION) || DEFAULT_MIN_APP_VERSION;
+}
+
+/** The phone platforms that have a store, a floor and a block. The web app has none of the three: see getAppFloors. */
+export const APP_PLATFORMS = ['android', 'ios'] as const;
+export type AppPlatform = typeof APP_PLATFORMS[number];
+
+const PLATFORM_ENV: Record<AppPlatform, string> = { android: 'ANDROID', ios: 'IOS' };
+
+/**
+ * One platform's floor as the operator set it: MIN_APP_VERSION_IOS / MIN_APP_VERSION_ANDROID, else MIN_APP_VERSION, else
+ * the default. A platform value that is not a version is ignored (the generic floor stands), never read as a higher one.
+ */
+export function getPlatformFloor(platform: AppPlatform): string {
+    return normaliseVersion(process.env[`MIN_APP_VERSION_${PLATFORM_ENV[platform]}`]) || getMinAppVersion();
+}
+
+/**
+ * When a floor starts to stop apps below it (the grace window): MIN_APP_VERSION_FROM_IOS / _ANDROID, else
+ * MIN_APP_VERSION_FROM, as a date or a date and time ("2026-10-15", "2026-10-15T09:00:00+10:00"; a bare date is
+ * midnight UTC). Before it the app shows its banner only; from it, the full-screen "Update required" at its next safe
+ * moment (apps/native/utils/force-update.ts). Unset: the block applies already. Set but not a date: `invalid`, and the
+ * block never applies — an operator's typo must not lock anyone out.
+ */
+export function getFloorFrom(platform?: AppPlatform): { iso: string | null; invalid: boolean } {
+    const own = platform ? process.env[`MIN_APP_VERSION_FROM_${PLATFORM_ENV[platform]}`] : undefined;
+    const raw = (own && own.trim()) ? own : process.env.MIN_APP_VERSION_FROM;
+    if (raw === undefined || raw.trim() === '') return { iso: null, invalid: false };
+    const text = raw.trim();
+    // A date first: Date.parse also takes "1", "2026" and "March 7", which are not what anyone means here.
+    if (!/^\d{4}-\d{2}-\d{2}([T ].+)?$/.test(text)) return { iso: null, invalid: true };
+    const ms = Date.parse(text);
+    if (!Number.isFinite(ms)) return { iso: null, invalid: true };
+    return { iso: new Date(ms).toISOString(), invalid: false };
+}
+
+/** The grace date every platform falls back to (MIN_APP_VERSION_FROM), served as `minAppVersionFrom`; null when unset or not a date. */
+export function getMinAppVersionFrom(): string | null {
+    return getFloorFrom().iso;
+}
+
+/** Everything this node knows about one platform's floor: the manager's view (GET /api/local/admin/app-versions). */
+export interface PlatformFloorDetail {
+    /** The floor the operator set for this platform (getPlatformFloor). */
+    floor: string;
+    /** The newest build this node has seen in the platform's store, or null if it has never read one. */
+    store: string | null;
+    /**
+     * The floor an app is held to: `floor` once the store has it. Null while the store is behind it (`held`) or unknown:
+     * a node never holds anyone to a build they cannot download (iOS review lag, an operator ahead of a release).
+     */
+    enforced: string | null;
+    /** True when the store has a build but it is below `floor`: the floor waits for it, and the log says so. */
+    held: boolean;
+    /** From when an app below `enforced` is stopped at its next safe moment (ISO), or null for "already". */
+    from: string | null;
+    /** The grace date was set but is not a date: the block never applies until it is fixed. */
+    fromInvalid: boolean;
+    /** On this node's clock: an app below `enforced` is stopped now, at its next safe moment. */
+    blocking: boolean;
+}
+
+export function getPlatformFloorDetail(platform: AppPlatform, now: Date = new Date()): PlatformFloorDetail {
+    const floor = getPlatformFloor(platform);
+    const store = normaliseVersion(cached[platform]);
+    const reachable = !!store && !isOlder(store, floor);
+    const held = !!store && !reachable;
+    const { iso: from, invalid: fromInvalid } = getFloorFrom(platform);
+    const enforced = reachable ? floor : null;
+    const blocking = !!enforced && !fromInvalid && (from === null || now.getTime() >= Date.parse(from));
+    noteHeldFloor(platform, floor, store, held, fromInvalid);
+    return { floor, store, enforced, held, from, fromInvalid, blocking };
+}
+
+/**
+ * What the app reads for one platform, in /api/community/health. Kept short: the payload goes to every phone every 30 s.
+ * The grace date itself is not repeated per platform (`blocking` already applies it, on this node's clock); the generic
+ * one is health's `minAppVersionFrom`, and the manager's route has each platform's.
+ */
+export interface PlatformFloor {
+    /** PlatformFloorDetail.enforced: the floor, once the store has it; null while it doesn't, or isn't known. */
+    min: string | null;
+    /** PlatformFloorDetail.blocking: an app below `min` stops at its next safe moment. */
+    blocking: boolean;
+}
+
+/**
+ * The floors the app enforces, per platform (health's `appFloors`). The web app is not here: it is this server's own
+ * copy, loaded fresh with every page load, so no store, no floor and no block apply to it (apps/pwa compares itself
+ * with the server's `version` instead and offers a reload).
+ */
+export function getAppFloors(now: Date = new Date()): Record<AppPlatform, PlatformFloor> {
+    const pick = (p: AppPlatform): PlatformFloor => {
+        const d = getPlatformFloorDetail(p, now);
+        return { min: d.enforced, blocking: d.blocking };
+    };
+    return { android: pick('android'), ios: pick('ios') };
+}
+
+/**
+ * The log line for a floor the store has not reached yet, and for a grace date that is not a date: once each time
+ * what it says changes, not on every health read. Reset with the cache in tests.
+ */
+const lastFloorNote: Partial<Record<AppPlatform, string>> = {};
+function noteHeldFloor(platform: AppPlatform, floor: string, store: string | null, held: boolean, fromInvalid: boolean): void {
+    const key = `${floor}|${store}|${held}|${fromInvalid}`;
+    if (lastFloorNote[platform] === key) return;
+    lastFloorNote[platform] = key;
+    const env = `MIN_APP_VERSION_${PLATFORM_ENV[platform]}`;
+    if (held) {
+        logger.warn('SYS', `[AppVersions] ${platform} floor ${floor} is held: the store has ${store}, so no ${platform} app is stopped until it has ${floor} (${env} / MIN_APP_VERSION)`);
+    }
+    if (fromInvalid) {
+        logger.warn('SYS', `[AppVersions] ${platform}: MIN_APP_VERSION_FROM_${PLATFORM_ENV[platform]} / MIN_APP_VERSION_FROM is not a date (use 2026-10-15 or 2026-10-15T09:00:00+10:00) — the ${platform} update block is off until it is`);
+    }
 }
 
 export interface AppStoreVersions {
@@ -119,6 +240,7 @@ export function applyCheckResult(
 /** Test seam — resets the module cache between assertions. */
 export function __resetAppStoreVersionsForTest(): void {
     cached = { android: null, ios: null, checkedAt: null };
+    for (const p of APP_PLATFORMS) delete lastFloorNote[p];
 }
 
 /** Numeric segment-wise compare, for the operator warning below. */
@@ -177,15 +299,11 @@ export async function checkAppStoreVersions(): Promise<AppStoreVersions> {
     } else {
         logger.info('SYS', `[AppVersions] android=${android} ios=${ios}`);
     }
-    // An operator who sets the floor above what the stores actually serve gets a banner
-    // their community cannot act on. The app degrades that to a dismissible notice rather
-    // than trapping anyone, but the operator still wants to hear about it — this is the
-    // only place that knows both numbers.
-    const floor = getMinAppVersion();
-    const unreachable = [next.android, next.ios].filter((v): v is string => !!v).every(v => isOlder(v, floor));
-    if (unreachable && (next.android || next.ios)) {
-        logger.warn('SYS', `[AppVersions] MIN_APP_VERSION=${floor} is above every published build (android=${next.android ?? '?'} ios=${next.ios ?? '?'}) — nobody can reach it`);
-    }
+    // An operator who sets a floor above what a store actually serves gets a floor their community cannot act on. The
+    // node holds it (getPlatformFloorDetail: never enforced above the store's build) and the app degrades the banner to a
+    // dismissible notice, so nobody is trapped, but the operator still wants to hear about it: reading each platform's
+    // floor logs a held one, once each time it changes.
+    for (const p of APP_PLATFORMS) getPlatformFloorDetail(p);
     return next;
 }
 

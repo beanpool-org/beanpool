@@ -21,7 +21,7 @@ import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
-import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
+import { getAppStoreVersions, getMinAppVersion, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
 import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
@@ -6304,7 +6304,7 @@ export function getPostCount(filter?: {
 
 export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
-export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
+export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
 // Reads the host watchdog's status file (dropped into the data dir by
 // ops/watchdog). Absent file = no watchdog on this host (not an error). A file
@@ -6391,6 +6391,11 @@ function healthBody(counts: HealthCounts, reportCount: number, watchdog: Watchdo
         // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
         // downloaded onto a phone on a metered off-grid connection to learn one number.
         minAppVersion: getMinAppVersion(),
+        // From the build that has the full-screen block (apps/native/utils/force-update.ts): each phone platform's floor
+        // as enforced (only once that store has the build), and whether it stops an app yet (the grace date,
+        // `minAppVersionFrom`, on this node's clock). Builds before it read `minAppVersion` above, as a banner.
+        minAppVersionFrom: getMinAppVersionFrom(),
+        appFloors: getAppFloors(),
         appVersions: getAppStoreVersions(),
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
         tree: { totalMembers: counts.totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },

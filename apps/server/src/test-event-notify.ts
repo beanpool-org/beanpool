@@ -19,6 +19,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import {
     initStateEngine, createTreasury, adminAssignTreasuryOperator,
@@ -191,10 +192,8 @@ async function main(): Promise<void> {
         return realFetch(url, init);
     };
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-            .run(goer, 'ExponentPushToken[goer]');
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-            .run(maybe, 'ExponentPushToken[maybe]');
+        putPushTokenRow(goer, 'ExponentPushToken[goer]', 'android');
+        putPushTokenRow(maybe, 'ExponentPushToken[maybe]', 'android');
 
         const wired = newEvent(host);
         rsvpEvent(capture, wired.id, goer, 'going');

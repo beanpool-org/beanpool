@@ -82,6 +82,7 @@ async function main() {
     const { createAdminRoutes } = await import('./routes/admin.js');
     const { createPlainBackup } = await import('./services/sealed-backup.js');
     const { openCopy, copyPage } = await import('./engine/copy-pages.js');
+    const { putPushTokenRow } = await import('./services/push-token-seal.js');
 
     se.initStateEngine();
     // The node's own key, for the standby's copies in section 5: they are signed.
@@ -94,8 +95,7 @@ async function main() {
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(pk, callsign);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
         for (let i = 0; i < tokens; i++) {
-            db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-                .run(pk, `ExponentPushToken[${callsign}-${i}]`);
+            putPushTokenRow(pk, `ExponentPushToken[${callsign}-${i}]`, 'android');
         }
         return pk;
     };

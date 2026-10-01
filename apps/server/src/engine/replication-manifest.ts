@@ -399,12 +399,13 @@ export const TABLES: Record<string, TableEntry> = {
     // rows are the main server's verbatim: a key registers and removes only its own (#1184), and `registered_at` is the
     // phone's stamp a leave statement is judged by (#1258). Tokens go to a standby only: this payload is served to a
     // standby's replication token, or the community's own admin password, and nothing else (routes/backup.ts), with the
-    // messages and recovery copies a standby already holds. Only members' (MEMBERS_OWN).
-    push_tokens: plain('public_key token platform created_at registered_at updated_at', { rows: MEMBERS_OWN }),
+    // messages and recovery copies a standby already holds. Only members' (MEMBERS_OWN). Locked (services/push-token-seal.ts):
+    // a token's id and its box, never the token, which a standby opens only once a take-over brings the key.
+    push_tokens: plain('public_key token_id token_box platform created_at registered_at updated_at', { rows: MEMBERS_OWN }),
     // A day's leave statements applied, so a registration the phone sent before one, delivered late to a server that took
     // over, is refused there too (state-engine.ts registerPushToken). Its day-old rows go without tombstones, on each
     // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).
-    push_token_leaves: plain('public_key token left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
+    push_token_leaves: plain('public_key token_id left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
     chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
     // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
     thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),

@@ -34,10 +34,12 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { KEY_PUSH_RULES, STRANGER_LEAVE_RULES, applyPushLeave, initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
+import { KEY_PUSH_RULES, registerPushToken, STRANGER_LEAVE_RULES, applyPushLeave, initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
 import { travellingRows } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
+import { pushTokenId } from './services/push-token-seal.js';
+import { installCarriedRecoverySealKey } from './services/recovery-seal-key.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -116,12 +118,13 @@ function present(s: Statement, overrides: Record<string, unknown> = {}, presente
     return send('POST', `/api/push-tokens/leave/${pathKey}`, body, presenter, from ? { 'CF-Connecting-IP': from } : {});
 }
 
-interface Row { public_key: string; token: string; registered_at: number | null }
+// A row names its phone by the token's id; the token itself is only in its box (services/push-token-seal.ts).
+interface Row { public_key: string; token_id: string; registered_at: number | null }
 function rows(): Row[] {
-    return db.prepare('SELECT public_key, token, registered_at FROM push_tokens ORDER BY public_key, token').all() as Row[];
+    return db.prepare('SELECT public_key, token_id, registered_at FROM push_tokens ORDER BY public_key, token_id').all() as Row[];
 }
-const has = (who: Identity, token: string) => rows().some((r) => r.public_key === who.pub && r.token === token);
-const stampOf = (who: Identity, token: string) => rows().find((r) => r.public_key === who.pub && r.token === token)?.registered_at;
+const has = (who: Identity, token: string) => rows().some((r) => r.public_key === who.pub && r.token_id === pushTokenId(token));
+const stampOf = (who: Identity, token: string) => rows().find((r) => r.public_key === who.pub && r.token_id === pushTokenId(token))?.registered_at;
 const snapshot = () => JSON.stringify(rows());
 const show = (a: Answer) => `${a.status} ${JSON.stringify(a.body)}`;
 const confirmed = (a: Answer) => a.status === 200 && a.body?.left === true;
@@ -226,7 +229,7 @@ async function main(): Promise<void> {
     assert(kept === 1, `the leaves recorded more than a day ago are cleared as the next one is applied (${kept} left)`);
     // That clearing runs on every leave applied, and keys with no row here can add leaves: it must read an index on
     // applied_at, never scan the table (#1258 review 4116631125: a full scan per leave let one address stall the node).
-    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN ${PUSH_LEAVE_PRUNE_SQL}`).all('-1 day', kim.pub, PHONE) as Array<{ detail: string }>).map((r) => r.detail).join('; ');
+    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN ${PUSH_LEAVE_PRUNE_SQL}`).all('-1 day', kim.pub, pushTokenId(PHONE)) as Array<{ detail: string }>).map((r) => r.detail).join('; ');
     assert(/SEARCH push_token_leaves USING (COVERING )?INDEX idx_push_token_leaves_applied_at/.test(prunePlan) && !/SCAN push_token_leaves/.test(prunePlan),
         `clearing old leaves searches idx_push_token_leaves_applied_at, never scans the table (${prunePlan})`);
 
@@ -309,6 +312,19 @@ async function main(): Promise<void> {
     const rule = travellingRows('push_token_leaves');
     const outside = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE NOT (${rule})`).get() as { n: number }).n;
     assert(outside === nodeDay, `the ${nodeDay} leaves of keys with no row stay on this server: none travel to a standby (${outside})`);
+
+    // ── A key replaced after a leave (a take-over or restore brings the community's key) ────────────
+    console.log('\n── A leave statement applied before a key replacement still refuses a late registration');
+    const dee = member('dee');
+    const DEE_PHONE = 'ExponentPushToken[dees-phone]';
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 100) === 'registered', 'Dee registers her phone, stamped 100');
+    assert(typeof applyPushLeave(dee.pub, DEE_PHONE, 200) === 'number', 'her leave statement (stamp 200) is applied');
+    db.prepare(`UPDATE push_token_leaves SET applied_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 minutes') WHERE public_key = ?`).run(dee.pub);
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 150) === 'left', 'control: a registration stamped 150 arrives late and is refused');
+    const replaced = installCarriedRecoverySealKey(crypto.randomBytes(32).toString('base64'));
+    assert(replaced.outcome === 'replaced', `the key is replaced by a carried one (${replaced.outcome})`);
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 150) === 'left', 'after the replacement the late registration is still refused');
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 300) === 'registered', 'a registration stamped after the leave is accepted');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

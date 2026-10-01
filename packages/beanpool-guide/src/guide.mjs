@@ -25,6 +25,10 @@ const VIDEO_RE = /^[A-Za-z0-9_-]{6,20}$/;
 /** The section that holds the four concept guides; every other section is the how-to manual. */
 export const ABOUT_SECTION = 'about';
 
+/** A page's title and summary at most, as the apps' validateGuide takes them. */
+const MAX_TITLE = 120;
+const MAX_SUMMARY = 300;
+
 function fail(file, line, message) {
     throw new Error(`${file}${line ? `:${line}` : ''}: ${message}`);
 }
@@ -58,6 +62,11 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
     if (!SLUG_RE.test(meta.slug)) fail(file, null, `slug "${meta.slug}" must be lowercase letters, digits and dashes`);
     checkInline(file, null, meta.title);
     checkInline(file, null, meta.summary);
+    // The limits the apps check every page against (packages/beanpool-core member-guide.ts): one page over them makes
+    // the whole guide or manual invalid there, so the build refuses the page instead.
+    for (const [key, max] of [['title', MAX_TITLE], ['summary', MAX_SUMMARY]]) {
+        if (meta[key].length > max) fail(file, null, `${key} is ${meta[key].length} characters; the apps take ${max} at most`);
+    }
     const related = meta.related.split(',').map(r => r.trim()).filter(Boolean);
     if (related.length === 0 || related.length > 8) fail(file, null, 'related lists 1 to 8 other pages');
     for (const r of related) {

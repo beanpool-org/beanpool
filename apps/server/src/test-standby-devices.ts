@@ -81,10 +81,10 @@ const DAY = 86400_000;
 const MIN = 60_000;
 /**
  * The importer format a copy records now (engine/sync.ts REPLICA_FORMAT: 6 was this change's, 7 a whole copy built from
- * nothing in a staging database, P2, 8 listing photos by reference, P4); the one before this change's, a standby to
- * re-seed.
+ * nothing in a staging database, P2, 8 listing photos by reference, P4, 9 members' phones locked); the one before this
+ * change's, a standby to re-seed.
  */
-const FORMAT = '8';
+const FORMAT = '9';
 const FORMAT_BEFORE = '5';
 /**
  * The standby's cap on the rows of any one table in a copy (engine/sync.ts MAX_IMPORT_ROWS_PER_CATEGORY, 250,000 by
@@ -504,7 +504,27 @@ function tablesDiff(m: Tables, s: Tables): string[] {
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 4).join(' | ')}`);
 const count = (t: Tables) => DEVICES.map((n) => `${n} ${t[n].length}`).join(', ');
-const has = (t: Tables, table: string, match: Record<string, unknown>) => t[table].some((r) => Object.entries(match).every(([c, v]) => r[c] === v));
+/**
+ * The id M's rows name a phone's token by (services/push-token-seal.ts): HMAC-SHA256 under the second half of
+ * HKDF-SHA256(M's data/recovery-seal.key, info 'beanpool-push-token/v1', 64 bytes). Read once M has made its key; a server
+ * that takes over with M's keys holds the same key, so names the same phone by the same id.
+ */
+let pushIdKey: Buffer | null = null;
+function readPushIdKey(dataDir: string): void {
+    const file = fs.readFileSync(path.join(dataDir, 'recovery-seal.key'));
+    pushIdKey = Buffer.from(crypto.hkdfSync('sha256', file, Buffer.alloc(0), 'beanpool-push-token/v1', 64)).subarray(32);
+}
+function tokenIdOf(token: string): string {
+    if (!pushIdKey) throw new Error("M's push id key was not read yet");
+    return crypto.createHmac('sha256', pushIdKey).update(token, 'utf8').digest('hex');
+}
+
+/** Whether `table` holds a row with these values. A `token` is looked for as its id: no row holds a token in the clear. */
+const has = (t: Tables, table: string, match: Record<string, unknown>) => {
+    const { token, ...rest } = match;
+    const want = token === undefined ? match : { ...rest, token_id: tokenIdOf(token as string) };
+    return t[table].some((r) => Object.entries(want).every(([c, v]) => r[c] === v));
+};
 
 function withDb(dir: string, fn: (db: Database.Database) => void): void {
     const db = new Database(path.join(dir, 'state.db'));
@@ -555,6 +575,7 @@ async function main(): Promise<void> {
         console.log('\n— 1. the main server: phones, mutes, read marks, a reminder, the activity list, the pricing guide —');
         const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
         nodes.push(main);
+        readPushIdKey(dir('main'));
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
         const A = (method: Method, route: string, body?: unknown) => api(m, method, route, { admin: PW_MAIN, body });
@@ -698,7 +719,7 @@ async function main(): Promise<void> {
         require_(aged.ok === true && aged.mode === 'delta', `S: a delta brings them (${aged.ok ? aged.mode : aged.error})`);
         built('Kip signs out on his first phone again (stamped 9500)', await S_(kip, '/api/push-tokens', { publicKey: kip.pk, token: token('kip-1'), leftAt: 9500 }, 'DELETE'));
         const m3b = await main.send('rows');
-        const kipLeave = m3b.tables.push_token_leaves.find((r: any) => r.public_key === kip.pk && r.token === token('kip-1'));
+        const kipLeave = m3b.tables.push_token_leaves.find((r: any) => r.public_key === kip.pk && r.token_id === tokenIdOf(token('kip-1')));
         assert(kipLeave?.left_at === 9500 && Date.parse(kipLeave.applied_at) > Date.now() - 60_000 && !has(m3b.tables, 'push_token_leaves', { public_key: bo.pk })
             && !has(m3b.tables, 'push_tokens', { public_key: kip.pk, token: token('kip-1') }),
             `M: Kip's leave is renewed (left at 9500, applied now) and his phone gone; Bo's day-old leave is cleared (${JSON.stringify(m3b.tables.push_token_leaves)})`);
@@ -873,10 +894,11 @@ async function main(): Promise<void> {
         await sleep(3);
         built('Lu registers an 11th phone', await phone(lu, luToken(10), 300));
         const mLu = await main.send('rows');
-        const luHolds = (t: Tables) => t.push_tokens.filter((r: any) => r.public_key === lu.pk).map((r: any) => r.token as string);
+        // His phones and their tombstones, by the ids his rows name them by.
+        const luHolds = (t: Tables) => t.push_tokens.filter((r: any) => r.public_key === lu.pk).map((r: any) => r.token_id as string);
         const luTombstones = (r: any) => r.tombstones.filter((t: any) => t.table_name === 'push_tokens' && t.row_key.startsWith(`${lu.pk}|`)).map((t: any) => t.row_key.slice(lu.pk.length + 1));
-        assert(luPhones.every((st) => st === 200) && luHolds(mLu.tables).length === 10 && !luHolds(mLu.tables).includes(luToken(1))
-            && luHolds(mLu.tables).includes(luToken(0)) && JSON.stringify(luTombstones(mLu)) === JSON.stringify([luToken(1)]),
+        assert(luPhones.every((st) => st === 200) && luHolds(mLu.tables).length === 10 && !luHolds(mLu.tables).includes(tokenIdOf(luToken(1)))
+            && luHolds(mLu.tables).includes(tokenIdOf(luToken(0))) && JSON.stringify(luTombstones(mLu)) === JSON.stringify([tokenIdOf(luToken(1))]),
             `M: Lu holds 10 phones; the 11th dropped his stalest (the second), with a tombstone (${JSON.stringify(luTombstones(mLu))})`);
         const dLu = await standby.send('pull', {});
         s = await standby.send('rows');

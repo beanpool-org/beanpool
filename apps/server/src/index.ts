@@ -74,9 +74,11 @@ import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { installPushTokenSealAtBoot } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
 import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
@@ -132,11 +134,19 @@ async function main() {
     // arms for the role as it now stands; a role change after re-arms it (services/snapshot-scheduler.ts). On every
     // role it removes, each hour, the snapshots past their count or age.
     initSnapshotScheduler();
+    // Step 2.62: off-box backups (services/offbox-backups.ts): the main server's LOCKED backups to the S3-compatible
+    // stores its operator set, if any — none is built in or required. Each check reads the role, so a standby sends
+    // nothing; a server with no recovery code sends nothing and says why. The first check is a couple of minutes in.
+    initOffboxBackups();
 
     // Step 2.65: the recovery seal for the role as it now stands. initStateEngine installed it for the role it read; a
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And members' push tokens, locked with a key from the same file (services/push-token-seal.ts): the server that took
+    // over opens the rows it copied with the key the take-over brought, and removes, with one line, any it can't open.
+    // Does nothing when the role did not change.
+    installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
     // And the open door's key for that role (services/open-join-key.ts). Does nothing when the role did not change.
     installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
     // And which key vault tickets the door takes, from .env (services/vault-ticket-keys.ts): one line, or none.

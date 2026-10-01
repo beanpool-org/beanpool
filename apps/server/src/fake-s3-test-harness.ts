@@ -88,9 +88,10 @@ function verify(req, body) {
     return null;
 }
 
-function takeFault(method, path) {
+function takeFault(method, path, early) {
     for (const f of faults) {
         if (f.count <= 0) continue;
+        if (!!f.early !== early) continue;
         if (f.method && f.method !== method) continue;
         if (f.prefix && !path.startsWith(f.prefix)) continue;
         f.count--;
@@ -99,19 +100,40 @@ function takeFault(method, path) {
     return null;
 }
 
-const server = http.createServer((req, res) => {
+// A request that asked "Expect: 100-continue" comes here first (Node otherwise answers 100 by itself): it gets its 100,
+// or an early fault's answer instead, before a byte of its body is sent.
+function serve(req, res, askedFirst) {
+    const u = new URL(req.url, 'http://x');
+    const early = takeFault(req.method, u.pathname, true);
+    if (early) {
+        // A store that answers before reading the body, and closes the connection.
+        log.push({ method: req.method, path: u.pathname, query: u.search, authOk: false, status: early.network ? -1 : early.status,
+            error: null, expectContinue: askedFirst });
+        if (early.network) { req.socket.destroy(); return; }
+        res.writeHead(early.status, { 'content-type': 'application/xml', connection: 'close' });
+        res.end(errorXml(early.code || 'InternalError', 'injected by the test, before the body'), () => req.socket.destroy());
+        return;
+    }
+    if (askedFirst) res.writeContinue();
     const chunks = [];
     req.on('data', c => chunks.push(c));
-    req.on('end', () => handle(req, res, Buffer.concat(chunks)));
-});
+    req.on('end', () => handle(req, res, Buffer.concat(chunks), askedFirst));
+}
+const server = http.createServer((req, res) => serve(req, res, false));
+server.on('checkContinue', (req, res) => serve(req, res, true));
 
-function handle(req, res, body) {
+function handle(req, res, body, askedFirst) {
     const u = new URL(req.url, 'http://x');
-    const entry = { method: req.method, path: u.pathname, query: u.search, authOk: false, status: 0, error: null };
+    const entry = { method: req.method, path: u.pathname, query: u.search, authOk: false, status: 0, error: null, expectContinue: !!askedFirst };
     log.push(entry);
     const answer = (status, headers, payload) => {
         entry.status = status;
         res.writeHead(status, headers || {});
+        if (fault && fault.cutAfter && req.method === 'GET' && Buffer.isBuffer(payload) && payload.length > fault.cutAfter) {
+            // The headers and part of the body, then the connection drops: a store that goes away mid-download.
+            res.write(payload.subarray(0, fault.cutAfter), () => setTimeout(() => req.socket.destroy(), 50));
+            return;
+        }
         if (fault && fault.slowBodyMs && req.method !== 'HEAD') {
             // The headers now, the body later: a bucket that answers at once and then trickles.
             res.flushHeaders();
@@ -120,7 +142,7 @@ function handle(req, res, body) {
         }
         res.end(req.method === 'HEAD' ? undefined : payload);
     };
-    const fault = takeFault(req.method, u.pathname);
+    const fault = takeFault(req.method, u.pathname, false);
     const go = () => {
         if (fault && fault.network) { entry.status = -1; req.socket.destroy(); return; }
         if (fault && fault.status) { return answer(fault.status, { 'content-type': 'application/xml' }, errorXml(fault.code || 'InternalError', 'injected by the test')); }
@@ -158,7 +180,10 @@ function handle(req, res, body) {
         }
         if (req.method === 'GET' || req.method === 'HEAD') {
             if (!o) return answer(404, { 'content-type': 'application/xml' }, errorXml('NoSuchKey', 'no such key'));
-            return answer(200, { 'content-type': o.mime, 'content-length': String(o.bytes.length), 'last-modified': new Date(o.mtimeMs).toUTCString() }, o.bytes);
+            const head = { 'content-type': o.mime, 'content-length': String(o.bytes.length), 'last-modified': new Date(o.mtimeMs).toUTCString() };
+            // A real bucket gives an object's x-amz-meta-* back with it.
+            if (o.meta) head['x-amz-meta-sha256'] = o.meta;
+            return answer(200, head, o.bytes);
         }
         if (req.method === 'DELETE') {
             objects.delete(key);
@@ -178,7 +203,7 @@ parentPort.on('message', (msg) => {
         case 'log': return reply(log.slice());
         case 'clearLog': log.length = 0; return reply(true);
         case 'setMtime': { const o = objects.get(msg.key); if (o) o.mtimeMs = msg.mtimeMs; return reply(!!o); }
-        case 'seed': objects.set(msg.key, { bytes: Buffer.from(msg.bytes), mime: msg.mime || 'application/octet-stream', mtimeMs: msg.mtimeMs || Date.now(), meta: null }); return reply(true);
+        case 'seed': objects.set(msg.key, { bytes: Buffer.from(msg.bytes), mime: msg.mime || 'application/octet-stream', mtimeMs: msg.mtimeMs || Date.now(), meta: msg.meta || null }); return reply(true);
         case 'remove': return reply(objects.delete(msg.key));
         case 'close': server.close(); server.closeAllConnections && server.closeAllConnections(); return reply(true);
     }
@@ -205,6 +230,8 @@ export interface FakeS3LogEntry {
     status: number;
     /** Why the signature was refused, when it was. */
     error: string | null;
+    /** The request asked "Expect: 100-continue": its body waited for the store's go-ahead. */
+    expectContinue: boolean;
 }
 
 export interface FakeS3Fault {
@@ -221,6 +248,10 @@ export interface FakeS3Fault {
     delayMs?: number;
     /** Send the headers at once and the body this much later. */
     slowBodyMs?: number;
+    /** Answer before reading the request's body (with `status`, or `network` for no answer), then close the connection. */
+    early?: boolean;
+    /** A GET: send the headers (the whole length) and this many bytes of the body, then drop the connection. */
+    cutAfter?: number;
     /** How many matching requests this applies to. */
     count: number;
 }
@@ -241,7 +272,8 @@ export interface FakeS3 {
     log(): Promise<FakeS3LogEntry[]>;
     clearLog(): Promise<void>;
     setMtime(key: string, mtimeMs: number): Promise<boolean>;
-    seed(key: string, bytes: Buffer, mime?: string, mtimeMs?: number): Promise<void>;
+    /** `meta`: the `x-amz-meta-sha256` the object is held with, as an uploader would have sent it. */
+    seed(key: string, bytes: Buffer, mime?: string, mtimeMs?: number, meta?: string): Promise<void>;
     /** Remove an object behind the store's back — a lost object, as far as the node can tell. */
     remove(key: string): Promise<boolean>;
     stop(): Promise<void>;
@@ -298,7 +330,7 @@ export async function startFakeS3(opts: { bucket?: string; region?: string; maxK
         log: () => ask<FakeS3LogEntry[]>('log'),
         clearLog: async () => { await ask('clearLog'); },
         setMtime: (key, mtimeMs) => ask<boolean>('setMtime', { key, mtimeMs }),
-        seed: async (key, bytes, mime, mtimeMs) => { await ask('seed', { key, bytes: new Uint8Array(bytes), mime, mtimeMs }); },
+        seed: async (key, bytes, mime, mtimeMs, meta) => { await ask('seed', { key, bytes: new Uint8Array(bytes), mime, mtimeMs, meta }); },
         remove: (key) => ask<boolean>('remove', { key }),
         stop: async () => { await ask('close'); await worker.terminate(); },
     };

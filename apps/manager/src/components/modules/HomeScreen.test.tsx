@@ -174,5 +174,26 @@ describe('HomeScreen Component', () => {
         rerender(<HomeScreen {...defaultProps} diag={{ standbyHealth: null } as any} />);
         expect(screen.queryByTestId('standby-health-banner')).toBeNull();
     });
+
+    it("shows the owners' banner while backups off the server need them, and opens the Backups tab", async () => {
+        const problems = ['Off-box backup to "Cloudflare R2" failed: HTTP 503. Last one that arrived: 2026-10-01 02:00 UTC. Next try: 2026-10-02 02:15 UTC.'];
+        const onNavigate = vi.fn();
+        const { rerender } = render(<HomeScreen {...defaultProps} onNavigate={onNavigate} diag={{ offboxBackups: { problems } } as any} />);
+        const banner = screen.getByTestId('offbox-health-banner');
+        expect(banner).toHaveTextContent('Backups off the server need attention');
+        expect(banner).toHaveTextContent(problems[0]);
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: 'Open Backups & Restore' }));
+        });
+        expect(onNavigate).toHaveBeenCalledWith('appliance', 'backups');
+
+        // Nothing to say, someone not an owner (null), or a server from before them: no banner.
+        rerender(<HomeScreen {...defaultProps} diag={{ offboxBackups: { problems: [] } } as any} />);
+        expect(screen.queryByTestId('offbox-health-banner')).toBeNull();
+        rerender(<HomeScreen {...defaultProps} diag={{ offboxBackups: null } as any} />);
+        expect(screen.queryByTestId('offbox-health-banner')).toBeNull();
+        rerender(<HomeScreen {...defaultProps} diag={{} as any} />);
+        expect(screen.queryByTestId('offbox-health-banner')).toBeNull();
+    });
 });
 

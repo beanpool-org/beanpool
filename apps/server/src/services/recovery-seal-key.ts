@@ -35,6 +35,9 @@
  * boot every row only a retired key opens is locked again with the live one ({@link rewrapRowsFromRetiredKeys}), so the
  * next take-over bundle, which carries the live key only, opens everything the database holds.
  *
+ * The same file locks members' push tokens too, under a key of their own derived from it ({@link recoverySealSubkey};
+ * services/push-token-seal.ts), so there is one file to carry.
+ *
  * The file is read on every use (32 bytes; the derivation is cached against its contents). A key that is deleted while
  * the server runs is gone at once, rather than living on in memory to lock new deposits that would not open after the
  * next restart: deposits are refused with {@link RECOVERY_SEAL_KEY_MISSING}, and nothing is stored unwrapped.
@@ -178,8 +181,8 @@ export function recoverySealKeyPath(): string {
 
 let derived: { file: Buffer; key: Uint8Array } | null = null;
 
-/** The wrap key from the file as it is now; null when there is no file. Never makes one. */
-function currentKey(): Uint8Array | null {
+/** The key file as it is now; null when there is none. Never makes one. */
+function liveKeyFile(): Buffer | null {
     let file: Buffer;
     try {
         file = fs.readFileSync(recoverySealKeyPath());
@@ -192,14 +195,50 @@ function currentKey(): Uint8Array | null {
         throw new RecoverySealKeyMissing(
             `This server holds sign-in recovery copies it cannot open: data/${RECOVERY_SEAL_KEY_FILE} is not a ${KEY_BYTES}-byte key.`);
     }
+    return file;
+}
+
+/** The wrap key from the file as it is now; null when there is no file. Never makes one. */
+function currentKey(): Uint8Array | null {
+    const file = liveKeyFile();
+    if (!file) return null;
     if (derived && derived.file.equals(file)) return derived.key;
     const key = deriveKey(file);
     derived = { file, key };
     return key;
 }
 
-function deriveKey(file: Buffer): Uint8Array {
-    return new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), HKDF_INFO, KEY_BYTES));
+function deriveKey(file: Buffer, info: string = HKDF_INFO, length: number = KEY_BYTES): Uint8Array {
+    return new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), info, length));
+}
+
+const subkeys = new Map<string, { file: Buffer; key: Uint8Array }>();
+
+/**
+ * Another lock under the same file, for something else this server keeps out of reach of a copy of its database
+ * (members' push tokens: services/push-token-seal.ts): HKDF-SHA256 of the file with that use's own `info`, never this
+ * file's `beanpool-recovery-row/v1`, so no two uses share a key. One file to carry: it travels in the take-over bundle
+ * and a sealed backup, and nowhere else. Null when there is no file; thrown ({@link RecoverySealKeyMissing}) when it
+ * can't be read or is not a key. Read on every use, as the seal's own key is; the derivation is cached against the
+ * file's contents. Never makes the file.
+ */
+export function recoverySealSubkey(info: string, length: number): Uint8Array | null {
+    if (info === HKDF_INFO) throw new Error(`${info} is the recovery seal's own key`);
+    const file = liveKeyFile();
+    if (!file) return null;
+    const id = `${info}\n${length}`;
+    const cached = subkeys.get(id);
+    if (cached && cached.file.equals(file)) return cached.key;
+    const key = deriveKey(file, info, length);
+    subkeys.set(id, { file, key });
+    return key;
+}
+
+/** {@link recoverySealSubkey} of each key a carried one replaced (recovery-seal-retired-<id>.key), in name order. */
+export function retiredRecoverySealSubkeys(info: string, length: number): Uint8Array[] {
+    if (info === HKDF_INFO) throw new Error(`${info} is the recovery seal's own key`);
+    retiredKeys();
+    return (retired?.files ?? []).map((file) => deriveKey(file, info, length));
 }
 
 function requireKey(): Uint8Array {
@@ -213,7 +252,7 @@ export function requireRecoverySealKey(): void {
     requireKey();
 }
 
-let retired: { names: string; keys: Uint8Array[] } | null = null;
+let retired: { names: string; files: Buffer[]; keys: Uint8Array[] } | null = null;
 
 /**
  * The keys a carried key replaced ({@link installCarriedRecoverySealKey}), derived, in name order. Read when the live
@@ -229,14 +268,15 @@ function retiredKeys(): Uint8Array[] {
     }
     const sig = names.join('\n');
     if (retired && retired.names === sig) return retired.keys;
-    const keys: Uint8Array[] = [];
+    const files: Buffer[] = [];
     for (const n of names) {
         try {
             const file = fs.readFileSync(path.join(dataDir(), n));
-            if (file.length === KEY_BYTES) keys.push(deriveKey(file));
+            if (file.length === KEY_BYTES) files.push(file);
         } catch { /* unreadable: not a key this server can use */ }
     }
-    retired = { names: sig, keys };
+    const keys = files.map((file) => deriveKey(file));
+    retired = { names: sig, files, keys };
     return keys;
 }
 

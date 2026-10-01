@@ -485,6 +485,18 @@ export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean
 const READS_AS_NON_MEMBER_WHILE: ReadonlySet<string> = new Set(['suspended', 'disabled']);
 
 /**
+ * Whether `pubkey`'s account is suspended: 'disabled' by an admin, a report or a community vote, or 'suspended' (the old
+ * key of a member being re-keyed). The same two statuses readsAsMember holds back. Every role the member holds is kept
+ * while it lasts; what a role lets them DO rests until it ends (a group convenor's powers: groups.ts
+ * assertConvenorPowersActive). Pass the verified signer.
+ */
+export function isSuspendedAccount(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status FROM members WHERE public_key = ?").get(pubkey) as { status: string | null } | undefined;
+    return !!row && READS_AS_NON_MEMBER_WHILE.has(row.status ?? '');
+}
+
+/**
  * THE READ TEST: whether `pubkey` gets what only members of this node may read, where anyone else gets a non-member's
  * copy or nothing: contact details shared with Community, Trade Partners or Friends (contactViewer), who voted for what
  * in a poll, the People list's distances, the activity feed, the /ws member feed, and the member's view of the listings

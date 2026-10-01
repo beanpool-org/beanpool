@@ -17,6 +17,8 @@ import {
     getMember,
     getConversation,
     isEventHost,
+    convenorHostPaused,
+    CONVENOR_POWERS_PAUSED,
     isVisitorKey,
     EVENT_READABLE_AFTER_END_MS,
     type Conversation,
@@ -416,6 +418,9 @@ export function removeEventThreadMessage(
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
     if (eventUnknownTo(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    // A convenor of the event's group whose account is suspended: their host power rests until it ends, and the
+    // refusal says so (the route answers 403 for "suspended").
+    if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) {
         throw new Error('Only the host can remove messages from this event chat');
     }

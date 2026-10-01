@@ -21,6 +21,8 @@
  *     judge a health answer and the migrations bootstrap as they should.
  *  7. v2, the one-use nonce: on the wire, end to end from a node sending it, and a captured v2 request replayed is
  *     refused (no tunnel token) while today's v1 node keeps working.
+ *  8. M3 (2026-10-02): the Worker's sweep pauses a name a page answers at (content swap); the node's own heal and rotate
+ *     verify at the Worker and bring it back on a fresh tunnel; the next sweep attests the node's real route ok.
  */
 
 import fs from 'node:fs';
@@ -462,6 +464,49 @@ async function run() {
         assert(checks.bootstrapProblems(wranglerRows([])).length === 1, 'and refuses an empty d1_migrations (what `wrangler d1 migrations list` makes)');
         assert(checks.bootstrapProblems(wranglerRows(['0002_states.sql'])).length === 1, 'or one without 0001_init.sql');
         assert(checks.bootstrapProblems('✘ [ERROR] no such table: d1_migrations').length === 1, 'or no table at all');
+
+        // ── 8. M3: a swapped name paused by the sweep, and the node's own heal and rotate (2026-10-02) ──
+        console.log('— M3: the sweep pauses a name a page answers at; the node\'s heal brings it back; its rotate moves it to a fresh tunnel');
+        world = newWorld();
+        sent.length = 0;
+        warnings.length = 0;
+        const loop = 'http://127.0.0.1:8080';
+        const m3 = await node.claimAddress('contract-m3', 'tunnel', loop);
+        assert(m3.status === 'live' && typeof m3.tunnelToken === 'string', 'the node claims its name', m3);
+        // Two other communities live (other keys, answering as themselves), so the sweep is believable.
+        const others = await Promise.all([harness.makeKey(), harness.makeKey()]);
+        others.forEach((k, i) => {
+            world.sqlite.prepare("INSERT INTO name_allocations (name, node_pubkey, hostname, mode, status, attest_fails, requested_at) VALUES (?, ?, ?, 'tunnel', 'live', 0, ?)")
+                .run(`contract-other${i}`, k.pubHex, `contract-other${i}.beanpool.org`, Math.floor(Date.now() / 1000));
+            nodesAt.set(`contract-other${i}.beanpool.org`, harness.attestsAs(k));
+        });
+        // The name answers with somebody's page: no attest at all.
+        nodesAt.set('contract-m3.beanpool.org', async () => new Response('<!doctype html><title>Parked</title>', { status: 200, headers: { 'content-type': 'text/html' } }));
+        for (let i = 0; i < 12; i++) await worker.index.attestSweep(world.env);
+        const pausedRow = world.row('contract-m3');
+        assert(pausedRow.status === 'paused' && pausedRow.pause_reason === 'content-swap' && pausedRow.node_pubkey === pubkey,
+            'after 12 sweeps of a page the Worker pauses the name for the node\'s key', pausedRow);
+        const pausedStatus = await node.addressStatus();
+        assert(pausedStatus.status === 'paused' && pausedStatus.reason === 'content-swap' && pausedStatus.tunnelToken === undefined,
+            'the node\'s status hears paused, content-swap, and no token', pausedStatus);
+        // The node answers there again (its own /api/attest): its heal verifies, and comes back on a fresh tunnel.
+        nodesAt.set('contract-m3.beanpool.org', nodeRoute);
+        const healedM3 = await node.healAddress('contract-m3', loop);
+        assert(healedM3.status === 'live' && typeof healedM3.tunnelToken === 'string' && healedM3.tunnelToken !== m3.tunnelToken,
+            'heal: the Worker verifies the node\'s signed heal, live on a fresh tunnel whose token only it gets', healedM3);
+        const beforeRotate = world.row('contract-m3').tunnel_id;
+        const rotatedM3 = await node.rotateAddress('contract-m3', loop);
+        assert(rotatedM3.status === 'live' && typeof rotatedM3.tunnelToken === 'string' && rotatedM3.tunnelToken !== healedM3.tunnelToken
+            && world.row('contract-m3').tunnel_id !== beforeRotate, 'rotate: verifies, a fresh tunnel and its token', rotatedM3);
+        assert(world.events('contract-m3').some((e) => e.event === 'rotated'), 'the Worker records the rotate');
+        const m3Sweep = await worker.index.attestSweep(world.env);
+        assert(m3Sweep.action === 'applied' && world.row('contract-m3').status === 'live' && !world.row('contract-m3').swap_fails,
+            'the next sweep attests the node\'s real /api/attest at the name: ok', { m3Sweep, row: world.row('contract-m3') });
+        // (The Worker's own log lines — its pause — are console.warn too: only the node client's protocol warnings count.)
+        assert(sent.every((r) => r.status === 200) && !warnings.some((w) => w.startsWith('[registrar]')),
+            'every signed call verified first time (no protocol fallback)', { sent, warnings });
+        others.forEach((_k, i) => nodesAt.delete(`contract-other${i}.beanpool.org`));
+        nodesAt.delete('contract-m3.beanpool.org');
     } finally {
         console.warn = realWarn;
         globalThis.fetch = realFetch;

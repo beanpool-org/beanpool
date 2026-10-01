@@ -64,6 +64,7 @@ import {
 import { startHttpsServer } from './https-server.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db, createCrowdfundProject } from './db/db.js';
+import { putPushTokenRow, pushTokenId } from './services/push-token-seal.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
@@ -429,7 +430,7 @@ async function main(): Promise<void> {
         return realFetch(url, init);
     };
     const pushToken = (id: Id) => `ExponentPushToken[g3-${id.name}]`;
-    for (const id of [viewer, ava]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
+    for (const id of [viewer, ava]) putPushTokenRow(id.pk, pushToken(id), 'android');
     const badgeOf = (id: Id): number | undefined => {
         pushed.length = 0;
         dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat', 'chat.message');
@@ -455,7 +456,7 @@ async function main(): Promise<void> {
     assert(avaBadgeAfter === avaBadgeBefore && avaBadgeAfter === avaListAfter.totalUnread
         && (avaListAfter.conversations ?? []).some((c: any) => c.id === meetup),
         `the host still has the event, so their badge still counts its chat (${avaBadgeBefore} → ${avaBadgeAfter}, totalUnread ${avaListAfter.totalUnread})`);
-    db.prepare('DELETE FROM push_tokens WHERE token IN (?, ?)').run(pushToken(viewer), pushToken(ava));
+    db.prepare('DELETE FROM push_tokens WHERE token_id IN (?, ?)').run(pushTokenId(pushToken(viewer)), pushTokenId(pushToken(ava)));
     (globalThis as any).fetch = realFetch;
 
     // A moderator removal of a hidden post works as always.

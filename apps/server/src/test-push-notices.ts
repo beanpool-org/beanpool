@@ -104,6 +104,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { startP2P } = await import('./p2p.js');
+    const { putPushTokenRow, pushTokenId } = await import('./services/push-token-seal.js');
     // Absent on a tree without them: the checks that need them fail, and the rest still run.
     const notices: any = await import('./engine/push-notices.js').catch(() => null);
 
@@ -158,7 +159,7 @@ async function main() {
     const ann = member('AnnSecretname'), bob = member('BobSecretname'), cat = member('CatSecretname');
     const stranger = newId('NobodyHere');
     const phone = { ann: tokenOf('ann'), annOld: tokenOf('annold'), bob: tokenOf('bob'), cat: tokenOf('cat') };
-    const register = (who: Id, token: string) => db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(who.pk, token);
+    const register = (who: Id, token: string) => putPushTokenRow(who.pk, token, 'android');
     register(bob, phone.bob);
     register(cat, phone.cat);
     const toWhom = new Map<string, Id>([[phone.ann, ann], [phone.annOld, ann], [phone.bob, bob], [phone.cat, cat]]);
@@ -348,8 +349,11 @@ async function main() {
 
         // ── 5. Expo's tickets ──────────────────────────────────────────────────────────────────────────────
         console.log("\n--- 5. Expo's tickets ---");
-        const rowsNow = () => (db.prepare('SELECT public_key, token FROM push_tokens ORDER BY public_key, token').all() as { public_key: string; token: string }[])
-            .map(r => `${toWhom.get(r.token)?.name ?? r.public_key.slice(0, 8)}:${r.token}`);
+        // A row names its phone by the token's id (services/push-token-seal.ts): each id read back to the token it is.
+        const byId = new Map([...toWhom.keys()].map(t => [pushTokenId(t), t]));
+        const rowsNow = () => (db.prepare('SELECT public_key, token_id FROM push_tokens ORDER BY public_key, token_id').all() as { public_key: string; token_id: string }[])
+            .map(r => byId.get(r.token_id) ?? r.token_id)
+            .map(t => `${toWhom.get(t)?.name ?? '?'}:${t}`);
         const before = rowsNow();
         expo = 'tickets';
         dead = new Set([phone.annOld]);
@@ -359,7 +363,7 @@ async function main() {
         assert(before.length - after.length === 1 && !after.some(r => r.endsWith(phone.annOld))
             && after.some(r => r.endsWith(phone.ann)) && after.some(r => r.endsWith(phone.bob)),
             `the phone Expo says is gone is removed, and only it: Ann's other phone and Bob's stay (${before.length} → ${after.length})`);
-        const tomb = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'push_tokens' AND row_key = ?").get(`${ann.pk}|${phone.annOld}`);
+        const tomb = db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'push_tokens' AND row_key = ?").get(`${ann.pk}|${pushTokenId(phone.annOld)}`);
         assert(!!tomb, 'with its tombstone, so a standby drops it too');
 
         dead = new Set();

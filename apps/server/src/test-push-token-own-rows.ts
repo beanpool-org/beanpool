@@ -34,6 +34,7 @@ import { KEY_PUSH_RULES, STRANGER_PUSH_RULES, getPushTokens, initStateEngine, is
 import { forgetOldJoinAddresses } from './engine/open-join.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
+import { pushTokenId } from './services/push-token-seal.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -87,9 +88,9 @@ async function answer(method: 'POST' | 'DELETE', path: string, body: unknown, si
     return { status: res.status, code };
 }
 
-/** Who holds a row for this token on the node, sorted. */
+/** Who holds a row for this token on the node, sorted. A row names its phone by the token's id (services/push-token-seal.ts). */
 function holders(token: string): string[] {
-    return (db.prepare('SELECT public_key FROM push_tokens WHERE token = ? ORDER BY public_key').all(token) as { public_key: string }[])
+    return (db.prepare('SELECT public_key FROM push_tokens WHERE token_id = ? ORDER BY public_key').all(pushTokenId(token)) as { public_key: string }[])
         .map((r) => r.public_key);
 }
 const keys = (...ids: Identity[]) => ids.map((i) => i.pub).sort();
@@ -263,7 +264,7 @@ async function main(): Promise<void> {
     assert(eleventh.status === 200 && alertTokensOf(cy).length === liveTokens && alertTokensOf(cy).includes(cyToken(0))
         && !alertTokensOf(cy).includes(cyToken(1)) && alertTokensOf(cy).includes(cyToken(liveTokens)),
         `an ${liveTokens + 1}th phone is registered and his stalest (the second, not registered again) goes: still ${liveTokens} (${JSON.stringify(eleventh)})`);
-    assert(same(cyTombstones(), [cyToken(1)]), `with a tombstone, so a standby drops it too (${JSON.stringify(cyTombstones())})`);
+    assert(same(cyTombstones(), [pushTokenId(cyToken(1))]), `with a tombstone naming it by id, so a standby drops it too (${JSON.stringify(cyTombstones())})`);
     const more: number[] = [];
     for (let i = liveTokens + 1; i < newTokensPerDay; i++) {
         more.push((await register(cy, cyToken(i))).status);

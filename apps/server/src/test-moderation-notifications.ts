@@ -76,6 +76,7 @@ async function main() {
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { createAdminRoutes } = await import('./routes/admin.js');
     const mod = await import('./engine/moderation-notices.js');
 
@@ -91,8 +92,7 @@ async function main() {
         db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', '/uploads/avatar.jpg')`).run(id.pubKeyHex, callsign);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-            .run(id.pubKeyHex, `ExponentPushToken[${callsign}]`);
+        putPushTokenRow(id.pubKeyHex, `ExponentPushToken[${callsign}]`, 'android');
         return id;
     };
     const Ann = member('AnnAuthor'), R1 = member('RitaReporter'), R2 = member('RobReporter'), C = member('CarlBystander');

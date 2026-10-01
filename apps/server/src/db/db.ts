@@ -515,6 +515,42 @@ function indexOldConversationIds(): void {
 }
 
 // Function to initialize schema
+/** Where movePlainPushTablesAside puts a push_tokens from before, tokens in the clear, until the boot locks or drops its rows. */
+export const PLAIN_PUSH_TOKENS = 'push_tokens_plain';
+/** And its leave statements, which named each token in the clear too. */
+export const PLAIN_PUSH_LEAVES = 'push_token_leaves_plain';
+
+/**
+ * Before schema.sql runs: a push_tokens or push_token_leaves from before (a `token` column: each phone's token in the
+ * clear, and in the key) is moved aside as it is, into PLAIN_PUSH_TOKENS and PLAIN_PUSH_LEAVES, and dropped with its
+ * indexes and triggers, so schema.sql makes the new tables and stampPlainTables their triggers. One transaction: a server
+ * stopped part way has moved nothing. Needs no key and no role: the boot locks the rows under the key, on a main server,
+ * or drops them, on a standby (services/push-token-seal.ts installPushTokenSealAtBoot). Leaves anything else as it is.
+ */
+function movePlainPushTablesAside(): void {
+    const hasTable = (name: string) => !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name);
+    const hasColumn = (table: string, column: string) => !!db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column);
+    const tokens = hasTable('push_tokens') && hasColumn('push_tokens', 'token');
+    const leaves = hasTable('push_token_leaves') && hasColumn('push_token_leaves', 'token');
+    if (!tokens && !leaves) return;
+    db.transaction(() => {
+        if (tokens) {
+            db.exec(`CREATE TABLE IF NOT EXISTS ${PLAIN_PUSH_TOKENS} (public_key TEXT, token TEXT, platform TEXT, created_at TEXT, registered_at INTEGER)`);
+            const registered = hasColumn('push_tokens', 'registered_at') ? 'registered_at' : 'NULL';
+            db.exec(`INSERT INTO ${PLAIN_PUSH_TOKENS} (public_key, token, platform, created_at, registered_at)
+                SELECT public_key, token, platform, created_at, ${registered} FROM push_tokens`);
+            db.exec('DROP TABLE push_tokens');
+        }
+        if (leaves) {
+            db.exec(`CREATE TABLE IF NOT EXISTS ${PLAIN_PUSH_LEAVES} (public_key TEXT, token TEXT, left_at INTEGER, applied_at TEXT)`);
+            db.exec(`INSERT INTO ${PLAIN_PUSH_LEAVES} (public_key, token, left_at, applied_at)
+                SELECT public_key, token, left_at, applied_at FROM push_token_leaves`);
+            db.exec('DROP TABLE push_token_leaves');
+        }
+    })();
+    console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -568,6 +604,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
     // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
     try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
+    // Push tokens locked at rest (services/push-token-seal.ts): the tables from before, each token in the clear, go aside
+    // for the boot to lock (a main server) or drop (a standby), and schema.sql makes the new ones.
+    try {
+        movePlainPushTablesAside();
+    } catch (e) {
+        console.error('[DB] ❌ Could not move the push tokens stored in the clear aside; the next boot tries again:', e);
+    }
     try {
         const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
         if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {

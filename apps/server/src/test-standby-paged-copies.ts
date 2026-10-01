@@ -134,8 +134,8 @@ async function main(): Promise<void> {
                 `S's own log line, its other cursor, its node role, a setting of its own and its copy record's id came through the swap (${JSON.stringify({ before: own0, after: own1, id: [rec0.id, rec1.id] })})`);
             const s1 = await snapS();
             const m1 = await snapM();
-            assert(s1.format === '8' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
-                `S's copy is format 8, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
+            assert(s1.format === '9' && s1.cursor !== null && s1.tables.messages.count === m1.tables.messages.count,
+                `S's copy is format 9, with its cursor, and all ${m1.tables.messages.count} of M's chat lines (${JSON.stringify({ format: s1.format, cursor: s1.cursor })}; ${counts(s1, 'messages')})`);
             const d1 = await standby.send('pull', {});
             const st1b = await standby.send('staging');
             assert(d1.ok === true && d1.mode === 'delta' && !st1b.previous, `the next pull is a delta, and once it lands the old database is deleted (${JSON.stringify({ pull: d1, ...st1b })})`);

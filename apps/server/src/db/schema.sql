@@ -584,9 +584,16 @@ CREATE INDEX IF NOT EXISTS idx_projects_enterprise ON projects(enterprise_pubkey
 -- 11. Push Notification Tokens (Expo Push)
 -- Copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a server that takes over reaches every
 -- phone at once; a standby sends no push itself (state-engine.ts dispatchPushNotification).
+-- Locked at rest (services/push-token-seal.ts): no token is stored in the clear. `token_id` is the token's HMAC and
+-- `token_box` the token sealed, both under keys from data/recovery-seal.key, which the database never holds; a standby
+-- opens none until a take-over brings the key.
 CREATE TABLE IF NOT EXISTS push_tokens (
     public_key TEXT NOT NULL REFERENCES members(public_key),
-    token TEXT NOT NULL,
+    -- HMAC-SHA256 of the phone's token, hex: what a tombstone (`<key>|<token_id>`), a leave statement and a dead-token
+    -- ticket name the row by.
+    token_id TEXT NOT NULL,
+    -- The token, XChaCha20-Poly1305, bound to public_key and token_id; base64 of nonce, ciphertext and tag.
+    token_box TEXT NOT NULL,
     platform TEXT DEFAULT 'ios',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
@@ -594,21 +601,21 @@ CREATE TABLE IF NOT EXISTS push_tokens (
     registered_at INTEGER,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (public_key, token)
+    PRIMARY KEY (public_key, token_id)
 );
 
 -- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
 -- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused. Copied
 -- to a standby with the tokens, so a server that takes over refuses the same late registration. A key applies at most
--- so many a day (state-engine.ts KEY_PUSH_RULES), counted from `applied_at`.
+-- so many a day (state-engine.ts KEY_PUSH_RULES), counted from `applied_at`. The token by its id (push_tokens.token_id).
 CREATE TABLE IF NOT EXISTS push_token_leaves (
     public_key TEXT NOT NULL,
-    token TEXT NOT NULL,
+    token_id TEXT NOT NULL,
     left_at INTEGER NOT NULL,
     applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (public_key, token)
+    PRIMARY KEY (public_key, token_id)
 );
 -- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
 -- leaves: a search on this, never a scan of the table per leave.

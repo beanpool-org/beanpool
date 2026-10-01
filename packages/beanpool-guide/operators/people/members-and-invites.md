@@ -1,7 +1,7 @@
 ---
 slug: members-and-invites
 title: Members and invites
-summary: How people join, the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.
+summary: How people join, who may invite (any member, or only admins), the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.
 related: roles, reports-and-takedowns, decisions-and-emergencies, disputes, first-time-setup
 ---
 
@@ -9,7 +9,7 @@ related: roles, reports-and-takedowns, decisions-and-emergencies, disputes, firs
 
 On a local community, nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join.
 
-Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.
+Any member can make invites from their app, unless you choose that only admins do (see Who may invite, below), and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows.
 
 Joining with a code is signed by the new member's own key, from the app or the web app they join in. So someone holding a code can only join as themselves: they can't use it to add a key that belongs to somebody else.
 
@@ -17,11 +17,32 @@ Joining with a code is signed by the new member's own key, from the app or the w
 
 **The key vault at the global community's door.** An app built with BeanPool's key vault can tie its sign-in at the door to a ticket from the vault, so that one sign-in both joins and keeps the member's sign-in copy at the vault. The door checks the ticket itself, with the vault's public keys, which go in the server's .env as BEANPOOL_VAULT_TICKET_KEYS: the same value the app is built with, newest key first, two at most. The server never contacts the vault and keeps nothing of the ticket. Give a standby the same line in its own .env: it is not copied. Without the line, or with one that isn't one or two keys of 64 characters (0–9 and a–f), the door takes no tickets. The log says so when the server starts, the door tells every app that asks, and an app then joins with the door's own sign-in check, as before. **On any other server, leave it empty:** your door, if it is open, needs nothing of BeanPool's.
 
+## Who may invite
+
+Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** says who can bring people into the community: make an invite, or answer someone who asks to join. Pick one and tap **Save who may invite**.
+
+- **Invite: any member invites.** Every community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
+- **Known: only admins invite.** Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead, says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. It is a role, not a trust badge.
+
+Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. The server's log says who changed it.
+
+When you switch to Known:
+
+- **Invite codes already made**, by anyone, still work until they expire, 30 days after they were made. The server made them under the old rule, and knows when.
+- **A paper ticket** (a long code starting BP-) **that a member made** on their phone no longer lets anyone in, whatever date it carries: the server first sees a ticket when someone joins with it, so it can't tell when it was really made. The join screen tells the person to ask an admin for a fresh invite. A ticket an owner or admin made still works. Switch back to Invite and a member's unused ticket works again.
+- **Requests to join already waiting** stay waiting, for an admin to answer.
+
+Switching back to Invite works straight away too: every member can invite again.
+
+A standby server keeps the setting from the main server, and so does a standby that takes over. A backup carries it.
+
+A community with Beans can't open its door to anyone with a sign-in: strangers would hold credit from their first day, so the server refuses it. On the global community, which has no Beans, the door is open and nobody invites; Settings shows **Open** there, with nothing to choose.
+
 ## Invites from Settings
 
 Open **People & Safety**, then **Invites & QR**. Choose how many (1 to 100) and a starting trust badge, and print the QR cards or copy the links. A starting badge is a head start on trade standing, nothing more: badges gate nothing.
 
-- Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.
+- Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button, whoever may invite. A moderator cannot.
 - If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: "This community doesn’t use invites".
 - In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or "the admin password"), in its security log.
 
@@ -74,6 +95,6 @@ Only an owner can suspend an owner, or remove an owner or an admin. Nobody can r
 - A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as "Deleted post".
 - A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.
 - The trust score shown on a member's page is not calculated yet. Do not act on it.
-- Suspended members can still make invites from their app.
+- Suspended members can still make invites from their app, where any member invites.
 - While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.
 - Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can take down a listing of their own, from before visitors were stopped from posting. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans.

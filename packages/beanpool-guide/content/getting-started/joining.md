@@ -10,7 +10,7 @@ related: finding-a-community, your-12-words, your-profile, communities, how-it-w
 - **With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.
 - **Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities.
 
-No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can. See "Finding a community near you".
+No invite, but a community near you? Join the global community, then ask that community to let you in: any of its members can, or, in a community where only the admins invite, its admins. See "Finding a community near you".
 
 Either way, your account is a key kept on your phone, with 12 words that bring it back. There is no password.
 
@@ -55,6 +55,7 @@ If you close the app halfway, it carries on from the same step next time.
 - **Already used:** each invite works exactly once. Ask for a new one. If it was yours and you are already a member, use **Recover an existing account** instead.
 - **Expired:** invites last 30 days. Ask for a new one.
 - **Not recognised:** check you copied all of it, and that the community name or address is right.
+- **Made by a member, and only the admins bring people in now:** the community has chosen that only its admins invite, and a ticket a member made without a connection no longer works. Ask an admin for a fresh invite.
 - **Failed to register identity** (after you tap **Next**): usually no connection, or no answer in time. Check your connection and tap **Next** again. If your first try got through, the app carries on to **Your Photo** and **Safety Backup** with the same account.
 
 ## If joining the global community does not work
@@ -69,7 +70,7 @@ If you close the app halfway, it carries on from the same step next time.
 
 ## Inviting someone
 
-Any member can invite people. Your trust badge does not matter.
+Any member can invite people, unless the community has chosen that only its admins do (see below). Your trust badge does not matter.
 
 - Tap the invite icon (a person with a plus) at the top right of the screen. This opens **Invites**.
 - If you like, write who the invite is for, just for your own records.
@@ -80,6 +81,11 @@ Any member can invite people. Your trust badge does not matter.
 
 A community's admins can turn invites off for the whole community.
 
+**Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
+
+- Invite codes you made before the community chose this still work until their 30 days are up.
+- A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.
+
 The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work.
 
 ## Requests to join
@@ -89,4 +95,4 @@ People can ask to join your community from the global community. When someone ha
 - **Invite** makes an invite that only their account can use. Their app finds it by itself, so you don't send them anything, and they join with one tap.
 - **Not now** tells them nothing more than "no answer yet".
 
-Any member can answer. See "Finding a community near you".
+Any member can answer. In a community where only the admins invite, only its owners and admins see the requests and answer them. See "Finding a community near you".

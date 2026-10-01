@@ -92,6 +92,12 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
  * One surface's content, with App Lock's lock screen or cover over it while either shows. The content stays mounted
  * (a half-written sheet is still there after the unlock), in a wrapper that fills the same box its parent gave it, so
  * nothing in it is laid out differently.
+ *
+ * The wrapper is always a native view of its own (`collapsable={false}`). Without it, Fabric flattens it away while the
+ * app shows and makes it a real view while the lock screen or cover shows (pointerEvents and the accessibility props),
+ * so every lock or cover change moved each native child, the navigator's ScreenStack included, to a new parent: Android's
+ * react-native-screens rebuilt its fragments, and an iPhone's focused field lost its keyboard (deciding review of #1413).
+ * Now each change is only a prop update.
  */
 export function AppLockSurface({ children }: { children?: ReactNode }): React.JSX.Element {
     const screen = useAppLockScreen();
@@ -100,6 +106,7 @@ export function AppLockSurface({ children }: { children?: ReactNode }): React.JS
         <>
             <View
                 style={styles.content}
+                collapsable={false}
                 pointerEvents={hidden ? 'none' : 'box-none'}
                 importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
                 accessibilityElementsHidden={hidden}

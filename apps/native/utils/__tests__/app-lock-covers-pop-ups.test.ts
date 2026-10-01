@@ -33,17 +33,19 @@ vi.mock('react-native', async () => {
         importantForAccessibility?: string;
         pointerEvents?: string;
         accessibilityViewIsModal?: boolean;
+        collapsable?: boolean;
     };
     return {
         Platform: { OS: 'android' },
         StyleSheet: { create: <T,>(s: T) => s, absoluteFillObject: { position: 'absolute' } },
-        View: ({ children, testID, accessibilityElementsHidden, importantForAccessibility, pointerEvents, accessibilityViewIsModal }: ViewProps) =>
+        View: ({ children, testID, accessibilityElementsHidden, importantForAccessibility, pointerEvents, accessibilityViewIsModal, collapsable }: ViewProps) =>
             h('div', {
                 'data-testid': testID,
                 'aria-hidden': accessibilityElementsHidden ? 'true' : undefined,
                 'data-important-for-accessibility': importantForAccessibility,
                 'data-pointer-events': pointerEvents,
                 'aria-modal': accessibilityViewIsModal ? 'true' : undefined,
+                'data-collapsable': collapsable === false ? 'false' : undefined,
             }, children),
         Text: ({ children }: { children?: ReactNode }) => h('span', null, children),
         Pressable: ({ children, onPress }: { children?: ReactNode; onPress?: () => void }) => h('button', { onClick: onPress }, children),
@@ -187,6 +189,30 @@ describe('a pop-up left open is covered by the lock screen', () => {
         await run(() => setAppLocked(true));
 
         expect(popUp()?.querySelectorAll('[data-testid="app-lock-screen"]')).toHaveLength(1);
+    });
+});
+
+describe('the wrapper is always a native view of its own', () => {
+    // Deciding review of #1413 (NON-BLOCKING, AppLock.tsx:103): with only flex/box-none/auto the wrapper was flattened
+    // away by Fabric, and the lock screen's pointerEvents/accessibility props made it a real view, so each lock or cover
+    // change moved every native child (the navigator's ScreenStack included) to a new parent. collapsable={false} keeps it
+    // a native view in every state, so a change is only a prop update.
+    it('collapsable={false} while the app shows, under the cover and under the lock screen, the same element throughout', async () => {
+        await draw(createElement(AppLockSurface, null, createElement('p', null, 'Half-typed message')));
+        const wrapper = holderOf('Half-typed message');
+        expect(wrapper?.getAttribute('data-collapsable')).toBe('false');
+
+        await run(() => setAppCovered(true));
+        expect(holderOf('Half-typed message')).toBe(wrapper);
+        expect(wrapper?.getAttribute('data-collapsable')).toBe('false');
+
+        await run(() => setAppLocked(true));
+        expect(holderOf('Half-typed message')).toBe(wrapper);
+        expect(wrapper?.getAttribute('data-collapsable')).toBe('false');
+
+        await run(() => setAppLocked(false));
+        expect(holderOf('Half-typed message')).toBe(wrapper);
+        expect(wrapper?.getAttribute('data-collapsable')).toBe('false');
     });
 });
 

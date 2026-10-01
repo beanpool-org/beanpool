@@ -17,6 +17,7 @@
 import { getNodeRole, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
+import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { persistAddress, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
@@ -63,8 +64,9 @@ export async function reconcile(): Promise<void> {
     const name = desiredName();
     if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
     const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
-    const contact = process.env.PUBLIC_ADDRESS_CONTACT || undefined;
-    const communityName = process.env.PUBLIC_ADDRESS_COMMUNITY_NAME || getLocalConfig().communityName || undefined;
+    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX);
+    const communityName = cleanLabel(process.env.PUBLIC_ADDRESS_COMMUNITY_NAME, REGISTRAR_COMMUNITY_NAME_MAX)
+        || cleanLabel(getLocalConfig().communityName, REGISTRAR_COMMUNITY_NAME_MAX);
 
     try {
         const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName);

@@ -16,6 +16,8 @@ import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports } from '../utils/blocklist';
 import { presentLeaveStatements } from '../utils/push-leave';
+import { markNoticeShown } from '../utils/sync-notices';
+import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
@@ -696,6 +698,9 @@ function RootLayoutNav() {
             </Stack>
             </NavThemeProvider>
 
+            {/* A tapped notification the phone can't trust: one calm line (utils/push-notice-check.ts). */}
+            <PushNoticeWarning />
+
             {isLocked && identity && (
                 <View style={[StyleSheet.absoluteFill, {
                     backgroundColor: isDark ? '#0a0a0a' : '#FAF9F6',
@@ -800,6 +805,9 @@ export default function RootLayout() {
                 const title = data.title || 'System Announcement';
                 const body = data.body || '';
                 Alert.alert(title, body, [{ text: 'Acknowledge', style: 'cancel' }]);
+                // A notice the node keeps names its id: shown now, so the background sync never posts it again
+                // (utils/sync-notices.ts).
+                void markNoticeShown(data.noticeId, AsyncStorage);
             }
         });
 

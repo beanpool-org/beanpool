@@ -32,6 +32,16 @@ TaskManager.defineTask(TASK_NAME, async () => {
             aborted: result.aborted,
         });
 
+        // The floor under push (utils/sync-notices.ts): the member's unseen notices from their own community, posted
+        // on the phone, each once. No push service involved.
+        try {
+            const { postNoticesAfterSync } = await import('./push-notifications');
+            const posted = await postNoticesAfterSync();
+            if (posted > 0) console.log(`[Pillar] Posted ${posted} notice(s) from the sync`);
+        } catch (e) {
+            console.warn('[Pillar] The sync\'s notices were not posted:', e);
+        }
+
         if (result.success || result.deltaCount > 0) {
             // Tell the OS we got new data (improves wake-up frequency)
             return BackgroundFetch.BackgroundFetchResult.NewData;

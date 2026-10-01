@@ -22,6 +22,11 @@ ATTEST_FAIL_LIMIT = "2"     # consecutive IMPOSTOR verdicts (a valid signature b
                             # 2026-09-24 incident).
 RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this long for the same key only
                                 # (design D3), then free. An admin release frees at once.
+CLAIM_LIMIT_PER_KEY = "3"   # names one node key may hold at once (live, pending, paused, blocked, or its own release
+                            # still in its hold); a further claim gets 403. A node uses one, and a rename leaves the
+                            # old one held for it 30 days, so 3 covers two renames in that time and keeps one key to
+                            # 3 Cloudflare tunnels. Only new names count: a key over it keeps, heals and takes back
+                            # what it has (src/index.js claimLimit).
 # Circuit-breaker canary: one of OUR nodes, which must attest 'ok' in a sweep for that sweep to act on any
 # row. Leave unset until that node is live in the registrar again (`test` was revoked 2026-09-24 and is
 # `blocked` in name_policy) — a configured canary that isn't live suspends every sweep.

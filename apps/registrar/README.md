@@ -13,7 +13,9 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release` (`revoke` is block's old name; `release` takes
   `{"free_now": true}`, below). Every action is logged in `name_events`.
-- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only
+- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
+  `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
+  anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
 - **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
   (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
@@ -40,6 +42,30 @@ hostname routes as the row says) or the tunnel an admin pause keeps. A live `bp-
 no row records would make Cloudflare refuse every later tunnel for the name (1013), so a claim that meets one
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
 minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
+
+## Limits on what a key may do (the 2026-10-01 review)
+
+- **Names per key:** one node key holds at most `CLAIM_LIMIT_PER_KEY` names (`wrangler.toml`, default 3; a value
+  that isn't a whole number ≥ 1 means 3). Counted: every name held under the key — live, pending, paused, blocked —
+  and its own releases (the owner's, or the admin's default one) still inside their hold. Not counted: a release that
+  freed the name at once, one past its hold, and the admin's release of a name it took from the key (held from that
+  key too). A claim of a **new** name past the limit gets `403 { error, limit, held }` and writes nothing; a name the
+  key already holds is healed and taken back whatever the count, so a key over the limit when it was set or lowered
+  keeps everything it has. Three, because a node uses one name and a rename leaves the old one held for it 30 days:
+  two renames in a month fit, and one key can hold at most three Cloudflare tunnels (the account has ~1,000). Keys
+  are free to make, so this stops one script with one key, not many keys: a per-IP budget (a Cloudflare rate-limit
+  rule on `POST /api/registrar/claim`) is the next step and is not built. Two claims by one key that race past the
+  count are both counted again once written, and the one over the limit gives its name back before it reaches
+  Cloudflare.
+- **Fields:** `community_name` (or `communityName`) at most 120 characters, `contact` at most 254, both text in any
+  script but with no control characters, line or paragraph separators or bidi overrides (checked after trimming);
+  `origin` is `http(s)://host[:port]` and nothing more, at most 200 characters; `public_ip` is an IPv4 address (a
+  direct name is an A record). A claim, heal or update carrying anything else gets a plain `400 { error }` before it
+  writes anything. The node caps its community name at 60, and its self-heal sends neither field.
+- **Errors:** a keyholder is never sent Cloudflare's error, which names the account and the zone: a failure at
+  Cloudflare answers `502 { error: 'provisioning failed', ref }`, anything else unexpected `500 { error: 'internal',
+  ref }`, and the Worker's log has the detail under that `ref`. The admin's approve and resume still show Cloudflare's
+  answer (`detail`).
 
 ## Ownership: a name belongs to its node's key
 
@@ -134,6 +160,9 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    the global node's names, and `ssh-global`, the global server's only way in). The live table already has
    `global` and `earth`, so there it adds only `ssh-global`: it adds a row only where the table has none for
    that name, never changing one it has. The Worker doesn't depend on it; a rerun changes nothing.
+   Then `--file migrations/0006_request_nonces.sql` (one table, `request_nonces`: the one-use nonces of v2 signed
+   requests, kept ~10 minutes). Before the Worker; a rerun changes nothing. A Worker without the table answers every
+   v2 request 500 (v1 requests never touch it).
 3. Deploy the Worker.
 
 Or let the deploy workflow apply them (below), once the live database is bootstrapped.
@@ -152,7 +181,8 @@ npx wrangler d1 execute beanpool-registrar --remote --file scripts/bootstrap-d1-
 
 It creates `d1_migrations` exactly as wrangler would and records each migration whose objects the database
 already has (0001's tables; 0002's seven columns, two tables and three indexes; 0003's column; 0004's table and
-index; 0005's three policy rows, `global`, `earth` and `ssh-global`), then prints the table. Safe to re-run.
+index; 0005's three policy rows, `global`, `earth` and `ssh-global`; 0006's table and index), then prints the table.
+Safe to re-run.
 Whatever it didn't record — say 0002–0005, if they were never applied by hand — the workflow applies next, before
 the Worker that needs them is deployed. The live table has only two of 0005's rows (`ssh-global` was never added
 by hand), so there 0005 is not recorded and the workflow applies it, adding just `ssh-global`. The workflow
@@ -175,6 +205,17 @@ Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128
 signing protocol) for any protocol but v1; signed message
 `` `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
 For v1 that is `` `beanpool-registrar-request/v1\n${METHOD}\n…` ``, exactly as before protocols had versions.
+
+**v2 (2026-10-01): a one-use nonce.** A v2 request also carries `x-bp-nonce` (32 lower-case hex, fresh for each
+request), signed between the timestamp and the body:
+`` `beanpool-registrar-request/v2\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}` ``. The Worker records
+each (key, nonce) in `request_nonces` (migration 0006) before acting and answers a second request carrying it
+`401 { error: 'request already used' }`, so a captured request — a `/status` with its tunnel token above all — can't be
+replayed while its timestamp is inside the ±300 s window. The sweep drops nonces over 600 s old. v1 signs no nonce and
+is still accepted, replayable inside its window as before, until every node sends v2: v2 is at **step 1** below (both
+sides accept it; nodes still send v1). Step 2 (`SEND_PROTO = 'v2'` in the node's `registrar-client.ts`) waits for this
+Worker to be live through the deploy workflow: the live Worker may predate `accepted_proto` in its 401, and a node
+sending v2 to it could not fall back.
 
 The leading domain tag is load-bearing, not cosmetic: the node signs both this and a PUBLIC attestation with the same identity key, so without distinct tags `/api/attest` is a forgery oracle for this scheme.
 
@@ -313,7 +354,9 @@ about 12 s): a request or decision landing at each Cloudflare call of another, a
 settles what is owed, with Cloudflare refusing writes for a while. After Cloudflare recovers and the sweep runs, no key
 but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
 its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
-`FUZZ_CASE='…'` replays one case and prints its trace.
+`FUZZ_CASE='…'` replays one case and prints its trace. `test/review-2026-10-01.test.js` covers the 2026-10-01 review's
+fixes: the switchboard's `?n=`, the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
+v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder.
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

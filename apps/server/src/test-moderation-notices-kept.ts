@@ -179,6 +179,8 @@ async function main(): Promise<void> {
     modSession = keySession(mo);
     const ava = member('Ava', 40);
     const R = [1, 2, 3].map(i => member(`Rep${i}`, 20 + i));
+    // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
+    for (const r of R) for (let i = 0; i < 3; i++) oldPost(r, `${r.name} kept ${i}`);
     const bea = member('Bea', 30);
     const nobody = newId('Nemo'); // a key that is no member here
     process.env.NODE_PROFILE = 'global';

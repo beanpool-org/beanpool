@@ -35,11 +35,12 @@
  *
  * ONE circle is enough for a post by a member who came in with 12 words and is still on probation
  * (engine/probation.ts isWordsNewcomer; the two-doors design §2.3): their account cost nothing to make, so what protects
- * the lobby is how cheaply a real member clears their spam. Then a reporter counts only when they are ESTABLISHED as
- * well: off probation themselves (engine/probation.ts probationState), on top of every rule above. So a newcomer's
- * report hides nothing, however old the account: a 12-words account that waited a week without posting is still on
- * probation. A sign-in member's post still needs 3 circles, and so does theirs once probation ends or they add a
- * sign-in.
+ * the lobby is how cheaply a real member clears their spam. A sign-in member's post still needs 3 circles, and so does
+ * theirs once probation ends or they add a sign-in.
+ *
+ * On every post, whoever wrote it (design §2.3, both doors), a reporter counts only when they are ESTABLISHED as well:
+ * off probation themselves (engine/probation.ts probationState), on top of every rule above. So a newcomer's report
+ * hides nothing, however old the account: a 12-words account that waited a week without posting is still on probation.
  *
  * A moderator undoes it by restoring the post (`restoreHiddenPost`: every open report on it is dismissed, its
  * reporters are told it was kept), or by dismissing reports one at a time until what hid it no longer adds up

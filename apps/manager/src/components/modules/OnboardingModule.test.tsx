@@ -257,6 +257,40 @@ describe('OnboardingModule', () => {
         expect(within(section).getByText('Nobody was turned away in this window.')).toBeInTheDocument();
     });
 
+    /** The 12-words door and the door's work (server: engine/door-signal.ts, services/door-work.ts): named too, never as codes. */
+    it('names the 12-words door, the ceilings and the door work in plain words', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            openDoor: true,
+            rows: [
+                { day: '2026-10-01', event: 'open_join_attempt', variant: 'words', count: 6 },
+                { day: '2026-10-01', event: 'cohort_open_door', variant: 'words', count: 4 },
+                { day: '2026-10-01', event: 'cohort_open_door', variant: 'google', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'network_busy_words', count: 2 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'network_busy', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_required', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_invalid', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_expired', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_spent', count: 1 },
+            ],
+        });
+
+        renderModule();
+
+        const section = await screen.findByRole('region', { name: 'Open door' });
+        expect(within(section).getByText('12 words 4 · Google 1')).toBeInTheDocument();
+        const reason = (label: string) => within(section).getByText(label).closest('li') as HTMLElement;
+        expect(reason('Too many 12-words accounts from one network (the sign-in way stayed open)')).toHaveTextContent('2');
+        expect(reason('Too many new accounts from one network')).toHaveTextContent('1');
+        expect(reason('Setting up was needed and none was sent (an older app on a busy network)')).toHaveTextContent('1');
+        expect(reason("Setting up didn't check out")).toHaveTextContent('1');
+        expect(reason('Setting up took over ten minutes')).toHaveTextContent('1');
+        expect(reason('Setting up was used twice')).toHaveTextContent('1');
+        for (const code of ['network_busy', 'network_busy_words', 'work_required', 'work_invalid', 'work_expired', 'work_spent', 'words']) {
+            expect(within(section).queryByText(code)).not.toBeInTheDocument();
+        }
+    });
+
     it('says neither open nor shut for a node too old to send it', async () => {
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({ days: 30, rows: [] });
 

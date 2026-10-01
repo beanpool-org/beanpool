@@ -534,7 +534,9 @@ export function createOpenJoinRoutes(_deps: RouteDeps): Router {
         const door = ((ctx as any).requestBody || {}).door;
         if (!isDoorWorkDoor(door)) return badRequest(ctx, "'door' must be 'words' or 'sign-in'.");
         if (door === 'words' && !wordsDoorOpen()) return signInRequired(ctx);
-        const ipHash = addressHash(ctx);
+        // No sweep here: the signal reads only the last hour and day, which a day-old hash is outside of, and the joins
+        // clear them. This route is asked more often than any join, so it writes nothing.
+        const ipHash = openJoinAddressHash(clientLimiterKey(ctx));
         // Told here, before the phone does any work it could not use.
         const ceiling = doorCeilingReached(door, ipHash);
         if (ceiling) return networkBusy(ctx, ceiling);

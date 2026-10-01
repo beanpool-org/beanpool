@@ -137,7 +137,7 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 - **Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.
 - **Only the lead convenor** can remove a convenor, or take the convenor role off someone.
 - **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.
-- **A suspended convenor:** while a convenor's account is suspended, they cannot use any convenor power, and their own powers as lead wait too. They stay a convenor, and the lead stays the lead; it all works again when the suspension ends. Other convenors carry on as usual, and members keep chatting and posting. A suspended member cannot join a group either, until the suspension ends.
+- **A suspended convenor:** while a convenor's account is suspended, they cannot use any convenor power, and their own powers as lead wait too. They stay a convenor, and the lead stays the lead; it all works again when the suspension ends. Other convenors carry on as usual, and members keep chatting and posting. A suspended member cannot start or join a group either, until the suspension ends.
 - **Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.
 - **Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.
 - The last convenor cannot step down or be removed while the group still has other members.

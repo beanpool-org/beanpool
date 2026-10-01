@@ -166,7 +166,16 @@ async function main(): Promise<void> {
         'SuspSC is suspended');
     console.log('\n— Suspended: SuspSC tries every convenor power —');
 
-    let r = await call('DELETE', `${A}/members/${reporter.pk}`, susp);
+    const groupsBefore = (db.prepare('SELECT COUNT(*) AS n FROM groups').get() as any).n;
+    const membersBefore = (db.prepare('SELECT COUNT(*) AS n FROM group_members').get() as any).n;
+    let r = await call('POST', '/api/groups', susp, { name: 'Suspended Start SC', description: 'A group nobody can take down', joinPolicy: 'open' });
+    assert(refused(r), `starting a group → 403, says suspended (${show(r)})`);
+    assert((db.prepare('SELECT COUNT(*) AS n FROM groups').get() as any).n === groupsBefore
+        && (db.prepare('SELECT COUNT(*) AS n FROM group_members').get() as any).n === membersBefore
+        && !db.prepare("SELECT 1 FROM groups WHERE name = 'Suspended Start SC'").get(),
+        'and no group row and no member row was written');
+
+    r = await call('DELETE', `${A}/members/${reporter.pk}`, susp);
     assert(refused(r), `removing the member who reported them → 403, says suspended (${show(r)})`);
     assert(membership(ga.id, reporter.pk)?.status === 'active', 'and ReporterSC is still in the group');
 
@@ -252,6 +261,9 @@ async function main(): Promise<void> {
     console.log('\n— Suspension lifted —');
     const lifted = adminLiftSuspension(susp.pk, admin.pk);
     assert(lifted.success === true, `the admin lifts the suspension (${lifted.error ?? 'ok'})`);
+
+    r = await call('POST', '/api/groups', susp, { name: 'Suspended Start SC', description: 'Allowed again', joinPolicy: 'open' });
+    assert(r.status === 201 && membership(r.body?.id, susp.pk)?.role === 'convenor', `starting a group works again (${show(r)})`);
 
     r = await call('PATCH', `${A}/members/${friend.pk}`, susp, { role: 'convenor' });
     assert(r.status === 200 && membership(ga.id, friend.pk)?.role === 'convenor', `promoting works again (${show(r)})`);

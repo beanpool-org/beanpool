@@ -195,7 +195,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = group;
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400;
+            // A suspended member starts no group until it ends (engine createGroup): 403, as /join answers.
+            ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to create group' };
         }
     });

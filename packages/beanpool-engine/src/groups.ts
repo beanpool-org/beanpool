@@ -127,6 +127,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     if (!member || member.is_visitor || member.status === 'pruned') {
         throw new Error('Creator member not found or pruned');
     }
+    // A suspended account starts no group: its creator would be the lead convenor of a group listed to every member,
+    // and no route deletes a group. Same refusal as joining one.
+    if (isSuspendedAccount(db, params.createdBy)) throw new Error(`UNAUTHORIZED: ${GROUP_START_PAUSED}`);
 
     const rawSlug = params.slug ? slugifyGroupName(params.slug) : slugifyGroupName(trimmedName);
     const slug = ensureUniqueSlug(db, rawSlug);
@@ -510,6 +513,7 @@ export const CONVENOR_POWERS_PAUSED =
     'Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.';
 
 /** What a suspended member is told when they try to join a group or accept an invitation. */
+export const GROUP_START_PAUSED = 'Your account is suspended. You can start groups again when your suspension ends.';
 export const GROUP_JOIN_PAUSED = 'Your account is suspended. You can join groups again when the suspension ends.';
 
 /** What a convenor is told when the person they would let in is suspended: the request waits. */

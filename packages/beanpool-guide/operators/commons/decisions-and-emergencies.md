@@ -34,12 +34,15 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - If it does not pass, the suspension lifts by itself and their role comes back.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The suspended person gets no notification. Tell them yourself.
+- In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead stays its lead: suspending someone never moves a group to anyone else.
 
 On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account.
 
 ## Removing someone
 
 Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons.
+
+No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it. If an admin must go, an owner takes the role away first; after that they are a member like any other.
 
 ## Halting a Decision
 

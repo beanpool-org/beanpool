@@ -8,6 +8,7 @@ related: decisions, rules, polls, enterprises
 ## Before you start
 
 - A Decision is for something your community's server can carry out: removing or suspending a member, freezing or unfreezing someone's credit, choosing who may vouch, or paying beans from the Commons. For anything else, start a Poll instead.
+- A Decision cannot remove or suspend an owner or admin of your community's server. See "Rules and how decisions work".
 - You can propose once you have completed a trade, or an admin has given you a trust badge. A vouch alone is not enough.
 - You can have one open Decision at a time.
 - The global community has no Decisions, so there is nothing to propose there. See "Voting on a Decision".
@@ -39,6 +40,7 @@ This keeps the queue free. If a grant passes when the Commons is short, it waits
 
 - **Complete a Trade First:** you cannot propose yet.
 - **Limit Reached:** you already have an open Decision. Wait for it to close.
+- **A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.
 - **This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.
 - **A grant needs an amount in Beans above 0:** fill in how many beans.
 - **Error:** check your description is at least 10 characters long.

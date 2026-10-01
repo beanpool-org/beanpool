@@ -81,6 +81,8 @@ The global community has no **Commons** tab. There, tap **Talk**, then **Groups*
 
 If a convenor removed you from a group, you cannot join it again by yourself.
 
+While your account is suspended, you cannot join a group, ask to join one, or accept an invitation. The groups you are already in stay yours. When the suspension ends, you can join again.
+
 ## Joining by invitation
 
 A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and that its chat is not private.
@@ -117,9 +119,13 @@ Only the **lead convenor** can remove a convenor, or take the convenor role off 
 
 The last convenor cannot step down or leave while anyone else is still in the group.
 
+**While a convenor is suspended.** If your community suspends a convenor's account, none of the convenor tools work for them until the suspension ends: approving, inviting, changing roles, removing people, posts or messages, editing the group, handing the lead over. The app says their account is suspended and that they are still a convenor. Nothing is taken from them: they stay a convenor, the lead stays the lead, and it all works again the moment the suspension ends. They can still leave the group, unless they lead it and anyone else is still in it.
+
+The group carries on meanwhile. Its members keep chatting and posting, and people can still join an open group. Any other convenor can still do everything above; only the lead's own powers wait. Requests to join and new invitations wait for a convenor. Anyone can still report a post or a person to your community's moderators. If the suspended convenor is the group's only convenor, they are its lead, and nothing they do while suspended counts as activity: 30 days after they were last active, the group can vote a new lead in, as below.
+
 **When the lead goes quiet.** Nobody can take the lead off the lead, so a lead who stops using the app would leave the group stuck. After 30 days with no activity from them, the group can vote a new lead in instead. Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes.
 
-Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. Observers can see the panel but have no vote, and neither does the quiet lead.
+Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. While the lead's account is suspended, nothing they do counts. Observers can see the panel but have no vote, and neither does the quiet lead.
 
 The full rules are in "Rules and how decisions work", under "A quiet lead convenor".
 

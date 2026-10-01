@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { invitesOn, readNodeProfile } from '../node-profile';
 import {
     communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT, onlyAdminsInvite, mayInviteHere,
-    mayMakeOfflineTicket, OFFLINE_ADMINS_ONLY_TEXT, adminsOnlyText, adminsOnlyRefusal, ADMINS_ONLY_FALLBACK,
+    mayMakeOfflineTicket, OFFLINE_ADMINS_ONLY_TEXT, adminsOnlyText, adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
 } from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
@@ -276,5 +276,16 @@ describe('People → Invites where only admins invite (source check)', () => {
         expect(handler.indexOf('adminsOnlyRefusal(')).toBeLessThan(ticket);
         expect(handler).toContain('mayMakeOfflineTicket(nodeProfile?.features, inviteRole)');
         expect(handler.indexOf('mayMakeOfflineTicket(')).toBeLessThan(ticket);
+    });
+});
+
+describe("the join's pre-flight: a member's ticket where only admins invite now", () => {
+    it('the welcome screen says so in plain words, not "not recognised"', () => {
+        const welcome = fs.readFileSync(path.resolve(__dirname, '../..', 'app/welcome.tsx'), 'utf-8');
+        const fn = welcome.slice(welcome.indexOf('function inviteProblemMessage'), welcome.indexOf('function joinedLabel'));
+        expect(fn).toMatch(/case 'admins_only':\s*return MEMBER_TICKET_REFUSED_TEXT;/);
+        expect(fn.indexOf("case 'admins_only'")).toBeLessThan(fn.indexOf('default:'));
+        expect(MEMBER_TICKET_REFUSED_TEXT).toMatch(/only its admins bring people in/);
+        expect(MEMBER_TICKET_REFUSED_TEXT).toMatch(/Ask an admin for a fresh invite/);
     });
 });

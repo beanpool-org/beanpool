@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
 import { WebSocket } from 'ws';
-import { db } from './db/db.js';
+import { db, afterTransactionCommit } from './db/db.js';
 import { sanitizeMessage } from './sanitize-message.js';
 
 // Re-exported so `import { sanitizeMessage } from './logger.js'` keeps working. The function itself moved
@@ -115,16 +118,71 @@ export function pruneSystemLogs(now = Date.now()): number {
     }
 }
 
+/**
+ * Where Settings' Clean storage (engine/storage-health.ts cleanStorageAndCompressLogs) moves the log lines past the newest
+ * 500: each file a gzipped JSON array of system_logs rows. They keep the same 30 days, and lose a deleted member the same
+ * way, as the lines still in the table.
+ */
+export function archivedLogsDir(dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data')): string {
+    return path.join(dataDir, 'logs', 'archived');
+}
+
+type ArchivedLogRow = { timestamp?: unknown; message?: unknown; metadata?: unknown };
+
+/**
+ * Put each archive of log lines through `edit`: one left with no line is deleted, one changed is written beside it and
+ * renamed over it, one unchanged is left as it is. Never throws (a file that can't be read or written is left, and the
+ * warning names it). Returns how many archives changed or went.
+ */
+function editLogArchives(edit: (rows: ArchivedLogRow[]) => ArchivedLogRow[], dir = archivedLogsDir()): number {
+    let names: string[];
+    try { names = fs.readdirSync(dir); } catch { return 0; }
+    let touched = 0;
+    for (const name of names) {
+        if (!name.endsWith('.json.gz')) continue;
+        const file = path.join(dir, name);
+        try {
+            const rows = JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8'));
+            if (!Array.isArray(rows)) continue;
+            const kept = edit(rows);
+            if (kept.length === 0) {
+                fs.rmSync(file, { force: true });
+                touched++;
+                continue;
+            }
+            const after = JSON.stringify(kept);
+            if (after === JSON.stringify(rows)) continue;
+            const twin = `${file}.tmp`;
+            fs.writeFileSync(twin, zlib.gzipSync(Buffer.from(after, 'utf8')), { mode: 0o600 });
+            fs.renameSync(twin, file);
+            touched++;
+        } catch (err: any) {
+            console.error(`Failed to tidy the archived log ${name}:`, err?.message || err);
+        }
+    }
+    return touched;
+}
+
+/** The archived lines older than LOG_KEEP_DAYS at `now` go, and an archive left empty with them. Returns how many archives changed. */
+export function pruneArchivedLogs(now = Date.now(), dir = archivedLogsDir()): number {
+    const cutoff = now - LOG_KEEP_MS;
+    return editLogArchives((rows) => rows.filter((r) => {
+        const at = typeof r?.timestamp === 'string' ? Date.parse(r.timestamp) : NaN;
+        return !(Number.isFinite(at) && at < cutoff);
+    }), dir);
+}
+
 let logPruneTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
- * Prune now and every hour after, on every server: a quiet server writes no hundredth line for weeks. Calling it again
- * restarts the timer.
+ * Prune now and every hour after, on every server: a quiet server writes no hundredth line for weeks. The archived lines
+ * too. Calling it again restarts the timer.
  */
 export function startSystemLogRetention(everyMs = 60 * 60_000): void {
-    pruneSystemLogs();
+    const sweep = () => { pruneSystemLogs(); pruneArchivedLogs(); };
+    sweep();
     if (logPruneTimer) clearInterval(logPruneTimer);
-    logPruneTimer = setInterval(() => { pruneSystemLogs(); }, everyMs);
+    logPruneTimer = setInterval(sweep, everyMs);
     logPruneTimer.unref?.();
 }
 
@@ -148,8 +206,9 @@ const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * after holds them too. A name shorter than 2 characters is not looked for: it would take letters out of every line.
  * A name that is also an ordinary word takes that word out of older lines too: a line that reads oddly is the price.
  * Every line is read (LOG_KEEP_ROWS, about a hundred more between prunes): a LIKE would miss a name in another script
- * written in another case. Docker's own log of the server is out of reach (docker-compose.yml rotates it). Returns how
- * many lines changed.
+ * written in another case. The lines Clean storage archived (archivedLogsDir) lose them too, once the caller's transaction
+ * has committed. Docker's own log of the server is out of reach (docker-compose.yml rotates it). Returns how many lines
+ * of the table changed.
  */
 export function scrubMemberFromLogs(callsign: string | null | undefined, keys: readonly string[]): number {
     const name = typeof callsign === 'string' ? callsign.trim() : '';
@@ -183,6 +242,15 @@ export function scrubMemberFromLogs(callsign: string | null | undefined, keys: r
             changed++;
         }
     }
+    // The lines Clean storage moved out of the table, once the purge has committed: files are no part of its transaction.
+    afterTransactionCommit(() => {
+        editLogArchives((archived) => archived.map((r) => {
+            if (!r || typeof r !== 'object') return r;
+            const message = typeof r.message === 'string' ? scrub(r.message) : r.message;
+            const metadata = typeof r.metadata === 'string' ? scrub(r.metadata) : r.metadata;
+            return message === r.message && metadata === r.metadata ? r : { ...r, message, metadata };
+        }));
+    });
     return changed;
 }
 

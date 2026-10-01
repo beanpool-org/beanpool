@@ -13,10 +13,11 @@
  *     is read as 14, and so is a kept community settings record. A snapshot 14 days old goes at the next hourly check;
  *     one 13 days old stays.
  *  4. The log: a line older than 30 days goes at the hourly check and at the next hundredth line, whatever the count; one
- *     29 days old stays.
+ *     29 days old stays. The lines Settings' Clean storage archived to data/logs/archived keep the same 30 days: an
+ *     archive all older goes, one with lines either side keeps the newer.
  *  5. A member deletes their account. No log line holds their name (any case, in the message or its metadata), nor the
- *     start of their key, nor of the key a re-key replaced; each reads "a deleted member". Another member's line, and a
- *     hex run that is no one's key, are exactly as they were. Their DM photos' stored objects are gone; the other
+ *     start of their key, nor of the key a re-key replaced; each reads "a deleted member"; nor does an archived line.
+ *     Another member's line, and a hex run that is no one's key, are exactly as they were. Their DM photos' stored objects are gone; the other
  *     member's are there, rows and all. Their picture is gone from the row, from the avatar route (404), and from the
  *     route's memory.
  *
@@ -28,6 +29,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 import Koa from 'koa';
 import { lockedDm } from './dm-test-payload.js';
@@ -190,9 +192,30 @@ async function main() {
     console.log('\n— 4. the log keeps 30 days —');
     const old1 = oldLine('[Test] a line from 40 days ago', Date.now() - 40 * DAY);
     const kept1 = oldLine('[Test] a line from 29 days ago', Date.now() - 29 * DAY);
+    // Lines Settings' Clean storage moved out of the table (engine/storage-health.ts): one archive all older than 30 days,
+    // one with a line either side of it and a line naming the member who deletes their account in section 5.
+    const archiveDir = path.join(DATA_DIR!, 'logs', 'archived');
+    fs.mkdirSync(archiveDir, { recursive: true });
+    const archive = (name: string, rows: { timestamp: string; message: string; metadata: string | null }[]) => {
+        const file = path.join(archiveDir, name);
+        fs.writeFileSync(file, zlib.gzipSync(Buffer.from(JSON.stringify(rows.map((r, i) => ({ id: i + 1, level: 'INFO', category: 'SYS', ...r }))))));
+        return file;
+    };
+    const readArchive = (file: string) => JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')) as { message: string; metadata: string | null }[];
+    const iso = (ago: number) => new Date(Date.now() - ago).toISOString();
+    const allOld = archive('logs-1.json.gz', [{ timestamp: iso(45 * DAY), message: '[Test] archived 45 days ago', metadata: null }]);
+    const mixed = archive('logs-2.json.gz', [
+        { timestamp: iso(35 * DAY), message: '[Test] archived 35 days ago', metadata: null },
+        { timestamp: iso(5 * DAY), message: '[Test] archived 5 days ago: Wren Calloway changed their bio', metadata: j({ member: 'Wren Calloway' }) },
+        { timestamp: iso(4 * DAY), message: '[Test] archived 4 days ago: Juniper Holt changed their bio', metadata: null },
+    ]);
     if (typeof logNew.startSystemLogRetention === 'function') logNew.startSystemLogRetention(60 * 60_000);
     assert(!lineExists(old1), 'the hourly check (run at start) removes a log line 40 days old, though the log is far below 2,500 lines');
     assert(lineExists(kept1), 'and keeps one 29 days old');
+    assert(!fs.existsSync(allOld), 'an archive of lines Clean storage moved out, all older than 30 days, is deleted');
+    const mixedNow = fs.existsSync(mixed) ? readArchive(mixed).map((r) => r.message) : [];
+    assert(j(mixedNow) === j(['[Test] archived 5 days ago: Wren Calloway changed their bio', '[Test] archived 4 days ago: Juniper Holt changed their bio']),
+        `an archive with lines either side of 30 days keeps only the newer ones (${j(mixedNow)})`);
     // The next hundredth line prunes too.
     const old2 = oldLine('[Test] another line from 40 days ago', Date.now() - 40 * DAY);
     const nextId = Number((db.prepare('SELECT MAX(id) AS m FROM system_logs').get() as { m: number }).m) + 1;
@@ -276,6 +299,11 @@ async function main() {
     assert(metaParsed?.member === 'a deleted member' && metaParsed?.who === 'a deleted member', `the metadata is still JSON, scrubbed (${meta})`);
     assert(j(logLine(juniperLineId)) === j(juniperLine), `Juniper's line, and a hex run that is no one's key, are exactly as they were (${logLine(juniperLineId)?.message})`);
     assert(logLine(wrenfieldLineId)?.message === '[Test] Wrenfield Farm opened its gate', 'a longer word that starts like their name is left alone');
+    const archived = fs.existsSync(mixed) ? readArchive(mixed) : [];
+    assert(archived.length === 2 && !/wren calloway/i.test(j(archived)) && archived[0].message === '[Test] archived 5 days ago: a deleted member changed their bio'
+        && JSON.parse(archived[0].metadata ?? '{}').member === 'a deleted member',
+        `the lines Clean storage archived lose their name too (${j(archived.map((r) => r.message))})`);
+    assert(archived[1]?.message === '[Test] archived 4 days ago: Juniper Holt changed their bio', "and Juniper's archived line is as it was");
 
     assert(wrenObjects.every((k) => !inStore(k)), `their DM photos' stored objects are gone (${wrenObjects.filter(inStore).length} left)`);
     assert(juniperObjects.every(inStore) && objectsOf(juniper).length === 1, "Juniper's photo, row and object, is still there");

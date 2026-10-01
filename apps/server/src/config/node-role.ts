@@ -15,13 +15,21 @@ let nodeRole: NodeRole | null = null;
  * local-config.json's `nodeRole` wins over NODE_ROLE in the environment (sealed-keys.md §5.4 step 4). Only a
  * take-over writes it, so a promoted standby needs no .env edit, and a later redeploy with the standby's old .env
  * (NODE_ROLE=backup) cannot demote it. Read once, on first use; setNodeRole replaces it for this process. A take-over
- * rolled back at boot (services/takeover.ts) reads it again, after putting the standby's own `nodeRole` back; one still
- * being rolled back makes this a standby, whatever the config says.
+ * rolled back at boot (services/takeover.ts) reads it again, after putting the standby's own `nodeRole` back. A take-over
+ * whose fate this start has still to decide (takeoverMayRollBack) makes this a standby, whatever the config says.
  */
 export function resolveNodeRole(): NodeRole {
-    // A take-over being rolled back (services/takeover.ts) never made this server the main one, though its `role` step
-    // may have written `nodeRole: primary` already: a standby until the roll-back finishes, from the database's boot on.
-    if (takeoverRollingBack()) return 'backup';
+    // A take-over being rolled back, or one stopped before its restart, which the next start may roll back (services/
+    // takeover.ts): neither has made this server the main one, though its `role` step may have written `nodeRole: primary`
+    // already. A standby from the database's boot on, until it is decided: a database that booted as the main server's
+    // writes what a roll-back would leave behind (the photo URLs' shape, the recovery seal's clear, the schema passes) and
+    // arms the main server's timers.
+    if (takeoverMayRollBack()) return 'backup';
+    return roleFromSettings();
+}
+
+/** The role local-config.json's `nodeRole`, then NODE_ROLE, give: what this server runs as once no take-over is undecided. */
+export function roleFromSettings(): NodeRole {
     try {
         const configured = getLocalConfig().nodeRole;
         if (configured === 'primary' || configured === 'backup') return configured;
@@ -29,15 +37,40 @@ export function resolveNodeRole(): NodeRole {
     return process.env.NODE_ROLE === 'backup' ? 'backup' : 'primary';
 }
 
-/** The take-over journal says 'rolling-back' (read from the file, as db/swap-at-boot.ts takeoverUnderWay reads it). */
-function takeoverRollingBack(): boolean {
+/**
+ * The take-over steps before its restart (services/takeover.ts PRE_RESTART), in order. Until every one is recorded, a start
+ * may roll the take-over back; once they are, it only goes on.
+ */
+export const TAKEOVER_STEPS_BEFORE_RESTART = [
+    'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'community-settings', 'role', 'pull-config',
+] as const;
+
+/** The take-over journal as this module reads it: the fields that say where it stands. */
+interface JournalState { state?: unknown; rolledBack?: unknown; steps?: Record<string, unknown> }
+
+function readTakeoverJournal(): JournalState | null {
     try {
         const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-        const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8')) as { state?: unknown } | null;
-        return j?.state === 'rolling-back';
+        const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8')) as JournalState | null;
+        return j && typeof j === 'object' ? j : null;
     } catch {
-        return false;
+        return null;
     }
+}
+
+/**
+ * Whether a start may still roll back the take-over the journal records (read from the file, as db/swap-at-boot.ts
+ * takeoverUnderWay reads it): one being rolled back ('rolling-back'), or one under way (neither complete nor rolled back)
+ * with a step before the restart not recorded, which the start resumes, and rolls back if that step fails or its opened
+ * keys are gone. One past all of them only goes on.
+ */
+export function takeoverMayRollBack(): boolean {
+    const j = readTakeoverJournal();
+    if (!j) return false;
+    if (j.state === 'rolling-back') return true;
+    if (j.state === 'complete' || (j.state === 'failed' && !!j.rolledBack)) return false;
+    const steps = j.steps && typeof j.steps === 'object' ? j.steps : {};
+    return TAKEOVER_STEPS_BEFORE_RESTART.some((s) => !steps[s]);
 }
 
 export function getNodeRole(): NodeRole {

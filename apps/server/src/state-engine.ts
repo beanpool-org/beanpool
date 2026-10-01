@@ -827,20 +827,25 @@ export function initStateEngine(): void {
     // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
     // boot). Primary only — it dispatches real push notifications to members, which a
     // passive backup replica must never do independently of the primary it mirrors.
+    //
+    // Armed on a main server only, and each tick asks the role again (onMainServer): a process made a standby after its
+    // boot (a role set back while it runs) runs none of them, and logs nothing, where each used to throw StandbyLedgerError
+    // with a stack trace every minute (the 2026-10-02 review of #1433).
     if (getNodeRole() === 'primary') {
-        setTimeout(() => {
+        const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
+        setTimeout(onMainServer(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 1000);
-        setInterval(() => {
+        }), 60 * 1000);
+        setInterval(onMainServer(() => {
             try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 60 * 1000);
+        }), 60 * 60 * 1000);
 
         // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
         // evaluate passed grants queue, and fire expired grace-period prunes.
-        setTimeout(() => {
+        setTimeout(onMainServer(() => {
             try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-        }, 30 * 1000);
-        setInterval(() => {
+        }), 30 * 1000);
+        setInterval(onMainServer(() => {
             try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
             // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
             try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
@@ -850,7 +855,7 @@ export function initStateEngine(): void {
             // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
             // itself is bounded by one indexed range scan over events starting inside the next week.
             try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
-        }, 60 * 1000);
+        }), 60 * 1000);
     }
 
     // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each

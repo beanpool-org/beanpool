@@ -188,6 +188,11 @@ async function main(): Promise<void> {
         assert(count(r.outputs, AUDIT_BANNER) === 1, `[${r.step}] the conservation audit ran exactly once across every start (${count(r.outputs, AUDIT_BANNER)})`);
         assert(count(r.outputs, ANNOUNCED) === 1, `[${r.step}] the community was told exactly once (${count(r.outputs, ANNOUNCED)})`);
         assert(a.preTakeoverDirs.length === 1, `[${r.step}] one copy of the standby's own files`);
+        if (r.step === 'role' || r.step === 'pull-config') {
+            // Killed once `role` had made it the main server: the start that resumes it boots its database as the main
+            // server, never as a standby promoted in the process (services/takeover.ts settleTakeoverBeforeDatabaseBoot).
+            assert(!/NODE_ROLE set to 'primary'/.test(r.outputs), `[${r.step}] the start that resumed it booted its database as the main server`);
+        }
     }
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);

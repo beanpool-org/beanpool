@@ -380,7 +380,7 @@ function backfillBoardStanding(): void {
 }
 
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
-const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
+export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
 /**
  * Brings this node's members rows into the rules a fresh install's table has (schema.sql's CHECKs on members, read from its

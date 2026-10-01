@@ -8439,6 +8439,9 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
 export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
 
+/** The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). */
+const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention']);
+
 /**
  * Generic push notification dispatcher with category-based preference gating,
  * app icon badge counts, and Android channelId routing.
@@ -8466,10 +8469,13 @@ export function dispatchPushNotification(
     kind: PushNoticeKind,
 ): number {
     if (getNodeRole() === 'backup') return 0;
-    // Filter out the actor and SYSTEM from targets. A chat push never reaches someone who has blocked whoever caused it
-    // (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and shows them the line, comes
-    // with no push. A trade's, a recovery's and every other category's still go: a deal under way must be heard.
-    const blockers = categoryId === 'chat' ? blockersOf(actorPubkey) : null;
+    // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
+    // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
+    // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
+    // (engine/messaging.ts sendMessage), so `chat.message` here is someone else's or the node's own (the admin page's
+    // message, under the operator's key), and a vote to replace a convenor (`group.lead`), a trade's, a recovery's and
+    // every other notice still go, whoever caused them (#1403 review).
+    const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
     const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
     if (recipients.length === 0) return 0;
 

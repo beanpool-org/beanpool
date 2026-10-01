@@ -10,8 +10,9 @@
  *   member is never told, and nothing they can read changes. The community's operator can see it, as they see reports
  *   (the trade Marty accepted).
  * - What the node does with it (hasBlocked, blockersOf): a direct message from a blocked member is kept for its sender
- *   alone and never reaches the owner, then or after an unblock (engine/withheld-lines.ts); no chat push and no new
- *   deal request's push reaches the owner from them; and they can't address a listing to the owner. A shared room (a
+ *   alone and never reaches the owner, then or after an unblock (engine/withheld-lines.ts); no push of their line or
+ *   @mention in a group's chat reaches the owner (the node's own notices, a vote on the owner's convenorship among them,
+ *   still do), nor of a new deal request from them; and they can't address a listing to the owner. A shared room (a
  *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author

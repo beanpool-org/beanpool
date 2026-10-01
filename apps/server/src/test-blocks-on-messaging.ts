@@ -19,6 +19,7 @@
  *   8. a listing addressed to the blocker is refused as one to someone who isn't here
  *   9. a member of another community, relayed by a peer, is withheld as a member here is
  *  10. a standby's copy carries no withheld line or conversation; a prune takes the member's own
+ *  11. pushes that aren't a blocked member's words still come: a vote to replace a convenor, the admin page's message
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-blocks-on-messaging.ts
  */
@@ -35,7 +36,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, createGroup, joinGroup, createPost, requestPost,
-    createConversation, sendMessage, transfer,
+    createConversation, sendMessage, transfer, getAdminPubkey,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -43,6 +44,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { registerVisitor } from './engine/members.js';
 import { lockedDm } from './dm-test-payload.js';
+import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -349,7 +351,7 @@ async function main(): Promise<void> {
     assert(pushesTo(cy).length === 2, `Cy hears both (${pushesTo(cy).length})`);
     const cm = await call('POST', cy, `/api/groups/${g.id}/chat/message`, { text: 'hi @Ann' });
     await sleep(50);
-    assert(cm.status === 201 && pushesTo(ann).length === 1 && /mentioned you/.test(pushesTo(ann)[0]?.body ?? ''), "Cy's @mention of Ann pushes her");
+    assert(cm.status === 201 && pushesTo(ann).length === 1 && pushesTo(ann)[0]?.data?.k === 'chat.mention', "Cy's @mention of Ann pushes her");
 
     // ── 7. a deal request ───────────────────────────────────────────────────────────────────────
     console.log('── 7. a deal request ──');
@@ -394,6 +396,48 @@ async function main(): Promise<void> {
     adminPruneUser(bo.pk, owner.pk);
     const boLeft = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE author_pubkey = ?').get(bo.pk) as { n: number }).n);
     assert(boLeft === 0, `a prune takes Bo's withheld lines (${boLeft})`);
+
+    // ── 11. pushes that aren't a blocked member's words ─────────────────────────────────────────
+    // #1403 review, BLOCKING 3: a block silences the pushes that carry the blocked member's own lines (a group's line,
+    // an @mention), and no other: the node's notices and the group's rules push as they did. The real dispatcher, Expo
+    // stubbed.
+    console.log("── 11. pushes that aren't a blocked member's words ──");
+    const DAY = 86_400_000;
+    const silence = (pub: string) => {
+        const then = new Date(Date.now() - 31 * DAY).toISOString();
+        db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(then, then, pub);
+        const before = new Date(Date.now() - 61 * DAY).toISOString();
+        db.prepare('UPDATE group_members SET joined_at = ?, role_since = ? WHERE group_id IN (SELECT id FROM groups WHERE lead_pubkey = ?)').run(before, before, pub);
+    };
+    const lee = member('Lee'), pat = member('Pat'), mo = member('Mo'), quin = member('Quin');
+    const leeGroup = createGroup({ name: 'Bike Kitchen', joinPolicy: 'open', createdBy: lee.pk });
+    joinGroup(leeGroup.id, pat.pk);
+    const moGroup = createGroup({ name: 'Tool Library', joinPolicy: 'open', createdBy: mo.pk });
+    joinGroup(moGroup.id, quin.pk);
+    const leeBlocks = await call('POST', lee, '/api/blocks', { targetPubkey: pat.pk });
+    silence(lee.pk);
+    silence(mo.pk);
+    pushes.length = 0;
+    const pp = await call('POST', pat, `/api/groups/${leeGroup.id}/succession/propose`, { candidatePubkey: pat.pk });
+    const qp = await call('POST', quin, `/api/groups/${moGroup.id}/succession/propose`, { candidatePubkey: quin.pk });
+    await sleep(50);
+    assert(leeBlocks.status === 200 && pp.status === 200 && qp.status === 200, `two silent leads face a vote (${show(pp)}; ${show(qp)})`);
+    assert(pushesTo(lee).length === 1 && pushesTo(lee)[0]?.data?.k === 'group.lead',
+        `a vote to replace a convenor pushes them though they blocked its proposer (${pushesTo(lee).length}; ${pushesTo(lee)[0]?.data?.k})`);
+    assert(pushesTo(mo).length === 1 && pushesTo(mo)[0]?.data?.k === 'group.lead', `as one by someone they never blocked does (${pushesTo(mo).length})`);
+
+    // The admin page's message: the node's words, sent under the operator's member key, which Ann has blocked.
+    const operator = getFirstNodeAdminPubkey() || getAdminPubkey();
+    const annBlocksOp = await call('POST', ann, '/api/blocks', { targetPubkey: operator });
+    pushes.length = 0;
+    resetGatewayRateLimit();
+    const adminRes = await realFetch(`${BASE}/api/local/admin/inbox/send`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': PW },
+        body: JSON.stringify({ targetPubkey: ann.pk, message: 'The node will be down for an hour on Sunday.' }),
+    });
+    await sleep(50);
+    assert(annBlocksOp.status === 200 && adminRes.status === 200 && pushesTo(ann).length === 1 && pushesTo(ann)[0]?.data?.k === 'chat.message',
+        `the admin page's message pushes Ann though she blocked the operator's key (${adminRes.status}; ${pushesTo(ann).length})`);
 
     for (const s of [annSock, boSock, deeSock]) s.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);

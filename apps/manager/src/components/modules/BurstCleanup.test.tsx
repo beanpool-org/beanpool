@@ -47,7 +47,17 @@ function reply(status: number, body: unknown) {
     return { ok: status >= 200 && status < 300, status, statusText: '', json: async () => body, headers: new Headers() } as unknown as Response;
 }
 
-function mockNode(opts: { digest?: number } = {}) {
+const A6 = 'f6'.repeat(32), V3 = '07'.repeat(32);
+
+function mockNode(opts: {
+    digest?: number;
+    /** The reports the node lists, in place of the one on Spammy's post. */
+    reports?: unknown[];
+    /** Each GET of a burst in turn (the last one repeats), in place of BURST. */
+    bursts?: unknown[];
+    /** The answer to a hide, in place of a success. */
+    hide?: { status: number; body: unknown };
+} = {}) {
     calls = [];
     vi.stubGlobal('fetch', vi.fn(async (input: string, init?: RequestInit) => {
         const url = String(input);
@@ -57,12 +67,19 @@ function mockNode(opts: { digest?: number } = {}) {
         calls.push({ url, method, body });
         const path = new URL(url, 'http://x').pathname;
         if (path.endsWith('/api/local/admin/bursts')) return opts.digest && opts.digest !== 200 ? reply(opts.digest, { error: 'Not Found' }) : reply(200, DIGEST);
-        if (path.endsWith('/burst') && method === 'GET') return reply(200, BURST);
-        if (path.endsWith('/burst/hide')) return reply(200, { success: true, action: { id: 'new', kind: 'hide', accounts: body.count, posts: body.count } });
+        if (path.endsWith('/burst') && method === 'GET') {
+            const n = calls.filter(c => c.method === 'GET' && new URL(c.url, 'http://x').pathname.endsWith('/burst')).length;
+            return reply(200, opts.bursts ? opts.bursts[Math.min(n, opts.bursts.length) - 1] : BURST);
+        }
+        if (path.endsWith('/burst/hide')) {
+            if (opts.hide) return reply(opts.hide.status, opts.hide.body);
+            return reply(200, { success: true, action: { id: 'new', kind: 'hide', accounts: body.count, posts: body.count } });
+        }
         if (path.endsWith('/burst/remove')) return reply(200, { success: true, removed: body.count, failed: [] });
         if (path.endsWith('/undo')) return reply(200, { success: true, restored: 3, keptHidden: 1 });
         if (path.endsWith('/api/local/admin/reports')) {
-            return reply(200, { success: true, reports: [{ id: 'r1', reason: 'Spam', outcome: 'open', targetPubkey: ANCHOR, postId: 'p1', postTitle: 'Cheap watches', postAuthorCallsign: 'Spammy', postRemoved: false }], total: 1, pendingCount: 1 });
+            if (opts.reports) return reply(200, { success: true, reports: opts.reports, total: opts.reports.length, pendingCount: opts.reports.length });
+            return reply(200, { success: true, reports: [{ id: 'r1', reason: 'Spam', outcome: 'open', targetPubkey: ANCHOR, postId: 'p1', postTitle: 'Cheap watches', postAuthorCallsign: 'Spammy', postAuthorPubkey: ANCHOR, postRemoved: false }], total: 1, pendingCount: 1 });
         }
         return reply(403, { error: 'Moderators can review reports and remove reported posts only', moderator: true });
     }));
@@ -71,6 +88,7 @@ function mockNode(opts: { digest?: number } = {}) {
 beforeEach(() => { setKeySessionCsrfToken(null); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+const burstReads = () => calls.filter(c => c.method === 'GET' && new URL(c.url, 'http://x').pathname.endsWith('/burst'));
 const sent = (suffix: string) => calls.filter(c => c.method === 'POST' && new URL(c.url, 'http://x').pathname.endsWith(suffix));
 
 async function openPanel(canRemove: boolean) {
@@ -136,6 +154,42 @@ describe('BurstPanel', () => {
         await act(async () => { fireEvent.click(go); });
         expect(sent('/burst/remove')[0].body).toEqual({ members: [ANCHOR, NEW3], count: 2 });
     });
+
+    it('after a refusal it loads the list again, re-ticks from the fresh standings, and keeps the refusal on screen', async () => {
+        // Between loading and confirming, Nell became established.
+        const fresh = { ...BURST, others: BURST.others.map(a => (a.publicKey === NEW3 ? { ...a, standing: 4, established: true } : a)) };
+        mockNode({
+            bursts: [BURST, fresh],
+            hide: { status: 409, body: { success: false, code: 'established', error: 'One of these accounts is established here (standing 4 or more). Check them, and confirm you mean them too.', established: [NEW3] } },
+        });
+        await act(async () => {
+            render(<BurstPanel nodeUrl="https://global.example" anchor={ANCHOR} canRemove={false} onClose={() => {}} />);
+        });
+        await waitFor(() => expect(screen.getAllByTestId('burst-account')).toHaveLength(5));
+        expect(box(screen.getAllByTestId('burst-account')[2]).checked).toBe(true);
+        fireEvent.click(screen.getByRole('button', { name: 'Hide their posts' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Hide the posts of 3 accounts' })); });
+        await waitFor(() => expect(burstReads()).toHaveLength(2));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/established here/);
+        const nell = screen.getAllByTestId('burst-account')[2];
+        expect(box(nell).checked).toBe(false);
+        expect(within(nell).getByText(/Established/)).toBeInTheDocument();
+        expect(screen.getByTestId('burst-summary')).toHaveTextContent('2 accounts ticked, standing 0 to 1.');
+    });
+
+    it('offers "Load again", which reads the list from the node again', async () => {
+        mockNode({ hide: { status: 409, body: { success: false, code: 'not_in_burst', error: 'Some of these accounts did not join from the same connection within a day as this one, or were removed since. Load the list again.' } } });
+        await act(async () => {
+            render(<BurstPanel nodeUrl="https://global.example" anchor={ANCHOR} canRemove={false} onClose={() => {}} />);
+        });
+        await waitFor(() => expect(screen.getAllByTestId('burst-account')).toHaveLength(5));
+        fireEvent.click(screen.getByRole('button', { name: 'Hide their posts' }));
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Hide the posts of 3 accounts' })); });
+        await waitFor(() => expect(burstReads()).toHaveLength(2));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/Load the list again/);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load again' })); });
+        await waitFor(() => expect(burstReads()).toHaveLength(3));
+    });
 });
 
 describe('BurstDigestCard', () => {
@@ -182,6 +236,28 @@ describe('ModeratorView with bursts', () => {
         expect(screen.queryByRole('button', { name: 'Remove them' })).toBeNull();
     });
 
+    it('on a report about a post it opens the post\'s author, never the member the reporter named', async () => {
+        mockNode({ reports: [{ id: 'r2', reason: 'Spam', outcome: 'open', targetPubkey: V3, postId: 'p6', postTitle: 'Cheap watches', postAuthorCallsign: 'A6', postAuthorPubkey: A6, postRemoved: false }] });
+        await act(async () => {
+            render(<ModeratorView nodeUrl="https://global.example" communityName="Global" onLogout={() => {}} />);
+        });
+        const card = await screen.findByTestId('moderator-report');
+        await act(async () => { fireEvent.click(await within(card).findByRole('button', { name: 'Who joined with them' })); });
+        await waitFor(() => expect(burstReads()).toHaveLength(1));
+        expect(burstReads()[0].url).toContain(`/members/${A6}/burst`);
+        expect(calls.some(c => c.url.includes(V3))).toBe(false);
+    });
+
+    it('a post report from a node that does not name the post\'s author offers no group at all', async () => {
+        mockNode({ reports: [{ id: 'r3', reason: 'Spam', outcome: 'open', targetPubkey: V3, postId: 'p6', postTitle: 'Cheap watches', postAuthorCallsign: 'A6', postRemoved: false }] });
+        await act(async () => {
+            render(<ModeratorView nodeUrl="https://global.example" communityName="Global" onLogout={() => {}} />);
+        });
+        const card = await screen.findByTestId('moderator-report');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(within(card).queryByRole('button', { name: 'Who joined with them' })).toBeNull();
+    });
+
     it('on a local community it offers nothing of it', async () => {
         mockNode({ digest: 404 });
         await act(async () => {
@@ -195,11 +271,11 @@ describe('ModeratorView with bursts', () => {
 });
 
 describe('Triage & Moderation (owners and admins) with bursts', () => {
-    const triage = (invitedBy: string) => render(
+    const triage = (invitedBy: string, reports: unknown[] = [{ id: 'r1', targetPubkey: ANCHOR, reason: 'Spam', status: 'pending', outcome: 'open' }]) => render(
         <PeopleSafetySection
             activeNode={{ id: 'global', name: 'Global', url: 'https://global.example', adminPassword: 'pw' }}
             nodeData={{
-                reports: [{ id: 'r1', targetPubkey: ANCHOR, reason: 'Spam', status: 'pending', outcome: 'open' }],
+                reports: reports as any,
                 members: [{ publicKey: ANCHOR, callsign: 'Spammy', invitedBy, nodeRole: null }],
             }}
             nodeDataLoading={false}
@@ -222,6 +298,18 @@ describe('Triage & Moderation (owners and admins) with bursts', () => {
         expect(screen.getByRole('button', { name: 'Remove them' })).toBeInTheDocument();
         const digest = calls.find(c => c.url.endsWith('/api/local/admin/bursts'));
         expect(digest).toBeTruthy();
+    });
+
+    it('on a report about a post it opens the post\'s author, never the member the reporter named', async () => {
+        mockNode();
+        await act(async () => {
+            triage('open:google', [{ id: 'r2', targetPubkey: V3, reason: 'Spam', status: 'pending', outcome: 'open', postId: 'p6', postTitle: 'Cheap watches', postAuthorCallsign: 'A6', postAuthorPubkey: A6 }]);
+        });
+        await screen.findByTestId('burst-digest');
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Who joined with them' })); });
+        await waitFor(() => expect(burstReads()).toHaveLength(1));
+        expect(burstReads()[0].url).toContain(`/members/${A6}/burst`);
+        expect(calls.some(c => c.url.includes(V3))).toBe(false);
     });
 
     it('on a community nobody joined through the door, it asks the node nothing about bursts', async () => {

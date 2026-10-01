@@ -190,6 +190,8 @@ export interface NodeReport {
     postTitle?: string | null;
     title?: string | null;
     postAuthorCallsign?: string | null;
+    /** The reported post's author's key, read by the node from the post (null when no post is reported). */
+    postAuthorPubkey?: string | null;
     postRemoved?: boolean | null;
     targetPulseItemId?: string;
     /** Set when the report targets a Pulse item; `removed` once it is off the feed. */
@@ -776,6 +778,7 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
                 postTitle: r.postTitle ?? r.title ?? null,
                 postId: typeof r.postId === 'string' ? r.postId : null,
                 postAuthorCallsign: r.postAuthorCallsign ?? null,
+                postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
                 postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
             };
         });
@@ -1067,6 +1070,7 @@ export async function fetchReports(
             postTitle: r.postTitle ?? r.title ?? null,
             postId: typeof r.postId === 'string' ? r.postId : null,
             postAuthorCallsign: r.postAuthorCallsign ?? null,
+            postAuthorPubkey: normalizeKeeperPubkey(r.postAuthorPubkey) || null,
             postRemoved: typeof r.postRemoved === 'boolean' ? r.postRemoved : null,
         };
     }) : [];
@@ -1210,6 +1214,19 @@ export async function fetchBurstDigest(nodeUrl: string, adminPassword?: string, 
         if (e instanceof BurstRequestError && (e.status === 404 || e.status === 403)) return null;
         throw e;
     }
+}
+
+/**
+ * The member a report is about, to open "Who joined with them" from. A report on a post is about the post's author, as
+ * the node reads it from the post (`postAuthorPubkey`), never the key the reporter sent (`targetPubkey`): a crafted report
+ * could name anyone beside a real spam post. A node that doesn't say who wrote it gets null, so nothing is offered.
+ * Otherwise (a member, or a Pulse item, whose owner the node sets) the report's target.
+ */
+export function reportBurstSubject(report: NodeReport): string | null {
+    if (report.postId) return typeof report.postAuthorPubkey === 'string' && report.postAuthorPubkey ? report.postAuthorPubkey : null;
+    const target = typeof report.targetPubkey === 'string' && report.targetPubkey ? report.targetPubkey
+        : (typeof report.target_pubkey === 'string' ? report.target_pubkey : '');
+    return target || null;
 }
 
 /** One account's burst: the account, and the others still here, oldest join first. */

@@ -9,6 +9,7 @@ import {
     actionNodeReport,
     dismissNodeReport,
     fetchReports,
+    reportBurstSubject,
     type ListedReport,
     type ReportStatusFilter,
 } from '../../lib/node-client';
@@ -196,6 +197,8 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
     /** Open the accounts that joined with the reported one (global community only). */
     onShowBurst?: (pubkey: string) => void;
 }) {
+    // A report on a post opens its author's group, as the node read it from the post: never the key the reporter sent.
+    const burstSubject = reportBurstSubject(report);
     const [choosingReason, setChoosingReason] = useState(false);
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState<string | null>(null);
@@ -291,8 +294,8 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                             {busy === 'pulse' ? 'Removing…' : 'Remove from the Pulse'}
                         </button>
                     )}
-                    {onShowBurst && typeof report.targetPubkey === 'string' && report.targetPubkey && (
-                        <button type="button" disabled={!!busy} onClick={() => onShowBurst(report.targetPubkey as string)}
+                    {onShowBurst && burstSubject && (
+                        <button type="button" disabled={!!busy} onClick={() => onShowBurst(burstSubject)}
                             className={`${btn} bg-nature-900 hover:bg-nature-800 border border-nature-700 text-nature-100`}>
                             Who joined with them
                         </button>

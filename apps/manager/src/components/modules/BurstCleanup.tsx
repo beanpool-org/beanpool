@@ -112,8 +112,12 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
             onChanged?.();
             await load();
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : 'That did not work');
+            // Refused (the group changed since it was read: someone passed 4 weeks, kept a 3rd post, or was removed by
+            // another admin): read it again, so the list and its ticks are the node's now, and keep the refusal on
+            // screen. load() clears the error as it starts, so it is set after.
             setConfirming(null);
+            await load();
+            setError(e instanceof Error ? e.message : 'That did not work');
         } finally {
             setBusy(false);
         }
@@ -128,6 +132,10 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
                 <h2 className="text-base font-bold text-white m-0 flex-1 min-w-0">
                     Joined from the same connection within a day{burst ? ` as ${name}` : ''}
                 </h2>
+                <button type="button" disabled={loading || busy} onClick={() => { setDone(null); void load(); }}
+                    className={`${btn} bg-nature-800 hover:bg-nature-700 text-nature-100`}>
+                    {loading && burst ? 'Loading…' : 'Load again'}
+                </button>
                 <button type="button" onClick={onClose} className={`${btn} bg-nature-800 hover:bg-nature-700 text-nature-100`}>Close</button>
             </div>
 

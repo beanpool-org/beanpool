@@ -22,7 +22,14 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import {
+    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
+    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
+} from '../../utils/invite-entries';
+import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
+import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -192,6 +199,37 @@ export default function PeopleScreen() {
     const makesInvites = invitesOn(nodeProfile?.features);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
+    // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
+    // once the global community has said its door is open. Only there: the door is the global community's alone, so a phone
+    // anywhere else never asks it.
+    const guestAtGlobal = guestNoInvites && isGlobalCommunity(anchorUrl);
+    const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
+    const accountClosed = useAccountClosedAtGlobal(identity?.publicKey);
+    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed });
+    // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
+    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
+    const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        setInviteRole(undefined);
+        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
+        let alive = true;
+        askNodeRole(anchorUrl, identity).then(async r => {
+            if (r) {
+                // Heard: remember it (header cache and phone storage) for the next time there is no signal.
+                rememberNodeRole(anchorUrl, identity.publicKey, r);
+                void persistNodeRole(anchorUrl, identity.publicKey, r.role);
+                if (alive) setInviteRole(r.role);
+                return;
+            }
+            // No answer (offline): the last role this node gave for this key, so an owner or admin can still make a ticket.
+            const last = await readPersistedNodeRole(anchorUrl, identity.publicKey);
+            if (alive && last !== undefined) setInviteRole(last);
+        });
+        return () => { alive = false; };
+    }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
+    const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -405,14 +443,31 @@ export default function PeopleScreen() {
                 } else {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
                     // make no offline ticket, which it would refuse just the same.
-                    const refusal = invitesOffRefusal(res.status, await res.json().catch(() => null));
+                    const body = await res.json().catch(() => null);
+                    const refusal = invitesOffRefusal(res.status, body);
                     if (refusal) {
                         Alert.alert('No invites here', refusal);
+                        return;
+                    }
+                    // Only admins invite here (this phone hadn't heard it yet, or the member's role changed): the node's
+                    // words, and no offline ticket, which it would refuse at the join.
+                    const adminsOnly = adminsOnlyRefusal(res.status, body);
+                    if (adminsOnly) {
+                        setInviteRole(null);
+                        if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
+                        Alert.alert('Only admins invite here', adminsOnly);
                         return;
                     }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
+            if (!mayMakeOfflineTicket(nodeProfile?.features, inviteRole)) {
+                const refusal = offlineTicketRefusal(inviteRole);
+                Alert.alert(refusal.title, refusal.text);
+                return;
             }
 
             // Offline Fallback
@@ -902,10 +957,22 @@ export default function PeopleScreen() {
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
-                                {guestNoInvites
-                                    ? GUEST_NO_INVITES_TEXT
+                                {guestDoor
+                                    ? GUEST_DOOR_TEXT
+                                    : guestNoInvites
+                                    ? guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)
                                     : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
+                            {guestDoor && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Join the global community with a sign-in"
+                                    style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
+                                    onPress={() => router.push('/join-global')}
+                                >
+                                    <Text style={styles.btnGenerateText}>{GUEST_DOOR_BUTTON}</Text>
+                                </Pressable>
+                            )}
                         </View>
                     ) : (
                         <>
@@ -928,6 +995,24 @@ export default function PeopleScreen() {
                                     >
                                         <Text style={styles.btnGenerateText}>📤 Share the link</Text>
                                     </Pressable>
+                                </>
+                            ) : !mayInvite ? (
+                                // Only its admins invite here, and this member is no owner or admin: no code, QR or offline
+                                // ticket. Where the community takes requests to join, its link lets someone ask, for an admin to answer.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>{adminsOnlyText(takesKnocks)}</Text>
+                                    {takesKnocks && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Share this community's link"
+                                            style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                            onPress={shareCommunityLink}
+                                            disabled={!anchorUrl}
+                                        >
+                                            <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                        </Pressable>
+                                    )}
                                 </>
                             ) : (
                             <>

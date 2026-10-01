@@ -46,7 +46,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
 import os from 'node:os';
-import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
+import { logger, addLogClient, removeLogClient, logClients, startSystemLogRetention } from './logger.js';
 import {
     registerMember, getMembers, getAllMembers, isNodeMember, isInvalidatedKey, isClosedAccountKey,
     readsAsMember, passesReadGate, isLiveVisitor, socketStanding,
@@ -1295,6 +1295,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // take-over keys' holders forget theirs, now (the first boot of a version clears older ones) and hourly after
     // (services/address-retention.ts).
     startForgettingOldAddresses();
+    // The log keeps its newest 2,500 lines and none older than 30 days, now and hourly after, on every server: a quiet one
+    // writes no hundredth line for weeks (logger.ts startSystemLogRetention).
+    startSystemLogRetention();
     // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();

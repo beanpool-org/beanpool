@@ -62,9 +62,21 @@ Profile pictures on your community are not locked with a key of their own yet. A
 
 ## What admins see in Settings
 
-- The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written.
+- The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written. The log keeps its newest 2,500 lines, and none older than 30 days.
 - The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.
 - Reports, and the people they are about.
+
+## When a member deletes their account
+
+Their profile, the words, photos and places of their posts, every chat line they wrote and the photos they sent, and their sign-in recovery copies go from your server at once. Their trades stay in the ledger, under "Deleted Member". The members' guide tells them what goes, and what stays a while:
+
+- **The log.** Every line that names them, or shows the start of their key, then reads "a deleted member", and so do the old lines that **Clean Orphaned Media & Compress Logs** moved out of the log. A line is never kept past 30 days anyway.
+- **A standby** takes the delete at its next copy.
+- **Notices kept for other members.** For 7 days your server keeps the details of each push it sent to a member (who wrote, which chat, which listing). On a delete it rewrites every such notice of other members that names the member or shows the start of their key: "Wren sent you a message" becomes "A member sent you a message". The rest of those notices (the chat or listing they point to) stays for the 7 days. They are the server's own: a standby does not copy them.
+- **Snapshots** keep everything as it was when each was taken, until the snapshot is deleted: up to 7 days with the defaults, never more than 14 (see Backups and replicas). A standby takes no snapshots.
+- **A backup you downloaded** is a file out of the server's reach. It keeps everything until you delete it. A fleet manager keeps one copy a day for 30 days.
+- **Deletion records.** A short record of each delete (which row went, such as which two members were friends) stays on every server for 30 days, so a standby can copy the delete.
+- **Docker's own log** of the server holds the same lines as the log, with their name, and nothing can change it afterwards. It is two files of 5 MB at most, and the oldest lines go as it fills, which on a quiet server can take weeks. It goes with the container: an update that replaces the container starts a new one, and so does: docker compose up -d --force-recreate
 
 ## Internet addresses
 

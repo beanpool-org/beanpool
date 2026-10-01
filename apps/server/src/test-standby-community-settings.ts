@@ -10,7 +10,8 @@
  *
  *  1. The main server M sets its community up: a name, place and contacts, a currency display, thresholds, directory
  *     choices with its contact email ON, its phone and member count OFF and a service area, a pricing source and
- *     seasonality, a snapshot schedule, and an accepted non-zero audit baseline (the test node's -9.82 kind).
+ *     seasonality, a snapshot schedule, only its admins inviting (the door, config/door.ts), and an accepted non-zero
+ *     audit baseline (the test node's -9.82 kind).
  *  2. A standby S with settings of its own (its phone published, its email not) takes its first copy: it keeps M's
  *     record, and its own name, contacts, directory choices, thresholds, gateway and baseline stay its own.
  *  3. M changes its phone and stops publishing its health (a save of that one switch, which leaves the others as they
@@ -35,8 +36,8 @@
  *  8. The directory publisher on the promoted server sends the community's name, area and contact email, and not its
  *     phone, member count or health, which the community had not published (S's own choice to publish its phone does
  *     not carry over to the community's phone); nothing of S's own name or contacts.
- *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed before the take-over
- *     resumes), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
+ *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed once the take-over
+ *     has resumed; a standby arms none), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
  *     community-settings step and finished at the next start (resumeTakeoverAtBoot), with no restart after: the promoted
  *     server's snapshot timer runs on M's schedule, not S3's (before, it kept S3's until it next restarted, while the
  *     Backup tab showed M's).
@@ -211,6 +212,11 @@ async function child(): Promise<void> {
             return delays;
         },
         /** How often this server's snapshot timer takes a snapshot now, in hours; null when none runs. */
+        /** Who may invite as this server acts on it (config/door.ts), and whether `pubkey` may. Nothing on a server without it. */
+        'door-now': async (a: { pubkey: string }) => {
+            const door: any = await import('./config/door.js').catch(() => null);
+            return door ? { door: door.getDoor(), may: door.mayInviteHere(a.pubkey) } : { door: null, may: null };
+        },
         'snapshot-timer': async () => {
             const { armedSnapshotInterval } = await import('./services/snapshot-scheduler.js');
             return armedSnapshotInterval();
@@ -401,7 +407,7 @@ async function directoryRegistry(): Promise<{ url: string; bodies: any[]; close:
 type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kept: any; directory: any };
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door'] as const;
 const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
@@ -464,10 +470,12 @@ async function main(): Promise<void> {
         built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
         built('its snapshot schedule: one every 6 hours', await A('/api/local/admin/snapshots/config', { enabled: true, intervalHours: 6, keep: 3 }));
+        built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
         let mSettings: Settings = await main.send('settings');
+        require_(mSettings.rows.door === 'admins', `M: only its admins invite (door ${j(mSettings.rows.door)})`);
         require_(mSettings.rows.ledger_audit_baseline && Math.abs(Number(mSettings.rows.ledger_audit_baseline) - 0.1) < 1e-9,
             `M: its accepted baseline is 0.1 (${mSettings.rows.ledger_audit_baseline})`);
 
@@ -500,6 +508,8 @@ async function main(): Promise<void> {
             && kept1.record?.directory?.publishContactEmail === true && kept1.record?.directory?.publishContactPhone === false
             && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
             `S keeps M's record, not installed: its name, its choice to publish its email and not its phone, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, email: kept1.record?.directory?.publishContactEmail, phone: kept1.record?.directory?.publishContactPhone, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
+        assert(kept1?.record?.nodeConfig?.door === 'admins' && sNow.rows.door === undefined,
+            `the record S keeps says only admins invite, and S's own door is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.door, own: sNow.rows.door ?? null })})`);
 
         // ── 3. M changes its settings; a delta brings them ──
         console.log('\n— 3. the main server changes its settings; a delta brings them —');
@@ -549,7 +559,8 @@ async function main(): Promise<void> {
         const takesSchedule = await standby.send('record-takes-snapshot-interval', { values: [1, 24, 596, 0, -1, 0.5, 597, 24 * 30, 24 * 366, '12'] });
         assert(j(takesSchedule) === j([true, true, true, false, false, false, false, false, false, false]),
             `a kept record takes the snapshot intervals the route does, and none the scheduler's timer can't hold (${j(takesSchedule)})`);
-        const armed = await standby.send('snapshot-timer-from-rows', {
+        // On M: a standby arms no snapshot timer at all (services/snapshot-scheduler.ts, data-at-rest report F3).
+        const armed = await main.send('snapshot-timer-from-rows', {
             rows: [{ enabled: true, intervalHours: 24 * 30, keep: 7 }, { enabled: true, intervalHours: 0.3, keep: 7 }].map((r) => JSON.stringify(r)),
         });
         assert(armed.length === 2 && armed.every((ms: number) => ms >= 3_600_000 && ms <= 2 ** 31 - 1),
@@ -582,6 +593,9 @@ async function main(): Promise<void> {
         let s2: Settings = await standby2.send('settings');
         assert(differing(mCommunity, communitySettings(s2)).length === 0,
             `every community setting is M's (differing: ${first(differing(mCommunity, communitySettings(s2)))})`);
+        const s2Door = await standby2.send('door-now', { pubkey: ann.pk });
+        assert(s2.rows.door === 'admins' && s2Door.door === 'admins' && s2Door.may === false,
+            `promoted by hand, S2 keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: s2.rows.door, now: s2Door })})`);
         assert(j(s2.localConfig.gateway?.adminIpAllowlist) === j(['192.0.2.44']) && s2.kept?.installedAt,
             `S2 keeps its own admin IP allowlist, and the record says when it was installed (${j({ allowlist: s2.localConfig.gateway?.adminIpAllowlist, installedAt: s2.kept?.installedAt })})`);
         const s2Audit = await standby2.send('ledger-audit');
@@ -629,7 +643,7 @@ async function main(): Promise<void> {
         console.log('\n— 9 (while the main server is up): a standby with its own snapshots off copies it —');
         fs.mkdirSync(dir('standby3'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby3'), 'genesis.json'));
-        // Booted as index.ts boots: the snapshot scheduler armed from the schedule row, then the take-over resumed. Its
+        // Booted as index.ts boots: the take-over resumed, then the snapshot scheduler armed for the role. Its
         // take-over is killed the moment the step before community-settings is recorded, as a power cut would.
         const s3Env = env(PW_STANDBY3, 'backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
         let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
@@ -642,7 +656,7 @@ async function main(): Promise<void> {
         const s3Kept = JSON.parse((await standby3.send('settings')).kept?.record?.nodeConfig?.autosnapshot_config ?? '{}');
         const s3Timer = await standby3.send('snapshot-timer');
         assert(s3Timer === null && s3Kept.enabled === true && s3Kept.intervalHours === 6,
-            `while a standby, S3 takes no snapshots, its own choice, and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
+            `while a standby, S3 takes no snapshots (none does, and its own are off), and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
         refused.push(...(await standby3.send('fetches')).blocked);
 
         // ── 6. The take-over ──
@@ -668,6 +682,9 @@ async function main(): Promise<void> {
         const expected = { ...mCommunity, 'node_config.pricing_show_seasonality': sOwnCommunity['node_config.pricing_show_seasonality'] };
         assert(differing(expected, communitySettings(sAfter)).length === 0,
             `every community setting is M's; the one the record carried a value S couldn't take is S's own (differing: ${first(differing(expected, communitySettings(sAfter)))})`);
+        const sDoor = await standby.send('door-now', { pubkey: ann.pk });
+        assert(sAfter.rows.door === 'admins' && sDoor.door === 'admins' && sDoor.may === false,
+            `taken over, S keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: sAfter.rows.door, now: sDoor })})`);
         assert(sAfter.blob.publishContactPhone === false && sAfter.blob.publishMembers === false && sAfter.blob.publishHealth === false,
             `a community that didn't publish its phone, member count or health still doesn't, though S had its own phone published (${j({ phone: sAfter.blob.publishContactPhone, members: sAfter.blob.publishMembers, health: sAfter.blob.publishHealth })})`);
         assert(sAfter.blob.publishContactEmail === true, `and the email it chose to publish still is (${j({ email: sAfter.blob.publishContactEmail })})`);

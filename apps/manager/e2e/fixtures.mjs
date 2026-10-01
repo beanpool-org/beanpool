@@ -1048,6 +1048,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
             publishHealth: true,
             directoryPushIntervalHours: 12,
             lastDirectoryPush: '2026-09-19T00:00:00.000Z',
+            // Who may invite (People & Safety → Invites & QR): any member, as every community starts.
+            door: 'members',
         });
     }
     if (pathname === '/api/local/update-identity') return ok({ success: true });

@@ -5,6 +5,7 @@ import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
+import { DoorSettingPanel } from './DoorSettingPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
@@ -335,7 +336,12 @@ export function PeopleSafetySection({
             )}
 
             {subTab === 'invites' && (
-                <InvitesModule activeNode={activeNode} />
+                <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Who may invite" resetKey={activeNode.id}>
+                        <DoorSettingPanel activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+                    <InvitesModule activeNode={activeNode} />
+                </div>
             )}
 
             {subTab === 'funnel' && (

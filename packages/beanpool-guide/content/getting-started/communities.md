@@ -18,7 +18,20 @@ Your phone holds one account: one name, one key, one set of 12 words. You can us
 
 Your key, your 12 words and your name come with you. Your posts, chats and trades stay in each community. Next you check your name and photo for the new community. A sign-in that protects your account is kept by each community, so the app asks you to protect your account in the new one too: tap **Protect it**, or **Later**.
 
-The global community needs no invite, but for now it is joined from the app's first screen, before you have an account: when the global community is open, tap **Explore BeanPool worldwide** there. See "Joining BeanPool". Joining it from an account you already have is not possible yet.
+## Joining the global community from your account
+
+The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it only when the global community is open.
+
+- Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.
+- Sign in once with Google, Apple (on an iPhone) or Facebook. The app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
+- Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
+- Then choose your photo for the global community, as for any new community.
+
+Nothing changes in your other communities, and your 12 words stay the same. The sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working.
+
+If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community.
+
+On a new phone with no account yet, use **Explore BeanPool worldwide** on the first screen instead. See "Joining BeanPool".
 
 ## Switching
 
@@ -38,4 +51,4 @@ To delete your account in one community, open it and use **Permanently Delete Ac
 
 ## Visiting as a guest
 
-If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite.
+If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with a sign-in instead: see "Joining the global community from your account" above.

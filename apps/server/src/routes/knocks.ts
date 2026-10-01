@@ -6,7 +6,8 @@
  * gets 403 `key_invalidated` from both):
  *   POST /api/join/knock          { message, callsign, avatar?, fromNode? }  → 201 { knock: { status: 'pending' } }
  *   GET  /api/join/knock/status   → { status: 'none' | 'pending' } | { status: 'approved', invite, expiresAt }
- * Any member (tiers gate nothing), signed:
+ * Any member (tiers gate nothing), signed; where only admins invite (the door, config/door.ts), only an owner or admin,
+ * and anyone else is answered 403 `admins_only`:
  *   GET  /api/join/knocks?limit&offset          → { knocks: [{ id, pubkey, callsign, message, avatar, fromNode, createdAt }], total, limit, offset }
  *   POST /api/join/knocks/:id/approve           → { knock: { id, status: 'approved' }, invite: { code, expiresAt } }
  *   POST /api/join/knocks/:id/decline           → { knock: { id, status: 'declined' } }   ("Not now")
@@ -55,6 +56,7 @@ import {
     type KnockRefusal, type AnswerRefusal,
 } from '../engine/knocks.js';
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
+import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
 import type { RouteDeps } from './types.js';
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -192,6 +194,8 @@ function refuseAnswer(ctx: any, reason: AnswerRefusal): void {
             return answer(ctx, 409, 'They have already joined this community.', reason);
         case 'key_invalidated':
             return answer(ctx, 409, 'This request came from a key that has since been replaced by a new one, so there is nothing to answer.', reason);
+        case 'admins_only':
+            return answer(ctx, 403, ADMINS_ONLY_ANSWER_MESSAGE, reason);
     }
 }
 
@@ -257,6 +261,9 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         if (!readsAsMember(member)) {
             return answer(ctx, 403, 'Only a member of this community can see or answer requests to join.', 'not_member');
         }
+        // Where only admins invite, the requests are theirs to answer, so theirs to read: what an applicant sent (a name,
+        // a message, a photo) goes to nobody who can't act on it. The phone shows a member no section for a 403.
+        if (!mayInviteHere(member)) return answer(ctx, 403, ADMINS_ONLY_ANSWER_MESSAGE, ADMINS_ONLY);
         const limit = wholeQuery(ctx.query.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
         const offset = wholeQuery(ctx.query.offset, 0, 1_000_000);
         if (limit === null || limit < 1) return answer(ctx, 400, `limit must be a whole number from 1 to ${MAX_LIST_LIMIT}.`, 'bad_request');

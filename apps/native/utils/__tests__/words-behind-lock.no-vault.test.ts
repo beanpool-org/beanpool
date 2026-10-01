@@ -370,6 +370,10 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             // The global door's sign-in with the phone's own key, and the join it signs in for (sign-in-link-behind-lock.test.ts).
             'app/welcome.tsx:signInAtDoor(': 1,
             'app/welcome.tsx:submitJoin(': 1,
+            // The same door from an account the phone already has (join-global.tsx): its sign-in, always the phone's own
+            // key, and the join it signs in for (sign-in-link-behind-lock.no-vault.test.ts).
+            'app/join-global.tsx:signInAtDoor(': 1,
+            'app/join-global.tsx:submitJoin(': 1,
             // Delete this account from this phone (account-removal-behind-lock.test.ts).
             'app/node-mismatch.tsx:readWordsBehindLock(': 1,
             'app/node-mismatch.tsx:deleteAccountFromThisPhone(': 1,

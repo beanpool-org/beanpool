@@ -7,14 +7,18 @@
  *  3. Community health metrics & flags
  *
  * On a node that takes no invites (lib/node-invites.ts: the global node), none of that: the community's plain link to
- * share, since anyone joins it with a sign-in.
+ * share, since anyone joins it with a sign-in. Where only its admins invite (the door, `features.door === 'admins'`), a
+ * member who is no owner or admin there makes none either, and is told who does, in plain words.
  */
 
 import { useState, useEffect } from 'react';
-import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, type InviteCode } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { communityLinkText, invitesOn, invitesOffRefusal } from '../lib/node-invites';
+import {
+    communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
+    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
+} from '../lib/node-invites';
 import { QRCodeSVG } from 'qrcode.react';
 
 const QRCodeSVGComponent = QRCodeSVG as any;
@@ -48,14 +52,37 @@ export function InvitePage({ identity }: Props) {
     const [makes, setMakes] = useState(true);
     // The node's own words, when it refused a generate before this page had heard it takes no invites.
     const [refused, setRefused] = useState<string | null>(null);
+    const [nodeInfo, setNodeInfo] = useState<CommunityInfo | null>(null);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) setMakes(invitesOn(info)); })
+            .then((info) => { if (!cancelled) { setNodeInfo(info); setMakes(invitesOn(info)); } })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses an invite itself. */ });
         return () => { cancelled = true; };
     }, []);
+
+    // Where only its admins invite (lib/node-invites.ts), this member's role, as the node says it (GET
+    // /api/node-admin/me). Not heard yet, or no answer, counts as before: the node refuses a member's invite itself.
+    const doorAdmins = onlyAdminsInvite(nodeInfo);
+    const [role, setRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        if (!doorAdmins) return;
+        let cancelled = false;
+        request<{ role?: unknown }>('GET', '/api/node-admin/me')
+            .then((body) => { if (!cancelled) setRole(readInviteRole(body?.role)); })
+            .catch((e) => {
+                // A refusal (not a member) is an answer: no role. No answer at all leaves it unknown.
+                const status = (e as { status?: unknown } | null)?.status;
+                if (!cancelled && typeof status === 'number' && status < 500) setRole(null);
+            });
+        return () => { cancelled = true; };
+    }, [doorAdmins]);
+    // The node's own words, when it refused a generate because only admins invite here.
+    const [adminsRefused, setAdminsRefused] = useState<string | null>(null);
+    const adminsOnly = adminsRefused !== null || !mayInviteHere(nodeInfo, role);
+    // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
+    const [notice, setNotice] = useState<string | null>(null);
 
     useEffect(() => {
         loadInvites();
@@ -111,6 +138,7 @@ export function InvitePage({ identity }: Props) {
     async function handleGenerate() {
         setGenerating(true);
         setCopied(false);
+        setNotice(null);
         try {
             // Online first (parity with native): a server-minted INV- code is
             // short, single-use enforced centrally, and lands in the node's
@@ -134,7 +162,20 @@ export function InvitePage({ identity }: Props) {
                     setMakes(false);
                     return;
                 }
+                // Only admins invite here (the page hadn't heard, or this member's role changed): the node's words, and
+                // no offline ticket, which it would refuse at the join.
+                const adminsWords = adminsOnlyRefusal(e);
+                if (adminsWords) {
+                    setAdminsRefused(adminsWords);
+                    return;
+                }
                 /* node unreachable — offline fallback below */
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (lib/node-invites.ts).
+            if (!mayMakeOfflineTicket(nodeInfo, role)) {
+                setNotice(OFFLINE_ADMINS_ONLY_TEXT);
+                return;
             }
 
             // A self-signed ticket for this community only (core's format 2 names its host), with the
@@ -220,19 +261,18 @@ export function InvitePage({ identity }: Props) {
         }
     }
 
-    const unusedInvites = invites.filter(i => !i.usedBy);
+    // Where only admins invite, a paper ticket made on this device before the switch is refused by the node, so it is
+    // not listed as a code that still works.
+    const offlineCodes = adminsOnly ? localOfflineCodes(identity.publicKey) : new Set<string>();
+    const unusedInvites = invites.filter(i => !i.usedBy && !offlineCodes.has(i.code));
     const usedInvites = invites.filter(i => i.usedBy);
 
-    if (!makes) {
+    // The community's plain link, to copy or share: where nobody makes invites, or where only admins do and the
+    // community takes requests to join (someone with the link asks in the app, and an admin answers).
+    const linkActions = () => {
         const link = window.location.origin;
         return (
-            <div className="p-4 max-w-[500px] mx-auto min-h-full">
-                <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                    📤 Bring someone here
-                </h2>
-                <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                    {refused ?? 'This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.'}
-                </p>
+            <>
                 <p className="font-mono text-[14px] font-bold text-nature-950 dark:text-white break-all mb-4">{link}</p>
                 <div className="flex flex-wrap gap-3">
                     <button
@@ -256,6 +296,20 @@ export function InvitePage({ identity }: Props) {
                         📤 Share
                     </button>
                 </div>
+            </>
+        );
+    };
+
+    if (!makes) {
+        return (
+            <div className="p-4 max-w-[500px] mx-auto min-h-full">
+                <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                    📤 Bring someone here
+                </h2>
+                <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                    {refused ?? 'This community doesn’t use invites. Anyone can join it with a sign-in, so just share its link.'}
+                </p>
+                {linkActions()}
             </div>
         );
     }
@@ -289,6 +343,20 @@ export function InvitePage({ identity }: Props) {
             {/* =================== INVITES SECTION =================== */}
             {activeSection === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {adminsOnly ? (
+                        // Only its admins invite here and this member is no owner or admin: no generator, but the
+                        // codes they already made (below) and the Tree stay.
+                        <div className="mb-6">
+                            <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                                📤 Bring someone here
+                            </h2>
+                            <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                                {adminsRefused ?? adminsOnlyText(takesKnocks(nodeInfo))}
+                            </p>
+                            {takesKnocks(nodeInfo) && linkActions()}
+                        </div>
+                    ) : (
+                        <>
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         🎟️ Invite Someone
                     </h2>
@@ -315,6 +383,9 @@ export function InvitePage({ identity }: Props) {
                     >
                         {generating ? 'Generating...' : '✨ Generate New Invite'}
                     </button>
+                    {notice && (
+                        <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{notice}</p>
+                    )}
 
                     {newCode && showQR && (
                         <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all">
@@ -349,10 +420,17 @@ export function InvitePage({ identity }: Props) {
                             </div>
                         </div>
                     )}
+                        </>
+                    )}
 
                     {unusedInvites.length > 0 && (
                         <div className="mb-6">
                             <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">⏳ Pending ({unusedInvites.length})</h3>
+                            {adminsOnly && (
+                                <p className="text-nature-500 dark:text-nature-400 text-[13px] mb-3 leading-relaxed">
+                                    Codes you made earlier still work until they lapse, 30 days after they were made.
+                                </p>
+                            )}
                             {unusedInvites.map(inv => (
                                 <div key={inv.code} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 shadow-sm transition-transform hover:-translate-y-0.5">
                                     <div className="flex justify-between items-center">
@@ -444,6 +522,14 @@ export function InvitePage({ identity }: Props) {
             )}
         </div>
     );
+}
+
+function localOfflineCodes(publicKey: string): Set<string> {
+    try {
+        const stored = localStorage.getItem(`bp_offline_invites_${publicKey}`);
+        const list: InviteCode[] = stored ? JSON.parse(stored) : [];
+        return new Set(list.map((i) => i.code));
+    } catch { return new Set(); }
 }
 
 // =================== SUB-COMPONENTS ===================

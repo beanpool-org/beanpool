@@ -25,9 +25,27 @@ export function getNodeRole(): NodeRole {
     return (nodeRole ??= resolveNodeRole());
 }
 
+/** Called after the role changes in this process, with the new role. */
+const roleListeners = new Set<(role: NodeRole) => void>();
+
+/**
+ * Run `fn` each time setNodeRole changes this process's role (a take-over finished at boot promotes a standby; a config
+ * that says standby demotes a main server). A listener that throws is logged and the rest still run. Returns the
+ * unsubscribe. The snapshot scheduler starts or stops on it (services/snapshot-scheduler.ts).
+ */
+export function onNodeRoleChange(fn: (role: NodeRole) => void): () => void {
+    roleListeners.add(fn);
+    return () => { roleListeners.delete(fn); };
+}
+
 export function setNodeRole(role: NodeRole): void {
+    const was = nodeRole;
     nodeRole = role;
     console.log(`[Topology] NODE_ROLE set to '${role}'`);
+    if (was === role) return;
+    for (const fn of roleListeners) {
+        try { fn(role); } catch (e) { console.warn('[Topology] A role-change listener failed:', (e as Error)?.message || e); }
+    }
 }
 
 /** The code a standby's refusal carries, as the escrow write-off's does (engine/escrow-write-off.ts). */

@@ -538,11 +538,13 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     const keyChanged: string[] = [];
     const look = async (state: NamesState) => {
         let pin = await readNamesTrust(store, identity.publicKey, anchor);
-        // An admin's callsign on a new key, and the key this phone trusted under it gone: trust neither until checked.
+        // An admin's callsign on a new key, and the key this phone trusted under it gone: trust neither until checked. The
+        // old key counts only for this phone's own wraps up to the newest generation it took before now (the pin's, never
+        // the server's number), and vouches for no one (PR #1411's third deciding review).
         if (pin && pin.communityId === state.communityId) {
             const changes = namesKeyChanges(pin, state.admins);
             if (changes.length) {
-                pin = pinKeyChanges(pin, changes, state.generation);
+                pin = pinKeyChanges(pin, changes);
                 await writeNamesTrust(store, identity.publicKey, anchor, pin);
                 for (const c of changes) if (!keyChanged.includes(c.callsign)) keyChanged.push(c.callsign);
             }
@@ -705,7 +707,8 @@ export const NAMES_COPY = {
         + `they shared its key with you. Check it in person: their code is ${code}, and it should match “Your code” on their phone. `
         + 'If it doesn’t, don’t add names, and tell your other admins.',
     keyChanged: (callsign: string) => `@${callsign}’s phone key changed: check it with @${callsign} in person before sharing. `
-        + 'A new phone does that, and so can whoever runs the server, so this phone trusts neither key until you check.',
+        + 'A new phone does that, and so can whoever runs the server, so this phone trusts neither key until you check. '
+        + 'It takes nothing new the old key signs: a lost phone still has it.',
     refusedTitle: 'This phone refused the list’s key',
     refused: (r: NamesRefusal, trusted: string[]) => {
         const who = r.makerCallsign ? `@${r.makerCallsign}` : 'a key that isn’t an admin here';

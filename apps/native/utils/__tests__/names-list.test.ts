@@ -477,6 +477,69 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(adaOpens.ok && openEntries(adaOpens.value.list!, adaOpens.value.keys).filter((e) => e.text).length).toBe(ids.length);
     });
 
+    it("THE THIRD REVIEW'S REPLACED KEY: Ada's old key, after Owen's phone dropped it, vouches for a key of its own at an old generation; that key's new generation is refused and nothing is sealed under it", async () => {
+        const { node, owen, ada, k1, ids } = await community();
+        // Ada's phone makes generation 2 and shares it with Owen; the entries go under it; Owen's phone takes it.
+        const k2 = newNamesListKey();
+        node.wrapBy(ada, k2, ada.publicKey, 2);
+        node.wrapBy(ada, k2, owen.publicKey, 2);
+        for (const e of node.entries) { e.ciphertext = sealNamesEntry(k2, e.id, 2, openNamesEntry(k1, e.id, 1, e.ciphertext)); e.keyGeneration = 2; }
+        expect((await openNamesList(COMMUNITY, owen, STORE)).ok).toBe(true);
+        expect((await pinOf(owen))?.newest).toBe(2);
+        // Ada loses her phone; the owner moves her account to her new one. Owen's phone makes generation 3, dropping the old key.
+        const adaNew = await admin('Ada');
+        node.admins = node.admins.map((a) => (a.pubkey === ada.publicKey ? { ...a, pubkey: adaNew.publicKey } : a));
+        node.rows = node.rows.map((r) => (r.holder === ada.publicKey ? { ...r, live: false } : r));
+        node.newKeyNeeded = true;
+        node.droppedHolders = [ada.publicKey];
+        const three = await openNamesList(COMMUNITY, owen, STORE);
+        expect(three.ok && three.value.plan.kind).toBe('ready');
+        expect(three.ok && three.value.keyChanged).toEqual(['Ada']);
+        expect(node.entries.every((e) => e.keyGeneration === 3)).toBe(true);
+        const pin3 = await pinOf(owen);
+        expect(pin3?.replaced[ada.publicKey]?.at).toBe(2);
+        expect(pin3?.dropped[ada.publicKey]).toBe(3);
+        // Whoever holds the lost phone, with whoever runs the server: a share of generation 1, signed with the old key, to a
+        // key of their own (made an admin), and then a generation 4 made by that key, for itself and Owen.
+        const xan = await admin('Xan');
+        node.admins.push({ pubkey: xan.publicKey, callsign: 'Xan', role: 'admin', holdsKey: false });
+        node.wrapBy(ada, k1, xan.publicKey, 1);
+        const k4 = newNamesListKey();
+        node.wrapBy(xan, k4, xan.publicKey, 4, [ada.publicKey]);
+        node.wrapBy(xan, k4, owen.publicKey, 4);
+        sent = [];
+        const four = await openNamesList(COMMUNITY, owen, STORE);
+        expect(four.ok && four.value.plan).toMatchObject({ kind: 'refused', refusal: { reason: 'untrusted', maker: xan.publicKey } });
+        // Nothing read, nothing sealed: only the state was asked for. Every entry stays under generation 3.
+        expect(sent.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual(['GET /api/names/state']);
+        expect(four.ok && four.value.keys.has(4)).toBe(false);
+        for (const id of ids) {
+            const e = node.entries.find((x) => x.id === id)!;
+            expect(e.keyGeneration).toBe(3);
+            expect(() => openNamesEntry(k4, id, 3, e.ciphertext)).toThrow();
+        }
+        expect((await pinOf(owen))?.trusted).not.toContain(xan.publicKey);
+    });
+
+    it("a replaced key counts only up to the newest generation this phone took, never the server's number: a generation 40 made with Ada's old key is refused", async () => {
+        const { node, owen, ada, ids } = await community();
+        expect((await pinOf(owen))?.newest).toBe(1);
+        // Ada's account moves to a new key; at the same time, with her old key, whoever runs the server offers generation
+        // 40, made by the old key and wrapped to Owen, as current.
+        const adaNew = await admin('Ada');
+        node.admins = node.admins.map((a) => (a.pubkey === ada.publicKey ? { ...a, pubkey: adaNew.publicKey } : a));
+        node.rows = node.rows.map((r) => (r.holder === ada.publicKey ? { ...r, live: false } : r));
+        const k40 = newNamesListKey();
+        node.wrapBy(ada, k40, owen.publicKey, 40);
+        sent = [];
+        const opened = await openNamesList(COMMUNITY, owen, STORE);
+        expect(opened.ok && opened.value.keyChanged).toEqual(['Ada']);
+        for (const id of ids) expect(node.entries.find((x) => x.id === id)!.keyGeneration).toBe(1);
+        expect(opened.ok && opened.value.plan).toMatchObject({ kind: 'refused', refusal: { reason: 'untrusted', maker: ada.publicKey } });
+        expect(sent.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual(['GET /api/names/state']);
+        expect((await pinOf(owen))?.replaced[ada.publicKey]?.at).toBe(1);
+    });
+
     it('THE ROLLBACK: a server put back to generation 1 (whose key a removed admin kept) is refused; a new key on this phone is numbered past it', async () => {
         const { node, owen, ada, k1, ids } = await community();
         const abe = await admin('Abe');

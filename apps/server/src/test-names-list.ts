@@ -671,7 +671,7 @@ async function main(): Promise<void> {
     const changes = namesKeyChanges(owenPin, stOp.admins);
     assert(changes.length === 1 && changes[0].callsign === 'Ada' && changes[0].was === adaNew.pk && changes[0].now === op.pk,
         `11b. Owen's phone sees Ada's key changed (${JSON.stringify(changes)})`);
-    owenPin = pinKeyChanges(owenPin, changes, stOp.generation);
+    owenPin = pinKeyChanges(owenPin, changes);
     const owenRekeyed = traceNamesTrust({ communityId: stOp.communityId, me: keysOf(owen), pin: owenPin, records: stOp.records, myKeys: stOp.myKeys, generation: stOp.generation });
     assert(!owenRekeyed.trusted.has(adaNew.pk) && !owenRekeyed.trusted.has(op.pk) && owenRekeyed.keys.has(6),
         "11b. it trusts neither Ada's old key (dropped for good: a lost phone may hold it) nor the key now under her name, and still holds generation 6");

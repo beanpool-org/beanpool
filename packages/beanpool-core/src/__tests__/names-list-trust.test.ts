@@ -276,14 +276,15 @@ describe('what the pin remembers (PR #1411, second deciding review)', () => {
 
     it('A KEY CHANGED UNDER AN ADMIN’S NAME: the old key is dropped for good; the new one is trusted only once checked in person', () => {
         const [owen, ada, op] = [admin(), admin(), admin()];
-        let pin = pinCallsigns({ ...emptyNamesTrustPin(COMMUNITY, owen.publicKey), trusted: [owen.publicKey, ada.publicKey].sort() },
+        // Owen's phone had taken generation 2 (Ada made it) when it noticed.
+        let pin = pinCallsigns({ ...emptyNamesTrustPin(COMMUNITY, owen.publicKey), trusted: [owen.publicKey, ada.publicKey].sort(), newest: 2 },
             [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
         expect(pin.names[ada.publicKey]).toBe('Ada');
         // The server moved Ada's account to a key of its own.
         const admins = [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: op.publicKey, callsign: 'ada' }];
         const changes = namesKeyChanges(pin, admins);
         expect(changes).toEqual([{ callsign: 'ada', was: ada.publicKey, now: op.publicKey }]);
-        pin = pinKeyChanges(pin, changes, 2);
+        pin = pinKeyChanges(pin, changes);
         expect(pin.trusted).not.toContain(ada.publicKey);
         expect(pin.replaced).toEqual({ [ada.publicKey]: { callsign: 'ada', at: 2 } });
         expect(namesShareCheck(pin, admins[1])).toBe('changed');
@@ -313,6 +314,66 @@ describe('what the pin remembers (PR #1411, second deciding review)', () => {
         expect(namesKeyCheckMatches(namesKeyQr(adaNew.publicKey), adaNew.publicKey)).toBe(true);
         pin = pinCheckedKey(pin, adaNew.publicKey, 'Ada');
         expect(namesShareCheck(pin, { pubkey: adaNew.publicKey, callsign: 'Ada' })).toBe('trusted');
+    });
+
+    it('THE THIRD REVIEW’S REPLACED KEY: after this phone dropped it, the old key vouches for no new key, whatever generation it signs', () => {
+        // Owen and Ada hold generations 1 and 2; Ada made 2. Owen's phone took both.
+        const [owen, ada, x] = [admin(), admin(), admin()];
+        const s = new FakeServer();
+        const [k1, k2, k3, k4] = [newNamesListKey(), newNamesListKey(), newNamesListKey(), newNamesListKey()];
+        s.wrapBy(owen, k1, owen.publicKey, 1);
+        s.wrapBy(owen, k1, ada.publicKey, 1);
+        s.wrapBy(ada, k2, ada.publicKey, 2);
+        s.wrapBy(ada, k2, owen.publicKey, 2);
+        let pin = pinCallsigns(trace(s, owen, null).pin!, [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
+        expect(pin.newest).toBe(2);
+        // Ada's account moves to a new key. Owen's phone notices (the old key counts up to 2, what it took), and its
+        // generation 3 names her old key as dropped, as installKeyFor does.
+        pin = { ...pin, trusted: pin.trusted.filter((k) => k !== ada.publicKey), replaced: { [ada.publicKey]: { callsign: 'Ada', at: 2 } } };
+        s.wrapBy(owen, k3, owen.publicKey, 3, [ada.publicKey]);
+        const t3 = trace(s, owen, pin);
+        expect(t3.keys.has(3) && t3.keys.has(2) && t3.currentTraced).toBe(true);
+        pin = t3.pin!;
+        expect(pin.dropped).toEqual({ [ada.publicKey]: 3 });
+        // Whoever holds Ada's old phone, with whoever runs the server: a wrap of generation 1 (and one of 2), signed with
+        // the old key after Owen's phone dropped it, for a fresh key X.
+        s.wrapBy(ada, k1, x.publicKey, 1);
+        s.wrapBy(ada, k2, x.publicKey, 2);
+        expect(trace(s, owen, pin).trusted.has(x.publicKey)).toBe(false);
+        // X makes generation 4, for itself and Owen, dropping the old key: refused, and nothing is used under it.
+        s.wrapBy(x, k4, x.publicKey, 4, [ada.publicKey]);
+        s.wrapBy(x, k4, owen.publicKey, 4);
+        const t4 = trace(s, owen, pin);
+        expect(t4.trusted.has(x.publicKey)).toBe(false);
+        expect(t4.keys.has(4) || t4.currentTraced).toBe(false);
+        expect(t4.refused[0]).toMatchObject({ generation: 4, wrappedBy: x.publicKey, reason: 'untrusted' });
+        // What the old key signed for this phone itself, up to what it took, still opens: the key Owen's phone holds came from her.
+        expect([...t4.keys.keys()].sort()).toEqual([1, 2, 3]);
+    });
+
+    it('a replaced key counts only up to the newest generation this phone took, never up to the number the server gives', () => {
+        // Owen's phone took only generation 1 when it noticed Ada's key change; the server said the current one was 50.
+        const [owen, ada, adaNew] = [admin(), admin(), admin()];
+        const s = new FakeServer();
+        const k1 = newNamesListKey();
+        s.wrapBy(owen, k1, owen.publicKey, 1);
+        s.wrapBy(owen, k1, ada.publicKey, 1);
+        const seen = pinCallsigns(trace(s, owen, null).pin!, [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: ada.publicKey, callsign: 'Ada' }]);
+        expect(seen.newest).toBe(1);
+        // A pin kept with the server's number (as PR #1411's head 5e20acb5 kept it) is held to what the phone took, too.
+        const kept = { ...seen, trusted: [owen.publicKey], replaced: { [ada.publicKey]: { callsign: 'Ada', at: 50 } } };
+        // With the old key, a generation-40 wrap for Owen: refused, whatever the server calls current.
+        const k40 = newNamesListKey();
+        s.wrapBy(ada, k40, owen.publicKey, 40);
+        for (const generation of [40, 50]) {
+            const t = trace(s, owen, kept, generation);
+            expect(t.keys.has(40) || t.currentTraced).toBe(false);
+            expect(t.refused[0]).toMatchObject({ generation: 40, reason: 'untrusted' });
+            expect(t.pin!.replaced[ada.publicKey].at).toBe(1);
+        }
+        // And a change noticed now is kept at what this phone took (1), not at anything the server says.
+        const changes = namesKeyChanges(seen, [{ pubkey: owen.publicKey, callsign: 'Owen' }, { pubkey: adaNew.publicKey, callsign: 'Ada' }]);
+        expect(pinKeyChanges(seen, changes).replaced).toEqual({ [ada.publicKey]: { callsign: 'Ada', at: 1 } });
     });
 
     it('a key’s code: 20 digits in five groups, the same typed any way, and different for another key', () => {

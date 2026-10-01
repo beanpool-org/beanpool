@@ -46,9 +46,12 @@
  * - **Keys replaced under an admin's name** (`replaced`; {@link namesKeyChanges}): when the server shows an admin's
  *   callsign on a new key and the key this phone trusted under it is gone (a re-key after a lost phone, or whoever runs
  *   the server moving the account to a key of its own), the old key is dropped for good and the new one is trusted only
- *   after an in-person check on this phone, or a trusted admin's signed share. What the old key signed up to the
- *   generation current when this phone noticed (`at`) still counts (the key this phone holds may have come from them);
- *   nothing it signs for a later one does, and no wrap makes it a holder again.
+ *   after an in-person check on this phone, or a trusted admin's signed share. Whoever has the lost phone still has the
+ *   old key and can sign anything with it, at any generation, so (PR #1411's third deciding review) what it signs
+ *   counts only for this phone's own wraps, at a generation no newer than the newest this phone had taken when it
+ *   noticed (`at`, from the pin, never the server's number): the key this phone already holds may have come from them.
+ *   It vouches for no one else, at any generation (no holder is added by it), and for nothing past `at` or at or after
+ *   the generation this phone dropped it at; no wrap makes it a holder again.
  * - **The callsign each trusted key had** (`names`), to notice that.
  *
  * ## Checking a key in person (the director's decision on PR #1411, under Marty's delegation, 2026-10-02)
@@ -121,8 +124,9 @@ export interface NamesTrustPin {
     /** Keys a trusted admin dropped, with the generation they were dropped at. */
     dropped: Record<string, number>;
     /**
-     * Keys replaced under an admin's name, with that name and the generation current when this phone noticed: trusted
-     * again only by an in-person check on this phone; their signatures count up to `at` only.
+     * Keys replaced under an admin's name, with that name and the newest generation this phone had taken when it noticed
+     * (`at`): trusted again only by an in-person check on this phone; their signatures count only for this phone's own
+     * wraps up to `at`, and add no one.
      */
     replaced: Record<string, { callsign: string; at: number }>;
 }
@@ -288,11 +292,22 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     const validKeys = new Set(valid.map((r) => `${r.holder}|${r.generation}`));
 
     // What the pin remembers: keys dropped (and at which generation) and keys replaced, which no old wrap brings back.
+    const pinnedNewest = input.pin?.newest ?? 0;
     const droppedAt = new Map<string, number>(Object.entries(input.pin?.dropped ?? {}).filter(([k, g]) => HEX_KEY.test(k) && Number.isSafeInteger(g) && g > 0));
-    const replaced = new Map<string, number>(Object.entries(input.pin?.replaced ?? {}).filter(([k]) => HEX_KEY.test(k) && k !== me).map(([k, r]) => [k, r.at]));
-    /** Whether `k` signs for generation `g`: trusted now, or a replaced key, for what it signed up to when it was replaced. */
-    const signs = (k: string, g: number) => trusted.has(k)
-        || (replaced.has(k) && g <= replaced.get(k)! && !(droppedAt.has(k) && droppedAt.get(k)! <= g));
+    // A replaced key's reach is what this phone had taken when it noticed, and never more than it has taken now: a pin
+    // that kept the server's number there (PR #1411 before its third review) is held to the phone's own.
+    const replaced = new Map<string, number>(Object.entries(input.pin?.replaced ?? {}).filter(([k]) => HEX_KEY.test(k) && k !== me)
+        .map(([k, r]) => [k, Math.max(0, Math.min(r.at, pinnedNewest))]));
+    /** Whether a replaced key `k` still counts at generation `g`: up to its `at`, and before this phone dropped it. */
+    const replacedReach = (k: string, g: number) => replaced.has(k) && g <= replaced.get(k)! && !(droppedAt.has(k) && droppedAt.get(k)! <= g);
+    /** Whether `k` drops admins at generation `g`: trusted now, or a replaced key within its reach (a drop only takes trust away). */
+    const mayDrop = (k: string, g: number) => trusted.has(k) || replacedReach(k, g);
+    /**
+     * Whether `k`'s wrap of generation `g` to `holder` is accepted: signed by a key trusted now; or by a replaced key, for
+     * this phone's own wrap within its reach only. Whoever has the lost phone signs anything with the old key: it
+     * vouches for no one else (PR #1411's third deciding review).
+     */
+    const vouches = (k: string, g: number, holder: string) => trusted.has(k) || (holder === me && replacedReach(k, g));
     const trusted = new Set<string>(input.pin ? input.pin.trusted.map((k) => k.toLowerCase()).filter((k) => HEX_KEY.test(k) && !replaced.has(k) && !droppedAt.has(k)) : []);
     trusted.add(me);
     let firstTrust: string | null = null;
@@ -312,7 +327,7 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     for (const g of generations) {
         const here = valid.filter((r) => r.generation === g);
         for (const r of here) {
-            if (!signs(r.wrappedBy, g)) continue;
+            if (!mayDrop(r.wrappedBy, g)) continue;
             // A maker naming itself as dropped means nothing: it signs the key it holds.
             for (const d of r.drops) {
                 if (d === me || d === r.wrappedBy) continue;
@@ -325,7 +340,7 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
             changed = false;
             for (const r of here) {
                 const id = `${r.holder}|${r.generation}`;
-                if (accepted.has(id) || !signs(r.wrappedBy, g)) continue;
+                if (accepted.has(id) || !vouches(r.wrappedBy, g, r.holder)) continue;
                 // A dropped key comes back only by a trusted admin's wrap made at or after its drop; a replaced key, never here.
                 if (r.holder !== me && (replaced.has(r.holder) || (droppedAt.get(r.holder) ?? 0) > g)) continue;
                 accepted.add(id);
@@ -351,7 +366,6 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
     }
     const currentTraced = [...accepted].some((id) => id.endsWith(`|${input.generation}`));
     const newestAccepted = Math.max(0, ...[...accepted].map((id) => Number(id.split('|')[1])));
-    const pinnedNewest = input.pin?.newest ?? 0;
     // Nothing accepted and nothing pinned yet: nothing is learnt, so nothing is kept (the next open is a first use again).
     const learnt = !!input.pin || keys.size > 0;
     if (!learnt) firstTrust = null;
@@ -367,7 +381,8 @@ export function traceNamesTrust(input: NamesTrustInput): NamesTrustTrace {
             v: 2, communityId: input.communityId, trusted: [...trusted].sort(), names,
             newest: Math.max(pinnedNewest, newestAccepted),
             dropped: Object.fromEntries([...droppedAt.entries()].filter(([k]) => !trusted.has(k)).sort()),
-            replaced: { ...(input.pin?.replaced ?? {}) },
+            replaced: Object.fromEntries(Object.entries(input.pin?.replaced ?? {})
+                .map(([k, r]) => [k, { ...r, at: Math.max(0, Math.min(r.at, pinnedNewest)) }])),
         } : null,
         otherCommunity: false,
         rolledBack: !!input.pin && input.generation < pinnedNewest,
@@ -429,15 +444,17 @@ export function namesKeyChanges(pin: NamesTrustPin | null, admins: NamesAdminNam
 }
 
 /**
- * The pin with each changed key's old key moved from trusted to replaced (see {@link namesKeyChanges}), noticed while
- * the server's current generation is `generation`.
+ * The pin with each changed key's old key moved from trusted to replaced (see {@link namesKeyChanges}). What the old key
+ * signed counts up to the newest generation this phone had taken (`pin.newest`), never to a number the server gives
+ * (PR #1411's third deciding review: a server saying 50 let the old key's generation 40 through).
  */
-export function pinKeyChanges(pin: NamesTrustPin, changes: { callsign: string; was: string }[], generation: number): NamesTrustPin {
+export function pinKeyChanges(pin: NamesTrustPin, changes: { callsign: string; was: string }[]): NamesTrustPin {
     if (changes.length === 0) return pin;
     const gone = new Set(changes.map((c) => c.was));
     const names = { ...pin.names };
     const replaced = { ...pin.replaced };
-    for (const c of changes) { replaced[c.was] = { callsign: c.callsign, at: Math.max(0, generation) }; delete names[c.was]; }
+    const at = Number.isSafeInteger(pin.newest) && pin.newest > 0 ? pin.newest : 0;
+    for (const c of changes) { replaced[c.was] = { callsign: c.callsign, at }; delete names[c.was]; }
     return { ...pin, trusted: pin.trusted.filter((k) => !gone.has(k)), names, replaced };
 }
 

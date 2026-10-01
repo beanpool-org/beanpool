@@ -687,12 +687,16 @@ export const ADMIN_SESSION_COOKIE = 'admin_session';
  * The admin session cookie, the one way a browser holds an admin session: httpOnly (no script reads it), SameSite
  * strict (no other site's page sends it), the whole origin (the API is under /api). Its value never appears in a
  * response body (Fable's web review, L3).
+ *
+ * No Max-Age: a browser-session cookie. The node ends the session (idle limit, SESSION_HARD_TTL_MS), and the cookie
+ * must outlive that, so the browser still sends it and the node answers `sessionExpired` with the reason, which
+ * sends the manager back to its sign-in card saying why. A Max-Age equal to the hard limit dropped the cookie a few
+ * milliseconds before the node's own limit, and the manager was then answered as if it had sent nothing.
  */
 export function setAdminSessionCookie(ctx: any, sessionId: string): void {
     ctx.cookies.set(ADMIN_SESSION_COOKIE, sessionId, {
         httpOnly: true,
         sameSite: 'strict',
-        maxAge: SESSION_HARD_TTL_MS,
         path: '/',
     });
 }

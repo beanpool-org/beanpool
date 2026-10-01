@@ -9,6 +9,9 @@
  *      A new sign-in ends the browser's old session. Turning 2FA on ends every password session opened without it;
  *      turning it off (or changing the password) ends every other password session but keeps the one that did it.
  *      In break-glass mode the password opens no session and an open one ends.
+ *  1b. The node, not the browser, ends a session: the cookie has no Max-Age, so at 12 h, 2 h idle (15 min for the phone
+ *      hand-off) the node answers `sessionExpired` with the reason. A request with nothing (no cookie, no password)
+ *      is answered at once, `sessionExpired`, and not counted by the admin tarpit.
  *   2. L3: the key sign-in's exchange answers the session in the cookie only (HttpOnly, SameSite=Strict), and so
  *      does /settings?token=.
  *   3. L4: a CSRF token counts only for the session it was issued to: a moderator's on an owner's cookie, another
@@ -258,6 +261,58 @@ async function main(): Promise<void> {
         assert(!validateAdminSession(opened[0].sessionId).valid && validateAdminSession(opened[MAX_PASSWORD_SESSIONS].sessionId).valid,
             `at most ${MAX_PASSWORD_SESSIONS} password sessions: the oldest goes`);
         for (const s of opened) revokeAdminSession(s.sessionId);
+
+        // The node, not the browser, ends a session: the cookie has no Max-Age, so at each limit it is still sent and
+        // the node answers `sessionExpired` with the reason (the manager's sign-in card shows it). The clock is moved
+        // in this process only (Date.now), for the one request.
+        console.log('\n── 1b. the node ends the session, and says why ──');
+        resetAdminAuthTarpit();
+        const realNow = Date.now;
+        const later = async (ms: number, sessionId: string | null): Promise<Reply> => {
+            const t = realNow();
+            Date.now = () => t + ms;
+            try { return await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(sessionId) }); } finally { Date.now = realNow; }
+        };
+        const life = await signIn(PW);
+        assert(life.status === 200 && !/;\s*max-age=/i.test(life.cookie) && !/;\s*expires=/i.test(life.cookie),
+            `the password sign-in's cookie has no Max-Age or Expires: a browser-session cookie (${life.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
+        const keyLife = await keySignIn(owner);
+        assert(keyLife.status === 200 && !/;\s*max-age=/i.test(keyLife.cookie) && !/;\s*expires=/i.test(keyLife.cookie),
+            `so has the key sign-in's (${keyLife.cookie.replace(/=[0-9a-f]{64}/, '=…')})`);
+        const hard = await later(12 * 3_600_000 + 1_000, life.sessionId);
+        assert(hard.status === 401 && hard.body?.sessionExpired === true && /12h hard limit/.test(hard.body?.error ?? ''),
+            `12 h on, the cookie still sent: 401, sessionExpired, and the reason (${show(hard)})`);
+        const idlePw = await signIn(PW);
+        const idleAnswer = await later(2 * 3_600_000 + 1_000, idlePw.sessionId);
+        assert(idleAnswer.status === 401 && idleAnswer.body?.sessionExpired === true && /2h idle/.test(idleAnswer.body?.error ?? ''),
+            `a password session unused for 2 h: 401, sessionExpired, "2h idle" (${show(idleAnswer)})`);
+        const handoff = await call('GET', `/settings?token=${mintHandshakeToken(owner.pub, 'owner').handshakeToken}`);
+        const handoffIdle = await later(16 * 60_000, handoff.sessionId);
+        assert(handoff.status === 302 && handoffIdle.status === 401 && handoffIdle.body?.sessionExpired === true && /15 min idle/.test(handoffIdle.body?.error ?? ''),
+            `the phone hand-off's cookie session still idles out at 15 min, and says so (${show(handoffIdle)})`);
+        const handoff2 = await call('GET', `/settings?token=${mintHandshakeToken(owner.pub, 'owner').handshakeToken}`);
+        const handoffUsed = await later(14 * 60_000, handoff2.sessionId);
+        assert(handoffUsed.status === 200, `used within 15 min, it is still signed in (${handoffUsed.status})`);
+
+        // A browser that holds no cookie any more (cleared, or the browser dropped it) sends nothing: no guess, so no
+        // tarpit, and nothing counted against the owner's next sign-in; `sessionExpired` sends the manager to its card.
+        resetAdminAuthTarpit();
+        const bare: number[] = [];
+        let bareOk = true;
+        for (let i = 0; i < 8; i++) {
+            const t = realNow();
+            const r = await call('GET', '/api/local/admin/diagnostics');
+            bare.push(realNow() - t);
+            if (!(r.status === 401 && r.body?.sessionExpired === true && r.body?.notSignedIn === true)) { bareOk = false; console.error(`   ${show(r)}`); }
+        }
+        assert(bareOk, 'a request with no cookie and no password: 401, sessionExpired, notSignedIn');
+        assert(Math.max(...bare) < 200, `and it is answered at once, not tarpitted (${bare.join(', ')} ms)`);
+        const tWrong = realNow();
+        const wrongAfter = await signIn('not the password');
+        const wrongMs = realNow() - tWrong;
+        assert(wrongAfter.status === 401 && wrongMs >= 200 && wrongMs < 1_200,
+            `a wrong password after them is tarpitted as the first failure, not the ninth (${wrongMs} ms; 8 counted would be ≥ 2250)`);
+        resetAdminAuthTarpit();
 
         // ── 2. L3: the key sign-in's session id is in the cookie only ───────────────────────────
         console.log('\n── 2. the key sign-in answers its session in the cookie only ──');

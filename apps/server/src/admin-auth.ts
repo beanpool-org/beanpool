@@ -210,6 +210,16 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
         return false;
     }
 
+    if (!ok && !password) {
+        // Nothing was sent: no session, no password, no code. That is no guess, so it is not tarpitted and the
+        // tarpit doesn't count it: most often it is a manager whose browser no longer holds its session cookie,
+        // polling on, and counting those would slow the owner's own next sign-in. `sessionExpired` sends that
+        // manager back to its sign-in card (App.tsx sessionEndedRef); a client that never signed in ignores it.
+        ctx.status = 401;
+        ctx.body = { error: 'Not signed in: no admin session or password was sent', sessionExpired: true, notSignedIn: true };
+        return false;
+    }
+
     if (!ok) {
         const now = Date.now();
         if (now - adminFailWindowStart > ADMIN_FAIL_WINDOW_MS) { adminAuthFailures = 0; adminFailWindowStart = now; }

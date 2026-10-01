@@ -124,11 +124,16 @@ export function isTombstone(m: { type?: string; metadata?: any } | null | undefi
  *    including of the keeper's own line, which must not read as that keeper deleting it;
  *  - a group chat has both, told apart by `removedBy`;
  *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
+ *
+ * Every chat has one more: the author deleted their account, and the node blanked every line they wrote
+ * (`metadata.accountDeleted`, apps/server/src/engine/message-tombstone.ts). That one is their own delete,
+ * in an event or an enterprise chat too, and must not read as a host's or a keeper's removal.
  */
 export function tombstoneText(
     m: { senderId?: string; metadata?: any } | null | undefined,
     kind?: ChatKind,
 ): string {
+    if (m?.metadata?.accountDeleted === true) return DELETED_BY_AUTHOR_TEXT;
     if (kind === 'event') return REMOVED_BY_HOST_TEXT;
     if (kind === 'enterprise') return REMOVED_BY_KEEPER_TEXT;
     if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;

@@ -37,6 +37,7 @@ export const NAMES_TEXT_ON = {
     keyCardTitle: 'keyCard',
     keyCardText: 'keyCard',
     codeText: 'keyCard',
+    scannerText: 'scanner',
 } as const;
 
 export function namesListStyleSpec(colors: AppColors) {
@@ -116,5 +117,8 @@ export function namesListStyleSpec(colors: AppColors) {
         codeText: { fontSize: 18, lineHeight: 26, fontWeight: '700' as const, letterSpacing: 1, color: colors.text.heading, textAlign: 'center' as const },
         // The camera, while scanning another admin's code: square, as wide as the screen allows.
         camera: { aspectRatio: 1, alignSelf: 'stretch' as const, borderRadius: 12, overflow: 'hidden' as const, backgroundColor: '#000000' },
+        // The scanner's own full screen (design §10 F8): dark around the camera in both themes, its words above it.
+        scanner: { flex: 1, padding: 16, gap: 16, justifyContent: 'center' as const, backgroundColor: '#000000' },
+        scannerText: { fontSize: 15, lineHeight: 22, color: '#ffffff' },
     };
 }

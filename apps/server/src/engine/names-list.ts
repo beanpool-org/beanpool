@@ -505,6 +505,25 @@ export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account
 
 // ── Reading ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The name each key goes by, for the words a phone says ("@Ada made a key…"): a member's callsign, or, for a key a
+ * re-key replaced, the callsign of the member it moved to. Only words: a phone never trusts a key by its name.
+ */
+function callsignsFor(keys: Iterable<string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    const name = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    const next = db.prepare('SELECT new_pubkey FROM rekey_audit_log WHERE old_pubkey = ? ORDER BY id DESC LIMIT 1');
+    for (const k of keys) {
+        let at: string | undefined = k;
+        for (let hop = 0; at && hop < 5; hop++) {
+            const m = name.get(at) as { callsign: string } | undefined;
+            if (m) { out[k] = m.callsign; break; }
+            at = (next.get(at) as { new_pubkey: string } | undefined)?.new_pubkey;
+        }
+    }
+    return out;
+}
+
 interface ShareRow {
     from_pubkey: string; to_pubkey: string; head_id: string; key_ids: string; trusts: string; sealed_ring: string; ring_iv: string; ring_tag: string;
     ephemeral_pubkey: string; kdf_params: string; box_digest: string; header: string; signature: string; created_at: string;
@@ -541,6 +560,9 @@ export function namesState(actor: string) {
                 (SELECT COUNT(*) FROM confirmations WHERE revoked_at IS NULL AND needs_second = 1 AND seconded_at IS NULL) AS awaitingSecond`,
     ).get() as { entries: number; confirmed: number; awaitingSecond: number };
     const holdersOfCurrent = [...holders].filter((k) => adminKeys.has(k)).sort();
+    const named = new Set<string>([...adminKeys]);
+    for (const g of generations) { named.add(g.maker); for (const d of g.drops) named.add(d); }
+    for (const s of shares) { named.add(s.from); named.add(s.to); for (const t of s.trusts) named.add(t); }
     return {
         communityId,
         current: current ? { id: current.id, n: current.n } : null,
@@ -549,6 +571,7 @@ export function namesState(actor: string) {
         admins: admins.map((a) => ({ ...a, keyIds: heldByAdmin.get(a.pubkey) ?? [], holdsCurrent: holders.has(a.pubkey) })),
         holdersOfCurrent,
         droppedHolders: current ? droppedHoldersOf(current.id) : [],
+        callsigns: callsignsFor(named),
         // Nobody who is an admin now holds the current key: any admin's phone may make a new one.
         nobodyHoldsKey: !!current && holdersOfCurrent.length === 0,
         newKeyNeeded: newKeyNeeded(current),

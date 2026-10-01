@@ -1,26 +1,27 @@
 /**
  * The names list, for a community's owners and admins (community modes slice 2). Logic and words: utils/names-list.ts;
- * styles: utils/names-list-style.ts; the server: apps/server/src/routes/names-list.ts.
+ * styles: utils/names-list-style.ts; the server: apps/server/src/routes/names-list.ts; the trust model:
+ * scratch/global-node/DESIGN-names-list-trust-fable.md.
  *
- * Opening it opens this admin's own wrap of the list's key on this phone (utils/names-list.ts openNamesList), and only a
- * wrap an admin this phone trusts signed: one the server, or anyone with its database, wrote in is refused, said here
- * plainly, and nothing is sealed under it. The first admin to open it makes the key; after an admin goes, the phone of
- * one who held it makes a new one and seals the older entries again; an admin made since waits until one who holds the
- * key taps "Share" for them. Share is offered only for a key this phone trusts: any other waiting admin is checked in
- * person first (their phone shows its key as a QR code and a code; this one scans or compares it), never on the
- * server's callsign alone (PR #1411's second deciding review). Every name is sealed here before it is sent, and opened
- * here: the community's server keeps scrambled text.
+ * Opening it syncs this phone's own record of the list's key history and the keys it holds (utils/names-list.ts
+ * openNamesList): it takes a new key only from an admin it trusts, gives the keys only to admins it trusts (without a
+ * tap, every send logged on the node), and reads or writes only when it holds the newest key the server names. When it
+ * refuses, it says why and offers the one way forward: check an admin in person, put the key history back, start again,
+ * make a new key nobody can hand over, or take a checked admin's history. Each of those asks first. Every name is
+ * sealed here before it is sent, and opened here: the community's server keeps scrambled text.
  *
- * One screen, four views in one keyboard-aware scroll (no Modal: a nested keyboard provider breaks keyboards app-wide):
- * the list, an entry's form, the member picker, and checking an admin in person. Every read the phone makes is logged on the node, so a write updates
- * the list here rather than reading it all again. Every button is at least 48dp tall and every row wraps at 320dp and
- * 1.3× text.
+ * Admins trust each other by checking each other in person: both phones show their key as a QR code and 20 digits, and
+ * each scans the other's (the camera in a full-screen view of its own, with no keyboard in it), or compares the digits.
+ *
+ * One screen, four views in one keyboard-aware scroll (no Modal around anything with a keyboard: a nested keyboard
+ * provider breaks keyboards app-wide): the list, an entry's form, the member picker, and checking each other. Every read
+ * the phone makes is logged on the node, so a write updates the list here rather than reading it all again. Every button
+ * is at least 48dp tall and every row wraps at 320dp and 1.3× text.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
@@ -32,20 +33,18 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    NAMES_COPY as COPY, openNamesList, fetchNamesList, fetchNamesLog, installKeyFor, makeNewKeyOnThisPhone, waitingAdmins, checkAdminInPerson, inPersonResult,
-    myKeyCheck, shareKeyWith, openEntries, filterEntries, sealedFor, addNamesEntry, editNamesEntry, deleteNamesEntry,
-    confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine,
-    confirmationActions, logLineText, namesListHtml, setNamesSettings,
-    type NamesState, type NamesListBody, type KeyPlan, type OpenedEntry, type NamesLogLine, type CommunityMember, type WaitingAdmin,
+    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
+    putHistoryBack, makeKeyOnThisPhone, takeHistoryOf, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
+    deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
+    logLineText, namesListHtml, setNamesSettings, planWords,
+    type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
-import type { NamesTrustPin } from '@beanpool/core';
 
 export { ErrorBoundary };
 
-/** Checking an admin's key in person: before sharing with them, or before taking a new key they made. */
-type Checked = { pubkey: string; callsign: string };
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null } | { kind: 'pick'; entry: OpenedEntry }
-    | { kind: 'check'; admin: Checked; purpose: 'share' | 'trust' };
+/** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
+type Picked = { pubkey: string; callsign: string } | null;
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -55,13 +54,8 @@ export default function NamesListScreen() {
     const communityName = typeof params.community === 'string' && params.community.trim() ? params.community.trim() : 'This community';
 
     const [anchor, setAnchor] = useState<string | null>(null);
-    const [state, setState] = useState<NamesState | null>(null);
-    const [list, setList] = useState<NamesListBody | null>(null);
-    const [keys, setKeys] = useState<Map<number, Uint8Array>>(new Map());
-    const [plan, setPlan] = useState<KeyPlan | null>(null);
+    const [opened, setOpened] = useState<NamesOpened | null>(null);
     const [log, setLog] = useState<NamesLogLine[]>([]);
-    /** The callsigns of the admins this phone trusts for the list (not this admin): whom a refusal says to ask. */
-    const [trustedNames, setTrustedNames] = useState<string[]>([]);
     const [members, setMembers] = useState<CommunityMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
@@ -73,14 +67,30 @@ export default function NamesListScreen() {
     const [name, setName] = useState('');
     const [note, setNote] = useState('');
     const [formError, setFormError] = useState<string | null>(null);
-    const [pin, setPin] = useState<NamesTrustPin | null>(null);
     const [typedCode, setTypedCode] = useState('');
     const [checkError, setCheckError] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
     const [showMyKey, setShowMyKey] = useState(false);
+    /** Keys checked in person on this screen, this time: only these may be offered "Take @X's history". */
+    const [checkedHere, setCheckedHere] = useState<string[]>([]);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
     const loadingRef = useRef(false);
+
+    /** What an open, or an action that opens again, came back with. */
+    const take = useCallback(async (url: string, result: Awaited<ReturnType<typeof openNamesList>>) => {
+        if (!identity) return;
+        if (!result.ok) {
+            setError(result.status === 404 ? 'This community keeps no names list.' : result.message);
+            return;
+        }
+        setOpened(result.value);
+        if (result.value.notices.length) setNotice(result.value.notices.join('\n\n'));
+        if (!result.value.list) return;
+        const lines = await fetchNamesLog(url, identity, 30);
+        if (lines.ok) setLog(lines.value.log);
+        setMembers(await getAllCommunityMembers().catch(() => []));
+    }, [identity]);
 
     const load = useCallback(async () => {
         if (loadingRef.current || !identity) return;
@@ -91,150 +101,130 @@ export default function NamesListScreen() {
             const url = await getAnchorUrl();
             if (!url) { setError('This phone isn’t connected to a community.'); return; }
             setAnchor(url);
-            const opened = await openNamesList(url, identity, AsyncStorage);
-            if (!opened.ok) {
-                setError(opened.status === 404 ? 'This community keeps no names list.' : opened.message);
-                return;
-            }
-            const { state: s, plan: p, keys: k, list: body, notice: said, pin: kept } = opened.value;
-            setPin(kept);
-            setTrustedNames(s.admins.filter((a) => a.pubkey !== identity.publicKey && kept?.trusted.includes(a.pubkey)).map((a) => a.callsign));
-            setState(s);
-            setKeys(k);
-            setPlan(p);
-            if (said) setNotice(said);
-            if (p.kind !== 'ready' || !body) return;
-            setList(body);
-            const lines = await fetchNamesLog(url, identity, 30);
-            if (lines.ok) setLog(lines.value.log);
-            setMembers(await getAllCommunityMembers().catch(() => []));
+            await take(url, await openNamesList(url, identity, STORE));
         } finally {
             loadingRef.current = false;
             setLoading(false);
         }
-    }, [identity]);
+    }, [identity, take]);
 
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-    const entries = useMemo(() => (list ? openEntries(list, keys) : []), [list, keys]);
+    const state = opened?.state ?? null;
+    const plan = opened?.plan ?? null;
+    const list = opened?.list ?? null;
+    const entries = useMemo(() => (opened?.list ? openEntries(opened.list, opened) : []), [opened]);
     const shown = useMemo(() => filterEntries(entries, query), [entries, query]);
-    const generation = state?.generation ?? 0;
-    const currentKey = keys.get(generation);
     const callsignOf = useMemo(() => {
         const m = new Map<string, string>();
         for (const x of members) m.set(x.publicKey, x.callsign);
+        for (const [k, c] of Object.entries(state?.callsigns ?? {})) m.set(k, c);
         for (const a of state?.admins ?? []) m.set(a.pubkey, a.callsign);
-        return (pubkey: string) => (m.has(pubkey) ? `@${m.get(pubkey)}` : 'an admin');
+        return (pubkey: string) => m.get(pubkey) ?? '';
     }, [members, state]);
+    const at = (pubkey: string) => (callsignOf(pubkey) ? `@${callsignOf(pubkey)}` : 'an admin');
+    const trusted = (pubkey: string) => !!opened?.pin.trusted.includes(pubkey);
 
-    // ── actions ──────────────────────────────────────────────────────────────────────────────
+    /** Runs an action that opens the list again, with the busy spinner and its refusal said. */
+    const run = async (fn: (url: string) => Promise<Awaited<ReturnType<typeof openNamesList>>>) => {
+        if (!anchor) return;
+        setBusy(true);
+        setError(null);
+        try {
+            await take(anchor, await fn(anchor));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // ── the key: each of these asks first ──────────────────────────────────────────────────────
+
+    const ask = (title: string, message: string, confirm: string, onConfirm: () => void, destructive = true) => {
+        Alert.alert(title, message, [
+            { text: 'Cancel', style: 'cancel' },
+            { text: confirm, style: destructive ? 'destructive' : 'default', onPress: onConfirm },
+        ]);
+    };
 
     const startAgain = () => {
-        if (!anchor || !identity || !state || !plan || plan.kind !== 'start_again') return;
-        Alert.alert(COPY.startAgainTitle, COPY.startAgain, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Start again', style: 'destructive', onPress: async () => {
-                    setBusy(true);
-                    const made = await installKeyFor(anchor, identity, state, plan, AsyncStorage);
-                    setBusy(false);
-                    if (!made.ok) { setError(made.message); return; }
-                    void load();
-                },
-            },
-        ]);
+        if (!identity || !state) return;
+        const words = plan?.kind === 'wait' ? (planWords(opened!) ?? '') : COPY.startAgain(state.counts?.entries ?? 0);
+        ask(plan?.kind === 'wait' ? COPY.makeNewTitle : COPY.startAgainTitle, words, plan?.kind === 'wait' ? COPY.makeNewButton : COPY.startAgainButton,
+            () => { void run((url) => makeKeyOnThisPhone(url, identity, STORE)); });
     };
 
-    /** Share only with a key this phone trusts; anyone else is checked in person first (shareKeyWith refuses them too). */
-    const share = (admin: WaitingAdmin) => {
-        if (!anchor || !identity || !state || !currentKey) return;
-        if (admin.check !== 'trusted') { startCheck(admin, 'share'); return; }
-        Alert.alert(COPY.shareTitle(admin.callsign), COPY.share(admin.callsign), [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Share', onPress: async () => {
-                    setBusy(true);
-                    const done = await shareKeyWith(anchor, identity, state, currentKey, admin, AsyncStorage);
-                    setBusy(false);
-                    if (!done.ok) { setError(done.message); return; }
-                    setState({ ...state, admins: state.admins.map((a) => (a.pubkey === admin.pubkey ? { ...a, holdsKey: true } : a)) });
-                },
-            },
-        ]);
+    const putBack = () => {
+        if (!identity || plan?.kind !== 'refused') return;
+        ask(COPY.putBackTitle, COPY.refusedRolledBack(plan.offered?.n ?? 0, plan.newest?.n ?? 0), COPY.putBackButton,
+            () => { void run((url) => putHistoryBack(url, identity, STORE)); }, false);
     };
 
-    const startCheck = (admin: Checked, purpose: 'share' | 'trust') => {
+    const removeKey = (admin: NamesAdminRow) => {
+        if (!identity || !anchor) return;
+        ask(COPY.removeKeyTitle(admin.callsign), COPY.removeKey(admin.callsign), COPY.removeKeyButton(admin.callsign), () => {
+            void run(async (url) => {
+                await removeOldKey(STORE, identity, url, admin.pubkey);
+                return openNamesList(url, identity, STORE);
+            });
+        });
+    };
+
+    const takeHistory = (pubkey: string) => {
+        if (!identity) return;
+        const who = callsignOf(pubkey);
+        ask(COPY.takeHistoryTitle(who), COPY.takeHistory(who), COPY.takeHistoryButton(who), () => {
+            void run((url) => takeHistoryOf(url, identity, STORE, pubkey));
+        });
+    };
+
+    const sendAgain = async (admin: NamesAdminRow) => {
+        if (!identity || !anchor) return;
+        setBusy(true);
+        const done = await sendKeysAgain(anchor, identity, STORE, admin.pubkey);
+        setBusy(false);
+        if (!done.ok) { setError(done.message); return; }
+        setNotice(`Sent the keys to @${admin.callsign}.`);
+    };
+
+    // ── checking each other ────────────────────────────────────────────────────────────────────
+
+    const startCheck = (picked: Picked) => {
         setTypedCode('');
         setCheckError(null);
         setScanning(false);
         scanLock.current = false;
-        setMode({ kind: 'check', admin, purpose });
+        setMode({ kind: 'check', picked });
     };
 
     /**
-     * What was scanned or typed, against the key the server lists for that admin. A match before sharing: this phone
-     * trusts that key (Share is then offered). A match before taking a new key they made: asked first, then trusted.
+     * What was scanned or typed. A QR code pins the key it shows: when it isn't the key the server lists for the admin
+     * picked, that is said loudly, and nothing is sent to either until the server lists the scanned key as an admin.
      */
-    const finishCheck = (text: string) => {
+    const finishCheck = async (text: string) => {
         if (mode.kind !== 'check' || !anchor || !identity || !state) return;
-        const { admin, purpose } = mode;
-        const result = inPersonResult(text, admin.pubkey);
-        if (result !== 'match') {
-            setScanning(false);
-            setCheckError(result === 'unreadable' ? COPY.unreadable : COPY.mismatch(admin.callsign));
+        const { picked } = mode;
+        setScanning(false);
+        const r = await checkEachOther(STORE, identity, anchor, state, text, picked);
+        if (!r.ok) {
+            const who = picked?.callsign ?? '';
+            setCheckError(r.reason === 'mismatch' ? COPY.codeMismatch(who) : r.reason === 'self' ? COPY.self : r.reason === 'no_match' ? COPY.noMatch : COPY.unreadable);
             setTimeout(() => { scanLock.current = false; }, 600);
             return;
         }
-        setScanning(false);
-        const keep = async () => {
-            const done = await checkAdminInPerson(AsyncStorage, identity, anchor, state, admin, text);
-            if (!done.ok) { setCheckError(COPY.mismatch(admin.callsign)); return; }
-            setNotice(COPY.matched(admin.callsign));
-            setMode({ kind: 'list' });
-            void load();
-        };
-        if (purpose === 'share') { void keep(); return; }
-        Alert.alert(COPY.trustTitle(admin.callsign), COPY.trust(admin.callsign), [
-            { text: 'Cancel', style: 'cancel', onPress: () => { scanLock.current = false; } },
-            { text: 'Trust', style: 'destructive', onPress: () => { void keep(); } },
-        ]);
+        setCheckedHere((was) => [...new Set([...was, r.pinned])]);
+        if (r.mismatch && picked) setError(COPY.mismatch(picked.callsign));
+        else setNotice(COPY.matched(callsignOf(r.pinned) || picked?.callsign || ''));
+        setMode({ kind: 'list' });
+        void load();
     };
 
     const onScanned = ({ data }: BarcodeScanningResult) => {
         if (scanLock.current) return;
         scanLock.current = true;
-        finishCheck(data);
+        void finishCheck(data);
     };
 
-    /** After a refused key, the admin may check its maker in person: never trusted on the server's word. */
-    const checkMaker = () => {
-        if (plan?.kind !== 'refused' || !plan.refusal.canTrust || !plan.refusal.maker) return;
-        startCheck({ pubkey: plan.refusal.maker, callsign: plan.refusal.makerCallsign ?? 'this admin' }, 'trust');
-    };
-
-    /**
-     * A server put back to an older copy, or a key made with an admin's old phone key: this phone makes a new key past the
-     * newest it took, asked first (for an old phone key, the names under it are sealed again under the new one, and said).
-     */
-    const makeNewKey = () => {
-        if (!anchor || !identity || !state || plan?.kind !== 'refused' || !plan.refusal.canMakeNew) return;
-        const { refusal } = plan;
-        Alert.alert(COPY.makeNewTitle, COPY.makeNew, [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Make a new key', style: 'destructive', onPress: async () => {
-                    setBusy(true);
-                    const made = await makeNewKeyOnThisPhone(anchor, identity, state, plan, AsyncStorage);
-                    setBusy(false);
-                    if (!made.ok) { setError(made.message); return; }
-                    await load();
-                    // After the open's own notice (a key still to check in person, say), so neither hides the other.
-                    const carried = made.value.carried > 0 ? COPY.carriedOver(refusal.makerCallsign, refusal.offered ?? 0, made.value.carried) : null;
-                    if (carried) setNotice((said) => [carried, said].filter(Boolean).join('\n\n'));
-                },
-            },
-        ]);
-    };
+    // ── entries ────────────────────────────────────────────────────────────────────────────────
 
     const openForm = (entry: OpenedEntry | null) => {
         setName(entry?.text?.name ?? '');
@@ -244,30 +234,30 @@ export default function NamesListScreen() {
     };
 
     const save = async () => {
-        if (mode.kind !== 'edit' || !anchor || !identity || !currentKey || !list) return;
-        const sealed = sealedFor(currentKey, generation, { name, note }, mode.entry?.id);
-        if (!sealed.ok) { setFormError(sealed.error); return; }
+        if (mode.kind !== 'edit' || !anchor || !identity || !opened || !list) return;
         setBusy(true);
-        const sent = mode.entry
-            ? await editNamesEntry(anchor, identity, generation, sealed)
-            : await addNamesEntry(anchor, identity, generation, sealed);
+        const sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id);
         setBusy(false);
         if (!sent.ok) { setFormError(sent.message); return; }
+        const base = sent.value.opened ?? opened;
+        const body = base.list ?? list;
         const now = new Date().toISOString();
-        const others = list.entries.filter((e) => e.id !== sealed.id);
-        const before = list.entries.find((e) => e.id === sealed.id);
-        setList({
-            ...list,
-            entries: [...others, {
-                id: sealed.id, ciphertext: sealed.ciphertext, keyGeneration: generation, createdBy: before?.createdBy ?? identity.publicKey,
-                createdAt: before?.createdAt ?? now, updatedBy: identity.publicKey, updatedAt: now,
-            }],
+        const before = body.entries.find((e) => e.id === sent.value.id);
+        setOpened({
+            ...base,
+            list: {
+                ...body,
+                entries: [...body.entries.filter((e) => e.id !== sent.value.id), {
+                    id: sent.value.id, ciphertext: sent.value.ciphertext, keyId: sent.value.keyId, createdBy: before?.createdBy ?? identity.publicKey,
+                    createdAt: before?.createdAt ?? now, updatedBy: identity.publicKey, updatedAt: now,
+                }],
+            },
         });
         setMode({ kind: 'list' });
     };
 
     const remove = (entry: OpenedEntry) => {
-        if (!anchor || !identity || !list) return;
+        if (!anchor || !identity || !opened || !list) return;
         if (entry.confirmation) { setFormError(COPY.deleteConfirmed); return; }
         Alert.alert('Delete this entry?', 'It goes from the list for every admin. Your paper copy, if you keep one, is yours to update.', [
             { text: 'Cancel', style: 'cancel' },
@@ -277,7 +267,7 @@ export default function NamesListScreen() {
                     const done = await deleteNamesEntry(anchor, identity, entry.id);
                     setBusy(false);
                     if (!done.ok) { setFormError(done.message); return; }
-                    setList({ ...list, entries: list.entries.filter((e) => e.id !== entry.id) });
+                    setOpened({ ...opened, list: { ...list, entries: list.entries.filter((e) => e.id !== entry.id) } });
                     setMode({ kind: 'list' });
                 },
             },
@@ -286,9 +276,9 @@ export default function NamesListScreen() {
 
     /** Confirmations come back from the node with its ids: read the list again (a read, logged). */
     const afterConfirmation = async () => {
-        if (!anchor || !identity) return;
+        if (!anchor || !identity || !opened) return;
         const l = await fetchNamesList(anchor, identity);
-        if (l.ok) setList(l.value);
+        if (l.ok) setOpened({ ...opened, list: l.value });
     };
 
     const confirmAs = async (entry: OpenedEntry, member: CommunityMember) => {
@@ -331,7 +321,7 @@ export default function NamesListScreen() {
     };
 
     const exportPdf = () => {
-        if (!anchor || !identity) return;
+        if (!anchor || !identity || !opened) return;
         Alert.alert(COPY.exportTitle, COPY.export, [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -341,7 +331,7 @@ export default function NamesListScreen() {
                         // Fetched for the export, so the node logs it as one: the PDF is made from this answer.
                         const fresh = await fetchNamesList(anchor, identity, true);
                         if (!fresh.ok) { setError(fresh.message); return; }
-                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, keys) });
+                        const html = namesListHtml({ communityName, exportedBy: `@${identity.callsign}`, at: new Date(), entries: openEntries(fresh.value, opened) });
                         // Required here, not at the top: a phone built before expo-print fails this export alone, and says so below.
                         const Print = require('expo-print') as typeof import('expo-print');
                         const Sharing = require('expo-sharing') as typeof import('expo-sharing');
@@ -364,12 +354,12 @@ export default function NamesListScreen() {
     };
 
     const setTwoAdmins = async (on: boolean) => {
-        if (!anchor || !identity || !state) return;
+        if (!anchor || !identity || !opened) return;
         setBusy(true);
         const done = await setNamesSettings(anchor, identity, { twoAdminsToConfirm: on });
         setBusy(false);
         if (!done.ok) { setError(done.message); return; }
-        setState({ ...state, settings: { ...state.settings, twoAdminsToConfirm: done.value.twoAdminsToConfirm } });
+        setOpened({ ...opened, state: { ...opened.state, settings: { ...opened.state.settings, twoAdminsToConfirm: done.value.twoAdminsToConfirm } } });
     };
 
     // ── views ────────────────────────────────────────────────────────────────────────────────
@@ -384,7 +374,7 @@ export default function NamesListScreen() {
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">
                 {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? 'Confirm a member'
-                    : mode.kind === 'check' ? COPY.checkTitle(mode.admin.callsign) : COPY.title}
+                    : mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title}
             </Text>
         </View>
     );
@@ -430,15 +420,20 @@ export default function NamesListScreen() {
             <Text style={styles.codeText} selectable accessibilityLabel={COPY.myCode(mine.code.split('').join(' '))}>{COPY.myCode(mine.code)}</Text>
         </View>
     ) : null;
+    const checkSomeone = btn(COPY.checkSomeone, () => startCheck(null), 'secondary');
 
     let body: React.ReactNode;
-    if (loading && !state) {
+    if (loading && !opened) {
         body = <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Opening the names list" />;
     } else if (mode.kind === 'edit') {
         const entry = mode.entry;
         body = (
             <>
-                {entry?.locked ? <View style={styles.warn}><Text style={styles.warnText}>{COPY.lockedEntry}</Text></View> : null}
+                {entry && !entry.text ? (
+                    <View style={styles.warn}>
+                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders)}</Text>
+                    </View>
+                ) : null}
                 <Text style={styles.label}>NAME</Text>
                 <TextInput
                     style={styles.input} value={name} onChangeText={setName} placeholder="Their real name"
@@ -461,7 +456,7 @@ export default function NamesListScreen() {
             </>
         );
     } else if (mode.kind === 'pick') {
-        const candidates = confirmableMembers(members, list ?? { generation, entries: [], confirmations: [] }, identity?.publicKey ?? '', state?.admins.length ?? 0)
+        const candidates = confirmableMembers(members, list ?? { current: null, entries: [], confirmations: [] }, identity?.publicKey ?? '', state?.admins.length ?? 0)
             .filter((m) => !memberQuery.trim() || m.callsign.toLocaleLowerCase().includes(memberQuery.trim().toLocaleLowerCase()));
         body = (
             <>
@@ -483,88 +478,77 @@ export default function NamesListScreen() {
             </>
         );
     } else if (mode.kind === 'check') {
-        const { admin } = mode;
+        const who = mode.picked?.callsign ?? '';
         body = (
             <>
-                <Text style={styles.body}>{COPY.checkIntro(admin.callsign)}</Text>
-                {scanning && permission?.granted ? (
-                    <View style={styles.camera}>
-                        <CameraView
-                            style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                            onBarcodeScanned={onScanned}
-                        />
-                    </View>
-                ) : null}
+                <Text style={styles.body}>{COPY.checkIntro(who)}</Text>
+                {myKeyCard}
                 {scanning && permission && !permission.granted ? <Text style={styles.hint}>{COPY.cameraNeeded}</Text> : null}
                 <View style={styles.buttonRow}>
-                    {scanning
-                        ? btn(COPY.stopScan, () => setScanning(false), 'secondary')
-                        : btn(COPY.scanButton, async () => {
-                            setCheckError(null);
-                            scanLock.current = false;
-                            if (!permission?.granted) await requestPermission();
-                            setScanning(true);
-                        }, 'primary')}
+                    {btn(COPY.scanButton, async () => {
+                        setCheckError(null);
+                        scanLock.current = false;
+                        if (!permission?.granted) await requestPermission();
+                        setScanning(true);
+                    }, 'primary')}
                 </View>
                 <Text style={styles.label}>{COPY.codeLabel}</Text>
                 <TextInput
                     style={styles.input} value={typedCode} onChangeText={setTypedCode} placeholder="0000 0000 0000 0000 0000"
                     placeholderTextColor={colors.text.muted} keyboardType="number-pad" autoCorrect={false} maxLength={30}
-                    accessibilityLabel={`The code on @${admin.callsign}'s phone`}
+                    accessibilityLabel={who ? `The code on @${who}'s phone` : 'The code on the other admin’s phone'}
                 />
                 {checkError ? <View style={styles.error} accessibilityLiveRegion="assertive"><Text style={styles.errorText}>{checkError}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn(COPY.compareButton, () => finishCheck(typedCode), 'primary')}
+                    {btn(COPY.compareButton, () => { void finishCheck(typedCode); }, 'primary')}
                     {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
             </>
         );
-    } else if (plan?.kind === 'wait') {
+    } else if (plan && plan.kind !== 'ready' && opened) {
+        const words = planWords(opened);
+        const maker = plan.kind === 'refused' ? plan.maker ?? null : null;
+        const takeFrom = plan.kind === 'refused' && plan.reason === 'different_history' ? checkedHere.filter((k) => trusted(k)) : [];
         body = (
             <>
-                <View style={styles.warn}>
-                    <Text style={styles.warnText}>{COPY.wait(plan.holders.map((h) => h.callsign), plan.newKeyNeeded)}</Text>
+                {words ? (
+                    <View style={styles.warn} accessibilityLiveRegion="polite">
+                        <Text style={styles.warnText}>{words}</Text>
+                    </View>
+                ) : null}
+                <View style={styles.buttonRow}>
+                    {plan.kind === 'refused' && plan.reason === 'untrusted_maker' && plan.canCheck && maker
+                        ? btn(COPY.checkButton(callsignOf(maker)), () => startCheck({ pubkey: maker, callsign: callsignOf(maker) }), 'primary') : null}
+                    {plan.kind === 'refused' && plan.reason === 'untrusted_maker' && plan.canStartAgain && opened.pin.chain.length === 0
+                        ? btn(COPY.startAgainButton, startAgain, 'danger') : null}
+                    {plan.kind === 'wait' && plan.canMakeNew ? btn(COPY.makeNewButton, startAgain, 'danger') : null}
+                    {plan.kind === 'refused' && plan.reason === 'rolled_back' ? btn(COPY.putBackButton, putBack, 'primary') : null}
+                    {takeFrom.map((k) => btn(COPY.takeHistoryButton(callsignOf(k)), () => takeHistory(k), 'danger'))}
+                    {plan.kind === 'refused' && plan.reason === 'other_community' ? null : checkSomeone}
                 </View>
                 {myKeyCard}
             </>
         );
-    } else if (plan?.kind === 'refused') {
+    } else if (plan?.kind === 'ready' && state && opened) {
+        const others = state.admins.filter((a) => a.pubkey !== identity?.publicKey);
         body = (
             <>
-                <View style={styles.warn} accessibilityLiveRegion="polite">
-                    <Text style={styles.warnText} accessibilityRole="header">{COPY.refusedTitle}</Text>
-                    <Text style={styles.warnText}>{COPY.refused(plan.refusal, trustedNames)}</Text>
-                </View>
-                {plan.refusal.canTrust && plan.refusal.makerCallsign
-                    ? <View style={styles.buttonRow}>{btn(COPY.checkButton(plan.refusal.makerCallsign), checkMaker, 'danger')}</View>
-                    : null}
-                {plan.refusal.canMakeNew
-                    ? <View style={styles.buttonRow}>{btn('Make a new key on this phone', makeNewKey, 'danger')}</View>
-                    : null}
-                {myKeyCard}
-            </>
-        );
-    } else if (plan?.kind === 'start_again') {
-        body = (
-            <>
-                <View style={styles.warn}><Text style={styles.warnText}>{COPY.startAgain}</Text></View>
-                <View style={styles.buttonRow}>{btn('Start a new key', startAgain, 'danger')}</View>
-            </>
-        );
-    } else if (plan?.kind === 'ready' && state) {
-        const waiting = waitingAdmins(state, identity?.publicKey ?? '', pin);
-        body = (
-            <>
-                {waiting.map((a) => (
+                {others.map((a) => (
                     <View key={a.pubkey} style={styles.entry}>
-                        <Text style={styles.entryNote}>
-                            {a.check === 'trusted' ? COPY.waitingTrusted(a.callsign) : a.check === 'changed' ? COPY.keyChanged(a.callsign) : COPY.waitingCheck(a.callsign)}
-                        </Text>
-                        <View style={styles.buttonRow}>
-                            {a.check === 'trusted'
-                                ? btn(`Share with @${a.callsign}`, () => share(a), 'small')
-                                : btn(COPY.checkButton(a.callsign), () => startCheck(a, 'share'), 'small')}
-                        </View>
+                        {trusted(a.pubkey) ? (
+                            <>
+                                <Text style={styles.entryName}>@{a.callsign}</Text>
+                                <View style={styles.buttonRow}>
+                                    {btn(COPY.sendAgainButton(a.callsign), () => { void sendAgain(a); }, 'small')}
+                                    {btn(COPY.removeKeyButton(a.callsign), () => removeKey(a), 'small')}
+                                </View>
+                            </>
+                        ) : (
+                            <>
+                                <Text style={styles.entryNote}>{COPY.toCheck(a.callsign)}</Text>
+                                <View style={styles.buttonRow}>{btn(COPY.checkButton(a.callsign), () => startCheck({ pubkey: a.pubkey, callsign: a.callsign }), 'small')}</View>
+                            </>
+                        )}
                     </View>
                 ))}
                 <View style={styles.buttonRow}>
@@ -589,9 +573,9 @@ export default function NamesListScreen() {
                                     {e.text.note ? <Text style={styles.entryNote}>{e.text.note}</Text> : null}
                                 </>
                             ) : (
-                                <Text style={styles.lockedText}>{e.locked === 'no_key' && e.generation < generation ? COPY.noKeyEntry : COPY.lockedEntry}</Text>
+                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders)}</Text>
                             )}
-                            <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, callsignOf) : 'No member confirmed against it'}</Text>
+                            <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
                             <View style={styles.buttonRow}>
                                 {btn(e.text ? 'Change' : 'Type it again', () => openForm(e), 'small')}
                                 {!e.confirmation && e.text ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
@@ -617,9 +601,11 @@ export default function NamesListScreen() {
                 <Text style={styles.hint}>{COPY.notShownToMembers}</Text>
                 <Text style={styles.label}>WHO OPENED OR CHANGED THE LIST</Text>
                 {log.length === 0 ? <Text style={styles.hint}>Nothing yet.</Text> : null}
-                {log.map((l) => <Text key={l.id} style={styles.logLine}>{logLineText(l, callsignOf)}</Text>)}
-                {mine ? <Text style={styles.hint}>{COPY.myCode(mine.code)}</Text> : null}
-                <View style={styles.buttonRow}>{btn(showMyKey ? COPY.hideMyKey : COPY.showMyKey, () => setShowMyKey(!showMyKey), 'secondary')}</View>
+                {log.map((l) => <Text key={l.id} style={styles.logLine}>{logLineText(l, at)}</Text>)}
+                <View style={styles.buttonRow}>
+                    {checkSomeone}
+                    {btn(showMyKey ? COPY.hideMyKey : COPY.showMyKey, () => setShowMyKey(!showMyKey), 'secondary')}
+                </View>
                 {showMyKey ? myKeyCard : null}
             </>
         );
@@ -640,6 +626,16 @@ export default function NamesListScreen() {
                 {body}
                 {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Working" /> : null}
             </KeyboardAwareScrollView>
+            {/* The scanner: full screen, a camera and one button, no text field (so no keyboard provider in a Modal). */}
+            <Modal visible={scanning && !!permission?.granted} animationType="slide" onRequestClose={() => setScanning(false)}>
+                <SafeAreaView style={styles.scanner} edges={['top', 'left', 'right', 'bottom']}>
+                    <Text style={styles.scannerText}>{COPY.checkIntro(mode.kind === 'check' ? mode.picked?.callsign ?? '' : '')}</Text>
+                    <View style={styles.camera}>
+                        <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
+                    </View>
+                    <View style={styles.buttonRow}>{btn(COPY.stopScan, () => setScanning(false), 'secondary')}</View>
+                </SafeAreaView>
+            </Modal>
         </SafeAreaView>
     );
 }

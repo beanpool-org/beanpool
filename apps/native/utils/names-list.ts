@@ -1,46 +1,44 @@
 /**
  * The names list, on an owner's or admin's phone (community modes slice 2; the server is apps/server/src/routes/
- * names-list.ts and engine/names-list.ts; the crypto is @beanpool/core names-list-crypto.ts).
+ * names-list.ts and engine/names-list.ts; the crypto and the trust model are @beanpool/core names-list-crypto.ts and
+ * names-list-trust.ts; the design is scratch/global-node/DESIGN-names-list-trust-fable.md).
  *
  * The community's admins keep a list of who its members are, by real name, and confirm a member against an entry. The
- * names are sealed on this phone before anything is sent: the node keeps scrambled text and the list's key wrapped to
- * each admin's own key, and only an admin's phone opens them. Everything here is signed with the member's own key.
+ * names are sealed on this phone before anything is sent: the node keeps scrambled text, a signed history of the
+ * list's keys, and boxes of keys sealed from one admin to another. Only an admin's phone opens them. Everything here is
+ * signed with the member's own key.
  *
  * What this module decides, so the screen (app/names-list.tsx) only draws it:
- *   - whom this phone takes the key from ({@link traceFor}; @beanpool/core names-list-trust.ts): every wrap is signed by
- *     the admin who made it, and this phone keeps its own pinned set of trusted admin keys for the community (trust on
- *     first use, on this phone only: {@link readNamesTrust}). It uses a wrap only where a trusted key signed it, so a
- *     row whoever runs the server writes into its database opens nothing here, and a key the server makes an admin is
- *     trusted only once a trusted admin's signed share adds it. When it refuses one, it says so ({@link namesRefusal})
- *     and changes nothing: nothing is sealed under a key it can't trace (PR #1411's deciding review). The pin also
- *     remembers the newest generation it took and whom trusted admins dropped, and refuses a server put back to an
- *     older copy;
- *   - whom this phone gives the key to: only a key it trusts, never one the server names by a callsign alone (PR #1411's
- *     second deciding review: a re-key with the owner password put an admin's callsign on the operator's key). A key
- *     is trusted by an in-person check ({@link checkAdminInPerson}: the other admin's phone shows a QR code and a code,
- *     {@link myKeyCheck}), or by a trusted admin's signed share. When an admin's key changes (a re-key, a lost phone),
- *     this phone drops the old one and says so ({@link NamesOpened.keyChanged});
- *   - the key: open this admin's own accepted wraps; make the first key, or a new one after an admin goes, for this
- *     admin alone (every other admin then gets it by a Share tap: the phone never wraps the key to anyone because the
- *     node says so); start again when nobody here holds it; or say who to ask ({@link keyPlan});
- *   - the entries: open each with the key of its generation, or say why it can't be ({@link openEntries}); seal the older
- *     ones again under a new key this phone traced ({@link reEncryptBatches}); the whole opening, in order, is
- *     {@link openNamesList};
- *   - sharing: an admin made since waits until an admin who holds the key taps "Share" for them — never automatic, and
- *     offered only for a key this phone trusts ({@link waitingAdmins}, {@link shareKeyWith});
- *   - confirming: who can be confirmed ({@link confirmableMembers}), and the words for each confirmation;
- *   - the access log's lines, and the PDF's page ({@link namesListHtml}), made and shared on this phone.
+ *   - the open ({@link openNamesList}): the node's state; this phone's pin (whom it trusts, the history it took and the
+ *     keys it holds, sealed at rest under a key in the secure store: {@link readNamesPinFrom}); the sync (core
+ *     syncNames: rule 1 takes a statement only off this phone's head from a maker it trusts; a key only from a box a
+ *     trusted admin signed, for a statement it took); then what the plan says, without asking where it only removes
+ *     trust (the first key, a new key without an admin who left), and the keys sent to every admin this phone trusts that
+ *     lacks one (logged on the node); and only when the plan is ready, the list;
+ *   - a generation is written ahead: the pin keeps it and its key before the request (`pending`), so a phone that dies
+ *     after the node took it still has the key, and one whose request never landed sends it again
+ *     ({@link openNamesList});
+ *   - the asked actions: "Check each other" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKey}), "Put
+ *     the key history back" ({@link putHistoryBack}), "Start again" / a new key nobody can hand over
+ *     ({@link makeKeyOnThisPhone}), "Take @X's history" ({@link takeHistoryOf}), "Send the keys to @X again"
+ *     ({@link sendKeysAgain});
+ *   - the entries: opened with the key of each one's generation from this phone's ring, or said to be locked with the
+ *     key's number, its maker and who holds it ({@link openEntries}); written only under the head's key
+ *     ({@link saveNamesEntry});
+ *   - confirming, the access log's lines, the PDF's page, and every sentence the screen says ({@link NAMES_COPY}).
  *
  * A confirmation is a fact about a member, never a tier, and in this version it gates nothing.
  */
+import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    NAMES_LIMITS, newNamesListKey, wrapNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId,
-    normaliseNamesEntryText, signedNamesWrap, traceNamesTrust, readNamesTrustPin, verifyNamesWrap, emptyNamesTrustPin,
-    namesKeyChanges, pinKeyChanges, pinCallsigns, pinCheckedKey, namesShareCheck, namesKeyCheckMatches, readNamesKeyCheck,
-    namesKeyQr, namesKeyCode,
-    type NamesEntryText, type WrappedNamesKey, type NamesKeyRecord, type NamesTrustPin, type NamesTrustTrace,
+    newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
+    readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
+    makeNamesGenerationFor, namesSharesToSend, namesReplay, takeNamesHistory, namesRingKeys, namesKeyLabel, readNamesGeneration,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId,
+    type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
-import { buildSignedHeaders } from './crypto';
+import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
 import type { BeanPoolIdentity } from './identity';
 
@@ -57,41 +55,33 @@ export function offersNamesList(role: string | null | undefined, profile: 'local
 
 // ── What the node sends ──────────────────────────────────────────────────────────────────────
 
-export interface NamesKeyWrap extends WrappedNamesKey {
-    generation: number;
-    wrappedBy: string;
-    signature: string;
-    drops: string[];
-}
-
 export interface NamesAdminRow {
     pubkey: string;
     callsign: string;
     role: 'owner' | 'admin';
-    holdsKey: boolean;
+    /** The key ids the node says this admin holds: a hint, never trust. */
+    keyIds: string[];
+    holdsCurrent: boolean;
 }
 
-export interface NamesState {
-    /** The community's id, which every wrap's signature is bound to. */
+export interface NamesState extends NamesServerState {
     communityId: string;
-    generation: number;
-    newKeyNeeded: boolean;
-    /** The holders dropped from the current generation: the maker of the next one names them, signed. */
+    admins: NamesAdminRow[];
+    holdersOfCurrent: string[];
     droppedHolders: string[];
     nobodyHoldsKey: boolean;
-    myKeys: NamesKeyWrap[];
-    /** Every wrap's signed header, which this phone walks to decide whom it trusts. */
-    records: NamesKeyRecord[];
-    admins: NamesAdminRow[];
+    newKeyNeeded: boolean;
+    /** The name each key the history names goes by, for words only. */
+    callsigns: Record<string, string>;
     settings: { twoAdminsToConfirm: boolean; namesShownToMembers: boolean };
-    counts: { entries: number; olderKey: number; locked: number; confirmed: number; awaitingSecond: number };
+    counts: { entries: number; confirmed: number; awaitingSecond: number; byKey: Record<string, number>; locked: number };
     me: { pubkey: string; role: 'owner' | 'admin' | null; owner: boolean };
 }
 
 export interface SealedEntryRow {
     id: string;
     ciphertext: string;
-    keyGeneration: number;
+    keyId: string;
     createdBy: string;
     createdAt: string;
     updatedBy: string | null;
@@ -117,13 +107,13 @@ export interface ConfirmationRow {
 }
 
 export interface NamesListBody {
-    generation: number;
+    current: string | null;
     entries: SealedEntryRow[];
     confirmations: ConfirmationRow[];
 }
 
 export type NamesAction = 'read' | 'export' | 'add' | 'edit' | 'delete' | 'confirm' | 'second' | 'revoke'
-    | 'key_made' | 'key_changed' | 'key_shared' | 're_encrypt' | 'holder_dropped' | 'settings';
+    | 'key_made' | 'key_changed' | 'key_shared' | 'holder_dropped' | 'settings';
 
 export interface NamesLogLine {
     id: string;
@@ -183,13 +173,31 @@ export const deleteNamesEntry = (anchor: string, id: BeanPoolIdentity, entryId: 
 export const setNamesSettings = (anchor: string, id: BeanPoolIdentity, settings: { twoAdminsToConfirm?: boolean }) =>
     call<{ twoAdminsToConfirm: boolean; namesShownToMembers: boolean }>(anchor, id, 'POST', `${NAMES_PATH}/settings`, settings);
 
-// ── Whom this phone trusts ───────────────────────────────────────────────────────────────────
+const postGeneration = (anchor: string, id: BeanPoolIdentity, g: Pick<NamesGeneration, 'statement' | 'signature'>, replay = false) =>
+    call<{ id: string; n: number; code?: string }>(anchor, id, 'POST', `${NAMES_PATH}/generations`, { statement: g.statement, signature: g.signature, ...(replay ? { replay: true } : {}) });
+const postShare = (anchor: string, id: BeanPoolIdentity, s: NamesShare) =>
+    call<{ to: string }>(anchor, id, 'POST', `${NAMES_PATH}/shares`, { header: s.header, signature: s.signature, box: s.box });
 
-/** What a pin is kept with: a small key-value store (AsyncStorage on the phone). */
-export interface NamesTrustStore {
+// ── The pin, sealed at rest ──────────────────────────────────────────────────────────────────
+
+/**
+ * Where a pin is kept: a small store for the sealed blob (AsyncStorage: Android caps a SecureStore value at 2 KB), and
+ * the secure store for the key that seals it.
+ */
+export interface NamesPinStore {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
+    getSecret(name: string): Promise<string | null>;
+    setSecret(name: string, value: string): Promise<void>;
 }
+
+/** The phone's own stores. */
+export const DEVICE_NAMES_STORE: NamesPinStore = {
+    getItem: (k) => AsyncStorage.getItem(k),
+    setItem: (k, v) => AsyncStorage.setItem(k, v),
+    getSecret: (name) => SecureStore.getItemAsync(name),
+    setSecret: (name, value) => SecureStore.setItemAsync(name, value),
+};
 
 /**
  * Where this phone keeps its pin for one community: by this member's key and the community's address, both the phone's
@@ -199,304 +207,341 @@ export function namesTrustStoreKey(publicKey: string, anchor: string): string {
     return `beanpool:names-trust:${publicKey.toLowerCase()}:${communityAddress(anchor) ?? anchor}`;
 }
 
-export async function readNamesTrust(store: NamesTrustStore, publicKey: string, anchor: string): Promise<NamesTrustPin | null> {
+/** The secure store's name for the key that seals that pin (letters, digits, dots, dashes and underscores only). */
+export function namesPinSecretName(label: string): string {
+    return `beanpool.names-pin.${namesStatementId(label).slice(0, 40)}`;
+}
+
+/** This phone's pin for the community, or null: none kept, or one that doesn't open (then it starts from an empty pin). */
+export async function readNamesPinFrom(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesPin | null> {
     try {
-        const raw = await store.getItem(namesTrustStoreKey(publicKey, anchor));
-        return raw ? readNamesTrustPin(JSON.parse(raw)) : null;
+        const label = namesTrustStoreKey(publicKey, anchor);
+        const blob = await store.getItem(label);
+        if (!blob) return null;
+        const secret = await store.getSecret(namesPinSecretName(label));
+        if (!secret || !/^[0-9a-f]{64}$/.test(secret)) return null;
+        const json = openNamesPinBlob(blob, fromHex(secret), label);
+        return json ? readNamesPin(JSON.parse(json), publicKey) : null;
     } catch {
         return null;
     }
 }
 
-async function writeNamesTrust(store: NamesTrustStore, publicKey: string, anchor: string, pin: NamesTrustPin): Promise<void> {
-    try { await store.setItem(namesTrustStoreKey(publicKey, anchor), JSON.stringify(pin)); } catch { /* learnt again next time */ }
-}
-
-/** Adds this phone's own key to its pin (it made a key, so it trusts itself), keeping everything else the pin holds. */
-async function pinSelf(store: NamesTrustStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, communityId: string): Promise<void> {
-    const pin = await readNamesTrust(store, identity.publicKey, anchor);
-    if (pin && pin.communityId !== communityId) return;
-    const base = pin ?? emptyNamesTrustPin(communityId, identity.publicKey);
-    await writeNamesTrust(store, identity.publicKey, anchor, { ...base, trusted: [...new Set([...base.trusted, identity.publicKey.toLowerCase()])].sort() });
-}
-
-/** The walk (@beanpool/core traceNamesTrust) over the node's state, from this phone's pin: the keys it may use. */
-export function traceFor(state: NamesState, identity: Pick<BeanPoolIdentity, 'privateKey' | 'publicKey'>, pin: NamesTrustPin | null): NamesTrustTrace {
-    return traceNamesTrust({
-        communityId: state.communityId, me: { publicKey: identity.publicKey, privateKey: identity.privateKey }, pin,
-        records: state.records ?? [], myKeys: state.myKeys ?? [], generation: state.generation,
-    });
-}
-
-/** Why this phone won't use the list's current key, in a form the screen says plainly. */
-export interface NamesRefusal {
-    /**
-     * `old_key`: the current key was made with a key this phone saw replaced under an admin's name (`makerCallsign`),
-     * newer than any this phone had taken when it saw the change: their lost phone before it was lost, or whoever has it
-     * since. This phone can't tell which (PR #1411's fourth deciding review).
-     */
-    reason: 'other_community' | 'rolled_back' | 'unsigned' | 'untrusted' | 'old_key';
-    /** Who the key says made it (its signer, or whom the node names), and their callsign where they are an admin here. */
-    maker: string | null;
-    makerCallsign: string | null;
-    /** The admin may check the maker in person and then trust them: a real signature, by a key that is an admin here. */
-    canTrust: boolean;
-    /**
-     * `rolled_back`: this phone holds the key the server now calls current, so it may make a new one past the newest it
-     * took (for itself alone, asked first); the server's old key is used for nothing. `old_key`: this phone holds a wrap of
-     * the current key and opens it apart (the walk's salvage), so it may make a new key of its own, asked first, and seal
-     * again under it the names the old key's generation opens ({@link makeNewKeyOnThisPhone}); nothing new is sealed
-     * under the old key's generation, and it is never counted as taken.
-     */
-    canMakeNew?: boolean;
-    /** `rolled_back` and `old_key`: the generation the server offers, and the newest this phone took. */
-    offered?: number;
-    newest?: number;
-}
-
-/**
- * Whether this phone refuses the list's current key, and why: the community isn't the one it pinned; the server offers
- * an older generation than this phone already took (put back to an older copy); its own wrap of the current key isn't
- * signed by a key it trusts; or, where it trusts anyone yet, no trusted admin made the current key.
- */
-export function namesRefusal(state: NamesState, trace: NamesTrustTrace, hadPin: boolean, pin: NamesTrustPin | null = null): NamesRefusal | null {
-    if (trace.otherCommunity) return { reason: 'other_community', maker: null, makerCallsign: null, canTrust: false };
-    if (trace.rolledBack) {
-        const iHold = state.generation > 0 && trace.keys.has(state.generation) && state.admins.some((a) => a.pubkey === state.me.pubkey && a.holdsKey);
-        return {
-            reason: 'rolled_back', maker: null, makerCallsign: null, canTrust: false,
-            canMakeNew: iHold || state.generation === 0 || state.nobodyHoldsKey, offered: state.generation, newest: pin?.newest ?? trace.pin?.newest ?? 0,
-        };
+/** Seals and keeps the pin; false when it couldn't be kept (then nothing that depends on it is sent). */
+export async function writeNamesPinTo(store: NamesPinStore, publicKey: string, anchor: string, pin: NamesPin): Promise<boolean> {
+    try {
+        const label = namesTrustStoreKey(publicKey, anchor);
+        const name = namesPinSecretName(label);
+        let secret = await store.getSecret(name);
+        if (!secret || !/^[0-9a-f]{64}$/.test(secret)) {
+            // Written once, before the first pin that holds a key.
+            secret = bytesToHex(newNamesListKey());
+            await store.setSecret(name, secret);
+        }
+        await store.setItem(label, sealNamesPinBlob(JSON.stringify(pin), fromHex(secret), label));
+        return true;
+    } catch {
+        return false;
     }
-    if (state.generation === 0) return null;
-    const mine = trace.refused.find((r) => r.generation === state.generation && r.reason !== 'did_not_open');
-    const hasBasis = hadPin || !!trace.pin;
-    if (!mine && (!hasBasis || trace.currentTraced)) return null;
-    const kept = pin ?? trace.pin;
-    const old = mine?.reason === 'untrusted' ? kept?.replaced[mine.wrappedBy] : undefined;
-    if (mine && old) {
-        const iHold = state.admins.some((a) => a.pubkey === state.me.pubkey && a.holdsKey);
-        return {
-            reason: 'old_key', maker: mine.wrappedBy, makerCallsign: old.callsign, canTrust: false,
-            canMakeNew: iHold && trace.salvage.has(state.generation), offered: state.generation, newest: kept?.newest ?? 0,
-        };
-    }
-    let maker = mine?.wrappedBy ?? null;
-    let signed = mine ? mine.reason === 'untrusted' : false;
-    if (!mine) {
-        const here = (state.records ?? []).filter((r) => r.generation === state.generation);
-        const record = here.find((r) => r.holder === r.wrappedBy) ?? here[0];
-        maker = record?.wrappedBy ?? null;
-        signed = !!record && verifyNamesWrap({ ...record, communityId: state.communityId }, record.signature);
-    }
-    const admin = maker ? state.admins.find((a) => a.pubkey === maker) : undefined;
-    return { reason: signed ? 'untrusted' : 'unsigned', maker, makerCallsign: admin?.callsign ?? null, canTrust: signed && !!admin };
 }
 
-// ── Checking a key in person ─────────────────────────────────────────────────────────────────
+const fromHex = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16));
+
+const NOT_KEPT: NamesResult<never> = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
+
+// ── Checking each other in person ────────────────────────────────────────────────────────────
 
 /** What this phone shows another admin to check it in person: its key as a QR code, and the same key as a code. */
 export function myKeyCheck(identity: Pick<BeanPoolIdentity, 'publicKey'>): { qr: string; code: string } {
     return { qr: namesKeyQr(identity.publicKey), code: namesKeyCode(identity.publicKey) };
 }
 
-/** A key's code, to show beside a callsign (the admin this phone trusted on first use, say). */
+/** A key's code, to show beside a callsign. */
 export const keyCodeOf = (pubkey: string): string => namesKeyCode(pubkey);
 
-export type InPersonCheck = { ok: true } | { ok: false; reason: 'unreadable' | 'mismatch' };
-
-/** Whether what was scanned or typed is `pubkey`'s key, before anything is kept (the screen asks first where it must). */
+/** Whether what was scanned or typed is `pubkey`'s key. */
 export function inPersonResult(scannedOrTyped: string, pubkey: string): 'match' | 'unreadable' | 'mismatch' {
     if (!readNamesKeyCheck(scannedOrTyped)) return 'unreadable';
     return namesKeyCheckMatches(scannedOrTyped, pubkey) ? 'match' : 'mismatch';
 }
 
+export type EachOtherCheck =
+    /** `pinned`: the key this phone now trusts. `mismatch`: it isn't the key the server lists for the admin picked. */
+    | { ok: true; pinned: string; mismatch: boolean }
+    | { ok: false; reason: 'unreadable' | 'mismatch' | 'self' | 'no_match' };
+
 /**
- * The admin checked `admin`'s key in person: they scanned the QR code on that admin's phone, or typed the code it shows.
- * Only if it is the key the server lists for that admin does this phone trust it (and so offer Share, or take a key they
- * made). A mismatch changes nothing: the server has put that admin's name on a key their phone doesn't hold.
+ * "Check each other" (design §3.3): what was scanned (a QR code: the other phone's key) or typed (its 20 digits). A QR
+ * code pins the key it shows, even when it isn't the one the server lists for `picked` (then `mismatch`, said loudly:
+ * nothing is sent to the server's key, and nothing to the scanned one unless the server lists it as an admin). A typed
+ * code can only be compared: with `picked`'s key, or with each admin the server lists; a mismatch pins nothing.
  */
-export async function checkAdminInPerson(
-    store: NamesTrustStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, state: NamesState,
-    admin: Pick<NamesAdminRow, 'pubkey' | 'callsign'>, scannedOrTyped: string,
-): Promise<InPersonCheck> {
-    const result = inPersonResult(scannedOrTyped, admin.pubkey);
-    if (result !== 'match') return { ok: false, reason: result };
-    const pin = await readNamesTrust(store, identity.publicKey, anchor);
-    if (pin && pin.communityId !== state.communityId) return { ok: false, reason: 'mismatch' };
-    await writeNamesTrust(store, identity.publicKey, anchor, pinCheckedKey(pin ?? emptyNamesTrustPin(state.communityId, identity.publicKey), admin.pubkey, admin.callsign));
-    return { ok: true };
-}
-
-// ── The key ──────────────────────────────────────────────────────────────────────────────────
-
-export type KeyPlan =
-    /** This phone holds the current key: open the list. */
-    | { kind: 'ready' }
-    /** The list has no key yet: this phone makes it, for this admin alone. */
-    | { kind: 'make_first' }
-    /**
-     * An admin went: this phone makes the next key, for this admin alone. The others wait for a Share tap, as a new admin
-     * does: who held the last key is the node's word, and a node that named its own key there must get nothing.
-     */
-    | { kind: 'make_new' }
-    /** Nobody who is an admin now holds the key: a new one, and the entries sealed under the old one stay locked. Asks first. */
-    | { kind: 'start_again' }
-    /** Another admin holds the key (or must make the new one): ask them, and show them this phone's key to check. */
-    | { kind: 'wait'; holders: NamesAdminRow[]; newKeyNeeded: boolean }
-    /** This phone won't use the current key (see {@link namesRefusal}): nothing is read, sealed or sent under it. */
-    | { kind: 'refused'; refusal: NamesRefusal };
-
-/** What this phone does about the key, from the node's state and the walk over it. */
-export function keyPlan(state: NamesState, myPubkey: string, trace: NamesTrustTrace, hadPin: boolean, pin: NamesTrustPin | null = null): KeyPlan {
-    if (state.generation === 0 && !trace.otherCommunity && !trace.rolledBack) return { kind: 'make_first' };
-    const refusal = namesRefusal(state, trace, hadPin, pin);
-    if (refusal) return { kind: 'refused', refusal };
-    if (state.nobodyHoldsKey) return { kind: 'start_again' };
-    const holders = state.admins.filter((a) => a.holdsKey);
-    const iHold = trace.keys.has(state.generation) && holders.some((h) => h.pubkey === myPubkey);
-    if (state.newKeyNeeded) {
-        return iHold ? { kind: 'make_new' } : { kind: 'wait', holders, newKeyNeeded: true };
+export async function checkEachOther(
+    store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, state: Pick<NamesState, 'communityId' | 'admins'>,
+    scannedOrTyped: string, picked?: Pick<NamesAdminRow, 'pubkey'> | null,
+): Promise<EachOtherCheck> {
+    const read = readNamesKeyCheck(scannedOrTyped);
+    if (!read) return { ok: false, reason: 'unreadable' };
+    let key: string;
+    let mismatch = false;
+    if (read.kind === 'key') {
+        key = read.pubkey;
+        mismatch = !!picked && picked.pubkey.toLowerCase() !== key;
+    } else if (picked) {
+        if (!namesKeyCheckMatches(scannedOrTyped, picked.pubkey)) return { ok: false, reason: 'mismatch' };
+        key = picked.pubkey.toLowerCase();
+    } else {
+        const found = state.admins.find((a) => namesKeyCheckMatches(scannedOrTyped, a.pubkey));
+        if (!found) return { ok: false, reason: 'no_match' };
+        key = found.pubkey.toLowerCase();
     }
-    // A key this phone saw replaced under an admin's name, and no key of the list made since without it: whoever has the
-    // lost phone may hold the current key. A phone that holds it makes a new one, whatever the server says (PR #1411's
-    // fourth deciding review: a server that kept quiet about the re-key let the old key read what was added after).
-    const kept = pin ?? trace.pin;
-    if (iHold && kept && Object.keys(kept.replaced).some((k) => !(k in kept.dropped))) return { kind: 'make_new' };
-    return iHold ? { kind: 'ready' } : { kind: 'wait', holders, newKeyNeeded: false };
+    if (key === identity.publicKey.toLowerCase()) return { ok: false, reason: 'self' };
+    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+    const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
+    return { ok: true, pinned: key, mismatch };
 }
 
-/**
- * Wraps `key` of `generation` to each admin in `holders`, each wrap signed by this admin for this community. `drops`
- * (only on this admin's own wrap of a new generation) names, signed, the admins dropped from the list.
- */
-export function wrapsFor(
-    key: Uint8Array, generation: number, holders: string[], signer: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, communityId: string, drops: string[] = [],
-): ({ holder: string; signature: string; drops: string[] } & WrappedNamesKey)[] {
-    return holders.map((holder) => signedNamesWrap(wrapNamesListKey(key, holder, generation), {
-        communityId, generation, holder, signer, drops: holder === signer.publicKey ? drops : [],
-    }));
+/** "Remove @X's old key" (asked first): the next open makes a new key without it. */
+export async function removeOldKey(store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, key: string): Promise<boolean> {
+    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+    if (!pin) return false;
+    return writeNamesPinTo(store, identity.publicKey, anchor, removeNamesKey(pin, key));
 }
 
-/**
- * Makes the key the plan asks for (not for `ready`, `wait` or a `refused` that offers no new key), wrapped to this admin
- * alone and signed, and sends it. It names, signed, the admins dropped from the current key, and every key this phone
- * knows was dropped or replaced (never itself: an admin who was the only holder and is an admin again starts a new key).
- * It is numbered past both the server's generation and the newest this phone took, so a phone never goes back. This
- * phone trusts its own key: its pin keeps this admin. The new key is kept for this screen only: the phone opens its own
- * wrap again from the node, as any other admin's does.
- */
-export async function installKeyFor(
-    anchor: string, identity: BeanPoolIdentity, state: NamesState, plan: KeyPlan, store: NamesTrustStore,
-): Promise<NamesResult<{ generation: number; key: Uint8Array }>> {
-    if (plan.kind === 'ready' || plan.kind === 'wait' || (plan.kind === 'refused' && !plan.refusal.canMakeNew)) {
-        return { ok: false, status: 0, code: 'no_plan', message: 'Nothing to make.' };
+// ── Opening the list, in order ───────────────────────────────────────────────────────────────
+
+export interface NamesOpened {
+    state: NamesState;
+    plan: NamesPlan;
+    pin: NamesPin;
+    /** This phone's keys, by generation id. */
+    ring: Record<string, Uint8Array>;
+    /** The statements the node sent that check out, by id. */
+    generations: Map<string, NamesGeneration>;
+    /** The list, where the plan is ready; null otherwise (nothing was read). */
+    list: NamesListBody | null;
+    /** Lines to show, in words. */
+    notices: string[];
+    /** The keys this open made a new generation without, if it made one. */
+    made: string[] | null;
+    /** Whom this open sent the keys to. */
+    sentTo: string[];
+    /** Admins the node lists whose phones this phone hasn't checked: "Check @X in person" (never a share on a callsign). */
+    toCheck: NamesAdminRow[];
+    /** Rolled back: how many entries this phone last saw that the node no longer has. */
+    lost: number;
+}
+
+const callsignIn = (state: Pick<NamesState, 'callsigns' | 'admins'>, key: string): string =>
+    state.admins.find((a) => a.pubkey === key)?.callsign ?? state.callsigns?.[key] ?? '';
+const at = (callsign: string): string => (callsign ? `@${callsign}` : 'an admin');
+
+/** The notices a sync gave, in words. */
+export function noticeWords(notices: NamesNotice[], state: Pick<NamesState, 'callsigns' | 'admins'>): string[] {
+    const out: string[] = [];
+    for (const n of notices) {
+        if (n.kind === 'dropped_me') out.push(NAMES_COPY.droppedMe(callsignIn(state, n.maker)));
+        else if (n.kind === 'different_keys') out.push(NAMES_COPY.differentKeys(n.n));
+        else if (n.kind === 'other_history') out.push(NAMES_COPY.otherHistory(callsignIn(state, n.who)));
+        else if (n.kind === 'dropped') out.push(NAMES_COPY.newKeyBy(callsignIn(state, n.maker), n.keys.map((k) => callsignIn(state, k))));
+        else if (n.kind === 'too_many') out.push(NAMES_COPY.tooMany);
     }
-    const me = identity.publicKey.toLowerCase();
-    const pin = await readNamesTrust(store, identity.publicKey, anchor);
-    const known = pin && pin.communityId === state.communityId ? pin : null;
-    const generation = Math.max(state.generation, known?.newest ?? 0) + 1;
-    const key = newNamesListKey();
-    const mustName = state.generation > 0 ? (state.droppedHolders ?? []) : [];
-    const remembered = known ? [...Object.keys(known.dropped), ...Object.keys(known.replaced)] : [];
-    const drops = [...new Set([...mustName, ...remembered].map((k) => k.toLowerCase()))].filter((k) => k !== me).slice(0, 50);
-    const sent = await call<{ generation: number }>(anchor, identity, 'POST', `${NAMES_PATH}/key`, {
-        generation, wraps: wrapsFor(key, generation, [identity.publicKey], identity, state.communityId, drops),
-    });
-    if (!sent.ok) return sent;
-    await pinSelf(store, identity, anchor, state.communityId);
-    return { ok: true, value: { generation, key } };
+    return [...new Set(out)];
 }
 
-/**
- * The admin's "Make a new key" on a refusal that offers one (asked first on the screen): the new key, made as
- * {@link installKeyFor} makes it. After an `old_key` refusal, the names the old key's generation opens (the walk's
- * salvage) are sealed again under this new key, and only under it; `carried` counts them, for the screen to say so.
- */
-export async function makeNewKeyOnThisPhone(
-    anchor: string, identity: BeanPoolIdentity, state: NamesState, plan: KeyPlan, store: NamesTrustStore,
-): Promise<NamesResult<{ generation: number; carried: number }>> {
-    const made = await installKeyFor(anchor, identity, state, plan, store);
-    if (!made.ok) return made;
-    const generation = made.value.generation;
-    if (plan.kind !== 'refused' || plan.refusal.reason !== 'old_key') return { ok: true, value: { generation, carried: 0 } };
+interface Synced { state: NamesState; pin: NamesPin; plan: NamesPlan; notices: NamesNotice[]; generations: Map<string, NamesGeneration> }
+
+async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<Synced & { kept: boolean }>> {
     const s = await fetchNamesState(anchor, identity);
-    if (!s.ok || s.value.generation !== generation) return { ok: true, value: { generation, carried: 0 } };
-    const trace = traceFor(s.value, identity, await readNamesTrust(store, identity.publicKey, anchor));
-    if (!trace.keys.has(generation) || !trace.currentTraced) return { ok: true, value: { generation, carried: 0 } };
-    const l = await fetchNamesList(anchor, identity);
-    if (!l.ok) return l;
-    // The salvaged keys open the old key's generation; the walk's keys open the rest. Sealed under the new key only.
-    const batches = reEncryptBatches(l.value, new Map([...trace.salvage, ...trace.keys]), generation);
-    if (batches.length === 0) return { ok: true, value: { generation, carried: 0 } };
-    const salvaged = new Set((l.value.entries ?? []).filter((e) => trace.salvage.has(e.keyGeneration) && !trace.keys.has(e.keyGeneration)).map((e) => e.id));
-    const carried = batches.flat().filter((e) => salvaged.has(e.id)).length;
-    const sent = await sendReEncrypted(anchor, identity, generation, batches);
-    if (!sent.ok) return sent;
-    return { ok: true, value: { generation, carried } };
-}
-
-/**
- * An admin who doesn't hold the key yet (made since, or since a new key), and whether this phone may share with them:
- * `trusted`, a key this phone trusts (checked in person, here or by a trusted admin who shared with them); `changed`,
- * their name was on another key this phone trusted (a re-key, a lost phone, or whoever runs the server); `check`, a key
- * this phone hasn't checked. Share is offered for `trusted` only.
- */
-export interface WaitingAdmin extends NamesAdminRow {
-    check: 'trusted' | 'changed' | 'check';
-}
-
-/** The admins who don't hold the key yet, each with whether this phone may share with them now. */
-export function waitingAdmins(state: NamesState, myPubkey: string, pin: NamesTrustPin | null): WaitingAdmin[] {
-    if (state.generation === 0 || state.newKeyNeeded) return [];
-    return state.admins.filter((a) => !a.holdsKey && a.pubkey !== myPubkey).map((a) => ({ ...a, check: namesShareCheck(pin, a) }));
-}
-
-/**
- * Shares the current key with one admin: a tap on this phone, after the screen asked. Only to a key this phone trusts
- * (its pin), never to whatever key the server puts behind a callsign: anything else sends nothing and says to check in
- * person first. The wrap is signed: it is this admin vouching for that one, so every phone that trusts this admin
- * trusts them too.
- */
-export async function shareKeyWith(
-    anchor: string, identity: BeanPoolIdentity, state: NamesState, key: Uint8Array, admin: Pick<NamesAdminRow, 'pubkey' | 'callsign'>, store: NamesTrustStore,
-): Promise<NamesResult<{ shared: string[] }>> {
-    const pin = await readNamesTrust(store, identity.publicKey, anchor);
-    if (!pin || pin.communityId !== state.communityId || namesShareCheck(pin, admin) !== 'trusted') {
-        return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(admin.callsign) };
+    if (!s.ok) return s;
+    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+    const r = syncNames({ pin, state: s.value, me: identity });
+    if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {
+        return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true } };
     }
-    return call<{ shared: string[] }>(anchor, identity, 'POST', `${NAMES_PATH}/key/share`, {
-        generation: state.generation, wraps: wrapsFor(key, state.generation, [admin.pubkey], identity, state.communityId),
-    });
+    const kept = await writeNamesPinTo(store, identity.publicKey, anchor, r.pin);
+    return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept } };
+}
+
+/**
+ * Sends a generation this phone made, written ahead (`pending`, with its key) before the request: on 201 the next sync
+ * takes it from the node and moves its key into the ring; when the node moved on (409 `stale`), the sync drops it and
+ * takes the winner; when the node can't be reached, it stays for the next open.
+ */
+async function sendGeneration(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, g: Pick<NamesGeneration, 'statement' | 'signature'>): Promise<NamesResult<true>> {
+    const sent = await postGeneration(anchor, identity, g);
+    if (sent.ok) return { ok: true, value: true };
+    if (sent.status === 0) return sent;
+    if (sent.code !== 'stale') {
+        // Refused for good (asked to wait for a holder, say): it never lands, so it isn't kept to send again.
+        await writeNamesPinTo(store, identity.publicKey, anchor, { ...pin, pending: null });
+    }
+    return sent;
+}
+
+async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Synced, drops: string[], startAgain = false): Promise<NamesResult<true>> {
+    const made = makeNamesGenerationFor(synced.pin, synced.state, identity, drops, { startAgain });
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, made.pin))) return NOT_KEPT;
+    return sendGeneration(anchor, identity, store, made.pin, made.generation);
+}
+
+/**
+ * What the screen does on opening (design §4): the node's state; the sync from this phone's pin (kept again); a
+ * generation the plan makes without asking (the first, or a new one without an admin who left or was removed here), or
+ * this phone's own that never landed, sent again; the keys sent to every admin this phone trusts that lacks one; then,
+ * only when the plan is ready, the list. A refusal stops before anything is read or written.
+ */
+export async function openNamesList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    let l = await look(anchor, identity, store);
+    if (!l.ok) return l;
+    if (!l.value.kept) return NOT_KEPT;
+    const notices: NamesNotice[] = [...l.value.notices];
+    let made: string[] | null = null;
+    const pend = l.value.pin.pending;
+    const cur = l.value.state.current?.id ?? '-';
+    if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
+        // Ours, never landed, and the node is still where it was: the same statement again (never a second key).
+        const sent = await sendGeneration(anchor, identity, store, l.value.pin, pend);
+        if (!sent.ok && sent.status === 0) return sent;
+        l = await look(anchor, identity, store);
+        if (!l.ok) return l;
+        notices.push(...l.value.notices);
+    } else if (l.value.plan.kind === 'make_first' || l.value.plan.kind === 'make_new') {
+        const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
+        const sent = await makeAndSend(anchor, identity, store, l.value, drops);
+        if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return sent;
+        if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
+        l = await look(anchor, identity, store);
+        if (!l.ok) return l;
+        notices.push(...l.value.notices);
+    }
+    const { state, pin, plan, generations } = l.value;
+    const sentTo: string[] = [];
+    let list: NamesListBody | null = null;
+    let kept = pin;
+    if (plan.kind === 'ready') {
+        for (const share of namesSharesToSend(pin, state, identity)) {
+            const done = await postShare(anchor, identity, share);
+            if (done.ok) sentTo.push(share.to);
+        }
+        const got = await fetchNamesList(anchor, identity);
+        if (!got.ok) return got;
+        list = got.value;
+        kept = { ...pin, lastCount: list.entries.length };
+        await writeNamesPinTo(store, identity.publicKey, anchor, kept);
+    }
+    const words = noticeWords(notices, state);
+    if (made && made.length) words.unshift(NAMES_COPY.newKeyMade(made.map((k) => callsignIn(state, k))));
+    if (plan.kind === 'refused' && plan.reason === 'rolled_back') {
+        const lost = Math.max(0, pin.lastCount - (state.counts?.entries ?? 0));
+        if (lost) words.push(NAMES_COPY.lostSinceCopy(lost));
+    }
+    return {
+        ok: true,
+        value: {
+            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list, notices: words, made, sentTo,
+            toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
+            lost: plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.lastCount - (state.counts?.entries ?? 0)) : 0,
+        },
+    };
+}
+
+// ── The asked actions ────────────────────────────────────────────────────────────────────────
+
+/**
+ * A new key on this phone, asked first: "Start again" on an empty history when nobody holds the current key (chained onto
+ * the node's history, design §4.3.1), or a new key off this phone's head when nobody who is an admin holds the head's
+ * key (what was sealed under it stays locked). Then the list opens again.
+ */
+export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    const l = await look(anchor, identity, store);
+    if (!l.ok) return l;
+    const { plan } = l.value;
+    const startAgain = plan.kind === 'refused' && plan.reason === 'untrusted_maker' && !!plan.canStartAgain && l.value.pin.chain.length === 0;
+    const offKey = plan.kind === 'wait' && plan.canMakeNew;
+    if (!startAgain && !offKey) return { ok: false, status: 0, code: 'no_plan', message: 'There is no new key to make here.' };
+    const sent = await makeAndSend(anchor, identity, store, l.value, plan.kind === 'wait' ? plan.drops : [], startAgain);
+    if (!sent.ok) return sent;
+    return openNamesList(anchor, identity, store);
+}
+
+/**
+ * "Put the key history back" (asked first, design §4.3.6): every statement this phone took after the node's current
+ * one, sent again in order (one it has already is fine), then the open sends the keys again.
+ */
+export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    const l = await look(anchor, identity, store);
+    if (!l.ok) return l;
+    if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'rolled_back')) return openNamesList(anchor, identity, store);
+    for (const link of namesReplay(l.value.pin, l.value.state)) {
+        const sent = await postGeneration(anchor, identity, link, true);
+        if (!sent.ok) return sent;
+    }
+    return openNamesList(anchor, identity, store);
+}
+
+/**
+ * "Take @X's history" (asked first, only on a different history, only for an admin checked at this meeting: design
+ * §4.3.9). This phone's chain goes back to the last statement it shares with the node's, the rest kept as abandoned
+ * keys, and the open walks the node's history from there under rule 1.
+ */
+export async function takeHistoryOf(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, checkedHere: string): Promise<NamesResult<NamesOpened>> {
+    const l = await look(anchor, identity, store);
+    if (!l.ok) return l;
+    if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'different_history') || !l.value.pin.trusted.includes(checkedHere.toLowerCase())) {
+        return { ok: false, status: 0, code: 'no_plan', message: 'Meet the admin first, and check each other’s phones.' };
+    }
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, takeNamesHistory(l.value.pin, l.value.state)))) return NOT_KEPT;
+    return openNamesList(anchor, identity, store);
+}
+
+/** "Send the keys to @X again": the same share the open sends, now, to one admin this phone trusts. */
+export async function sendKeysAgain(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, to: string): Promise<NamesResult<{ to: string }>> {
+    const l = await look(anchor, identity, store);
+    if (!l.ok) return l;
+    if (l.value.plan.kind !== 'ready') return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.notReady };
+    const share = namesSharesToSend(l.value.pin, l.value.state, identity, to)[0];
+    if (!share) return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(callsignIn(l.value.state, to.toLowerCase())) };
+    return postShare(anchor, identity, share);
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────────────────────
 
 export interface OpenedEntry {
     id: string;
-    generation: number;
+    keyId: string;
     createdAt: string;
     updatedAt: string;
     /** The name and note, or null where this phone can't open it. */
     text: NamesEntryText | null;
     /** Why it can't be opened: no key of its generation on this phone, or the box didn't open (altered, or a wrong key). */
     locked: 'no_key' | 'did_not_open' | null;
+    /** The key's number and maker, where this phone took its statement; null for a key it has never seen. */
+    key: { n: number; maker: string } | null;
+    /** The trusted admins the node says hold its key, by callsign. */
+    holders: string[];
     /** The live confirmation against it (confirmed or waiting for a second admin), if any. */
     confirmation: ConfirmationRow | null;
 }
 
 /** Every entry, opened where this phone can; open ones by name, then the locked ones. */
-export function openEntries(list: NamesListBody, keys: Map<number, Uint8Array>): OpenedEntry[] {
+export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'>): OpenedEntry[] {
     const live = new Map<string, ConfirmationRow>();
     for (const c of list.confirmations ?? []) if (c.status !== 'revoked') live.set(c.entryId, c);
     const out = (list.entries ?? []).map((e): OpenedEntry => {
-        const key = keys.get(e.keyGeneration);
+        const key = opened.ring[e.keyId];
         let text: NamesEntryText | null = null;
         let locked: OpenedEntry['locked'] = key ? null : 'no_key';
         if (key) {
-            try { text = openNamesEntry(key, e.id, e.keyGeneration, e.ciphertext); } catch { locked = 'did_not_open'; }
+            try { text = openNamesEntry(key, e.id, e.keyId, e.ciphertext); } catch { locked = 'did_not_open'; }
         }
-        return { id: e.id, generation: e.keyGeneration, createdAt: e.createdAt, updatedAt: e.updatedAt, text, locked, confirmation: live.get(e.id) ?? null };
+        const holders = text ? [] : opened.state.admins
+            .filter((a) => a.pubkey !== opened.pin.me && opened.pin.trusted.includes(a.pubkey) && (a.keyIds ?? []).includes(e.keyId)).map((a) => a.callsign);
+        return {
+            id: e.id, keyId: e.keyId, createdAt: e.createdAt, updatedAt: e.updatedAt, text, locked,
+            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, confirmation: live.get(e.id) ?? null,
+        };
     });
     return out.sort((a, b) => {
         if (!a.text || !b.text) return a.text ? -1 : b.text ? 1 : a.createdAt.localeCompare(b.createdAt);
@@ -511,130 +556,49 @@ export function filterEntries(entries: OpenedEntry[], query: string): OpenedEntr
     return entries.filter((e) => !!e.text && `${e.text.name}\n${e.text.note}`.toLocaleLowerCase().includes(q));
 }
 
-/** Seals a name and note under the current key, as a new entry or an edit of `entryId`. A problem in the text is said. */
-export function sealedFor(key: Uint8Array, generation: number, text: { name: string; note: string }, entryId?: string):
+/** Seals a name and note under the key of `keyId`, as a new entry or an edit of `entryId`. A problem in the text is said. */
+export function sealedFor(key: Uint8Array, keyId: string, text: { name: string; note: string }, entryId?: string):
     { ok: true; id: string; ciphertext: string } | { ok: false; error: string } {
     const checked = normaliseNamesEntryText(text);
     if (!checked.ok) return checked;
     const id = entryId ?? newNamesEntryId();
-    return { ok: true, id, ciphertext: sealNamesEntry(key, id, generation, checked.value) };
+    return { ok: true, id, ciphertext: sealNamesEntry(key, id, keyId, checked.value) };
 }
 
-export function addNamesEntry(anchor: string, identity: BeanPoolIdentity, generation: number, sealed: { id: string; ciphertext: string }) {
-    return call<{ id: string }>(anchor, identity, 'POST', `${NAMES_PATH}/entries`, { id: sealed.id, ciphertext: sealed.ciphertext, keyGeneration: generation });
+export function addNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId: string, sealed: { id: string; ciphertext: string }) {
+    return call<{ id: string }>(anchor, identity, 'POST', `${NAMES_PATH}/entries`, { id: sealed.id, ciphertext: sealed.ciphertext, keyId });
 }
 
-export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, generation: number, sealed: { id: string; ciphertext: string }) {
-    return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyGeneration: generation });
-}
-
-/**
- * After a new key: the older entries this phone can open, sealed again under the current one, in batches the node takes.
- * One that doesn't open is left as it is (another admin who holds its key can do it). `keys` are the walk's
- * ({@link traceFor}): without a traced key of `generation` there is nothing to seal under, and nothing is sealed.
- */
-export function reEncryptBatches(list: NamesListBody, keys: Map<number, Uint8Array>, generation: number): { id: string; ciphertext: string }[][] {
-    const current = keys.get(generation);
-    if (!current) return [];
-    const resealed: { id: string; ciphertext: string }[] = [];
-    for (const e of list.entries ?? []) {
-        if (e.keyGeneration >= generation) continue;
-        const old = keys.get(e.keyGeneration);
-        if (!old) continue;
-        try {
-            resealed.push({ id: e.id, ciphertext: sealNamesEntry(current, e.id, generation, openNamesEntry(old, e.id, e.keyGeneration, e.ciphertext)) });
-        } catch { /* left for an admin who can open it */ }
-    }
-    const batches: { id: string; ciphertext: string }[][] = [];
-    for (let i = 0; i < resealed.length; i += NAMES_LIMITS.batch) batches.push(resealed.slice(i, i + NAMES_LIMITS.batch));
-    return batches;
-}
-
-export async function sendReEncrypted(anchor: string, identity: BeanPoolIdentity, generation: number, batches: { id: string; ciphertext: string }[][]): Promise<NamesResult<{ done: number }>> {
-    let done = 0;
-    for (const entries of batches) {
-        const sent = await call<{ done: number; left: number }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/re-encrypt`, { generation, entries });
-        if (!sent.ok) return sent;
-        done += sent.value.done;
-    }
-    return { ok: true, value: { done } };
-}
-
-// ── Opening the list, in order ───────────────────────────────────────────────────────────────
-
-export interface NamesOpened {
-    state: NamesState;
-    plan: KeyPlan;
-    /** The keys this phone may use: only wraps a trusted admin signed. */
-    keys: Map<number, Uint8Array>;
-    /** The list, where the plan is `ready`; null otherwise (nothing was read). */
-    list: NamesListBody | null;
-    /** A line to show: a key this phone made, or an admin it trusted for the first time (with their code). */
-    notice: string | null;
-    /** This phone's pin after opening: whom it trusts, for the screen's Share rows. */
-    pin: NamesTrustPin | null;
-    /** Admins whose key changed under their name, not checked in person yet: said on every open until they are. */
-    keyChanged: string[];
+export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId: string, sealed: { id: string; ciphertext: string }) {
+    return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyId });
 }
 
 /**
- * What the screen does on opening: the node's state; the walk from this phone's pin (kept again, with what it learnt); the
- * key the plan asks for, made and signed here; then, only with a key the walk accepted for the current generation, the
- * list, and the older entries sealed again under that key. A refusal stops before anything is read or sealed.
+ * Writes an entry (rule 4): only when the plan is ready, sealed under this phone's head key. When the node's current
+ * moved on (409 `stale_key`) the list is opened again and, if ready, sealed under the new head and sent once more; an
+ * add that already landed (409 `entry_exists`, a retry) is done.
  */
-export async function openNamesList(anchor: string, identity: BeanPoolIdentity, store: NamesTrustStore): Promise<NamesResult<NamesOpened>> {
-    let s = await fetchNamesState(anchor, identity);
-    if (!s.ok) return s;
-    const keyChanged: string[] = [];
-    const look = async (state: NamesState) => {
-        let pin = await readNamesTrust(store, identity.publicKey, anchor);
-        // An admin's callsign on a new key, and the key this phone trusted under it gone: trust neither until checked. The
-        // old key counts only for this phone's own wraps up to the newest generation it took before now (the pin's, never
-        // the server's number), and vouches for no one (PR #1411's third deciding review).
-        if (pin && pin.communityId === state.communityId) {
-            const changes = namesKeyChanges(pin, state.admins);
-            if (changes.length) {
-                pin = pinKeyChanges(pin, changes);
-                await writeNamesTrust(store, identity.publicKey, anchor, pin);
-                for (const c of changes) if (!keyChanged.includes(c.callsign)) keyChanged.push(c.callsign);
-            }
-        }
-        const trace = traceFor(state, identity, pin);
-        const kept = trace.pin ? pinCallsigns(trace.pin, state.admins) : null;
-        if (kept) await writeNamesTrust(store, identity.publicKey, anchor, kept);
-        return { trace, pin: kept ?? pin, plan: keyPlan(state, identity.publicKey, trace, !!pin, kept ?? pin) };
+export async function saveNamesEntry(
+    anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>, text: { name: string; note: string }, entryId?: string,
+): Promise<NamesResult<{ id: string; keyId: string; ciphertext: string; opened: NamesOpened | null }>> {
+    // One id for both tries: an add that landed but whose answer was lost comes back `entry_exists`.
+    const id = entryId ?? newNamesEntryId();
+    const attempt = async (o: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>) => {
+        const head = o.pin.chain[o.pin.chain.length - 1];
+        if (o.plan.kind !== 'ready' || !head || !o.ring[head.id]) return { ok: false as const, status: 0, code: 'not_ready', message: NAMES_COPY.notReady };
+        const sealed = sealedFor(o.ring[head.id], head.id, text, id);
+        if (!sealed.ok) return { ok: false as const, status: 0, code: 'bad_text', message: sealed.error };
+        const sent = entryId ? await editNamesEntry(anchor, identity, head.id, sealed) : await addNamesEntry(anchor, identity, head.id, sealed);
+        if (!sent.ok && sent.code === 'entry_exists' && !entryId) return { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } };
+        return sent.ok ? { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } } : sent;
     };
-    let { trace, plan, pin } = await look(s.value);
-    const callsignOf = (pubkey: string) => s.ok ? (s.value.admins.find((a) => a.pubkey === pubkey)?.callsign ?? null) : null;
-    let notice: string | null = trace.firstTrust ? NAMES_COPY.firstTrust(callsignOf(trace.firstTrust), keyCodeOf(trace.firstTrust)) : null;
-    if (plan.kind === 'make_first' || plan.kind === 'make_new') {
-        const was = plan.kind;
-        const made = await installKeyFor(anchor, identity, s.value, plan, store);
-        if (!made.ok) return made;
-        s = await fetchNamesState(anchor, identity);
-        if (!s.ok) return s;
-        ({ trace, plan, pin } = await look(s.value));
-        // Both: the new key, and whom this phone trusted on first use (with their code), if it did.
-        if (was === 'make_new') notice = [notice, NAMES_COPY.newKeyMade].filter(Boolean).join('\n\n');
-    }
-    // Said on every open until checked in person: an admin the server lists under a callsign whose key this phone saw
-    // replaced, on a key it doesn't trust yet.
-    if (s.ok) for (const a of s.value.admins) if (namesShareCheck(pin, a) === 'changed' && !keyChanged.includes(a.callsign)) keyChanged.push(a.callsign);
-    if (keyChanged.length) notice = [notice, ...keyChanged.map((c) => NAMES_COPY.keyChanged(c))].filter(Boolean).join('\n\n');
-    if (plan.kind !== 'ready') return { ok: true, value: { state: s.value, plan, keys: trace.keys, list: null, notice, pin, keyChanged } };
-    const l = await fetchNamesList(anchor, identity);
-    if (!l.ok) return l;
-    let body = l.value;
-    // After a new key, the older entries this phone can open go back sealed under it: a key the walk accepted, only.
-    const batches = reEncryptBatches(body, trace.keys, s.value.generation);
-    if (batches.length) {
-        const sent = await sendReEncrypted(anchor, identity, s.value.generation, batches);
-        if (sent.ok) {
-            const again = await fetchNamesList(anchor, identity);
-            if (again.ok) body = again.value;
-        }
-    }
-    return { ok: true, value: { state: s.value, plan, keys: trace.keys, list: body, notice, pin, keyChanged } };
+    const first = await attempt(opened);
+    if (first.ok) return { ok: true, value: { ...first.value, opened: null } };
+    if (first.code !== 'stale_key') return first;
+    const again = await openNamesList(anchor, identity, store);
+    if (!again.ok) return again;
+    const second = await attempt(again.value);
+    return second.ok ? { ok: true, value: { ...second.value, opened: again.value } } : second;
 }
 
 // ── Confirming ───────────────────────────────────────────────────────────────────────────────
@@ -685,10 +649,9 @@ const ACTION_WORDS: Record<NamesAction, string> = {
     confirm: 'confirmed',
     second: 'confirmed as second admin',
     revoke: 'revoked the confirmation of',
-    key_made: 'made the list’s key',
+    key_made: 'made the list’s first key',
     key_changed: 'made a new key',
-    key_shared: 'shared the key with',
-    re_encrypt: 'sealed older entries under the new key',
+    key_shared: 'sent the list’s keys to',
     holder_dropped: 'no longer holds the key:',
     settings: 'changed the settings',
 };
@@ -747,101 +710,107 @@ ${rows}
 
 // ── Words ────────────────────────────────────────────────────────────────────────────────────
 
+/** "@A", "@A or @B", "@A, @B or @C". */
+function either(names: string[]): string {
+    const named = names.map(at);
+    return named.length <= 1 ? named[0] ?? 'an admin' : `${named.slice(0, -1).join(', ')} or ${named[named.length - 1]}`;
+}
+
+function both(names: string[]): string {
+    const named = names.map(at);
+    return named.length <= 1 ? named[0] ?? 'an admin' : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+}
+
+/**
+ * Every sentence the screen says about the list's keys. The ones the design fixes (DESIGN-names-list-trust-fable.md §9)
+ * are exactly its words, which are true under its proof (§6) and say its limits; the tests pin each.
+ */
 export const NAMES_COPY = {
     title: 'Names list',
-    who: 'Only this community’s owners and admins can read these names, on their own phones. The community’s server keeps them scrambled, '
-        + 'so a backup, a copy or a stolen database holds nothing readable. Whoever runs the server can put an admin’s name on a key of its own, '
-        + 'so this phone shares the list only with a key you or an admin you trust checked in person. What it can’t protect: '
-        + 'a check made with the wrong person, a phone someone else gets into, and the first key this phone took.',
+    // §9, exact.
+    who: 'Only this community’s owners and admins can read these names, on their own phones. The server keeps them scrambled: '
+        + 'a backup, a copy or a stolen database holds nothing readable. This phone gives the list’s keys only to admins whose phones '
+        + 'were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can’t protect: '
+        + 'a check made with the wrong person, a phone someone else gets into, and a lost phone until an admin removes its key.',
+    newKeyMade: (who: string[]) => `The list has a new key because ${both(who)} ${who.length > 1 ? 'are' : 'is'} no longer ${who.length > 1 ? 'admins' : 'an admin'}. `
+        + `Nothing written from now on can be read with the keys ${both(who)} had. This phone has sent the new key to the admins it trusts.`,
+    removeKey: (who: string) => `Remove ${at(who)}’s old key? The list gets a new key that ${at(who)}’s old phone can’t read. `
+        + `If ${at(who)} gets a new phone, check it in person and this phone will send the keys.`,
+    checkIntro: (who: string) => `Meet ${at(who)}. Open the names list on both phones, and scan each other’s code (or compare and type the `
+        + `20 digits). Only do this with ${at(who)} in front of you: your phone will trust this key, send it the names, and take new keys it makes.`,
+    mismatch: (who: string) => `The key you scanned isn’t the one the server lists for ${at(who)}. Your phone trusts the key you scanned and `
+        + `nothing is sent to the server’s key. Either the server has put ${at(who)}’s name on another key, or this isn’t ${at(who)}’s phone. Tell your other admins.`,
+    refusedUntrusted: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and no admin this phone trusts has `
+        + `checked them. Nothing was read or written. Meet ${at(who)}, or an admin who trusts them, and check each other’s phones.`,
+    refusedRolledBack: (n: number, m: number) => `The server offers an older key history (up to key ${n}) than this phone has (key ${m}). `
+        + 'A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; '
+        + 'entries written since the copy are gone and must be typed again from your paper copy.',
+    refusedDifferent: 'The server shows a key history this phone didn’t take. Whoever runs the server changed it. Nothing was read or written. '
+        + 'Ask your admins; an admin whose phone has the server’s history can check yours and send the keys.',
+    wait: (holders: string[]) => (holders.length
+        ? `You don’t hold the list’s keys yet. ${either(holders)} will send them the next time they open the names list.`
+        : 'Nobody this phone trusts holds the list’s keys. Meet an admin who does and check each other’s phones.'),
+    lockedEntry: (n: number | null, who: string, holders: string[]) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
+        + 'This phone doesn’t hold it. '
+        + (holders.length
+            ? `${either(holders)} ${holders.length > 1 ? 'hold' : 'holds'} it and will send it on their next open.`
+            : 'Nobody who is an admin now holds it: type it again from your paper copy, or delete it.'),
+    startAgain: (count: number) => 'Nobody who is an admin now holds the list’s keys. You can start a new key; the '
+        + `${count} ${count === 1 ? 'entry' : 'entries'} written before stay locked until an admin who held a key comes back, or they are typed again from your paper copy.`,
+    // The design's other words (§4, §7, §10), and the screen's.
+    otherCommunity: 'The server says this list belongs to a different community from the one this phone opened before. Nothing was read or written.',
+    missingRecord: 'The server is missing part of the list’s key history, so this phone can’t check the newest key. Nothing was read or written. '
+        + 'Ask whoever runs the server, or an admin.',
+    waitNewKey: (holders: string[]) => (holders.length
+        ? `The list needs a new key before anything more is written. ${either(holders)} will make it the next time they open the names list.`
+        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
+    nobodyHoldsKey: (n: number, count: number, maker: string) => `Nobody who is an admin now holds key ${n}. You can make a new key; the `
+        + `${count} ${count === 1 ? 'name' : 'names'} sealed under it stay locked unless ${at(maker)}’s phone is found.`,
+    droppedMe: (who: string) => `${at(who)} made a key without this phone. This phone still trusts them; ask them why, and tell your other admins if you didn’t expect it.`,
+    differentKeys: (n: number) => `Two admins sent different keys for key ${n}: tell your admins. This phone kept the first one.`,
+    otherHistory: (who: string) => `${at(who)}’s phone is on a different key history: meet ${at(who)}.`,
+    newKeyBy: (maker: string, who: string[]) => `${at(maker)} made the list a new key without ${both(who)}.`,
+    tooMany: 'The server sent more of the list’s history than this phone reads. Ask whoever runs the server.',
+    lostSinceCopy: (count: number) => `${count} ${count === 1 ? 'entry this phone saw is' : 'entries this phone saw are'} gone from the server: restore them from the paper copy.`,
+    notReady: 'This phone can’t write to the list right now. Open it again.',
+    checkFirst: (who: string) => `Check ${at(who)}’s phone in person first: the server’s word that a key is ${at(who)}’s isn’t enough.`,
+    toCheck: (who: string) => `${at(who)} is an admin, and this phone hasn’t checked their phone. Meet them and check each other’s phones: then this phone sends them the keys.`,
     notShownToMembers: 'Members don’t see these names. Showing real names to members isn’t available yet.',
-    makingKey: 'Setting up the list’s key on this phone…',
-    newKeyMade: 'An admin left, or an admin’s phone key changed, so this phone made the list a new key. Their old key can’t read anything written from now on. '
-        + 'Share the new key with each of the other admins below. Where it asks, check their phone in person first.',
-    firstTrust: (callsign: string | null, code: string) => `This phone now trusts ${callsign ? `@${callsign}` : 'the admin'} for the names list: `
-        + `they shared its key with you. Check it in person: their code is ${code}, and it should match “Your code” on their phone. `
-        + 'If it doesn’t, don’t add names, and tell your other admins.',
-    keyChanged: (callsign: string) => `@${callsign}’s phone key changed: check it with @${callsign} in person before sharing. `
-        + 'A new phone does that, and so can whoever runs the server, so this phone trusts neither key until you check. '
-        + 'A lost phone still has the old key, so this phone takes nothing new it signs, and makes the list a new key before it writes anything more.',
-    refusedTitle: 'This phone refused the list’s key',
-    refused: (r: NamesRefusal, trusted: string[]) => {
-        const who = r.makerCallsign ? `@${r.makerCallsign}` : 'a key that isn’t an admin here';
-        const ask = trusted.length ? ` Ask ${holderNames(trusted)}, whom this phone trusts, to open the names list.` : '';
-        if (r.reason === 'other_community') {
-            return 'The server says this list belongs to a different community from the one this phone opened before. Nothing was read or changed.';
-        }
-        if (r.reason === 'rolled_back') {
-            return `The server offers an older key of the list (number ${r.offered ?? 0}) than this phone already took (number ${r.newest ?? 0}). `
-                + 'A server put back to an older copy does that, and an admin who was removed may hold that older key. This phone used nothing '
-                + 'under it and changed nothing.' + (r.canMakeNew ? ' You can make a new key on this phone: the older entries it can open are sealed again under it.' : ask);
-        }
-        if (r.reason === 'old_key') {
-            const whose = r.makerCallsign ? `@${r.makerCallsign}’s old phone key` : 'an admin’s old phone key';
-            return `The list’s newest key (number ${r.offered ?? 0}) was made with ${whose}, and it is newer than any key this phone had taken `
-                + `when it saw that key change. ${r.makerCallsign ? `@${r.makerCallsign}’s` : 'Their'} lost phone may have made it before it was lost, or `
-                + 'someone who has that phone may have made it since: this phone can’t tell, so it used nothing under it and changed nothing.'
-                + (r.canMakeNew
-                    ? ' You can make a new key on this phone: it opens the names under that key and seals them again under the new one. Names '
-                        + 'written under it can’t be told from ones someone else wrote in, so check the list afterwards.'
-                    : ask);
-        }
-        if (r.reason === 'unsigned') {
-            return `The list’s newest key says it was made by ${who}, but it isn’t signed by them. Whoever runs the server, or anyone `
-                + 'with its database, could have written it in. This phone used nothing under it and changed nothing: no name was sealed under it.' + ask;
-        }
-        return `The list’s newest key was made by ${who}, and no admin this phone trusts added them. Whoever runs the server can make any key `
-            + 'an admin, so this phone used nothing under it and changed nothing: no name was sealed under it.' + ask;
-    },
-    carriedOver: (callsign: string | null, generation: number, count: number) => `This phone made the list a new key and sealed ${count} `
-        + `${count === 1 ? 'name' : 'names'} from ${callsign ? `@${callsign}’s` : 'an admin’s'} old phone key (number ${generation}) again under it. `
-        + 'Names written under that key can’t be told from ones someone else wrote in: check the list, and delete any you don’t know.',
-    makeNewTitle: 'Make a new key on this phone?',
-    makeNew: 'This phone makes the list a new key for you alone, and seals the entries it can open again under it. Every other admin '
-        + 'then waits for you to share it, after checking their phone in person where the app asks.',
+    // Buttons and titles.
+    checkEachOtherTitle: 'Check each other',
+    checkButton: (who: string) => `Check ${at(who)} in person`,
+    checkSomeone: 'Check an admin in person',
+    removeKeyButton: (who: string) => `Remove ${at(who)}’s old key`,
+    removeKeyTitle: (who: string) => `Remove ${at(who)}’s old key?`,
+    putBackButton: 'Put the key history back',
+    putBackTitle: 'Put the key history back?',
+    startAgainButton: 'Start again',
     startAgainTitle: 'Start the list again?',
-    startAgain: 'Nobody who is an admin now holds the list’s key: the admins who did have left or lost their phones. You can start a new key, '
-        + 'but the entries written before can’t be opened by anyone here any more. They stay, locked, until an admin types each one again '
-        + 'from your paper copy, or deletes it.',
-    waitTitle: 'Waiting for the key',
-    wait: (holders: string[], newKey: boolean) => (newKey
-        ? `The list needs a new key before anything more is written. ${holderNames(holders)} can make it: ask them to open the names list.`
-        : `You don’t hold the list’s key yet. ${holderNames(holders)} can share it with you: meet them, open the names list on both phones, `
-            + 'and let them scan the code below.'),
+    makeNewButton: 'Make a new key',
+    makeNewTitle: 'Make a new key?',
+    takeHistoryButton: (who: string) => `Take ${at(who)}’s history`,
+    takeHistoryTitle: (who: string) => `Take ${at(who)}’s history?`,
+    takeHistory: (who: string) => `This phone follows the key history ${at(who)}’s phone has, from the last key both share. The keys it holds `
+        + 'from the other history stay on this phone, for reading only.',
+    sendAgainButton: (who: string) => `Send the keys to ${at(who)} again`,
     myKeyTitle: 'Your phone’s key',
-    myKey: 'An admin who shares the list with you checks this first, in person: they scan the QR code, or compare the code with what '
-        + 'their phone shows for you. Show it only to someone you’re with.',
+    myKey: 'The other admin scans this QR code, or compares the 20 digits with what their phone shows. Show it only to someone you’re with.',
     myCode: (code: string) => `Your code: ${code}`,
     showMyKey: 'Show my phone’s key',
     hideMyKey: 'Hide my phone’s key',
-    // Sharing, and checking a key in person.
-    checkFirst: (callsign: string) => `Check @${callsign}’s phone in person before sharing: the server’s word that a key is @${callsign}’s isn’t enough.`,
-    waitingTrusted: (callsign: string) => `@${callsign} is an admin and is waiting for the list’s key. This phone has checked their key.`,
-    waitingCheck: (callsign: string) => `@${callsign} is an admin and is waiting for the list’s key. Check their phone in person first: `
-        + 'the server can put an admin’s name on any key.',
-    checkButton: (callsign: string) => `Check @${callsign} in person`,
-    checkTitle: (callsign: string) => `Check @${callsign} in person`,
-    checkIntro: (callsign: string) => `Meet @${callsign}. Ask them to open the names list on their phone: it shows their phone’s key as a QR code `
-        + 'and a code. Scan the QR code, or compare the code with theirs and type it in. Only do this with them in front of you.',
     scanButton: 'Scan their QR code',
     stopScan: 'Stop scanning',
     cameraNeeded: 'To scan their code, allow the camera. You can type the code instead.',
     codeLabel: 'THEIR CODE (20 DIGITS)',
     compareButton: 'Compare',
     unreadable: 'That isn’t a phone key code. Scan the QR code on their names list, or type the 20 digits shown under it.',
-    mismatch: (callsign: string) => `That isn’t the key the server has for @${callsign}. Don’t share the list with it. Either this isn’t `
-        + `@${callsign}’s phone, or the server has put their name on a key their phone doesn’t hold. Tell your other admins.`,
-    matched: (callsign: string) => `It matches: this phone now trusts @${callsign}’s key.`,
-    trustTitle: (callsign: string) => `Trust @${callsign}’s new key?`,
-    trust: (callsign: string) => `It matches the phone in front of you. Only go on if that is @${callsign} and they told you themselves that `
-        + 'they made the list a new key (after its last key was lost). From then on this phone uses their key and seals names under it.',
-    shareTitle: (callsign: string) => `Share the names list with @${callsign}?`,
-    share: (callsign: string) => `This phone has checked @${callsign}’s key, in person (here, or by an admin you trust). Sharing gives their phone `
-        + 'the list’s key: they can read every name on it.',
+    codeMismatch: (who: string) => `Those digits aren’t ${at(who)}’s key as the server lists it. Nothing was trusted. Scan their QR code instead, and tell your other admins.`,
+    noMatch: 'Those digits aren’t the key of any admin the server lists. Scan their QR code instead.',
+    self: 'That is this phone’s own key.',
+    matched: (who: string) => `Checked: this phone now trusts ${at(who)}’s phone.`,
     exportTitle: 'Export the list as a PDF?',
     export: 'The PDF holds every name you can open here. Once it leaves this phone it’s yours to keep safe, like a paper list. '
         + 'The other admins can see that you exported it, and when.',
-    lockedEntry: 'Locked: written with a key nobody here holds. Type it again from your paper copy, or delete it.',
-    noKeyEntry: 'This entry was sealed under an older key you don’t hold. An admin who does will update it.',
     deleteConfirmed: 'A member is confirmed against this entry. Revoke the confirmation first.',
     removedConfirmTitle: 'Revoke this confirmation?',
     twoAdminsLabel: 'Two admins confirm each member',
@@ -849,8 +818,27 @@ export const NAMES_COPY = {
         + 'Where nobody else could (an admin confirmed in a community of two admins), one admin is enough.',
 } as const;
 
-function holderNames(holders: string[]): string {
-    if (holders.length === 0) return 'An admin who holds it';
-    const named = holders.map((h) => `@${h}`);
-    return named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} or ${named[named.length - 1]}`;
+/** The plan, in words, for the screen's top card: the refusal or the wait. Null when ready. */
+export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): string | null {
+    const { plan, state } = o;
+    const name = (k: string) => callsignIn(state, k);
+    if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
+    if (plan.kind === 'wait') {
+        const holders = plan.holders.map(name);
+        if (plan.canMakeNew) {
+            const maker = o.pin.chain.length ? readNamesGeneration(o.pin.chain[o.pin.chain.length - 1], undefined, new Set([plan.keyId]))?.maker ?? '' : '';
+            return NAMES_COPY.nobodyHoldsKey(plan.n, state.counts?.byKey?.[plan.keyId] ?? 0, name(maker));
+        }
+        return plan.newKeyNeeded ? NAMES_COPY.waitNewKey(holders) : NAMES_COPY.wait(holders);
+    }
+    switch (plan.reason) {
+        case 'other_community': return NAMES_COPY.otherCommunity;
+        case 'missing_record': return NAMES_COPY.missingRecord;
+        case 'different_history': return NAMES_COPY.refusedDifferent;
+        case 'rolled_back': return NAMES_COPY.refusedRolledBack(plan.offered?.n ?? 0, plan.newest?.n ?? 0);
+        case 'untrusted_maker':
+            return plan.canStartAgain && o.pin.chain.length === 0
+                ? `${NAMES_COPY.refusedUntrusted(plan.n ?? 0, name(plan.maker ?? ''))}\n\n${NAMES_COPY.startAgain(state.counts?.entries ?? 0)}`
+                : NAMES_COPY.refusedUntrusted(plan.n ?? 0, name(plan.maker ?? ''));
+    }
 }

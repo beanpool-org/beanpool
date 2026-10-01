@@ -694,7 +694,10 @@ export function planNames(pin: NamesPin, state: NamesServerState, toDrop: string
         const holders = namesTrustedHolders(pin, state, head.id);
         if (needNew && pin.ring[head.id]) return { kind: 'make_new', drops: toDrop };
         if (!needNew && pin.ring[head.id]) return { kind: 'ready' };
-        return { kind: 'wait', keyId: head.id, n: head.n, holders, newKeyNeeded: needNew, canMakeNew: !!state.nobodyHoldsKey, drops: toDrop };
+        // Nobody who is an admin holds it, or only this phone does as far as the server knows, and this phone lost it (the
+        // only admin, reinstalled with the same key): a new key off this head is the way on, asked first.
+        const othersHold = (state.admins ?? []).some((a) => lower(a.pubkey) !== pin.me && (a.keyIds ?? []).includes(head.id));
+        return { kind: 'wait', keyId: head.id, n: head.n, holders, newKeyNeeded: needNew, canMakeNew: !!state.nobodyHoldsKey || !othersHold, drops: toDrop };
     }
     if (position.has(cur.id)) return { kind: 'refused', reason: 'rolled_back', offered: { id: cur.id, n: cur.n }, newest: { id: head.id, n: head.n } };
     if (pin.abandoned.includes(cur.id)) return { kind: 'refused', reason: 'different_history' };

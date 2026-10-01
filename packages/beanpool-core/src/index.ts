@@ -38,3 +38,4 @@ export * from './live-updates.js';
 export * from './request-signing.js';
 export * from './push-notice.js';
 export * from './vault-wire.js';
+export * from './door-work.js';

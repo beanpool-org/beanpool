@@ -356,12 +356,26 @@ async function main(): Promise<void> {
     const ins = db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, status, created_at)
                             VALUES (?, ?, ?, ?, 'spam', 'pending', ?)`);
     for (const r of long) ins.run(`long-${r.pk}`, r.pk, dina.pk, dinaPost, ago(1000));
+    // Count the invite-tree lookups (the invited_by reads) one weighing does; time is printed, never asserted.
+    let lookups = 0;
+    const realPrepare = db.prepare;
+    (db as any).prepare = function (this: unknown, sql: string) {
+        const stmt = realPrepare.call(db, sql);
+        if (/SELECT invited_by FROM members/.test(sql)) {
+            const realGet = stmt.get.bind(stmt);
+            (stmt as any).get = (...a: unknown[]) => { lookups++; return realGet(...a); };
+        }
+        return stmt;
+    };
     const t0 = performance.now();
-    const longTally = hideTally(dinaPost);
+    let longTally: ReturnType<typeof hideTally>;
+    try { longTally = hideTally(dinaPost); } finally { (db as any).prepare = realPrepare; }
     const ms = performance.now() - t0;
     console.log(`   (one weighing of 300 reports from a 300-deep chain: ${ms.toFixed(1)} ms)`);
     assert(longTally.circles.length === 1 && longTally.circles[0].length === 300, `300 reporters from one 300-deep chain are 1 circle (${longTally.circles.length})`);
-    assert(ms < 100, `weighing them takes well under the 204 ms it took before (${ms.toFixed(1)} ms)`);
+    console.log(`   (${lookups} invite-tree lookups)`);
+    // Without the memo every reporter re-walks to the top: about 300 * 300 / 2 = 45,000 lookups. With it, one per member.
+    assert(lookups > 0 && lookups <= 300 + 10, `weighing them reads each member's inviter about once (${lookups} lookups, not ~45,000)`);
 
     // ── 10. the connection label lapses a day after its cohort's first join ─────────────────────
     console.log('\n── 10. the label is bounded ──');

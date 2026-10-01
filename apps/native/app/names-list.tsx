@@ -2,10 +2,12 @@
  * The names list, for a community's owners and admins (community modes slice 2). Logic and words: utils/names-list.ts;
  * styles: utils/names-list-style.ts; the server: apps/server/src/routes/names-list.ts.
  *
- * Opening it opens this admin's own wrap of the list's key on this phone. The first admin to open it makes the key; after
- * an admin goes, the phone of one who held it makes a new one (for the admins who held the old) and seals the older
- * entries again; an admin made since waits until one who holds the key taps "Share" for them. Every name is sealed here
- * before it is sent, and opened here: the community's server keeps scrambled text.
+ * Opening it opens this admin's own wrap of the list's key on this phone (utils/names-list.ts openNamesList), and only a
+ * wrap an admin this phone trusts signed: one the server, or anyone with its database, wrote in is refused, said here
+ * plainly, and nothing is sealed under it. The first admin to open it makes the key; after an admin goes, the phone of
+ * one who held it makes a new one and seals the older entries again; an admin made since waits until one who holds the
+ * key taps "Share" for them. Every name is sealed here before it is sent, and opened here: the community's server keeps
+ * scrambled text.
  *
  * One screen, three views in one keyboard-aware scroll (no Modal: a nested keyboard provider breaks keyboards app-wide):
  * the list, an entry's form, and the member picker. Every read the phone makes is logged on the node, so a write updates
@@ -16,6 +18,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -25,9 +28,9 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    NAMES_COPY as COPY, fetchNamesState, fetchNamesList, fetchNamesLog, myListKeys, keyPlan, installKeyFor, waitingAdmins,
-    shareKeyWith, openEntries, filterEntries, sealedFor, addNamesEntry, editNamesEntry, deleteNamesEntry, reEncryptBatches,
-    sendReEncrypted, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine,
+    NAMES_COPY as COPY, openNamesList, fetchNamesList, fetchNamesLog, installKeyFor, waitingAdmins, trustAdminKey, readNamesTrust,
+    shareKeyWith, openEntries, filterEntries, sealedFor, addNamesEntry, editNamesEntry, deleteNamesEntry,
+    confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine,
     confirmationActions, logLineText, namesListHtml, setNamesSettings,
     type NamesState, type NamesListBody, type KeyPlan, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
@@ -49,6 +52,8 @@ export default function NamesListScreen() {
     const [keys, setKeys] = useState<Map<number, Uint8Array>>(new Map());
     const [plan, setPlan] = useState<KeyPlan | null>(null);
     const [log, setLog] = useState<NamesLogLine[]>([]);
+    /** The callsigns of the admins this phone trusts for the list (not this admin): whom a refusal says to ask. */
+    const [trustedNames, setTrustedNames] = useState<string[]>([]);
     const [members, setMembers] = useState<CommunityMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
@@ -71,39 +76,19 @@ export default function NamesListScreen() {
             const url = await getAnchorUrl();
             if (!url) { setError('This phone isn’t connected to a community.'); return; }
             setAnchor(url);
-            let s = await fetchNamesState(url, identity);
-            if (!s.ok) {
-                setError(s.status === 404 ? 'This community keeps no names list.' : s.message);
+            const opened = await openNamesList(url, identity, AsyncStorage);
+            if (!opened.ok) {
+                setError(opened.status === 404 ? 'This community keeps no names list.' : opened.message);
                 return;
             }
-            let k = myListKeys(s.value, identity);
-            let p = keyPlan(s.value, identity.publicKey, k);
-            if (p.kind === 'make_first' || p.kind === 'make_new') {
-                setNotice(COPY.makingKey);
-                const made = await installKeyFor(url, identity, s.value, p);
-                if (!made.ok) { setNotice(null); setError(made.message); return; }
-                s = await fetchNamesState(url, identity);
-                if (!s.ok) { setNotice(null); setError(s.message); return; }
-                k = myListKeys(s.value, identity);
-                setNotice(p.kind === 'make_new' ? COPY.newKeyMade : null);
-                p = keyPlan(s.value, identity.publicKey, k);
-            }
-            setState(s.value);
+            const { state: s, plan: p, keys: k, list: body, notice: said } = opened.value;
+            const pin = await readNamesTrust(AsyncStorage, identity.publicKey, url);
+            setTrustedNames(s.admins.filter((a) => a.pubkey !== identity.publicKey && pin?.trusted.includes(a.pubkey)).map((a) => a.callsign));
+            setState(s);
             setKeys(k);
             setPlan(p);
-            if (p.kind !== 'ready') return;
-            const l = await fetchNamesList(url, identity);
-            if (!l.ok) { setError(l.message); return; }
-            let body = l.value;
-            // After a new key, the older entries this phone can open go back sealed under it.
-            const batches = reEncryptBatches(body, k, s.value.generation);
-            if (batches.length) {
-                const sent = await sendReEncrypted(url, identity, s.value.generation, batches);
-                if (sent.ok) {
-                    const again = await fetchNamesList(url, identity);
-                    if (again.ok) body = again.value;
-                }
-            }
+            if (said) setNotice(said);
+            if (p.kind !== 'ready' || !body) return;
             setList(body);
             const lines = await fetchNamesLog(url, identity, 30);
             if (lines.ok) setLog(lines.value.log);
@@ -136,7 +121,7 @@ export default function NamesListScreen() {
             {
                 text: 'Start again', style: 'destructive', onPress: async () => {
                     setBusy(true);
-                    const made = await installKeyFor(anchor, identity, state, plan);
+                    const made = await installKeyFor(anchor, identity, state, plan, AsyncStorage);
                     setBusy(false);
                     if (!made.ok) { setError(made.message); return; }
                     void load();
@@ -152,10 +137,26 @@ export default function NamesListScreen() {
             {
                 text: 'Share', onPress: async () => {
                     setBusy(true);
-                    const done = await shareKeyWith(anchor, identity, state, currentKey, admin);
+                    const done = await shareKeyWith(anchor, identity, state, currentKey, admin, AsyncStorage);
                     setBusy(false);
                     if (!done.ok) { setError(done.message); return; }
                     setState({ ...state, admins: state.admins.map((a) => (a.pubkey === admin.pubkey ? { ...a, holdsKey: true } : a)) });
+                },
+            },
+        ]);
+    };
+
+    /** The admin's own choice to trust the key that made the list's new key: asked first, in plain words. */
+    const trustMaker = () => {
+        if (!anchor || !identity || !state || plan?.kind !== 'refused' || !plan.refusal.canTrust || !plan.refusal.maker) return;
+        const maker = plan.refusal.maker;
+        const callsign = plan.refusal.makerCallsign ?? 'this admin';
+        Alert.alert(COPY.trustTitle(callsign), COPY.trust(callsign), [
+            { text: 'Cancel', style: 'cancel' },
+            {
+                text: 'Trust', style: 'destructive', onPress: async () => {
+                    await trustAdminKey(AsyncStorage, identity, anchor, state, maker);
+                    void load();
                 },
             },
         ]);
@@ -398,6 +399,18 @@ export default function NamesListScreen() {
             <View style={styles.warn}>
                 <Text style={styles.warnText}>{COPY.wait(plan.holders.map((h) => h.callsign), plan.newKeyNeeded)}</Text>
             </View>
+        );
+    } else if (plan?.kind === 'refused') {
+        body = (
+            <>
+                <View style={styles.warn} accessibilityLiveRegion="polite">
+                    <Text style={styles.warnText} accessibilityRole="header">{COPY.refusedTitle}</Text>
+                    <Text style={styles.warnText}>{COPY.refused(plan.refusal, trustedNames)}</Text>
+                </View>
+                {plan.refusal.canTrust && plan.refusal.makerCallsign
+                    ? <View style={styles.buttonRow}>{btn(`Trust @${plan.refusal.makerCallsign}`, trustMaker, 'danger')}</View>
+                    : null}
+            </>
         );
     } else if (plan?.kind === 'start_again') {
         body = (

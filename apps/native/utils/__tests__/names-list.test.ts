@@ -26,15 +26,17 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, wrapNamesListKey, unwrapNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, NAMES_LIMITS, toEd25519Pkcs8,
+    signedNamesWrap, namesWrapDigest, verifyNamesWrap, type WrappedNamesKey,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { lightColors, darkColors } from '../../constants/colors';
 import {
-    offersNamesList, myListKeys, keyPlan, installKeyFor, waitingAdmins, shareKeyWith, openEntries, filterEntries, sealedFor,
+    offersNamesList, keyPlan, traceFor, waitingAdmins, shareKeyWith, openEntries, filterEntries, sealedFor,
     addNamesEntry, editNamesEntry, reEncryptBatches, sendReEncrypted, confirmableMembers, confirmationActions, confirmationLine,
-    logLineText, namesListHtml, fetchNamesState, fetchNamesList, confirmMember, deleteNamesEntry,
-    type NamesState, type NamesListBody, type ConfirmationRow,
+    logLineText, namesListHtml, fetchNamesState, fetchNamesList, confirmMember, deleteNamesEntry, openNamesList, readNamesTrust,
+    namesTrustStoreKey, trustAdminKey, NAMES_COPY,
+    type NamesState, type NamesListBody, type ConfirmationRow, type NamesAdminRow, type SealedEntryRow,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
 import type { BeanPoolIdentity } from '../identity';
@@ -63,17 +65,6 @@ beforeEach(() => {
     });
 });
 
-function stateOf(me: BeanPoolIdentity, over: Partial<NamesState> = {}): NamesState {
-    return {
-        generation: 0, newKeyNeeded: false, nobodyHoldsKey: false, myKeys: [],
-        admins: [{ pubkey: me.publicKey, callsign: me.callsign, role: 'owner', holdsKey: false }],
-        settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
-        counts: { entries: 0, olderKey: 0, locked: 0, confirmed: 0, awaitingSecond: 0 },
-        me: { pubkey: me.publicKey, role: 'owner', owner: true },
-        ...over,
-    };
-}
-
 const nothingReadable = (s: Sent) => PLANTED.every((p) => !s.body.toLowerCase().includes(p.toLowerCase()));
 
 describe('who is offered the names list', () => {
@@ -89,108 +80,317 @@ describe('who is offered the names list', () => {
     });
 });
 
+/**
+ * A community's node as the phone sees it: the wraps (each signed, or written in by whoever runs it), the entries, the
+ * admins. Answers the routes the phone calls, by the signed request's key; records what it was sent.
+ */
+class FakeNode {
+    rows: { holder: string; generation: number; wrap: WrappedNamesKey; wrappedBy: string; signature: string; drops: string[]; live: boolean }[] = [];
+    entries: SealedEntryRow[] = [];
+    admins: NamesAdminRow[] = [];
+    droppedHolders: string[] = [];
+    newKeyNeeded = false;
+    /** An admin's phone signs and sends a wrap. */
+    wrapBy(signer: BeanPoolIdentity, key: Uint8Array, holder: string, generation: number, drops: string[] = []): void {
+        const w = signedNamesWrap(wrapNamesListKey(key, holder, generation), { communityId: CID, generation, holder, signer, drops });
+        const { holder: _h, signature, drops: d, ...wrap } = w;
+        void _h;
+        this.put({ holder, generation, wrap, wrappedBy: signer.publicKey, signature, drops: d, live: true });
+    }
+    /** Whoever runs the server writes a row: a key of its own, any signer named, any signature. */
+    plant(holder: string, generation: number, key: Uint8Array, wrappedBy: string, signature: string): void {
+        this.put({ holder, generation, wrap: wrapNamesListKey(key, holder, generation), wrappedBy, signature, drops: [], live: true });
+    }
+    put(row: FakeNode['rows'][number]): void {
+        this.rows = this.rows.filter((r) => !(r.holder === row.holder && r.generation === row.generation));
+        this.rows.push(row);
+    }
+    add(key: Uint8Array, generation: number, name: string): string {
+        const id = newNamesEntryId();
+        this.entries.push({ id, ciphertext: sealNamesEntry(key, id, generation, { name, note: '' }), keyGeneration: generation, createdBy: 'x', createdAt: '2026-10-01', updatedBy: null, updatedAt: '' });
+        return id;
+    }
+    generation(): number {
+        return Math.max(0, ...this.rows.map((r) => r.generation), ...this.entries.map((e) => e.keyGeneration));
+    }
+    stateFor(me: string): NamesState {
+        const generation = this.generation();
+        const holders = new Set(this.rows.filter((r) => r.generation === generation && r.live).map((r) => r.holder));
+        const meRow = this.admins.find((a) => a.pubkey === me);
+        return {
+            communityId: CID, generation, newKeyNeeded: this.newKeyNeeded, droppedHolders: this.droppedHolders, nobodyHoldsKey: generation > 0 && holders.size === 0,
+            myKeys: this.rows.filter((r) => r.holder === me && r.live).map((r) => ({ ...r.wrap, generation: r.generation, wrappedBy: r.wrappedBy, signature: r.signature, drops: r.drops })),
+            records: this.rows.map((r) => ({ communityId: CID, generation: r.generation, holder: r.holder, wrappedBy: r.wrappedBy, wrapDigest: namesWrapDigest(r.wrap), drops: r.drops, signature: r.signature })),
+            admins: this.admins.map((a) => ({ ...a, holdsKey: holders.has(a.pubkey) })),
+            settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
+            counts: { entries: this.entries.length, olderKey: 0, locked: 0, confirmed: 0, awaitingSecond: 0 },
+            me: { pubkey: me, role: meRow?.role ?? null, owner: meRow?.role === 'owner' },
+        };
+    }
+    /** The fetch stub's answer. */
+    answer(req: Sent): { status: number; body?: unknown } {
+        const who = req.headers['X-Public-Key'];
+        const { pathname } = new URL(req.url);
+        const body = req.body ? JSON.parse(req.body) : {};
+        if (req.method === 'GET' && pathname === '/api/names/state') return { status: 200, body: this.stateFor(who) };
+        if (req.method === 'GET' && pathname === '/api/names/entries') return { status: 200, body: { generation: this.generation(), entries: this.entries, confirmations: [] } };
+        if (req.method === 'POST' && pathname === '/api/names/entries/re-encrypt') {
+            for (const e of body.entries) {
+                const row = this.entries.find((x) => x.id === e.id)!;
+                row.ciphertext = e.ciphertext;
+                row.keyGeneration = body.generation;
+            }
+            return { status: 200, body: { done: body.entries.length, left: 0 } };
+        }
+        if (req.method === 'POST' && (pathname === '/api/names/key' || pathname === '/api/names/key/share')) {
+            for (const w of body.wraps) {
+                const { holder, signature, drops, ...wrap } = w;
+                this.put({ holder, generation: body.generation, wrap, wrappedBy: who, signature, drops, live: true });
+            }
+            if (pathname === '/api/names/key') { this.newKeyNeeded = false; this.droppedHolders = []; }
+            return { status: pathname === '/api/names/key' ? 201 : 200, body: pathname === '/api/names/key' ? { generation: body.generation } : { shared: body.wraps.map((w: any) => w.holder) } };
+        }
+        return { status: 404, body: { error: 'no such route', code: 'not_found' } };
+    }
+}
+
+const CID = 'a1b2c3d4e5f60718';
+const STORE = { getItem: async (k: string) => mem.get(k) ?? null, setItem: async (k: string, v: string) => { mem.set(k, v); } };
+const pinOf = (me: BeanPoolIdentity) => readNamesTrust(STORE, me.publicKey, COMMUNITY);
+const sentAs = (method: string, path: string) => sent.filter((s) => s.method === method && new URL(s.url).pathname === path);
+
+/** Owen made generation 1 and shared it with Ada; both phones opened the list once. */
+async function community(): Promise<{ node: FakeNode; owen: BeanPoolIdentity; ada: BeanPoolIdentity; k1: Uint8Array; ids: string[] }> {
+    const [owen, ada] = [await admin('Owen'), await admin('Ada')];
+    const node = new FakeNode();
+    node.admins = [{ pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }, { pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: false }];
+    const k1 = newNamesListKey();
+    node.wrapBy(owen, k1, owen.publicKey, 1);
+    node.wrapBy(owen, k1, ada.publicKey, 1);
+    const ids = PLANTED.map((n) => node.add(k1, 1, n));
+    answer = (req) => node.answer(req);
+    for (const who of [owen, ada]) expect((await openNamesList(COMMUNITY, who, STORE)).ok).toBe(true);
+    sent = [];
+    return { node, owen, ada, k1, ids };
+}
+
 describe('the key: made, opened, and passed on only by a tap', () => {
     it('the first admin makes the key, for themselves alone, signed with their own key; it opens with their key only', async () => {
         const owen = await admin('Owen');
-        const st = stateOf(owen);
-        const plan = keyPlan(st, owen.publicKey, myListKeys(st, owen));
-        expect(plan).toEqual({ kind: 'make_first' });
-        answer = () => ({ status: 201, body: { generation: 1 } });
-        const made = await installKeyFor(COMMUNITY, owen, st, plan);
-        expect(made.ok).toBe(true);
-        expect(sent[0].url).toBe(`${COMMUNITY}/api/names/key`);
-        expect(boundSignatureValid(sent[0], owen.publicKey)).toBe(true);
-        const body = JSON.parse(sent[0].body);
+        const node = new FakeNode();
+        node.admins = [{ pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }];
+        answer = (req) => node.answer(req);
+        const opened = await openNamesList(COMMUNITY, owen, STORE);
+        expect(opened.ok && opened.value.plan.kind).toBe('ready');
+        const keyReq = sentAs('POST', '/api/names/key')[0];
+        expect(boundSignatureValid(keyReq, owen.publicKey)).toBe(true);
+        const body = JSON.parse(keyReq.body);
         expect(body.generation).toBe(1);
         expect(body.wraps.map((w: any) => w.holder)).toEqual([owen.publicKey]);
-        const key = unwrapNamesListKey(body.wraps[0], owen.privateKey, owen.publicKey, 1);
-        expect(made.ok && Buffer.from(made.value.key).equals(Buffer.from(key))).toBe(true);
+        const w = body.wraps[0];
+        expect(verifyNamesWrap({ communityId: CID, generation: 1, holder: owen.publicKey, wrappedBy: owen.publicKey, wrapDigest: namesWrapDigest(w), drops: [] }, w.signature)).toBe(true);
+        const key = unwrapNamesListKey(w, owen.privateKey, owen.publicKey, 1);
+        expect(opened.ok && Buffer.from(opened.value.keys.get(1)!).equals(Buffer.from(key))).toBe(true);
+        expect((await pinOf(owen))?.trusted).toEqual([owen.publicKey]);
     });
 
-    it('opens its own wraps, from a raw seed or PKCS8, and none made for anyone else', async () => {
-        const ada = await admin('Ada', true);
+    it('an admin shared with opens it on first use, trusts the admin who signed it, and is told so', async () => {
+        const { node, ada, k1 } = await community();
+        mem.clear();
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok && opened.value.plan.kind).toBe('ready');
+        expect(opened.ok && Buffer.from(opened.value.keys.get(1)!).equals(Buffer.from(k1))).toBe(true);
+        expect(opened.ok && opened.value.notice).toMatch(/^This phone now trusts @Owen for the names list/);
+        expect((await pinOf(ada))?.trusted.sort()).toEqual([node.admins[0].pubkey, ada.publicKey].sort());
+    });
+
+    it("THE REVIEW'S ATTACK: a next-generation wrap written into the node's database: nothing re-sealed, nothing read, the admin told", async () => {
+        const { node, owen, ada, k1, ids } = await community();
+        const planted = newNamesListKey();
+        node.plant(ada.publicKey, 2, planted, owen.publicKey, '00'.repeat(64));
+        const before = JSON.stringify(node.entries);
+        const pinBefore = await pinOf(ada);
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok).toBe(true);
+        if (!opened.ok) return;
+        expect(opened.value.plan).toEqual({ kind: 'refused', refusal: { reason: 'unsigned', maker: owen.publicKey, makerCallsign: 'Owen', canTrust: false } });
+        expect(opened.value.keys.has(2)).toBe(false);
+        // The phone asked for the state and nothing else: no list read, nothing sealed or sent.
+        expect(sent.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual(['GET /api/names/state']);
+        expect(JSON.stringify(node.entries)).toBe(before);
+        for (const id of ids) {
+            const e = node.entries.find((x) => x.id === id)!;
+            expect(e.keyGeneration).toBe(1);
+            expect(openNamesEntry(k1, id, 1, e.ciphertext).name).toBeTruthy();
+            expect(() => openNamesEntry(planted, id, 2, e.ciphertext)).toThrow();
+        }
+        // The real wraps stay (the phone changed nothing), and the phone still trusts whom it trusted.
+        expect(node.rows.filter((r) => r.generation === 1).length).toBe(2);
+        expect(await pinOf(ada)).toEqual(pinBefore);
+        const said = NAMES_COPY.refused(opened.value.plan.kind === 'refused' ? opened.value.plan.refusal : (null as never), ['Owen']);
+        expect(said).toMatch(/isn’t signed by them/);
+        expect(said).toMatch(/no name was sealed under it/);
+        // And a name written now has no key to be sealed under: the screen offers no Add.
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toContain("plan?.kind === 'refused'");
+        expect(screen.indexOf("plan?.kind === 'refused'")).toBeLessThan(screen.indexOf("plan?.kind === 'ready' && state"));
+    });
+
+    it('a key the node made an admin, signing its own key: refused, and the admin is asked before trusting it', async () => {
+        const { node, ada } = await community();
+        const oscar = await admin('Oscar');
+        node.admins.push({ pubkey: oscar.publicKey, callsign: 'Oscar', role: 'admin', holdsKey: false });
+        const k2 = newNamesListKey();
+        node.wrapBy(oscar, k2, oscar.publicKey, 2);
+        node.wrapBy(oscar, k2, ada.publicKey, 2);
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok && opened.value.plan).toEqual({ kind: 'refused', refusal: { reason: 'untrusted', maker: oscar.publicKey, makerCallsign: 'Oscar', canTrust: true } });
+        expect(sent.filter((s) => s.method !== 'GET')).toEqual([]);
+        expect((await pinOf(ada))?.trusted).not.toContain(oscar.publicKey);
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        const trust = screen.slice(screen.indexOf('const trustMaker'), screen.indexOf('const openForm'));
+        expect(trust.indexOf('Alert.alert(COPY.trustTitle')).toBeGreaterThan(-1);
+        expect(trust.indexOf('Alert.alert(COPY.trustTitle')).toBeLessThan(trust.indexOf('trustAdminKey('));
+        expect(NAMES_COPY.trust('Oscar')).toMatch(/whoever runs the server can make any key an admin/);
+        // Only if the admin says yes: then the phone takes it.
+        if (opened.ok) await trustAdminKey(STORE, ada, COMMUNITY, opened.value.state, oscar.publicKey);
+        const again = await openNamesList(COMMUNITY, ada, STORE);
+        expect(again.ok && again.value.keys.has(2)).toBe(true);
+    });
+
+    it('an admin added by a trusted admin’s signed share is trusted: their new key is taken, and the entries sealed again under it', async () => {
+        const { node, owen, ada, k1, ids } = await community();
+        const cy = await admin('Cy');
+        node.admins.push({ pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false });
+        node.wrapBy(owen, k1, cy.publicKey, 1); // Owen's phone shared with Cy; Ada's never saw it
+        const k2 = newNamesListKey();
+        node.wrapBy(cy, k2, cy.publicKey, 2, [owen.publicKey]);
+        node.wrapBy(cy, k2, ada.publicKey, 2);
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok && opened.value.plan.kind).toBe('ready');
+        const reenc = sentAs('POST', '/api/names/entries/re-encrypt');
+        expect(reenc).toHaveLength(1);
+        for (const id of ids) expect(openNamesEntry(k2, id, 2, node.entries.find((e) => e.id === id)!.ciphertext).name).toBeTruthy();
+        void k1;
+        // Cy dropped Owen, signed: Ada's phone stops trusting Owen.
+        expect((await pinOf(ada))?.trusted).not.toContain(owen.publicKey);
+    });
+
+    it('a removed admin, dropped by a trusted admin’s signed new key, signs nothing this phone takes', async () => {
+        const { node, owen, ada, k1 } = await community();
         const abe = await admin('Abe');
-        const key = newNamesListKey();
-        const st = stateOf(ada, {
-            generation: 2,
-            myKeys: [
-                { generation: 2, wrappedBy: ada.publicKey, ...wrapNamesListKey(key, ada.publicKey, 2) },
-                { generation: 1, wrappedBy: ada.publicKey, ...wrapNamesListKey(newNamesListKey(), abe.publicKey, 1) },
-            ],
-        });
-        const keys = myListKeys(st, ada);
-        expect([...keys.keys()]).toEqual([2]);
-        expect(Buffer.from(keys.get(2)!).equals(Buffer.from(key))).toBe(true);
+        node.admins.push({ pubkey: abe.publicKey, callsign: 'Abe', role: 'admin', holdsKey: false });
+        node.wrapBy(owen, k1, abe.publicKey, 1);
+        expect((await openNamesList(COMMUNITY, owen, STORE)).ok).toBe(true);
+        expect((await pinOf(owen))?.trusted).toContain(abe.publicKey);
+        // Abe is removed; Ada's phone makes generation 2, naming him, and shares it with Owen.
+        node.admins = node.admins.filter((a) => a.pubkey !== abe.publicKey);
+        node.rows = node.rows.map((r) => (r.holder === abe.publicKey ? { ...r, live: false } : r));
+        node.newKeyNeeded = true;
+        node.droppedHolders = [abe.publicKey];
+        sent = [];
+        const adaOpens = await openNamesList(COMMUNITY, ada, STORE);
+        expect(adaOpens.ok && adaOpens.value.plan.kind).toBe('ready');
+        const made = JSON.parse(sentAs('POST', '/api/names/key')[0].body);
+        expect(made.generation).toBe(2);
+        expect(made.wraps[0].drops).toEqual([abe.publicKey]);
+        const k2 = adaOpens.ok ? adaOpens.value.keys.get(2)! : new Uint8Array();
+        node.wrapBy(ada, k2, owen.publicKey, 2);
+        expect((await openNamesList(COMMUNITY, owen, STORE)).ok).toBe(true);
+        expect((await pinOf(owen))?.trusted).not.toContain(abe.publicKey);
+        // Abe, working with whoever runs the server, makes generation 3 for Owen: refused, nothing sent.
+        const k3 = newNamesListKey();
+        node.wrapBy(abe, k3, abe.publicKey, 3);
+        node.wrapBy(abe, k3, owen.publicKey, 3);
+        sent = [];
+        const owenOpens = await openNamesList(COMMUNITY, owen, STORE);
+        expect(owenOpens.ok && owenOpens.value.plan).toMatchObject({ kind: 'refused', refusal: { reason: 'untrusted', maker: abe.publicKey } });
+        expect(sent.filter((s) => s.method !== 'GET')).toEqual([]);
+    });
+
+    it('a pin for another community: nothing is used, and nothing is changed', async () => {
+        const { ada } = await community();
+        mem.set(namesTrustStoreKey(ada.publicKey, COMMUNITY), JSON.stringify({ v: 1, communityId: 'ffffffffffffffff', trusted: [ada.publicKey] }));
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok && opened.value.plan).toMatchObject({ kind: 'refused', refusal: { reason: 'other_community' } });
+        expect(sent.map((s) => s.method)).toEqual(['GET']);
+        expect((await pinOf(ada))?.communityId).toBe('ffffffffffffffff');
     });
 
     it('after an admin goes, the holder makes a new key for itself alone; every other admin waits for a Share tap', async () => {
         const [owen, ada, cy] = [await admin('Owen'), await admin('Ada'), await admin('Cy')];
+        const node = new FakeNode();
+        node.admins = [
+            { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false },
+            // The node says Ada held the old key. It may be lying (its own key, named an admin): the phone wraps nothing to her.
+            { pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: false },
+            { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false },
+        ];
         const k1 = newNamesListKey();
-        const st = stateOf(owen, {
-            generation: 1, newKeyNeeded: true,
-            myKeys: [{ generation: 1, wrappedBy: owen.publicKey, ...wrapNamesListKey(k1, owen.publicKey, 1) }],
-            admins: [
-                { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: true },
-                // The node says Ada held the old key. It may be lying (its own key, named an admin): the phone wraps nothing to her.
-                { pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: true },
-                { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false },
-            ],
-        });
-        const plan = keyPlan(st, owen.publicKey, myListKeys(st, owen));
-        expect(plan).toEqual({ kind: 'make_new' });
-        answer = () => ({ status: 201, body: { generation: 2 } });
-        await installKeyFor(COMMUNITY, owen, st, plan);
-        const body = JSON.parse(sent[0].body);
+        node.wrapBy(owen, k1, owen.publicKey, 1);
+        node.wrapBy(owen, k1, ada.publicKey, 1);
+        node.newKeyNeeded = true;
+        answer = (req) => node.answer(req);
+        const opened = await openNamesList(COMMUNITY, owen, STORE);
+        const body = JSON.parse(sentAs('POST', '/api/names/key')[0].body);
         expect(body.generation).toBe(2);
         expect(body.wraps.map((w: any) => w.holder)).toEqual([owen.publicKey]);
+        expect(opened.ok && opened.value.notice).toBe(NAMES_COPY.newKeyMade);
         // Once the new key is in, Ada and Cy are both waiting, each for a tap.
-        const after = { ...st, generation: 2, newKeyNeeded: false, admins: st.admins.map((a) => ({ ...a, holdsKey: a.pubkey === owen.publicKey })) };
-        expect(waitingAdmins(after, owen.publicKey).map((a) => a.callsign)).toEqual(['Ada', 'Cy']);
+        expect(opened.ok && waitingAdmins(opened.value.state, owen.publicKey).map((a) => a.callsign)).toEqual(['Ada', 'Cy']);
         // Ada, who doesn't hold the current key, waits and is told who can make it.
-        const adaPlan = keyPlan({ ...st, myKeys: [] }, ada.publicKey, new Map());
-        expect(adaPlan).toMatchObject({ kind: 'wait', newKeyNeeded: true });
+        const adaPlan = keyPlan({ ...node.stateFor(ada.publicKey), newKeyNeeded: true }, ada.publicKey, traceFor(node.stateFor(ada.publicKey), ada, null), false);
+        expect(adaPlan).toMatchObject({ kind: 'wait' });
         // Nothing in the module wraps the key to anyone the node names, but by a share.
         const src = fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8');
         expect(src.match(/wrapsFor\(/g)?.length).toBe(3);
-        expect(src).toContain('wrapsFor(key, generation, [identity.publicKey])');
-        expect(src).toContain('wrapsFor(key, state.generation, [admin.pubkey])');
+        expect(src).toContain('wrapsFor(key, generation, [identity.publicKey], identity, state.communityId, drops)');
+        expect(src).toContain('wrapsFor(key, state.generation, [admin.pubkey], identity, state.communityId)');
     });
 
     it('nobody holding the key: start again (the screen asks first); an admin who waits is told who to ask', async () => {
         const owen = await admin('Owen');
-        expect(keyPlan(stateOf(owen, { generation: 3, nobodyHoldsKey: true }), owen.publicKey, new Map())).toEqual({ kind: 'start_again' });
-        const st = stateOf(owen, { generation: 3, admins: [{ pubkey: 'a'.repeat(64), callsign: 'Ada', role: 'admin', holdsKey: true }, { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }] });
-        const plan = keyPlan(st, owen.publicKey, new Map());
+        const ada = await admin('Ada');
+        const node = new FakeNode();
+        node.admins = [{ pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: false }, { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }];
+        node.wrapBy(ada, newNamesListKey(), ada.publicKey, 3);
+        node.rows[0].live = false;
+        const st = node.stateFor(owen.publicKey);
+        expect(keyPlan(st, owen.publicKey, traceFor(st, owen, null), false)).toEqual({ kind: 'start_again' });
+        node.rows[0].live = true;
+        const st2 = node.stateFor(owen.publicKey);
+        const plan = keyPlan(st2, owen.publicKey, traceFor(st2, owen, null), false);
         expect(plan.kind === 'wait' && plan.holders.map((h) => h.callsign)).toEqual(['Ada']);
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
         // Start again is never done without the admin's yes.
         expect(screen.indexOf('Alert.alert(COPY.startAgainTitle')).toBeGreaterThan(-1);
-        expect(screen.indexOf('Alert.alert(COPY.startAgainTitle')).toBeLessThan(screen.indexOf('installKeyFor(anchor, identity, state, plan)'));
+        expect(screen.indexOf('Alert.alert(COPY.startAgainTitle')).toBeLessThan(screen.indexOf('installKeyFor(anchor, identity, state, plan, AsyncStorage)'));
     });
 
-    it('sharing: only admins waiting; the wrap opens for that admin only; the screen asks before sharing', async () => {
+    it('sharing: only admins waiting; the wrap is signed and opens for that admin only; the screen asks before sharing', async () => {
         const [owen, cy] = [await admin('Owen'), await admin('Cy')];
+        const node = new FakeNode();
+        node.admins = [{ pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }, { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false }];
         const key = newNamesListKey();
-        const st = stateOf(owen, {
-            generation: 1,
-            admins: [
-                { pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: true },
-                { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false },
-            ],
-        });
+        node.wrapBy(owen, key, owen.publicKey, 1);
+        const st = node.stateFor(owen.publicKey);
         const waiting = waitingAdmins(st, owen.publicKey);
         expect(waiting.map((a) => a.callsign)).toEqual(['Cy']);
-        answer = () => ({ status: 200, body: { shared: [cy.publicKey] } });
-        await shareKeyWith(COMMUNITY, owen, st, key, waiting[0]);
+        answer = (req) => node.answer(req);
+        await shareKeyWith(COMMUNITY, owen, st, key, waiting[0], STORE);
         expect(sent[0].url).toBe(`${COMMUNITY}/api/names/key/share`);
         expect(boundSignatureValid(sent[0], owen.publicKey)).toBe(true);
         const wrap = JSON.parse(sent[0].body).wraps[0];
         expect(wrap.holder).toBe(cy.publicKey);
+        expect(verifyNamesWrap({ communityId: CID, generation: 1, holder: cy.publicKey, wrappedBy: owen.publicKey, wrapDigest: namesWrapDigest(wrap), drops: [] }, wrap.signature)).toBe(true);
         expect(Buffer.from(unwrapNamesListKey(wrap, cy.privateKey, cy.publicKey, 1)).equals(Buffer.from(key))).toBe(true);
         expect(() => unwrapNamesListKey(wrap, owen.privateKey, owen.publicKey, 1)).toThrow();
+        // Owen's phone vouched for Cy: it trusts Cy from now on.
+        expect((await pinOf(owen))?.trusted).toContain(cy.publicKey);
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
-        const share = screen.slice(screen.indexOf('const share = '), screen.indexOf('const openForm'));
+        const share = screen.slice(screen.indexOf('const share = '), screen.indexOf('const trustMaker'));
         expect(share.indexOf('Alert.alert(COPY.shareTitle')).toBeLessThan(share.indexOf('shareKeyWith('));
+        expect(NAMES_COPY.share('Cy')).toMatch(/whoever runs the server can make any key an admin/);
     });
 });
 

@@ -96,7 +96,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📇</Text></View>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>Names list</Text>
-                            <Text style={styles.menuSub}>Who your members are, by name · readable only on admins' phones</Text>
+                            <Text style={styles.menuSub}>Who your members are, by name · sealed on admins' phones</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>

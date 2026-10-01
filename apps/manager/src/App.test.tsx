@@ -2,6 +2,46 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { App } from './App';
 
+/**
+ * A node answering as if this browser holds a live password session (the httpOnly cookie the password sign-in sets):
+ * /auth/session says so, /csrf-token gives its token. `onAdmin` sees every other request.
+ */
+function stubPasswordSession(onAdmin?: (url: string, opts?: any) => unknown) {
+    const fetchMock = vi.fn().mockImplementation((url: string, opts?: any) => {
+        if (String(url).includes('/api/local/admin/auth/session')) {
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null }),
+            });
+        }
+        if (String(url).includes('/api/local/admin/csrf-token')) {
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-session' }) });
+        }
+        const custom = onAdmin?.(String(url), opts);
+        if (custom) return custom;
+        return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }),
+        });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+}
+
+/** Every key and value this origin's web storage holds. */
+function storedText(): string {
+    const out: string[] = [];
+    for (const store of [sessionStorage, localStorage]) {
+        for (let i = 0; i < store.length; i++) {
+            const key = store.key(i)!;
+            out.push(`${key}=${store.getItem(key)}`);
+        }
+    }
+    return out.join('\n');
+}
+
 describe('App Component', () => {
     beforeEach(() => {
         localStorage.clear();
@@ -100,7 +140,7 @@ describe('App Component', () => {
         });
 
         it('verifies document title does not contain "Fleet" in single-node mode', async () => {
-            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            stubPasswordSession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -109,7 +149,7 @@ describe('App Component', () => {
         });
 
         it('renders single-node shell with HomeScreen when authenticated', async () => {
-            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            stubPasswordSession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -132,7 +172,7 @@ describe('App Component', () => {
         });
 
         it('navigates across the 4 plain-English sections', async () => {
-            sessionStorage.setItem('bp-admin-token', 'mock-password');
+            stubPasswordSession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -166,8 +206,8 @@ describe('App Component', () => {
             expect(screen.getByText(/backups & restore wizard/i)).toBeInTheDocument();
         });
 
-        it('logs out and clears session token', async () => {
-            sessionStorage.setItem('bp-admin-token', 'mock-password');
+        it('logs out: the node ends the session (with its CSRF token) and the sign-in card is back', async () => {
+            const fetchMock = stubPasswordSession();
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
@@ -178,10 +218,16 @@ describe('App Component', () => {
             });
 
             expect(screen.getByText(/unlock settings/i)).toBeInTheDocument();
+            const logout = fetchMock.mock.calls.find((call: any[]) => String(call[0]).includes('/api/local/admin/auth/logout'));
+            expect(logout).toBeTruthy();
+            expect(logout![1].headers['X-CSRF-Token']).toBe('csrf-session');
             expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
         });
 
-        it('authenticating via AdminLoginCard in single-node mode keeps credentials in session storage without writing password to localStorage', async () => {
+        // Fable's web review, M1: the members' web app shares this origin, so a password kept in its storage is one
+        // script away from it. Until 2026-10-01 this test asserted the password and its 2FA session WERE kept in
+        // sessionStorage after sign-in.
+        it('signing in with the password leaves no admin secret in the origin\'s storage, and no password on later requests', async () => {
             sessionStorage.clear();
             localStorage.clear();
             await act(async () => {
@@ -191,14 +237,16 @@ describe('App Component', () => {
             const passInput = screen.getByPlaceholderText('Password');
             const unlockBtn = screen.getByRole('button', { name: /unlock settings/i });
 
-            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-                if (url.includes('/api/local/verify-password')) {
+            const adminCalls: Array<{ url: string; headers: Record<string, string> }> = [];
+            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: any) => {
+                if (String(url).includes('/api/local/admin/auth/password')) {
                     return Promise.resolve({
                         ok: true,
                         status: 200,
-                        json: () => Promise.resolve({ success: true, sessionToken: 'tfa-session-xyz' }),
+                        json: () => Promise.resolve({ success: true, role: 'owner', csrfToken: 'csrf-from-signin' }),
                     });
                 }
+                if (String(url).includes('/api/local/admin/')) adminCalls.push({ url: String(url), headers: opts?.headers || {} });
                 return Promise.resolve({
                     ok: true,
                     status: 200,
@@ -211,30 +259,51 @@ describe('App Component', () => {
                 fireEvent.click(unlockBtn);
             });
 
-            expect(screen.getByText('Node Settings')).toBeInTheDocument();
-            expect(sessionStorage.getItem('bp-admin-token')).toBe('secret-pass-123');
-            expect(sessionStorage.getItem('bp_tfa_session_local-node')).toBe('tfa-session-xyz');
-            const profilesRaw = localStorage.getItem('bp_fleet_profiles');
-            if (profilesRaw) {
-                const profiles = JSON.parse(profilesRaw);
-                expect(profiles.some((p: any) => p.adminPassword === 'secret-pass-123')).toBe(false);
-            }
+            expect(screen.getByRole('button', { name: /appliance & data/i })).toBeInTheDocument();
+            expect(storedText()).not.toContain('secret-pass-123');
+            expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
+            expect(sessionStorage.getItem('bp_tfa_session_local-node')).toBeNull();
+            expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
+            // Later admin requests ride the cookie, with the session's CSRF token, and never carry the password.
+            const auditBtn = screen.getByRole('button', { name: /run ledger audit/i });
+            await act(async () => {
+                fireEvent.click(auditBtn);
+            });
+            const audit = adminCalls.find(c => c.url.includes('/api/local/admin/ledger-audit'));
+            expect(audit).toBeTruthy();
+            expect(audit!.headers['X-Admin-Password']).toBeUndefined();
+            expect(audit!.headers['X-CSRF-Token']).toBe('csrf-from-signin');
+            expect(adminCalls.length).toBeGreaterThan(0);
+            for (const c of adminCalls) expect(JSON.stringify(c.headers)).not.toContain('secret-pass-123');
         });
 
-        it('prioritizes session adminToken over stale localStorage profile password in single-node mode', async () => {
+        it('a session the node has ended (idle, restarted, password changed) sends the operator back to sign-in, saying so', async () => {
+            stubPasswordSession((url) => (url.includes('/api/local/admin/diagnostics')
+                ? Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'Session expired (2h idle timeout)', sessionExpired: true }) })
+                : undefined));
+            await act(async () => {
+                render(<App isFleetMode={false} />);
+            });
+            expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(/signed out \(Session expired \(2h idle timeout\)\)\. Sign in again\./);
+        });
+
+        it('what an older build stored (the password, its 2FA session, a profile password) is removed on load and never sent', async () => {
             sessionStorage.clear();
             localStorage.clear();
-            // Pre-seed localStorage with a stale password
             localStorage.setItem('bp_fleet_profiles', JSON.stringify([{
                 id: 'local-node',
                 name: 'Local Sovereign Node',
                 url: 'http://localhost',
                 adminPassword: 'stale-password-from-storage',
+                replicationToken: 'stale-replication-token',
             }]));
-            sessionStorage.setItem('bp-admin-token', 'fresh-authenticated-password');
+            sessionStorage.setItem('bp-admin-token', 'old-build-password');
+            sessionStorage.setItem('bp-2fa-session', 'old-2fa-session');
+            sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa-session');
 
             let lastAdminHeaders: Record<string, string> = {};
-            vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, opts?: any) => {
+            stubPasswordSession((url, opts) => {
                 if (url.includes('/api/local/admin/ledger-audit')) {
                     lastAdminHeaders = opts?.headers || {};
                     return Promise.resolve({
@@ -242,22 +311,25 @@ describe('App Component', () => {
                         json: () => Promise.resolve({ success: true, ok: true, drift: 0 }),
                     });
                 }
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [] }),
-                });
-            }));
+                return undefined;
+            });
 
             await act(async () => {
                 render(<App isFleetMode={false} />);
             });
+
+            for (const secret of ['stale-password-from-storage', 'stale-replication-token', 'old-build-password', 'old-2fa-session']) {
+                expect(storedText()).not.toContain(secret);
+            }
 
             const auditBtn = screen.getByRole('button', { name: /run ledger audit/i });
             await act(async () => {
                 fireEvent.click(auditBtn);
             });
 
-            expect(lastAdminHeaders['X-Admin-Password']).toBe('fresh-authenticated-password');
+            expect(lastAdminHeaders['X-Admin-Password']).toBeUndefined();
+            expect(lastAdminHeaders['X-Admin-2FA-Session']).toBeUndefined();
+            expect(lastAdminHeaders['X-CSRF-Token']).toBe('csrf-session');
         });
 
         /**

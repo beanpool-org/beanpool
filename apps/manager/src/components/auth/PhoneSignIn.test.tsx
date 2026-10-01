@@ -167,7 +167,7 @@ describe('AdminLoginCard — phone option', () => {
 
     it('offers "Sign in with your phone" beside the password, and the password stays', async () => {
         fakeNode({ [ID1]: ['hang'] });
-        render(<AdminLoginCard nodeUrl="" onAuthenticated={vi.fn()} onKeySession={vi.fn()} />);
+        render(<AdminLoginCard nodeUrl="" onPasswordSession={vi.fn()} onKeySession={vi.fn()} />);
         expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /Sign in with your phone/ }));
         expect(await screen.findByTestId('phone-signin-qr')).toBeInTheDocument();
@@ -177,7 +177,7 @@ describe('AdminLoginCard — phone option', () => {
     });
 
     it('has no phone option where the caller cannot take a key session (fleet mode)', () => {
-        render(<AdminLoginCard nodeUrl="http://localhost:3000" onAuthenticated={vi.fn()} />);
+        render(<AdminLoginCard nodeUrl="http://localhost:3000" onPasswordSession={vi.fn()} />);
         expect(screen.queryByRole('button', { name: /Sign in with your phone/ })).toBeNull();
     });
 });

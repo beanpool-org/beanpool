@@ -1074,6 +1074,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(pathname)) return ok({ status: 'waiting', expiresAt: Date.now() + 120000 });
     if (pathname === '/api/local/admin/csrf-token') return ok({ csrfToken: `csrf_${longToken('csrf', 24)}` });
     if (pathname === '/api/local/verify-password' || pathname === '/api/verify-password') return ok({ success: true });
+    if (pathname === '/api/local/admin/auth/password') return ok({ success: true, role: 'owner', csrfToken: `csrf_${longToken('signin', 24)}` });
     if (pathname === '/api/local/change-password') return ok({ success: true });
     if (pathname === '/api/local/reset') return ok({ success: true });
     if (pathname === '/api/admin/login') return ok({ success: true });

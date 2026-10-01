@@ -3,8 +3,13 @@
  * opens it in headless Chromium at a chosen width and text size. Nothing here talks to a real node.
  *
  * Used by phone-width.mjs (the automated check) and screenshots.mjs (the PR's pictures).
+ *
+ * Served under the node's own policy for Settings (APP_DOCUMENT_CSP, apps/server/src/app-document-csp.ts, compiled
+ * on the fly so it can never drift): every violation a page reports lands in CSP_VIOLATIONS, and phone-width.mjs
+ * fails on any (Fable's web review, M2).
  */
-import { build, preview } from 'vite';
+/* global console, process, Buffer, URL, document, window, localStorage, getComputedStyle -- Node, plus page.evaluate callbacks run in the browser */
+import { build, preview, transformWithEsbuild } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -15,6 +20,18 @@ import { mockResponse, UNKNOWN } from './fixtures.mjs';
 const MANAGER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Tailwind reads its config from the working directory, so the build only works from apps/manager.
 process.chdir(MANAGER_DIR);
+
+const POLICY_SOURCE = path.resolve(MANAGER_DIR, '../server/src/app-document-csp.ts');
+
+/** The server's own policy file, compiled on the fly: the harness can never drift from what the node sends. */
+async function loadPolicy() {
+    const source = fs.readFileSync(POLICY_SOURCE, 'utf8');
+    const { code } = await transformWithEsbuild(source, POLICY_SOURCE, { loader: 'ts', format: 'esm' });
+    return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+}
+
+/** Every Content-Security-Policy violation any page opened by openSettings reported: `{ page, directive, blocked, sample, at }`. */
+export const CSP_VIOLATIONS = [];
 
 /**
  * The text font is forced to DejaVu Sans (bundled in e2e/fonts, OFL), which is as wide as Verdana: wider than
@@ -84,7 +101,16 @@ export async function startServer() {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-settings-'));
     const config = { root: MANAGER_DIR, configFile: path.join(MANAGER_DIR, 'vite.config.ts'), logLevel: 'error' };
     await build({ ...config, build: { outDir, emptyOutDir: true } });
-    const server = await preview({ ...config, build: { outDir }, preview: { port: Number(process.env.SETTINGS_HARNESS_PORT || 0), host: '127.0.0.1', strictPort: false, proxy: {} } });
+    const policy = await loadPolicy();
+    const server = await preview({
+        ...config,
+        build: { outDir },
+        preview: {
+            port: Number(process.env.SETTINGS_HARNESS_PORT || 0), host: '127.0.0.1', strictPort: false, proxy: {},
+            // What the node sends with Settings (routes/settings.ts, https-server.ts): the web app's strict policy.
+            headers: { 'Content-Security-Policy': policy.APP_DOCUMENT_CSP, 'Referrer-Policy': policy.APP_DOCUMENT_REFERRER_POLICY },
+        },
+    });
     const addr = server.httpServer.address();
     return {
         server: { close: async () => { await server.close(); fs.rmSync(outDir, { recursive: true, force: true }); } },
@@ -97,7 +123,8 @@ export async function launch() {
 }
 
 /**
- * A fresh page on Settings, signed in with a (mocked) admin password, opened on `screen`.
+ * A fresh page on Settings, signed in (the node's mocked answer: this browser holds a live password session, the
+ * httpOnly cookie the password sign-in sets; nothing is put in web storage), opened on `screen`.
  * `hash` lets a caller open the key sign-in hand-off link instead (e.g. '#handoff=…&section=disputes').
  * `overrides` maps an API path to a function that edits the fixture's reply.
  * `handoffRole` is the role the hand-off link signs in as ('moderator' opens the moderator's Reports screen).
@@ -113,6 +140,13 @@ export async function openSettings(browser, origin, { width, height = 800, textS
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
+    const label = `${screen.tab}${screen.sub ? `-${screen.sub}` : ''} @${width}${textScale !== 1 ? ` ×${textScale}` : ''}${signedIn ? '' : ' (signed out)'}`;
+    await context.exposeBinding('__reportCspViolation', (_source, v) => { CSP_VIOLATIONS.push({ page: label, ...v }); });
+    await context.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (e) => {
+            window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, sample: e.sample, at: `${e.sourceFile}:${e.lineNumber}` });
+        });
+    });
     // Nothing leaves this machine: map tiles, avatars and anything else off the local server are refused.
     await context.route((url) => url.hostname !== '127.0.0.1', (route) => route.abort());
     await context.route(/\/__harness\/fonts\//, (route) => {
@@ -125,14 +159,16 @@ export async function openSettings(browser, origin, { width, height = 800, textS
         // The app's one-time sign-in link: any well-formed token is accepted here, as an owner (or `handoffRole`).
         let { status, json } = url.pathname === '/api/local/admin/auth/exchange'
             ? { status: 200, json: { role: handoffRole, memberPubkey: 'f'.repeat(64), csrfToken: 'fixture-csrf' } }
-            : mockResponse(req.method(), url.pathname, url.searchParams, req.postData() || '');
+            // Signed in: the browser's cookie is a live password session, as after the password sign-in.
+            : signedIn && url.pathname === '/api/local/admin/auth/session'
+                ? { status: 200, json: { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null } }
+                : mockResponse(req.method(), url.pathname, url.searchParams, req.postData() || '');
         // A screen that shows only on some nodes (e.g. a primary rather than a standby): `overrides[path]` edits the reply.
         if (overrides[url.pathname]) json = overrides[url.pathname](json);
         await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(json) });
     });
-    await page.addInitScript(({ tab, signedIn, css }) => {
+    await page.addInitScript(({ tab, css }) => {
         try {
-            if (signedIn) sessionStorage.setItem('bp-admin-token', 'fixture-password');
             localStorage.setItem('bp_settings_active_tab', tab);
             // Home would otherwise open the first-run wizard on a node with no members.
             localStorage.setItem('bp_cold_start_completed', 'true');
@@ -146,7 +182,7 @@ export async function openSettings(browser, origin, { width, height = 800, textS
             };
             if (document.head) add(); else document.addEventListener('DOMContentLoaded', add);
         }
-    }, { tab: screen.tab, signedIn, css: (systemFont ? '' : FONT_CSS) + (textScale !== 1 ? TEXT_SCALE_CSS(textScale) : '') });
+    }, { tab: screen.tab, css: (systemFont ? '' : FONT_CSS) + (textScale !== 1 ? TEXT_SCALE_CSS(textScale) : '') });
 
     await page.goto(`${origin}/settings/${hash}`);
     if (signedIn) {

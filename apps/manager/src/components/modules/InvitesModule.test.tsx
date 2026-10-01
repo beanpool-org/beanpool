@@ -15,6 +15,9 @@ vi.mock('../../lib/node-client', async () => {
 });
 
 describe('InvitesModule', () => {
+    // The printable sheet's popup, as window.open hands it back (beforeEach).
+    let printWindow: any;
+    let printButton: any;
     const mockNode: NodeProfile = {
         id: 'node-1',
         name: 'Test Node',
@@ -29,12 +32,17 @@ describe('InvitesModule', () => {
                 writeText: vi.fn().mockResolvedValue(undefined),
             },
         });
-        vi.spyOn(window, 'open').mockImplementation(() => ({
+        printButton = { addEventListener: vi.fn() };
+        printWindow = {
             document: {
                 write: vi.fn(),
                 close: vi.fn(),
+                getElementById: vi.fn((id: string) => (id === 'print-now' ? printButton : null)),
             },
-        } as unknown as Window));
+            setTimeout: vi.fn(),
+            print: vi.fn(),
+        };
+        vi.spyOn(window, 'open').mockImplementation(() => printWindow as unknown as Window);
     });
 
     it('renders initial form state and empty pass state', () => {
@@ -273,6 +281,17 @@ describe('InvitesModule', () => {
         const printBtn = screen.getAllByRole('button', { name: /Print Sheet/i })[0];
         await userEvent.click(printBtn);
         expect(window.open).toHaveBeenCalled();
+
+        // The popup inherits Settings' strict policy (no inline script runs there), so its page has none: no <script>,
+        // no inline handler. The Print button and the print dialog are wired from Settings instead.
+        const html = printWindow.document.write.mock.calls.map((c: unknown[]) => String(c[0])).join('');
+        expect(html).toContain('INV-PRINT-1');
+        expect(html).not.toMatch(/<script/i);
+        expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+        expect(printButton.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+        printButton.addEventListener.mock.calls[0][1]();
+        expect(printWindow.print).toHaveBeenCalledTimes(1);
+        expect(printWindow.setTimeout).toHaveBeenCalledWith(expect.any(Function), 400);
     });
 });
 

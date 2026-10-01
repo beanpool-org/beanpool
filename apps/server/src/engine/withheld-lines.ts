@@ -20,6 +20,9 @@
  *   person who blocked them sees no new chat in their list. It becomes the real conversation, under the same id (the id
  *   the apps encrypt against), when either of them opens one with the other, or the sender writes in it once the block
  *   is lifted; the lines withheld before stay withheld.
+ * - A reaction on a line of a DM with someone who has blocked them, or an edit of their own line in it, is kept here too
+ *   (withheld_overlays), laid over their own reads of that line and heard on their own sockets only, so it doesn't
+ *   vanish on their next read (#1403 review); the line itself, which the other person sees, never changes.
  *
  * A promoted standby has none of these: the sender's own copies of lines nobody else ever saw are what a take-over
  * loses. A line's photo is kept in its row (a chat photo isn't copied either; replication-manifest message_attachments).
@@ -155,6 +158,106 @@ export function withheldAttachmentFor(id: unknown, viewer: string | undefined): 
     return { data: row.attachment_data, nonce: row.attachment_nonce, mime: row.attachment_mime || 'image/jpeg' };
 }
 
+// ── a blocked member's reaction or edit on a line in `messages` ─────────────────────────────────────────────────
+
+/**
+ * What a blocked member did to a line the person who blocked them can see (engine/messaging.ts): their reaction on a
+ * line of a DM with that person, or their edit of their own line in it. Never written into the line: kept here for its
+ * author alone and laid over their own reads of it (pageWithOwnWithheld), so their screen shows what they did, as it
+ * would anyone's, and the other person's shows nothing of it, then or after an unblock. `reaction` null: none of theirs
+ * here (the line's own stands); `ciphertext` null: no edit.
+ */
+export interface WithheldOverlay {
+    message_id: string;
+    author_pubkey: string;
+    reaction: string | null;
+    ciphertext: string | null;
+    nonce: string | null;
+    edited_at: string | null;
+    changed_at: string;
+}
+
+/** `author`'s overlay on the line `messageId`, if they have one. */
+export function overlayOf(messageId: string, author: string): WithheldOverlay | undefined {
+    return db.prepare('SELECT * FROM withheld_overlays WHERE message_id = ? AND author_pubkey = ?').get(messageId, author) as WithheldOverlay | undefined;
+}
+
+/** A row with nothing left in it goes. */
+function tidyOverlay(messageId: string, author: string): void {
+    db.prepare('DELETE FROM withheld_overlays WHERE message_id = ? AND author_pubkey = ? AND reaction IS NULL AND ciphertext IS NULL').run(messageId, author);
+}
+
+/** `author`'s reaction on the line, for their eyes alone; null takes theirs off the overlay. */
+export function setOverlayReaction(messageId: string, author: string, emoji: string | null): void {
+    const at = new Date().toISOString();
+    db.prepare(`INSERT INTO withheld_overlays (message_id, author_pubkey, reaction, changed_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(message_id, author_pubkey) DO UPDATE SET reaction = excluded.reaction, changed_at = excluded.changed_at`)
+        .run(messageId, author, emoji, at);
+    if (emoji === null) tidyOverlay(messageId, author);
+}
+
+/** `author`'s new words on their own line, for their eyes alone. */
+export function setOverlayEdit(messageId: string, author: string, ciphertext: string, nonce: string, editedAt: string): void {
+    db.prepare(`INSERT INTO withheld_overlays (message_id, author_pubkey, ciphertext, nonce, edited_at, changed_at) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(message_id, author_pubkey) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce,
+                    edited_at = excluded.edited_at, changed_at = excluded.changed_at`)
+        .run(messageId, author, ciphertext, nonce, editedAt, editedAt);
+}
+
+/** The edit is the line's own now (made once the block was lifted): the overlay's goes. */
+export function clearOverlayEdit(messageId: string, author: string): void {
+    db.prepare('UPDATE withheld_overlays SET ciphertext = NULL, nonce = NULL, edited_at = NULL WHERE message_id = ? AND author_pubkey = ?').run(messageId, author);
+    tidyOverlay(messageId, author);
+}
+
+/** The line is gone (a tombstone): nothing is laid over it any more. */
+export function dropOverlaysOn(messageId: string): void {
+    db.prepare('DELETE FROM withheld_overlays WHERE message_id = ?').run(messageId);
+}
+
+/**
+ * A line's metadata with `author`'s reaction as `emoji`: theirs replaced where it is, or added at the end, exactly as a
+ * reaction is stored (engine/messaging.ts toggledReactions), so the author's read is the one a stored reaction gives.
+ */
+export function withOwnReaction(stored: string | null | undefined, author: string, emoji: string): string {
+    let metadata: any = {};
+    if (stored) {
+        try { metadata = JSON.parse(stored); } catch { metadata = {}; }
+    }
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) metadata = {};
+    if (!Array.isArray(metadata.reactions)) metadata.reactions = [];
+    const mine = metadata.reactions.findIndex((r: any) => r?.author === author);
+    if (mine > -1) metadata.reactions[mine].emoji = emoji;
+    else metadata.reactions.push({ emoji, author });
+    return JSON.stringify(metadata);
+}
+
+/** One line as `author` sees it: with their overlay laid over it (looked up when not given). A tombstone takes none. */
+export function withOwnOverlay(line: Message, author: string, given?: WithheldOverlay | null): Message {
+    const ov = given === undefined ? overlayOf(line.id, author) : given;
+    if (!ov || line.type === 'removed') return line;
+    const seen: Message = { ...line };
+    if (ov.reaction) seen.metadata = withOwnReaction(line.metadata, author, ov.reaction);
+    if (ov.ciphertext && ov.nonce && line.authorPubkey === author) {
+        seen.ciphertext = ov.ciphertext;
+        seen.nonce = ov.nonce;
+        seen.editedAt = ov.edited_at ?? line.editedAt;
+    }
+    // As a stored line's stamp moves with each change to it.
+    if ('updatedAt' in line && (!line.updatedAt || ov.changed_at > line.updatedAt)) seen.updatedAt = ov.changed_at;
+    return seen;
+}
+
+/** Lines as `viewer` reads them: their own overlays laid over theirs. */
+function withOwnOverlays(lines: Message[], viewer: string): Message[] {
+    if (lines.length === 0) return lines;
+    const rows = db.prepare(`SELECT * FROM withheld_overlays WHERE author_pubkey = ? AND message_id IN (SELECT value FROM json_each(?))`)
+        .all(viewer, JSON.stringify(lines.map(l => l.id))) as WithheldOverlay[];
+    if (rows.length === 0) return lines;
+    const byId = new Map(rows.map(r => [r.message_id, r]));
+    return lines.map(l => withOwnOverlay(l, viewer, byId.get(l.id) ?? null));
+}
+
 // ── what the sender reads ───────────────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -169,8 +272,9 @@ export function pageWithOwnWithheld(conversationId: string, viewer: string | und
     const own = (db.prepare(`SELECT * FROM withheld_lines WHERE conversation_id = ? AND author_pubkey = ?
                               ORDER BY timestamp DESC, rowid DESC LIMIT ?`).all(conversationId, viewer, limit + offset) as WithheldLine[])
         .map(withheldLineMessage);
-    if (own.length === 0) return page(limit, offset);
-    const lines = page(limit + offset, 0).reverse();
+    // Their own reactions and edits on the lines, kept for them alone, laid over the lines as they read them.
+    if (own.length === 0) return withOwnOverlays(page(limit, offset), viewer);
+    const lines = withOwnOverlays(page(limit + offset, 0), viewer).reverse();
     const merged: Message[] = [];
     let i = 0, j = 0;
     while (merged.length < limit + offset && (i < lines.length || j < own.length)) {
@@ -236,4 +340,5 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
 export function dropWithheldOf(publicKey: string): void {
     db.prepare('DELETE FROM withheld_lines WHERE author_pubkey = ?').run(publicKey);
     db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ?').run(publicKey);
+    db.prepare('DELETE FROM withheld_overlays WHERE author_pubkey = ?').run(publicKey);
 }

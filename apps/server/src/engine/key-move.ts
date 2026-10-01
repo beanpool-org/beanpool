@@ -104,6 +104,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // already there (it can't, as the new key is new) is left to go with the old key.
     move('messages', 'author_pubkey');
     move('withheld_lines', 'author_pubkey');
+    move('withheld_overlays', 'author_pubkey');
     db.prepare('UPDATE OR IGNORE withheld_conversations SET owner_pubkey = ? WHERE owner_pubkey = ?').run(newKey, oldKey);
     db.prepare('UPDATE OR IGNORE withheld_conversations SET other_pubkey = ? WHERE other_pubkey = ?').run(newKey, oldKey);
     db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ? OR other_pubkey = ?').run(oldKey, oldKey);

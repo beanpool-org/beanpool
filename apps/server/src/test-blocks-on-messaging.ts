@@ -257,6 +257,50 @@ async function main(): Promise<void> {
         "Ann's lines, unread count, pushes and socket are as they were");
     const deeLines = await linesOf(dee, deeConv);
     assert(JSON.stringify(deeLines) === JSON.stringify([firstLine, annLine, d2id]), `Dee reads her line among the others (${JSON.stringify(deeLines)})`);
+
+    // Her reaction and her edit stay as made on her own screen (#1403 review, BLOCKING 1 and 2): a sender-only overlay,
+    // merged into her reads and heard on her own sockets, the same in shape as a control's (Cy has blocked nobody).
+    const ccId: string = cc.body?.conversation?.id;
+    const ctrlLine = await call('POST', dee, '/api/messages/send', dm(ccId, dee));
+    const ctrlEd = await call('POST', dee, '/api/messages/edit', { messageId: ctrlLine.body?.message?.id, ...lockedDm() });
+    const ctrlRe = await call('POST', dee, '/api/messages/react', { messageId: cs.body?.message?.id, authorPubkey: dee.pk, emoji: '😠' });
+    await sleep(150);
+    const deeRead4 = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages ?? [];
+    const deeFirst = deeRead4.find((m: any) => m.id === firstLine);
+    const deeOnAnn = deeRead4.find((m: any) => m.id === annLine);
+    const reactionsOf = (m: any) => { try { return JSON.parse(m?.metadata ?? '{}')?.reactions ?? []; } catch { return []; } };
+    assert(!!deeFirst && deeFirst.ciphertext === ed.body?.message?.ciphertext && deeFirst.nonce === ed.body?.message?.nonce
+        && deeFirst.editedAt === ed.body?.message?.editedAt && !!deeFirst.editedAt,
+        `Dee's next read shows her edit, as made (${JSON.stringify(deeFirst)?.slice(0, 140)})`);
+    assert(reactionsOf(deeOnAnn).some((r: any) => r.author === dee.pk && r.emoji === '😠') && deeOnAnn?.metadata === re.body?.metadata,
+        `and her reaction on Ann's line, as the answer had it (${deeOnAnn?.metadata})`);
+    const ownEvent = (s: Sock, type: string, id: string) => s.events.filter(e => e.type === type && (e.messageId === id || e.message?.id === id));
+    const reEv = ownEvent(deeSock, 'message_reaction', annLine), edEv = ownEvent(deeSock, 'message_edited', firstLine);
+    const ctrlReEv = ownEvent(deeSock, 'message_reaction', cs.body?.message?.id), ctrlEdEv = ownEvent(deeSock, 'message_edited', ctrlLine.body?.message?.id);
+    assert(reEv.length === 1 && edEv.length === 1 && reEv[0].metadata === re.body?.metadata && edEv[0].message?.ciphertext === ed.body?.message?.ciphertext,
+        `her own sockets hear each once (${reEv.length} reaction, ${edEv.length} edit)`);
+    assert(ctrlReEv.length === 1 && ctrlEdEv.length === 1 && keysOf(reEv[0]) === keysOf(ctrlReEv[0]) && keysOf(edEv[0]) === keysOf(ctrlEdEv[0])
+        && keysOf(edEv[0]?.message) === keysOf(ctrlEdEv[0]?.message) && reEv[0].participants?.length === 2 && edEv[0].participants?.length === 2,
+        `in the shape a control's events have (${keysOf(reEv[0])} / ${keysOf(ctrlReEv[0])})`);
+    assert(keysOf(re.body) === keysOf(ctrlRe.body) && keysOf(ed.body) === keysOf(ctrlEd.body) && keysOf(ed.body?.message) === keysOf(ctrlEd.body?.message),
+        `and the answers have a control's shape (${keysOf(ed.body?.message)} / ${keysOf(ctrlEd.body?.message)})`);
+    // Another emoji replaces hers on her screen; the same again takes it away; Ann's row never changes.
+    const re2 = await call('POST', dee, '/api/messages/react', { messageId: annLine, authorPubkey: dee.pk, emoji: '👍' });
+    const seen2 = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages?.find((m: any) => m.id === annLine);
+    const re3 = await call('POST', dee, '/api/messages/react', { messageId: annLine, authorPubkey: dee.pk, emoji: '👍' });
+    const seen3 = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages?.find((m: any) => m.id === annLine);
+    assert(re2.status === 200 && reactionsOf(seen2).filter((r: any) => r.author === dee.pk).map((r: any) => r.emoji).join() === '👍'
+        && re3.status === 200 && !reactionsOf(seen3).some((r: any) => r.author === dee.pk),
+        `she changes it and takes it back, as anyone does (${seen2?.metadata}; ${seen3?.metadata})`);
+    const re4 = await call('POST', dee, '/api/messages/react', { messageId: annLine, authorPubkey: dee.pk, emoji: '😠' });
+    await sleep(100);
+    const annMetaNow = (db.prepare('SELECT metadata FROM messages WHERE id = ?').get(annLine) as any)?.metadata ?? '';
+    const annRead4 = (await call('GET', ann, `/api/messages/${deeConv}`)).body?.messages ?? [];
+    assert(re4.status === 200 && !String(annMetaNow).includes(dee.pk)
+        && !String(annRead4.find((m: any) => m.id === annLine)?.metadata ?? '').includes(dee.pk)
+        && annRead4.find((m: any) => m.id === firstLine)?.ciphertext === before4.ciphertext
+        && heard(annSock, firstLine, annLine).length === 0,
+        "none of it reaches Ann's row, her read or her socket");
     const ownEd = await call('POST', dee, '/api/messages/edit', { messageId: d2id, ...lockedDm() });
     const ownDel = await call('POST', dee, '/api/messages/delete', { messageId: d2id });
     const deeView = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages?.find((m: any) => m.id === d2id);
@@ -283,6 +327,10 @@ async function main(): Promise<void> {
         `Bo's next line opens the conversation for Ann, under the same id (${show(b4)})`);
     assert(JSON.stringify(await linesOf(ann, boConv)) === JSON.stringify([b4.body?.message?.id]), 'and it holds that line alone');
     assert(JSON.stringify(await linesOf(ann, deeConv)) === JSON.stringify([...annLines4, d3.body?.message?.id]), "Dee's next line follows her old ones, without the withheld one");
+    const annRead5 = (await call('GET', ann, `/api/messages/${deeConv}`)).body?.messages ?? [];
+    assert(annRead5.find((m: any) => m.id === firstLine)?.ciphertext === before4.ciphertext
+        && !String(annRead5.find((m: any) => m.id === annLine)?.metadata ?? '').includes(dee.pk),
+        "nor Dee's edit or reaction from while she was blocked");
     assert(pushesTo(ann).length === pushesBefore + 2, `each pushes Ann now (${pushesTo(ann).length - pushesBefore})`);
     assert(JSON.stringify(await linesOf(bo, boConv)) === JSON.stringify([...boIds, b4.body?.message?.id]), 'Bo reads all four');
 

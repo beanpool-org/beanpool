@@ -1063,6 +1063,21 @@ CREATE TABLE IF NOT EXISTS withheld_lines (
 );
 CREATE INDEX IF NOT EXISTS idx_withheld_lines_conversation ON withheld_lines(conversation_id, author_pubkey, timestamp);
 CREATE INDEX IF NOT EXISTS idx_withheld_lines_author ON withheld_lines(author_pubkey);
+-- What a blocked member did to a line in `messages` that would show on the screen of someone who has blocked them: their
+-- reaction on a line of a DM with that person, or their edit of their own line in it. Kept for them alone and laid over
+-- their own reads of the line, never written into the line, so the person who blocked them never sees it, then or after
+-- an unblock. One row per line and author. Local, as the lines above are.
+CREATE TABLE IF NOT EXISTS withheld_overlays (
+    message_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    reaction TEXT,
+    ciphertext TEXT,
+    nonce TEXT,
+    edited_at TEXT,
+    changed_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, author_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

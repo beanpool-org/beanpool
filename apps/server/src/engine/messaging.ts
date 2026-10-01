@@ -33,6 +33,7 @@ import {
     withheldConversationOwnedBy, withheldConversationOfPair, openWithheldConversation, dropWithheldConversation,
     withheldLine, ownWithheldLine, storeWithheldLine, editWithheldLine, setWithheldLineMetadata, tombstoneWithheldLine,
     withheldLineMessage, type WithheldConversation,
+    overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
 } from './withheld-lines.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
@@ -552,7 +553,7 @@ export function toggleMessageReaction(
         if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
         const toggled = JSON.stringify(toggledReactions(own.metadata, authorPubkey, emoji).metadata);
         setWithheldLineMetadata(own.id, toggled);
-        cb.broadcast({ type: 'message_reaction', conversationId: own.conversation_id, messageId, metadata: toggled, participants: [authorPubkey] }, [authorPubkey]);
+        cb.broadcast({ type: 'message_reaction', conversationId: own.conversation_id, messageId, metadata: toggled, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
         return { success: true, metadata: toggled };
     }
 
@@ -597,13 +598,30 @@ export function toggleMessageReaction(
     // A tombstone takes no reactions, in any chat: the message it stood for is gone.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
 
-    const { metadata, removed } = toggledReactions(row.metadata, authorPubkey, emoji);
+    // The line as this member sees it: with their own reaction from while they were blocked, if they made one
+    // (engine/withheld-lines.ts withheld_overlays), which only they see.
+    const overlay = overlayOf(messageId, authorPubkey);
+    const seen = overlay?.reaction ? withOwnReaction(row.metadata, authorPubkey, overlay.reaction) : row.metadata;
+    const { metadata, removed } = toggledReactions(seen, authorPubkey, emoji);
     const metadataStr = JSON.stringify(metadata);
-    // In a DM with someone who has blocked them, a reaction is up to 32 characters of anything on the other person's
-    // screen: answered as made and not made (engine/member-blocks.ts). Taking one of theirs back still goes through.
-    if (!removed && convType?.type === 'dm'
-        && participants.some((p: any) => p.public_key !== authorPubkey && hasBlocked(p.public_key, authorPubkey))) {
+    const keys = participants.map((p: any) => p.public_key as string);
+    const toAuthorOnly = () => {
+        // As a stored reaction is heard, the conversation's participants named, on the author's own sockets alone.
+        cb.broadcast({ type: 'message_reaction', conversationId: row.conversation_id, messageId, metadata: metadataStr, participants: keys }, [authorPubkey]);
         return { success: true, metadata: metadataStr };
+    };
+    // In a DM with someone who has blocked them, a reaction is up to 32 characters of anything on the other person's
+    // screen (engine/member-blocks.ts): kept for its author alone and laid over their own reads (#1403 review), so it is
+    // there on their next read, as anyone's is, and never in the line the other person sees. Taking theirs back from the
+    // line itself still goes through.
+    if (!removed && convType?.type === 'dm' && keys.some(pk => pk !== authorPubkey && hasBlocked(pk, authorPubkey))) {
+        setOverlayReaction(messageId, authorPubkey, emoji);
+        return toAuthorOnly();
+    }
+    if (overlay?.reaction) {
+        setOverlayReaction(messageId, authorPubkey, null);
+        // The one they took back was only ever theirs to see: the line nobody else sees changes in nothing.
+        if (removed && !reactionsOf(row.metadata).some((r: any) => r?.author === authorPubkey)) return toAuthorOnly();
     }
     db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
 
@@ -612,10 +630,28 @@ export function toggleMessageReaction(
         conversationId: row.conversation_id,
         messageId,
         metadata: metadataStr,
-        participants: participants.map(p => p.public_key)
-    }, participants.map(p => p.public_key));
+        participants: keys
+    }, keys);
 
     return { success: true, metadata: metadataStr };
+}
+
+/** A line's stored reactions, whatever its metadata holds. */
+function reactionsOf(stored: string | null | undefined): any[] {
+    try {
+        const m = stored ? JSON.parse(stored) : null;
+        return Array.isArray(m?.reactions) ? m.reactions : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Who a conversation's live events name: its participants, or the two of a withheld conversation (engine/withheld-lines.ts). */
+function eventParticipants(conversationId: string, author: string): string[] {
+    const real = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as { public_key: string }[];
+    if (real.length > 0) return real.map(p => p.public_key);
+    const kept = withheldConversationOwnedBy(conversationId, author);
+    return kept ? [kept.owner_pubkey, kept.other_pubkey] : [author];
 }
 
 /**
@@ -717,7 +753,7 @@ export function editMessage(
         editWithheldLine(own.id, ciphertext, nonce, editedAt);
         const edited: Message = { ...withheldLineMessage(own), ciphertext, nonce, editedAt };
         delete edited.updatedAt;
-        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: edited, participants: [authorPubkey] }, [authorPubkey]);
+        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: edited, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
         return edited;
     }
     // Enterprise discussion-thread messages are not editable. This route has no size bound
@@ -776,11 +812,16 @@ export function editMessage(
 
     const editedAt = new Date().toISOString();
     const participants = isGroupChat ? [] : db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
-    // An edit is new words on the other person's screen: in a DM with someone who has blocked its author, answered as
-    // made and not made (engine/member-blocks.ts), as a new line is withheld.
+    // An edit is new words on the other person's screen: in a DM with someone who has blocked its author, kept for the
+    // author alone and laid over their own reads of the line (engine/withheld-lines.ts withheld_overlays; #1403 review),
+    // as a new line is withheld, so their next read shows it as made and the other person's never does.
     const withheld = !isGroupChat && participants.some((p: any) => p.public_key !== authorPubkey && hasBlocked(p.public_key, authorPubkey));
-    if (!withheld) {
+    if (withheld) {
+        setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
+    } else {
         db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
+        // An edit from while they were blocked, still over their own read, gives way to this one.
+        if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
     }
 
     const updated: Message = {
@@ -802,7 +843,13 @@ export function editMessage(
         broadcastGroupChatUpdate(cb, row.conversation_id, messageId, 'edited');
         return updated;
     }
-    if (withheld) return updated;
+    if (withheld) {
+        // Heard on the author's own sockets alone, as a stored edit is heard, with the line as they see it.
+        const seen = withOwnOverlay({ ...updated }, authorPubkey);
+        cb.broadcast({ type: 'message_edited', conversationId: row.conversation_id, message: { ...seen, ciphertext: storedCiphertext, nonce: storedNonce, editedAt },
+            participants: participants.map((p: any) => p.public_key) }, [authorPubkey]);
+        return { ...updated, metadata: seen.metadata };
+    }
 
     cb.broadcast({
         type: 'message_edited',
@@ -843,7 +890,7 @@ export function deleteOwnMessage(
         const { ciphertext, metadata } = tombstoneFields(own, authorPubkey, GROUP_THREAD_DELETED_TEXT);
         tombstoneWithheldLine(own.id, ciphertext, metadata);
         const gone: Message = { ...toMessage(own), ciphertext, nonce: 'plaintext-v1', type: 'removed', metadata };
-        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: gone, participants: [authorPubkey] }, [authorPubkey]);
+        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: gone, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
         return gone;
     }
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be
@@ -884,6 +931,8 @@ export function deleteOwnMessage(
     }
 
     const { ciphertext, metadata } = writeMessageTombstone(messageId, row, authorPubkey, GROUP_THREAD_DELETED_TEXT);
+    // Nothing is laid over a tombstone: anyone's withheld reaction or edit on the line goes with it (engine/withheld-lines.ts).
+    dropOverlaysOn(messageId);
     const updated: Message = {
         ...toMessage(row),
         ciphertext,

@@ -33,6 +33,8 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { getAppLockEnabled } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { appVersionHeaderValue } from '../utils/force-update';
+import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -48,7 +50,9 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Forward-compatible read signing (SRV-2/SRV-4): sign GET requests to the anchor
 // node so read-auth can be enforced server-side later without another app-store
 // release. Installed at module load, before any component renders or fetches.
-installNodeRequestSigning();
+// Every request to the anchor also names this build (X-BeanPool-App), so the community
+// can count who runs what before it raises its floor (utils/force-update.ts).
+installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
 
 // Cap OS font scaling app-wide so enlarged system fonts (common on low-end
 // devices in our target markets) can't shatter row layouts.
@@ -864,6 +868,9 @@ export default function RootLayout() {
                             <RootLayoutNav />
                         </NodeStatusProvider>
                     </IdentityProvider>
+                    {/* "Update required", over everything and outside the account: only at a safe moment (a cold
+                        start, or back after 5 minutes away), never mid-use (utils/force-update.ts). */}
+                    <ForceUpdateBlock />
                 </ThemeProvider>
             </KeyboardProvider>
         </SafeAreaProvider>

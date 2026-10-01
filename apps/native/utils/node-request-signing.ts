@@ -22,8 +22,11 @@ import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
 import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { loadSavedRequestSigning } from './nodes';
+import { APP_VERSION_HEADER } from './force-update';
 
 let installed = false;
+/** `X-BeanPool-App`'s value on this phone (utils/force-update.ts appVersionHeaderValue), or null: sent with nothing. */
+let appVersionHeader: string | null = null;
 
 /**
  * Whether a request to `url` goes to this phone's community at `anchorUrl`: the same origin, scheme, host and port
@@ -48,12 +51,28 @@ function hasHeader(headers: any, name: string): boolean {
 }
 
 /**
- * Wrap global.fetch once so GET requests to the anchor node carry a replay-proof
- * member signature. Call once at app startup.
+ * The app's version on a request to its own community (`X-BeanPool-App: 1.2.57 android`), for the community's counts of
+ * who runs what: an operator reads them before raising the floor (apps/server/src/app-version-counts.ts). Added to a
+ * plain headers object only, never over one the caller set: a Headers instance or a Request carries its own, and adding
+ * to those here would replace them.
  */
-export function installNodeRequestSigning(): void {
+function withAppVersionHeader(input: any, init: any, value: string): any {
+    if (typeof input !== 'string') return init;
+    const headers = init?.headers;
+    if (headers !== undefined && (typeof headers !== 'object' || headers === null || Array.isArray(headers) || typeof headers.get === 'function')) return init;
+    if (hasHeader(headers, APP_VERSION_HEADER)) return init;
+    return { ...(init || {}), headers: { ...(headers || {}), [APP_VERSION_HEADER]: value } };
+}
+
+/**
+ * Wrap global.fetch once so GET requests to the anchor node carry a replay-proof
+ * member signature, and every request to it the app's version when `appVersionHeader` is given (a phone build: see
+ * utils/force-update.ts appVersionHeaderValue). Call once at app startup.
+ */
+export function installNodeRequestSigning(options: { appVersionHeader?: string | null } = {}): void {
     if (installed) return;
     installed = true;
+    appVersionHeader = options.appVersionHeader ?? null;
 
     // Which format each saved community's server reads, as recorded on an earlier run (request binding). Signed
     // requests made before it has loaded wait for it.
@@ -77,10 +96,12 @@ export function installNodeRequestSigning(): void {
                 init?.method ?? (typeof input !== 'string' ? input?.method : undefined) ?? 'GET',
             ).toUpperCase();
 
-            if (url && method === 'GET') {
+            if (url && (method === 'GET' || appVersionHeader)) {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+                const toAnchor = !!anchorUrl && isAnchorRequest(url, anchorUrl);
+                if (toAnchor && appVersionHeader) init = withAppVersionHeader(input, init, appVersionHeader);
                 // Only sign requests to our own node, and never double-sign.
-                if (anchorUrl && isAnchorRequest(url, anchorUrl) && !hasHeader(init?.headers, 'X-Signature')) {
+                if (method === 'GET' && toAnchor && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();
                     if (identity?.privateKey && identity?.publicKey) {
                         // Signed over the URL fetched: its host (request binding) and its path, which is the

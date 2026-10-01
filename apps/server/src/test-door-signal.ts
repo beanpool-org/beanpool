@@ -299,8 +299,10 @@ async function main(): Promise<void> {
     const lou = await joinByWords(PUB, 'Lou');
     const louPurge = await call('POST', lou.id, '/api/member/purge', PUB, {});
     assert(kay.res.status === 200 && !joinRow(kay.id.pk)?.ip_kept_until && lou.res.status === 200 && louPurge.status === 200 && !joinRow(lou.id.pk)?.ip_kept_until
-        && (await askWork('words', PUB)).level === 0,
-        'removed more than a day after joining (Kay), or deleted by their own hand (Lou): nothing is kept, and the network is asked no more');
+        && (await askWork('words', PUB)).level === 0
+        // Lou's own delete also clears the connection label (releaseOpenJoin, report rings #1416), as for a sign-in.
+        && joinRow(lou.id.pk)?.join_cohort === null,
+        'removed more than a day after joining (Kay), or deleted by their own hand (Lou, whose connection label goes too): nothing is kept, and the network is asked no more');
     // Max, removed fresh from a third network, to look for in the copies.
     const BAR = '203.0.113.18';
     const max = await joinByWords(BAR, 'Max');
@@ -313,7 +315,9 @@ async function main(): Promise<void> {
     assert(typeof maxRow?.ip_kept_until === 'string' && !!exported && !!bundled
         && JSON.stringify(Object.keys(exported).sort()) === JSON.stringify(['joinCohort', 'joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
         && JSON.stringify(Object.keys(bundled).sort()) === JSON.stringify(['joinCohort', 'joinHash', 'joinedAt', 'memberPubkey', 'provider', 'updatedAt'])
-        && !payloadText.includes(maxRow.ip_hash) && !payloadText.includes(maxRow.ip_kept_until),
+        && !payloadText.includes(maxRow.ip_hash) && !payloadText.includes(maxRow.ip_kept_until)
+        // A 12-words join gets its connection label like a sign-in's, and it travels.
+        && typeof maxRow?.join_cohort === 'string' && exported.joinCohort === maxRow.join_cohort && bundled.joinCohort === maxRow.join_cohort,
         'a copy for a standby and the take-over record carry Max\'s row (with its join_cohort label, report rings #1416), but neither the hash nor how long it is kept');
 
     // ── 7. overrides ─────────────────────────────────────────────────────────────────────────────

@@ -160,7 +160,7 @@ test('holder: signed like status — a bad, missing, stale or re-aimed signature
         await liveName(w, 'riverside', owner);
         const before = everything(w);
         const text = JSON.stringify({ name: 'riverside' });
-        const refused = { error: 'bad signature', accepted_proto: ['v1'] };
+        const refused = { error: 'bad signature', accepted_proto: ['v1', 'v2'] };
 
         // The good request first, so each refusal below differs from it in one thing only.
         assert.equal((await send(w, await signedRaw(asker, { text }))).body.held, 'other');

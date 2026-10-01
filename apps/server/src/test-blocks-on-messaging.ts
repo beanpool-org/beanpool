@@ -20,6 +20,7 @@
  *   9. a member of another community, relayed by a peer, is withheld as a member here is
  *  10. a standby's copy carries no withheld line or conversation; a prune takes the member's own
  *  11. pushes that aren't a blocked member's words still come: a vote to replace a convenor, the admin page's message
+ *  12. a DM's push goes after the send is answered, so a withheld send (no push) answers no sooner than a stored one
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-blocks-on-messaging.ts
  */
@@ -32,6 +33,7 @@ const PW = 'BlocksOnMessagingPass123!';
 process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
+import http from 'node:http';
 import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
@@ -59,12 +61,24 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 let BASE = '';
 
+// ── the order things happen in: each answer's end, each push handed to Expo ─────────────────────
+let seq = 0;
+const answered: { seq: number; url: string }[] = [];
+const realEnd = http.ServerResponse.prototype.end;
+(http.ServerResponse.prototype as any).end = function (this: http.ServerResponse, ...args: any[]) {
+    answered.push({ seq: ++seq, url: (this as any).req?.url ?? '' });
+    return (realEnd as any).apply(this, args);
+};
+const pushedAt: { seq: number; to: string }[] = [];
+
 // ── Expo, stubbed: every push the node hands it, by token ───────────────────────────────────────
 const realFetch = globalThis.fetch;
 const pushes: { to: string; title: string; body: string; data: any }[] = [];
 (globalThis as any).fetch = async (url: any, init: any) => {
     if (String(url).includes('exp.host')) {
-        pushes.push(...JSON.parse(init.body));
+        const batch = JSON.parse(init.body);
+        for (const m of batch) pushedAt.push({ seq: ++seq, to: m.to });
+        pushes.push(...batch);
         return { ok: true, status: 200, json: async () => ({}) } as any;
     }
     return realFetch(url, init);
@@ -467,6 +481,27 @@ async function main(): Promise<void> {
     await sleep(50);
     assert(annBlocksOp.status === 200 && adminRes.status === 200 && pushesTo(ann).length === 1 && pushesTo(ann)[0]?.data?.k === 'chat.message',
         `the admin page's message pushes Ann though she blocked the operator's key (${adminRes.status}; ${pushesTo(ann).length})`);
+
+    // ── 12. a send is answered before its push goes ─────────────────────────────────────────────
+    // #1403 review, NON-BLOCKING: a withheld send skipped the push work a stored one did inside the request (the
+    // recipient's preferences, tokens and badge count), so a withheld send answered measurably sooner. The push now
+    // goes after the answer, so neither answer waits on it.
+    console.log('── 12. a send is answered before its push goes ──');
+    const mark = seq;
+    const cyLine = await call('POST', cy, '/api/messages/send', dm(ccConv, cy));
+    await sleep(100);
+    const sendAnswered = answered.find(a => a.seq > mark && a.url.startsWith('/api/messages/send'));
+    const deePushed = pushedAt.find(p => p.seq > mark && p.to === tokenOf(dee));
+    assert(cyLine.status === 200 && !!sendAnswered && !!deePushed && sendAnswered.seq < deePushed.seq,
+        `Cy's line to Dee is answered before Dee's push goes (answer #${sendAnswered?.seq}, push #${deePushed?.seq})`);
+    // A group's line too: a blocked author's line pushes the blocker nothing, so the work for them must not be in the answer.
+    const mark2 = seq;
+    const cyGroupLine = await call('POST', cy, `/api/groups/${g.id}/chat/message`, { text: 'seeds are in' });
+    await sleep(100);
+    const groupAnswered = answered.find(a => a.seq > mark2 && a.url.startsWith(`/api/groups/${g.id}/chat/message`));
+    const annPushed = pushedAt.find(p => p.seq > mark2 && p.to === tokenOf(ann));
+    assert(cyGroupLine.status === 201 && !!groupAnswered && !!annPushed && groupAnswered.seq < annPushed.seq,
+        `Cy's group line is answered before Ann's push goes (answer #${groupAnswered?.seq}, push #${annPushed?.seq})`);
 
     for (const s of [annSock, boSock, deeSock]) s.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);

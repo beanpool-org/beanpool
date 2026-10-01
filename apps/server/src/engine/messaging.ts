@@ -529,19 +529,30 @@ export function sendMessage(
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));
 
     // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
+    // After the answer, never inside it: the push's work (the recipient's preferences, tokens and badge count over all
+    // their chats) would make a stored line's answer measurably slower than a withheld one's, which has no push, and
+    // tell its sender they are blocked (#1403 review). A line's push never decided its answer.
     if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
-        const senderMember = getMember(db, authorPubkey) as any;
-        // A push names people in words, never a slice of their key.
-        const senderName = senderMember?.callsign || 'A member';
-        cb.dispatchPushNotification(
-            unmutedRecipients(effectiveConvId, participants.map(p => p.public_key)),
-            authorPubkey,
-            '💬 New Message',
-            `${senderName} sent you a message`,
-            { screen: 'chat', conversationId: effectiveConvId },
-            'chat',
-            'chat.message'
-        );
+        const recipients = participants.map(p => p.public_key as string);
+        const pushConvId = effectiveConvId;
+        setImmediate(() => {
+            try {
+                const senderMember = getMember(db, authorPubkey) as any;
+                // A push names people in words, never a slice of their key.
+                const senderName = senderMember?.callsign || 'A member';
+                cb.dispatchPushNotification(
+                    unmutedRecipients(pushConvId, recipients),
+                    authorPubkey,
+                    '💬 New Message',
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: pushConvId },
+                    'chat',
+                    'chat.message'
+                );
+            } catch (e: any) {
+                console.warn('[Push] A message push failed:', e?.message ?? e);
+            }
+        });
     }
 
     return msg;

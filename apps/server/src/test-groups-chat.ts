@@ -87,6 +87,8 @@ const lastLine = (groupId: string) => systemLines(groupId).slice(-1)[0];
 
 const broadcasts: { event: any; recipients?: string[] }[] = [];
 const pushes: { targets: string[]; actor: string; title: string; body: string; data: any }[] = [];
+/** A line's push goes once its send has answered (engine/group-thread.ts: setImmediate): wait for it. */
+const pushesSent = () => new Promise<void>(r => setImmediate(r));
 const cb = {
     broadcast: (event: any, recipients?: string[]) => { broadcasts.push({ event, recipients }); },
     dispatchPushNotification: (targets: string[], actor: string, title: string, body: string, data: any) => {
@@ -317,6 +319,7 @@ async function main(): Promise<void> {
     console.log('\n--- 6. Pushes, mutes and @mentions ---');
     pushes.length = 0; broadcasts.length = 0;
     postGroupThreadMessage(cb, garden.id, bob, 'Rain tomorrow');
+    await pushesSent();
     const all = pushes.flatMap(p => p.targets);
     assert(all.includes(alice) && all.includes(carol) && all.includes(frank), 'every other member (observer included) gets a push by default');
     assert(!all.includes(bob), 'never the author');
@@ -331,11 +334,13 @@ async function main(): Promise<void> {
     setChatMute(garden.id, carol, 'always');
     pushes.length = 0;
     postGroupThreadMessage(cb, garden.id, bob, 'Anyone got a spade?');
+    await pushesSent();
     const afterMute = pushes.flatMap(p => p.targets);
     assert(!afterMute.includes(alice) && !afterMute.includes(carol), 'muted members get no push');
     assert(afterMute.includes(frank), 'the others still do');
     pushes.length = 0;
     postGroupThreadMessage(cb, garden.id, bob, 'Thanks @alice, and @Carol!');
+    await pushesSent();
     const mention = pushes.find(p => /mentioned you/.test(p.body));
     assert(!!mention && mention.targets.includes(alice) && mention.targets.includes(carol), 'an @mention gets through a mute (any case)');
     const mentionMsg = db.prepare("SELECT metadata FROM messages WHERE conversation_id = ? ORDER BY rowid DESC LIMIT 1").get(garden.id) as any;
@@ -348,6 +353,7 @@ async function main(): Promise<void> {
         .run(new Date(Date.now() - 1000).toISOString(), garden.id, alice);
     pushes.length = 0;
     postGroupThreadMessage(cb, garden.id, bob, 'Mute over?');
+    await pushesSent();
     assert(pushes.flatMap(p => p.targets).includes(alice), 'an expired 8-hour mute is no mute');
 
     // The mute route.

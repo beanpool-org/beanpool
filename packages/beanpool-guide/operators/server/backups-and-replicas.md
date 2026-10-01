@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), owners' 12 words and phones, restoring, running a second server as a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.
+summary: What to back up, locked backups, sending them off the server to storage you choose, owners' 12 words and phones, restoring, running a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -95,6 +95,50 @@ A locked backup is still private: whoever opens it can read everything in it, in
 
 If the recovery code is lost, a locked backup still opens with the phone of any owner it was locked to. While the server is running a lost code costs little: press **Replace it** in the Who can unlock this community card, then download a new backup. Keep the paper somewhere away from the server.
 
+## Backups off the server
+
+A backup in data/snapshots, or a file you downloaded once, does not help when the server's disk, the server or the hosting account is lost. So the main server can also send a locked backup, on a schedule, to storage you choose somewhere else. It is optional: nothing is sent anywhere until you add a destination. No destination is BeanPool's, and none is needed.
+
+**What goes**: only locked backups. Each is the same .bpsealed file **Download Sovereign Database** makes once you have a recovery code: the database, the settings and the server's keys, locked to the recovery code and the community's owners. The storage holds a file it cannot read. It can see the file's outside: which community and which server it is from, when it was made, and the names of the owners it is locked to. A server that keeps photos on its own disk sends them in the file; one that keeps them in a bucket (IMAGE_STORE=s3) leaves them there, as its downloaded backups do.
+
+**Without a recovery code nothing goes.** A backup that is not locked can be read by anyone who has it, and in someone else's storage that would be every message of the community in the clear. The card and Home say "Nothing goes off the box: this server has no recovery code…". Everything else keeps working. Make a recovery code (see Make a recovery code) and the next check sends a locked backup.
+
+**Only the main server sends.** A standby sends nothing and asks no storage anything. Put the same destinations on the standby anyway: if it takes over, it starts sending to them, into the same folder. A main server that sees another server has taken over from it stops sending.
+
+### Choosing storage
+
+Any storage that speaks S3: Cloudflare R2, Backblaze B2, Wasabi, AWS S3, Scaleway, OVH, Hetzner, or MinIO or Garage on a machine of your own. For each destination:
+
+- Make a bucket for these backups alone.
+- Make a key that may read, write, list and delete in that bucket and nothing else.
+- Turn off versioning on the bucket, or add a rule that removes old versions within 30 days. With versioning on, a backup the server deletes stays behind as an old version.
+- Add a lifecycle rule that deletes files older than 30 days, if the storage has them (R2, B2, Wasabi, AWS and MinIO do). The server deletes old backups itself, but only while it runs and only where a destination points now; the rule keeps the 30-day promise after a **Change**, a **Remove**, or once the server is gone for good.
+- Note its endpoint: the storage's S3 address without the bucket in it, starting https://. For R2, https://ACCOUNT-ID.r2.cloudflarestorage.com.
+
+Two destinations at two different companies are safer than one: an account closed, a bill unpaid or an outage then costs one copy, not both.
+
+### Setting it up
+
+In Settings: **Appliance & Data**, **Backups & Restore**, **Backups off the server**, **Add a destination**. Fill in a name of your choosing, the endpoint, the bucket, the region ("auto" for R2, your storage's region elsewhere), a folder if you want one, the access key id and the secret access key, and press **Add**. The first backup goes there within a few minutes. Only an owner sees this card or changes it (anyone with the admin password counts as one); an admin is told "Only an owner of this node can see or change where its backups go off the box".
+
+Settings keeps a destination in data/offbox-backups.json, which only the server's own user can read. It is never in the database, so never in a snapshot, a backup or a standby's copy, and the log never shows a key. The card shows the key id shortened and never shows the secret again. To change a destination press **Change**: leave the key id and the secret empty to keep them, or type new ones. **Remove** stops sending there; what that destination already holds stays there, so delete it yourself within 30 days. A **Change** to another endpoint, bucket or folder is the same for the old place: the backups already sent there stay, the server no longer looks there, and the card says so; delete them yourself within 30 days.
+
+Or in the server's .env, for up to two destinations (Settings takes more, five in all): BACKUP_OFFBOX_1_ENDPOINT, BACKUP_OFFBOX_1_BUCKET, BACKUP_OFFBOX_1_REGION, BACKUP_OFFBOX_1_ACCESS_KEY_ID and BACKUP_OFFBOX_1_SECRET_ACCESS_KEY, with BACKUP_OFFBOX_1_PREFIX (a folder) and BACKUP_OFFBOX_1_NAME if you want them, and the same with BACKUP_OFFBOX_2_ for a second; then docker compose up -d. The card marks these "set in .env"; they change only there. A destination with a setting missing or wrong shows "Can't be used" and names the setting, never what it holds. Five in all is the most, .env's first: one past that shows "Can't be used" too, gets no new backups, and its old ones are still removed on time.
+
+### When, and when it fails
+
+- Every 24 hours by default (nightly); **How often** chooses 6 hours to a week. The server looks every 5 minutes, and a destination gets a backup once its last one is older than that. All destinations get the same file. **Send one now** sends to every destination at once.
+- After each upload the server asks the storage for the file's size, so a copy cut short is never counted as made.
+- Each upload is tried 3 times. If it still fails, the destination shows **Failing** with the storage's own words (a refused key says so), and is tried again after 15 minutes, then 30, doubling up to 6 hours, until it works. One that has had no backup for a day and a half (with the 24-hour setting) shows **Late**.
+- Owners see the same on Home: "Backups off the server need attention", with what failed and when it is tried next.
+- One upload carries about 5 GB at most. A larger backup is refused in words: such a community is not covered yet.
+
+### How long they are kept
+
+**Keep each backup** is 30 days by default. You can choose fewer, never more: a member who deletes their account is in every backup made before, and the members' guide promises that ends within 30 days. 30 days in .env is the most it reads; more is read as 30.
+
+The server deletes this community's backups past that age from each destination after each upload and every hour, also while nothing is sent for want of a recovery code. It deletes only files it named itself, beanpool-backup- and the date with .bpsealed, in this community's own folder (the folder you chose, then the community's id). It touches nothing else in the bucket, another community's backups included.
+
 ## Owners' 12 words and phones
 
 A locked backup and the locked take-over keys are locked to each owner's key: **any one owner can open them with their phone**, and so can the recovery code. An owner who loses their phone gets that key back from their 12 words. So each owner's 12 words matter most on the day the server itself is lost.
@@ -187,6 +231,7 @@ Before anything is replaced, the server reads the file and refuses the whole of 
 - **Or type the printed recovery code**, then press **Open with the code and restore**.
 - Without Settings, on the server's own machine, in the folder that holds the file: curl -k -X POST --data-binary @FILE -H "X-Admin-Password: PASSWORD" -H "X-Recovery-Code: CODE" https://localhost:8443/api/local/admin/restore, putting the file's name for FILE, this server's admin password for PASSWORD and the recovery code for CODE. With two-factor sign-in on, add -H "X-Admin-TOTP: 123456" with the code the authenticator shows. Sent without a recovery code, it answers with who the file is locked to and which code number it needs.
 - This works on a **fresh server** too: install BeanPool, sign in to its Settings with its own admin password, and restore. The whole community comes back onto it.
+- **From a backup off the server**: on the fresh server, add the same destination under **Backups off the server** (or put it in .env), and press **Show backups**. It lists the lost community's backups, newest first, marked "another community" until the restore. Press **Download** on the newest: the server checks it against the fingerprint it was sent with, and a file the storage gives back changed stops short rather than arriving whole. Then restore that file with the Restore Database Wizard and the recovery code, as above. You can also take the file from the storage's own website or tools: it is in the folder you chose, then the community's id. The fresh server sends nothing off the box until it has a recovery code; after the restore it has the community's, and carries on sending to the same folder.
 - It brings back everything in the file: the database, the server's keys (the key that opens members' sign-in recovery copies and, on the global community, open-join.key among them), the community's genesis, its links with other communities, and its admin password and two-factor sign-in. If this server had a different recovery-seal.key of its own, it is kept as recovery-seal-retired- and a number, and a different open-join.key as open-join-retired- and a number. When the backup holds sign-in recovery copies locked with such a key, the server's log then says whether they open on this server. After the restart, sign in with **the community's** admin password, not the one this server had. The server keeps its own replication token and other settings. (Opened with a phone, the wizard follows the restore to the end by itself, and says when the server is restarting.)
 - If the file was locked by a different machine than this community's server, the server refuses it and names that machine. The fleet manager locks old copies with its own key, so its files are named this way. If you know the machine, send the same command again with -H "X-Accept-Signer: NAME", putting the name it gave. A file let through this way brings back its **database only**: the server never takes keys or an admin password from it. Anyone who has seen one of your backup files can make a file like it, locked to your recovery code, so don't let through a machine you don't know.
 - **A backup that is not locked (.tar.gz)** restores with the Restore Database Wizard, as before. It brings back the database only; copy genesis.json, community.key, recovery-seal.key, open-join.key and the other key files back by hand if they were lost. Without this community's recovery-seal.key, the members' sign-in recovery copies locked with it don't open: the server's log says how many, members' 12 words still work, and each member can connect their sign-in again. The phones' push addresses don't open either: the server removes them at its start and its log says how many ("Push tokens: removed …"); each phone gets notifications again once its app next opens. Without its open-join.key, a global community refuses anyone joining with a sign-in: the restore's answer and the server's log say so in one line starting "Open door: this server holds …", and every start repeats it. Copy the community's open-join.key into the data folder and the next person to join is let in (or told they already have an account), with no restart.

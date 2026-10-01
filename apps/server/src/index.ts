@@ -74,6 +74,7 @@ import { initTunnelConnector } from './services/tunnel-connector.js';
 import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
 import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
@@ -133,6 +134,10 @@ async function main() {
     // arms for the role as it now stands; a role change after re-arms it (services/snapshot-scheduler.ts). On every
     // role it removes, each hour, the snapshots past their count or age.
     initSnapshotScheduler();
+    // Step 2.62: off-box backups (services/offbox-backups.ts): the main server's LOCKED backups to the S3-compatible
+    // stores its operator set, if any — none is built in or required. Each check reads the role, so a standby sends
+    // nothing; a server with no recovery code sends nothing and says why. The first check is a couple of minutes in.
+    initOffboxBackups();
 
     // Step 2.65: the recovery seal for the role as it now stands. initStateEngine installed it for the role it read; a
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.

@@ -16,6 +16,7 @@ export * from './recovery-split.js';
 export * from './two-layer-split.js';
 export * from './keeper-crypto.js';
 export * from './names-list-crypto.js';
+export * from './names-list-trust.js';
 export * from './sealed-envelope.js';
 export * from './recovery-self-check.js';
 export * from './protocol.js';

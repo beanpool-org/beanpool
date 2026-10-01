@@ -16,7 +16,8 @@ export interface SavedNode {
     currencyValue?: string;
     /**
      * What the node's /api/community/info said about request signing (request-signing-version.ts): 2 or more for
-     * a server that reads format 2, 1 when it answered without saying. Absent: not asked yet (format 2 is used).
+     * a server that reads format 2, 1 when it answered without saying. Never lowered once 2: a later answer without it
+     * changes nothing (one way only). Absent: not asked yet (format 2 is used).
      */
     requestSigning?: number;
 }

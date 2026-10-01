@@ -266,7 +266,7 @@ function evaluate(s: HealthState, t: number): void {
         const to = owners();
         incident.pushed = to.length === 0 ? 0 : dispatchPushNotification(
             to, 'SYSTEM', PUSH_TITLE, pushBody(problems),
-            { kind: 'standby_health', incidentId: incident.id, section: 'home' }, 'marketplace',
+            { kind: 'standby_health', incidentId: incident.id, section: 'home' }, 'marketplace', 'owner.standby',
         );
         incident.pushedAt = t;
     } catch (e) {

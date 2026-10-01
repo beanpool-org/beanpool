@@ -16,7 +16,7 @@
  *      by every module that reads a point from a query) is one this suite measures below; one that isn't fails here
  *   3. the guest shape: every listing there, every person neutral (`'hidden'`, `''`, null, 0), the counts kept,
  *      'pending' kept, the area for the place; direct, group and hidden posts out; one member's listings, a group's or
- *      a person's refused 403; the membership probe names only the signer; the Commons decisions, pool balance and
+ *      a person's refused 403; the membership probe answers only the key it asks about; the Commons decisions, pool balance and
  *      Pulse feed for members only; `X-BeanPool-View: guest`
  *   4. a member's body is the engine's member read, byte for byte, with `X-BeanPool-View: member`
  *   5. ETag: a guest's token never gets a member a 304, a member's never gets a guest one, a key that joins or is
@@ -40,7 +40,7 @@
  *      runs section 2's sweep too (nothing public there names a member to a guest), and then its own: the listings and
  *      every other read that names people (the Commons decisions, the Pulse feed, the enterprises, crowdfunds and
  *      projects) are refused to a guest with code members_only and the global community's address, and no view header
- *      is sent; the Commons pot stays public; the membership probe names nobody; faces are public by key, avatar URLs
+ *      is sent; the Commons pot stays public; the membership probe answers only the key it asks about; faces are public by key, avatar URLs
  *      carry no `k=` (a listing's photo URL carries its key: the listings are members'), and the recovery lookup matches
  *      the whole name only, with no photo or join date; where an operator keeps the directory there, the landing card's
  *      count is a member's from each listing's place and anyone else's from its area, so bisecting it finds the area; a
@@ -675,9 +675,10 @@ async function main(): Promise<void> {
             const refused = await call('GET', id, `${POSTS}?${q}`);
             assert(refused.status === 403 && refused.body?.code === 'members_only', `${who}: ?${q.split('=')[0]}=… is refused 403 members_only (got ${refused.status})`);
         }
+        // Answered only to the key it asks about (multi-community review F3): refused, saying nothing of Alice's key.
         const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
-        assert(probe.status === 200 && probe.body?.isMember === true && probe.body?.callsign === null,
-            `${who}: the membership probe says Alice's key is a member and names nobody (got ${JSON.stringify(probe.body)})`);
+        assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
+            `${who}: the membership probe is refused, and says nothing of Alice's key (got ${probe.status} ${JSON.stringify(probe.body)})`);
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const gated = await call('GET', id, p);
             assert(gated.status === (id ? 403 : 401), `${who}: ${p} is for members only (got ${gated.status})`);
@@ -694,7 +695,8 @@ async function main(): Promise<void> {
         const own = await call('GET', alice, `/api/community/membership/${alice.pk}`);
         assert(own.body?.callsign === 'SentinelAlice', `the membership probe, signed by that very key, names its holder (got ${JSON.stringify(own.body)})`);
         const other = await call('GET', bob, `/api/community/membership/${alice.pk}`);
-        assert(other.body?.callsign === null, 'signed by another member, it names nobody either');
+        assert(other.status === 403 && !('isMember' in (other.body ?? {})) && !other.text.includes('SentinelAlice'),
+            `signed by another member, it is refused and names nobody either (got ${other.status} ${other.text.slice(0, 80)})`);
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const r = await call('GET', bob, p);
             assert(r.status === 200, `a member reads ${p} (got ${r.status})`);
@@ -1296,7 +1298,7 @@ async function main(): Promise<void> {
             'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
-            'GET /api/notices', 'POST /api/notices/seen',
+            'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
@@ -1582,8 +1584,10 @@ async function main(): Promise<void> {
                     && r.headers.get('x-beanpool-view') === null && !r.text.includes(alice.pk) && !r.text.includes('Sentinel'),
                     `${who} ${p.replace(POSTS, '')}: refused members_only, naming the global community, with nothing of a listing (got ${r.status})`);
             }
+            // Answered only to the key it asks about (multi-community review F3), here as on global.
             const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
-            assert(probe.body?.isMember === true && probe.body?.callsign === null, `${who}: the membership probe says the key is a member, and not its name (${JSON.stringify(probe.body)})`);
+            assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
+                `${who}: the membership probe is refused, and says nothing of the key (${probe.status} ${JSON.stringify(probe.body)})`);
             for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/pulse/feed', '/api/enterprises', `/api/enterprise/${enterprise}`,
                 `/api/treasury/${enterprise}`, '/api/crowdfund/projects', `/api/crowdfund/projects/${crowdfund}`, '/api/commons/projects']) {
                 const r = await call('GET', id, p);

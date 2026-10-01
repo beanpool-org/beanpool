@@ -33,7 +33,7 @@ Your report goes to your community's moderators: the owners and admins who run i
 - **A Pulse post, an enterprise or a person:** you are not told the outcome in the app.
 - Nobody is told who reported. Not the person you reported, and not anyone else who reported the same thing.
 
-These alerts come under **Marketplace Activity** in your notification settings. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.
+These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only "Your community has a notice for you."; open BeanPool to read it. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.
 
 If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
 

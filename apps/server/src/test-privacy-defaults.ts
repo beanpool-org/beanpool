@@ -35,7 +35,8 @@
  *      visitor's row (403), with code members_only and the global community's address, trailing slash and HEAD too; a
  *      member reads each in full, naming its people, and so does a suspended one. The totals stay public (the Commons
  *      pot, the community's info). The recovery lookup matches the whole name only, with no photo or join date; the
- *      membership probe names a key only to its own signer; the name check is rate-limited per address; the trust
+ *      membership probe answers only the key it asks about, whether it is a member as well as its name (multi-community
+ *      review F3); the name check is rate-limited per address; the trust
  *      profile answers only a member, and a redeem gives an existing member's card only to that member's own key.
  *      Settings lists the enterprises with the admin password. A key-less socket hears no doorbell for any of them.
  *
@@ -709,11 +710,12 @@ async function main() {
             && hit[0].avatarUrl === null && hit[0].joinedAt === null && !exact.text.includes('data:image'),
             `the whole name finds Alice, with her key and no photo or join date (got ${exact.text.slice(0, 160)})`);
 
-        // F3: whether a key is a member stays public; its name goes only to that key's own signer.
+        // F3: the membership probe answers only the key it asks about (multi-community review F3, 2026-10-01): to anyone
+        // else, whether the key is a member is as private as its name.
         for (const [who, id] of [['a stranger (unsigned)', undefined], ['a key that is no member here', outsider], ["a visitor's row", vera], ['Carol, another member', carol]] as const) {
             const r = await get(`/api/community/membership/${alice.pk}`, id);
-            assert(r.status === 200 && r.body?.isMember === true && r.body?.callsign === null && !r.text.includes('PrivAlice'),
-                `${who}: the membership probe says Alice's key is a member, and not her name (got ${r.text.slice(0, 90)})`);
+            assert(r.status === (id ? 403 : 401) && !('isMember' in (r.body ?? {})) && !r.text.includes('PrivAlice'),
+                `${who}: the membership probe is refused, and says nothing of Alice's key (got ${r.status} ${r.text.slice(0, 90)})`);
         }
         const own = await get(`/api/community/membership/${alice.pk}`, alice);
         assert(own.body?.isMember === true && own.body?.callsign === 'PrivAlice', `signed by Alice's own key, it names her (got ${own.text.slice(0, 90)})`);

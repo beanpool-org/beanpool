@@ -475,6 +475,7 @@ export function proposeGroupConvenor(
             : 'The group opened a vote on a new lead convenor. Open the group to see it.',
         { screen: 'chat', conversationId: groupId, groupId },
         'chat',
+        'group.lead',
     );
     const after = db.prepare('SELECT * FROM group_convenor_proposals WHERE id = ?').get(id) as any;
     return { proposal: toInfo(after, proposerPubkey), executed: outcome === 'passed' };

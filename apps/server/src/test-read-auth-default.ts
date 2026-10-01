@@ -15,7 +15,8 @@
  *      identity exists) and signed by a key that is NOT a member here (the PWA guest of #849/#850,
  *      which holds a keypair and signs every read); that guest is still refused private reads (403),
  *      a local community's listings, and its other reads that name members (its enterprises, Commons Decisions,
- *      projects, crowdfunds and Pulse feed, 2026-10-01): 401/403 naming the global community
+ *      projects, crowdfunds and Pulse feed, 2026-10-01): 401/403 naming the global community; the membership probe
+ *      answers only the key it asks about (multi-community review F3)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-read-auth-default.ts
  */
@@ -139,7 +140,8 @@ async function main() {
         '/api/pricing-guide',
         '/api/federation/links',
         '/api/federation/reachable-peers',
-        `/api/community/membership/${alice.pubKeyHex}`,
+        // Not /api/community/membership/<key>: it answers only the key it asks about (multi-community review F3,
+        // 2026-10-01), so a guest asking about Alice is refused below and asks about itself instead.
         '/api/members/callsign-available/somebody-new',
     ];
     const { publicKey: gPub, privateKey: gPriv } = crypto.generateKeyPairSync('ed25519');
@@ -154,6 +156,16 @@ async function main() {
         const g = await get(path, guest);
         assert(g.status === 403, `non-member guest, signed, is refused ${what} (got ${g.status})`);
     }
+    // The membership probe: only the key it asks about hears the answer. The guest asks about itself, as the apps do.
+    const probeAlice = `/api/community/membership/${alice.pubKeyHex}`;
+    const probeUnsigned = await get(probeAlice);
+    const probeGuest = await get(probeAlice, guest);
+    const probeOwnGuest = await get(`/api/community/membership/${guest.pubKeyHex}`, guest);
+    const probeOwnAlice = await get(probeAlice, alice);
+    assert(probeUnsigned.status === 401 && probeGuest.status === 403,
+        `the membership probe about Alice is refused unsigned (401) and to the guest (403) (got ${probeUnsigned.status}, ${probeGuest.status})`);
+    assert(probeOwnGuest.status === 200 && probeOwnAlice.status === 200,
+        `the guest asking about itself, and Alice about herself, are answered (got ${probeOwnGuest.status}, ${probeOwnAlice.status})`);
     // The listings: refused to both, in words that send them to the global community.
     const boardUnsigned = await get('/api/marketplace/posts');
     const boardGuest = await get('/api/marketplace/posts', guest);

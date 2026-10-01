@@ -9,11 +9,12 @@
 // None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
 // moderators", and each reporter hears only about their own report.
 
+import type { PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { keepNotice } from './kept-notices.js';
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => void;
 
 export interface ModerationNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -91,7 +92,7 @@ function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string
         }
     }
     try {
-        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace');
+        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace', 'community.notice');
     } catch (e: any) {
         console.warn('[Moderation] Push failed:', e?.message || e);
     }

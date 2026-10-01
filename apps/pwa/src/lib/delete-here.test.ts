@@ -7,6 +7,9 @@
  * a stub.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { signedRequestBytes, signedRequestText } from '@beanpool/core';
 
 // The purge goes through api.ts `request`, which signs with the browser's key: none here (no IndexedDB in the tests).
 vi.mock('./identity', async () => ({ ...(await vi.importActual('./identity')), loadIdentity: vi.fn(async () => null) }));
@@ -15,17 +18,19 @@ import {
     membershipAt, otherCommunityOfThisBrowser, planWebDelete, purgeHere, webDeleteFailedLine, webKeepsKeyLine,
     webLastCommunityLine,
 } from './delete-here';
+import { loadIdentity, type BeanPoolIdentity } from './identity';
 
 const KEY = 'a'.repeat(64);
 const CASTLEMAINE = 'https://castlemaine.beanpool.org';
 
 type Answer = 'member' | 'stranger' | 'recovering' | 'down' | 'refused' | 'not-json' | 'odd' | 'silent';
 
-function pageNodeAnswers(answer: Answer) {
+function pageNodeAnswers(answer: Answer, sent: RequestInit[] = []) {
     const asked: string[] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
         asked.push(url);
+        sent.push(init ?? {});
         if (answer === 'down') throw new TypeError('Failed to fetch');
         if (answer === 'silent') {
             return new Promise<Response>((_resolve, reject) => {
@@ -104,6 +109,34 @@ describe('the plan', () => {
             if (plan.kind === 'this-one') expect(webKeepsKeyLine(plan, false)).toContain('couldn\'t be reached, so it counts as a community you are still in.');
         });
     }
+
+    it('the probe is signed by the key it asks about, for the host it asks: the only probe a community answers (F3)', async () => {
+        const seed = '05'.repeat(32);
+        const kim = {
+            publicKey: bytesToHex(ed25519.getPublicKey(hexToBytes(seed))), privateKey: seed, callsign: 'Kim',
+        } as BeanPoolIdentity;
+        vi.mocked(loadIdentity).mockResolvedValue(kim);
+        try {
+            const sent: RequestInit[] = [];
+            pageNodeAnswers('member', sent);
+            expect(await membershipAt(window.location.origin, kim.publicKey)).toBe('member');
+            const h = sent[0].headers as Record<string, string>;
+            const host = window.location.hostname;
+            expect(h['X-Public-Key']).toBe(kim.publicKey);
+            expect(h['X-Signed-For']).toBe(host);
+            const text = signedRequestText({
+                host, method: 'GET', path: `/api/community/membership/${kim.publicKey}`, timestamp: h['X-Timestamp'], nonce: h['X-Nonce'], body: '',
+            });
+            const signature = Uint8Array.from(atob(h['X-Signature']), (c) => c.charCodeAt(0));
+            expect(ed25519.verify(signature, signedRequestBytes(text), hexToBytes(kim.publicKey))).toBe(true);
+
+            // A key this browser doesn't keep goes unsigned (and a community refuses it, which is no answer).
+            await membershipAt(window.location.origin, KEY);
+            expect(sent[1].headers).toEqual({ Accept: 'application/json' });
+        } finally {
+            vi.mocked(loadIdentity).mockResolvedValue(null);
+        }
+    });
 
     it('a recovering key is a member', async () => {
         pageNodeAnswers('recovering');

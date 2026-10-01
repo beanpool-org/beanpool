@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, type PushNoticeKind } from '@beanpool/core';
 import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -30,7 +30,7 @@ import { unmutedRecipients } from './chat-mutes.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
 type RegisterVisitorFn = (pubkey: string) => void;
 
 export interface MessagingCallbacks {
@@ -428,7 +428,8 @@ export function sendMessage(
             '💬 New Message',
             `${senderName} sent you a message`,
             { screen: 'chat', conversationId: effectiveConvId },
-            'chat'
+            'chat',
+            'chat.message'
         );
     }
 

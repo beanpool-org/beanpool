@@ -7,6 +7,7 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { useIdentity } from '../IdentityContext';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { makeOfflineTicket } from '../../utils/member-statements';
+import { fetchMembership } from '../../utils/membership-probe';
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -21,10 +22,14 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import {
+    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
+    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
+} from '../../utils/invite-entries';
 import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
+import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -201,6 +206,30 @@ export default function PeopleScreen() {
     const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
     const accountClosed = useAccountClosedAtGlobal(identity?.publicKey);
     const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed });
+    // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
+    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
+    const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        setInviteRole(undefined);
+        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
+        let alive = true;
+        askNodeRole(anchorUrl, identity).then(async r => {
+            if (r) {
+                // Heard: remember it (header cache and phone storage) for the next time there is no signal.
+                rememberNodeRole(anchorUrl, identity.publicKey, r);
+                void persistNodeRole(anchorUrl, identity.publicKey, r.role);
+                if (alive) setInviteRole(r.role);
+                return;
+            }
+            // No answer (offline): the last role this node gave for this key, so an owner or admin can still make a ticket.
+            const last = await readPersistedNodeRole(anchorUrl, identity.publicKey);
+            if (alive && last !== undefined) setInviteRole(last);
+        });
+        return () => { alive = false; };
+    }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
+    const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -239,7 +268,8 @@ export default function PeopleScreen() {
                 setAnchorUrl(val);
                 if (identity?.publicKey) {
                     try {
-                        const res = await fetch(`${val}/api/community/membership/${identity.publicKey}`);
+                        // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                        const res = await fetchMembership(val, identity);
                         if (res.ok) {
                             const data = await res.json();
                             setIsGuest(!data.isMember);
@@ -413,14 +443,31 @@ export default function PeopleScreen() {
                 } else {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
                     // make no offline ticket, which it would refuse just the same.
-                    const refusal = invitesOffRefusal(res.status, await res.json().catch(() => null));
+                    const body = await res.json().catch(() => null);
+                    const refusal = invitesOffRefusal(res.status, body);
                     if (refusal) {
                         Alert.alert('No invites here', refusal);
+                        return;
+                    }
+                    // Only admins invite here (this phone hadn't heard it yet, or the member's role changed): the node's
+                    // words, and no offline ticket, which it would refuse at the join.
+                    const adminsOnly = adminsOnlyRefusal(res.status, body);
+                    if (adminsOnly) {
+                        setInviteRole(null);
+                        if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
+                        Alert.alert('Only admins invite here', adminsOnly);
                         return;
                     }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
+            if (!mayMakeOfflineTicket(nodeProfile?.features, inviteRole)) {
+                const refusal = offlineTicketRefusal(inviteRole);
+                Alert.alert(refusal.title, refusal.text);
+                return;
             }
 
             // Offline Fallback
@@ -492,7 +539,8 @@ export default function PeopleScreen() {
             if (targetNodeUrl === anchorUrl) {
                 let isMember = false;
                 try {
-                    const res = await fetch(`${targetNodeUrl}/api/community/membership/${identity?.publicKey}`);
+                    // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                    const res = await fetchMembership(targetNodeUrl, identity ?? '');
                     if (res.ok) {
                         const data = await res.json();
                         isMember = !!data.isMember;
@@ -947,6 +995,24 @@ export default function PeopleScreen() {
                                     >
                                         <Text style={styles.btnGenerateText}>📤 Share the link</Text>
                                     </Pressable>
+                                </>
+                            ) : !mayInvite ? (
+                                // Only its admins invite here, and this member is no owner or admin: no code, QR or offline
+                                // ticket. Where the community takes requests to join, its link lets someone ask, for an admin to answer.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>{adminsOnlyText(takesKnocks)}</Text>
+                                    {takesKnocks && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Share this community's link"
+                                            style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                            onPress={shareCommunityLink}
+                                            disabled={!anchorUrl}
+                                        >
+                                            <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                        </Pressable>
+                                    )}
                                 </>
                             ) : (
                             <>

@@ -8,6 +8,7 @@ import { sortMyEvents, type MyEvent } from './event-extras';
 import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
@@ -86,7 +87,14 @@ function releaseSyncLock() {
 let currentDbName: string | null = null;
 let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/**
+ * Resolves once this phone's community copies have the names that give every community its own file
+ * (cache-file-migration.ts). Nothing opens a copy or reads its sync cursors before then.
+ */
+export { communityCachesRenamed };
+
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
+    await communityCachesRenamed();
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     const expectedDbName = getDatabaseFilenameForNode(url);
 
@@ -3219,6 +3227,7 @@ export async function syncMessages(publicKey: string) {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return;
         
+        await communityCachesRenamed();
         const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
         const kLastMembersSync = `pillar_sync_${expectedDbName}_members_last_sync`;
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
@@ -4214,7 +4223,8 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }

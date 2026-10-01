@@ -27,6 +27,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import {
     initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     submitReport, actionReport, adminDeletePost as adminDeletePostStateful,
@@ -285,10 +286,12 @@ async function main(): Promise<void> {
 
     // The whole way through: report → admin actions it → Expo. This is the path §2.5 describes.
     const realFetch = globalThis.fetch;
-    const sent: any[] = [];
+    // Each push as its member is told it (push-notice-test-harness.ts): the lock screen shows only the kind's fixed words,
+    // and "Event cancelled" is the notice's details, which the app reads from this server.
+    const sent: ToldPush[] = [];
     (globalThis as any).fetch = async (url: any, init: any) => {
         if (String(url).includes('exp.host')) {
-            sent.push(...JSON.parse(init.body));
+            sent.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
             return { ok: true, status: 200, json: async () => ({}) } as any;
         }
         return realFetch(url, init);
@@ -306,7 +309,9 @@ async function main(): Promise<void> {
         assert(sent.length === 1 && sent[0]?.to === 'ExponentPushToken[goer]',
             'and the member marked Going is pushed to');
         assert(sent[0]?.channelId === 'marketplace' && sent[0]?.title === EVENT_CANCELLED_PUSH_TITLE,
-            'on the marketplace Android channel, so no app in the store needs an update');
+            'on the marketplace Android channel, so no app in the store needs an update (its details say the event is off)');
+        assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.update' && !JSON.stringify(sent[0]?.sent).includes(wired.id),
+            `its lock screen shows only "There is news about an event you're going to.", with no post id (${sent[0]?.sent?.body})`);
 
         // A reported listing that is not an event still sends nothing on this path.
         const offerReported = createPostEngine(capture, 'offer', 'other', 'Dodgy', 'Nope', 1, 'fixed', host,

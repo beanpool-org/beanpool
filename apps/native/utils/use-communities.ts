@@ -7,6 +7,7 @@ import { getSavedNodes, removeSavedNode, addSavedNode, isGuestNode } from './nod
 import { assertPlainNodeAddress } from './node-url';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { communityName, realName } from './community-name';
+import { fetchMembership } from './membership-probe';
 
 // The communities this phone knows, for the BeanPool sheet: which one is in use, whether each answers and
 // whether the member belongs to it, and switching between them. It used to live in the header's own modal;
@@ -22,11 +23,11 @@ export interface CommunityRow {
 
 const PING_MS = 4000;
 
-async function getJson(url: string): Promise<any | null> {
+async function getJson(url: string | ((signal: AbortSignal) => Promise<Response>)): Promise<any | null> {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), PING_MS);
     try {
-        const r = await fetch(url, { signal: controller.signal });
+        const r = typeof url === 'string' ? await fetch(url, { signal: controller.signal }) : await url(controller.signal);
         return r.ok ? await r.json() : null;
     } catch {
         return null;
@@ -74,7 +75,8 @@ export function useCommunities() {
                 let member: boolean;
                 if (!me) member = false;
                 else {
-                    const m = await getJson(`${n.url}/api/community/membership/${me}`);
+                    // Signed by the key (membership-probe.ts): each community answers only its own key.
+                    const m = await getJson((signal) => fetchMembership(n.url, identity ?? me, signal));
                     member = m ? !!m.isMember : !(await isGuestNode(n.url).catch(() => false));
                 }
                 patch(n.url, { status: member ? 'online' : 'guest' });

@@ -202,6 +202,8 @@ lookup and a Cloudflare-API zone check are only belt-and-suspenders at mint time
 | `POST /api/registrar/claim` | `{ name, mode, origin, contact? }` | Atomic reserve → probe → `pending`. Returns `{ status:'pending' }` or `409`. |
 | `GET  /api/registrar/status` | (signed) | Node polls: `pending` / `live` (+ `tunnelToken`, `hostname`) / `revoked`. |
 | `POST /api/registrar/offline` | (signed) | Operator tears their own name down. |
+| `POST /api/registrar/heal` | `{ name?, origin? }` | The owner brings its own held name back (a pause its heal lifts): routed again once the node proves its key. Never a claim. |
+| `POST /api/registrar/rotate` | `{ name?, origin? }` | The owner's tunnel name onto a fresh tunnel: the old one (and every copy of its token) deleted, the record re-pointed, the new token answered. Settings' **New tunnel key**. |
 
 `origin` is where Cloudflare/cloudflared should send traffic: the node's own loopback, `http://127.0.0.1:PORT` (its plain
 HTTP listener, [http-server.ts](../apps/server/src/http-server.ts)), since cloudflared runs inside the node's container.
@@ -344,6 +346,23 @@ lands on us. So abuse controls ship **with** the registrar, not after.
    offline it is **not** taken away; it just isn't reachable until it's back. It's only auto-removed if
    your node starts serving something that isn't beanpool, if you take it offline yourself, or if an
    admin revokes it."*
+
+   **As built (2026-10-02, after the 2026-09-24 incident; design `scratch/registrar/DESIGN-2026-09-24-fable.md`
+   §2.3, decision D2 = b; M3 of the 2026-10-01 review):** nothing auto-*removes* a name any more — a failed check
+   can only **pause routing**, and the name stays its key's (no other key may claim it). Verdicts: `ok`;
+   `impostor` (a valid signature by ANOTHER node key over our fresh nonce: 2 sweeps in a row pause it); a
+   **content swap** (a 2xx that is no attest at all — a page; a BeanPool node never answers one: 12 applied
+   sweeps in a row, about an hour, pause it, and only in sweeps that saw the verifier working, the canary `ok` or
+   with none some name `ok`); and `unverifiable` (anything else: down, 5xx, an unknown signing format — never
+   evidence). While a run is open, an `ok` is asked again (three answers in all), so a second connector on a copy
+   of the tunnel token can't hide behind the owner's answers. A sweep with too many foreign answers at once
+   (impostors and swaps together > max(2, 10% of live), or every live name) is the registrar's fault and acts on
+   none. A pause deletes the tunnel and the record; the owner's node asks for the name back by itself (a heal,
+   never a claim: on the agent's next tick, or when its dead tunnel is noticed), and it is routed again once the
+   node proves its key — on a fresh tunnel only its signed request gets the token of, or (a direct name) through
+   an attest at the name under its key. Only an admin pause needs the admin. The holder can also **rotate**
+   (Settings' New tunnel key): its name onto a fresh tunnel, the old token dead at once — for a token that may
+   have leaked (a copied data folder or backup, a standby given away). See `apps/registrar/README.md`.
 2. **Approval gate.** Manual approval on `gated` names now (paper trail, bound to pubkey + contact);
    auto for the rest. Fast one-click **revoke** always available.
 3. **Raise the cost of anonymity.** Registration binds `name → node_pubkey` + a contact / an existing

@@ -3,11 +3,10 @@
  */
 
 import Router from '@koa/router';
-import { getVersion } from '../version.js';
+import { getVersion, getCommit } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'node:child_process';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
     getNodeRole, getMemberStats, type NodeConfig,
@@ -352,14 +351,7 @@ router.get('/api/directory/info', async (ctx) => {
 // ===================== VERSION & UPDATES =====================
 
 // Version now lives in ../version.js so /api/version and /api/community/health
-// cannot drift apart again.
-
-// Get git commit hash
-function getCommitHash(): string {
-    try {
-        return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    } catch { return 'unknown'; }
-}
+// cannot drift apart again. So does the commit, asked of git once rather than on every request.
 
 // ===================== BACKGROUND UPDATE CHECKER =====================
 let cachedUpdateInfo: {
@@ -430,7 +422,7 @@ router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     ctx.body = {
         version: getVersion(),
-        commit: getCommitHash(),
+        commit: getCommit(),
         buildTime: new Date().toISOString(),
         node: process.env.CF_RECORD_NAME || 'local',
         // Include cached update info if available

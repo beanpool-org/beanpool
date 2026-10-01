@@ -9,12 +9,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 let cached: string | null = null;
+let cachedCommit: string | null = null;
 
 export function getVersion(): string {
     if (cached === null) cached = resolveVersion();
     return cached;
+}
+
+/**
+ * The commit this server runs (git's short hash of the working directory's checkout), or 'unknown' where there is no
+ * git (the image has none). Asked of git once and kept: /api/version answers it to anyone, and running git for every
+ * request blocked the event loop for about 6 ms each time, 149 requests a second where a 401 path answers 19,000 (the
+ * confirm review of #1384).
+ */
+export function getCommit(): string {
+    if (cachedCommit === null) {
+        try {
+            cachedCommit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+        } catch { cachedCommit = 'unknown'; }
+    }
+    return cachedCommit;
 }
 
 function resolveVersion(): string {

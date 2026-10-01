@@ -263,6 +263,7 @@ export const SUITES = [
     'test-escrow-floor',
     'test-escrow-write-off',
     'test-version-resolution',
+    'test-version-route',
     'test-avatar-endpoint',
     'test-avatar-keys',
     'test-etag-short-circuit',

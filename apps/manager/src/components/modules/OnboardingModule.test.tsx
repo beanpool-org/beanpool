@@ -220,6 +220,7 @@ describe('OnboardingModule', () => {
                 { day: '2026-09-01', event: 'open_join_failed', variant: 'rate_limited', count: 2 },
                 { day: '2026-09-02', event: 'open_join_failed', variant: 'already_joined', count: 1 },
                 { day: '2026-09-02', event: 'open_join_failed', variant: 'door_key_missing', count: 3 },
+                { day: '2026-09-02', event: 'open_join_failed', variant: 'ticket_signature', count: 4 },
             ],
         });
 
@@ -237,6 +238,8 @@ describe('OnboardingModule', () => {
         expect(reason('That sign-in already joined here')).toHaveTextContent('1');
         expect(reason("This server can't check sign-ins: its open-door key is missing")).toHaveTextContent('3');
         expect(within(section).queryByText('door_key_missing')).not.toBeInTheDocument();
+        expect(reason('Key vault ticket not signed by a key this server lists')).toHaveTextContent('4');
+        expect(within(section).queryByText('ticket_signature')).not.toBeInTheDocument();
         expect(within(section).queryByText(/Nobody used the open door/i)).not.toBeInTheDocument();
         expect(within(section).queryByText(/Nobody was turned away/i)).not.toBeInTheDocument();
     });

@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 88,
-  "hash": "a996a85d71ff5f955f2ac8d800df701c298ad7b446d784b03690d670a2152a39",
+  "version": 89,
+  "hash": "9bf41ec5cc907526718d692bdb0dab2058bc80f87b55408ce48bee844ae141b0",
   "sections": [
     {
       "id": "setup",
@@ -156,7 +156,7 @@
             "**Step 2** also explains how your phone becomes an owner. See The first owner below.",
             "**Step 3** can create your first enterprise and post its first offer. If a member is already an owner, it makes them the enterprise's first keeper. On a new server nobody is, so it says no keeper will be set; add one later under Shared Projects & Economy. If any part fails, it shows the server's reason, with **Retry** (which repeats only the parts that failed) and **Continue anyway**.",
             "**Step 4** explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.",
-            "**Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety."
+            "**Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety. On the global community it always refuses, because invites are off there: skip it."
           ]
         },
         {
@@ -184,6 +184,10 @@
         {
           "type": "p",
           "text": "When the first real people have joined, give owner to at least one of them. As the password holder, open People & Safety, open the person and choose **👑 Grant Owner**. Settings now has an owner who can sign in from their phone. Keep at least two owners."
+        },
+        {
+          "type": "p",
+          "text": "**On the global community** there is no first invite and no Admin member, because invites are switched off there (see Members and invites). The first owner joins like everyone else: in the BeanPool app, through the open door, with a sign-in. Then, as the password holder, open People & Safety, open that member and choose **👑 Grant Owner**. From then on their phone opens Settings as owner from the app's Manage button."
         },
         {
           "type": "h2",
@@ -886,7 +890,7 @@
         },
         {
           "type": "p",
-          "text": "The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up."
+          "text": "The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up. The global community has no such member: invites are off there, and its first owner joins through the open door and is made owner with the admin password."
         }
       ]
     },
@@ -909,7 +913,7 @@
         },
         {
           "type": "p",
-          "text": "Nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join."
+          "text": "On a local community, nobody joins without an invite. An invite code looks like INV-XXXX-XXXX. It works once and expires **30 days** after it is made. One nobody used is then deleted, and leaves the member's Pending list. The name an invite is made out to is only a label: the person picks their own name when they join."
         },
         {
           "type": "p",
@@ -918,6 +922,14 @@
         {
           "type": "p",
           "text": "Joining with a code is signed by the new member's own key, from the app or the web app they join in. So someone holding a code can only join as themselves: they can't use it to add a key that belongs to somebody else."
+        },
+        {
+          "type": "p",
+          "text": "**On the global community it is the other way round: nobody joins with an invite.** Invites are switched off there. No member, admin or owner can make one, in the app or in Settings, and a code or a paper ticket made before is refused too. Everyone joins through the open door with a sign-in, and one sign-in account is one member (see Open door, below). Without that, one sign-in could make invites for hundreds of accounts that no sign-in stands behind. The app's **Invites** shows **Bring someone here** instead, with the community's link to share. Someone there who asks to join a local community is let in by that community, with its own invite."
+        },
+        {
+          "type": "p",
+          "text": "**The key vault at the global community's door.** An app built with BeanPool's key vault can tie its sign-in at the door to a ticket from the vault, so that one sign-in both joins and keeps the member's sign-in copy at the vault. The door checks the ticket itself, with the vault's public keys, which go in the server's .env as BEANPOOL_VAULT_TICKET_KEYS: the same value the app is built with, newest key first, two at most. The server never contacts the vault and keeps nothing of the ticket. Give a standby the same line in its own .env: it is not copied. Without the line, or with one that isn't one or two keys of 64 characters (0–9 and a–f), the door takes no tickets. The log says so when the server starts, the door tells every app that asks, and an app then joins with the door's own sign-in check, as before. **On any other server, leave it empty:** your door, if it is open, needs nothing of BeanPool's."
         },
         {
           "type": "h2",
@@ -931,7 +943,7 @@
           "type": "ul",
           "items": [
             "Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.",
-            "If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server.",
+            "If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: \"This community doesn’t use invites\".",
             "In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or \"the admin password\"), in its security log."
           ]
         },
@@ -975,7 +987,7 @@
         },
         {
           "type": "p",
-          "text": "**Open door.** The open door lets someone join by signing in with an account they already have, such as Google or Apple, instead of using an invite code. It is open on the global community; on a local one it is normally shut, and the screen says which yours is. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **too many new accounts from one network** (the door takes 5 an hour and 20 a day from one address) and **that sign-in already joined here** (one sign-in account is one member). With the door shut, these stay at 0."
+          "text": "**Open door.** The open door lets someone join by signing in with an account they already have, such as Google or Apple, instead of using an invite code. It is open on the global community; on a local one it is normally shut, and the screen says which yours is. **Tried to join this way** counts attempts, like the codes. **Joined this way** counts people, and every one of them is also in **Joined** at the top. Underneath is why anyone was turned away. The usual ones are **too many new accounts from one network** (the door takes 5 an hour and 20 a day from one address) and **that sign-in already joined here** (one sign-in account is one member). On the global community you may also see a **key vault ticket** turned away, as expired, not signed by a key this server lists, and so on. A run of those usually means this server's clock is wrong, or its BEANPOOL_VAULT_TICKET_KEYS is not the vault's: the log says which. With the door shut, these stay at 0."
         },
         {
           "type": "p",
@@ -1420,7 +1432,8 @@
             "A 7-day vote opens: \"Keep the suspension?\". One member, one vote, 60% to keep it.",
             "If it does not pass, the suspension lifts by itself and their role comes back.",
             "You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.",
-            "The suspended person gets no notification. Tell them yourself."
+            "The suspended person gets no notification. Tell them yourself.",
+            "In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead stays its lead: suspending someone never moves a group to anyone else."
           ]
         },
         {
@@ -1434,6 +1447,10 @@
         {
           "type": "p",
           "text": "Only the community removes a member, by a Decision. When it passes, the person is suspended and frozen at once, and has **7 days' grace**. After that they are removed automatically, and their balance or debt goes to the commons."
+        },
+        {
+          "type": "p",
+          "text": "No Decision can remove or suspend an owner or admin of your server, one whose role a suspension has set aside included: the app refuses it when someone proposes it, and one that was already open is stopped before it is carried out. The people who run the server cannot be voted out of it. If an admin must go, an owner takes the role away first; after that they are a member like any other."
         },
         {
           "type": "h2",

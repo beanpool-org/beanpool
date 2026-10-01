@@ -22,12 +22,14 @@ import {
 } from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 
-function decodeThreadText(ciphertext: string, type: string): string {
-    if (type === 'removed') return 'removed by a keeper';
+/** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
+function decodeThreadText(ciphertext: string, type: string, metadata?: string): string {
+    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : 'removed by a keeper';
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -2176,7 +2178,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {threadMessages.map((m) => {
                                         const isRemoved = m.type === 'removed';
                                         const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
-                                        const textContent = decodeThreadText(m.ciphertext, m.type);
+                                        const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata);
                                         return (
                                             <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
                                                 {m.authorAvatar ? (

@@ -181,6 +181,37 @@ describe('Enterprise Discussion Thread (PWA)', () => {
         expect(screen.getByText('DanActive')).toBeInTheDocument();
     });
 
+    it('reads a line whose author deleted their account as their own delete, not a keeper\'s removal', async () => {
+        vi.spyOn(api, 'getEnterpriseThread').mockResolvedValue({
+            conversation: { id: 'enterprise-bakery-pubkey', type: 'enterprise_thread' },
+            messages: [{
+                id: 'msg-1',
+                conversationId: 'enterprise-bakery-pubkey',
+                authorPubkey: 'citizen-dan-pubkey',
+                authorCallsign: 'Deleted Member',
+                ciphertext: btoa('This message was deleted'),
+                nonce: 'plaintext-v1',
+                type: 'removed',
+                metadata: JSON.stringify({ removed: true, removedBy: 'citizen-dan-pubkey', accountDeleted: true }),
+                timestamp: '2026-09-17T10:00:00.000Z',
+            }],
+            readOnly: false,
+        });
+
+        render(
+            <TreasuryDetailPage
+                identity={mockKeeperIdentity}
+                pubkey="enterprise-bakery-pubkey"
+                onBack={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByText('This message was deleted')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('removed by a keeper')).not.toBeInTheDocument();
+    });
+
     it('shows Remove button to keepers and calls removeEnterpriseThreadMessage', async () => {
         const mockMessages: api.EnterpriseThreadMessage[] = [
             {

@@ -19,10 +19,14 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 
-/** Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. */
-export function decodeEventChatText(ciphertext: string, type: string): string {
-    if (type === 'removed') return 'removed by the host';
+/**
+ * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
+ * host's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts).
+ */
+export function decodeEventChatText(ciphertext: string, type: string, metadata?: string): string {
+    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : 'removed by the host';
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -236,7 +240,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
                                         <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
-                                            {decodeEventChatText(m.ciphertext, m.type)}
+                                            {decodeEventChatText(m.ciphertext, m.type, m.metadata)}
                                         </p>
                                         {view.isHost && !isRemoved && (
                                             <button

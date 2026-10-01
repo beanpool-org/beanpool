@@ -100,6 +100,7 @@ async function askPhoneLock(reason: string, door: boolean): Promise<boolean> {
     const lock = await getScreenLock();
     if (lock === 'none') return true;
     if (lock === 'unknown' && !((await hasLocalAuthHardware()) && (await isLocalAuthEnrolled()))) return true;
+    if (!door) appLockPromptOpened();
     try {
         const passCounts = door ? timeDoorPrompt() : () => true;
         const res = await phoneLockPrompt({
@@ -112,7 +113,43 @@ async function askPhoneLock(reason: string, door: boolean): Promise<boolean> {
     } catch (e) {
         console.warn('Local authentication error:', e);
         return false;
+    } finally {
+        if (!door) appLockPromptClosed();
     }
+}
+
+/**
+ * App Lock's own unlock prompt (authenticateForAppLock: the launch lock, Unlock App and the return lock's prompt), as
+ * apart from a door's. It takes the app out of the front while it is open (iOS's Face ID and passcode make it inactive,
+ * Android 8-10's PIN screen backgrounds it), and the full-screen "Update required" (utils/force-update.ts) must not take
+ * that for the member leaving: it comes at the very moments the update screen waits for, a cold start and a return. A
+ * door's prompt is the member in the middle of something (their words, a payment), so it is not counted here: the
+ * update screen never lands on it.
+ */
+let openAppLockPrompts = 0;
+let appLockCloseWaiters: Array<() => void> = [];
+
+function appLockPromptOpened(): void {
+    openAppLockPrompts++;
+}
+
+function appLockPromptClosed(): void {
+    if (--openAppLockPrompts > 0) return;
+    openAppLockPrompts = 0;
+    const waiters = appLockCloseWaiters;
+    appLockCloseWaiters = [];
+    waiters.forEach(resolve => resolve());
+}
+
+/** Whether App Lock's own unlock prompt is open now (from just before the phone's prompt opens until its answer). */
+export function isAppLockPromptOpen(): boolean {
+    return openAppLockPrompts > 0;
+}
+
+/** Resolves when no App Lock prompt is open: at once if none is. */
+export function whenAppLockPromptsClose(): Promise<void> {
+    if (openAppLockPrompts === 0) return Promise.resolve();
+    return new Promise(resolve => appLockCloseWaiters.push(resolve));
 }
 
 /**

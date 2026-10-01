@@ -17,7 +17,7 @@ import {
     getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner, findPendingReport, isReportRateLimited,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -83,6 +83,8 @@ import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
+import { getPlatformFloor } from '../app-store-versions.js';
+import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -889,7 +891,17 @@ router.get('/api/community/health', async (ctx) => {
     //
     // So this read never computes them (getPublicCommunityHealth): it ran the whole fraud analysis on every hit, and
     // threw it away, with no throttle in front of it. Its table counts are cached for a few seconds (DoS review F4).
-    ctx.body = getPublicCommunityHealth();
+    //
+    // An app that names its platform (X-BeanPool-App, app-version-counts.ts) gets that platform's floor as `minAppVersion`:
+    // the number its banner reads (apps/native GlobalHeader, utils/app-version.ts evaluateUpdate), so a floor set for one
+    // platform (MIN_APP_VERSION_IOS / _ANDROID) shows its "required" banner in the grace window before the full-screen
+    // update. Anything else (an older app, the web app, a monitor) can't say which kind of phone it is on, and gets the
+    // lower of the two platforms' floors (getUnnamedAppFloor): MIN_APP_VERSION, as always, unless both platforms have
+    // been raised past it.
+    const health = getPublicCommunityHealth();
+    const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
+    ctx.vary(APP_VERSION_HEADER);
+    ctx.body = app ? { ...health, minAppVersion: getPlatformFloor(app.platform) } : health;
 });
 
 /** The membership probe's refusal of an unsigned request (401) and of one signed by another key (403). */
@@ -1950,6 +1962,12 @@ router.post('/api/reports', async (ctx) => {
             return;
         }
         targetPubkey = owner;
+    } else {
+        // A report on a post is about its author, whatever targetPubkey the client sent: the moderators' screens open
+        // that member's group from it (engine/burst-cleanup.ts), so a reporter must not be able to pair a post with
+        // someone else. Every app sends the author already.
+        const author = getReportablePostAuthor(targetPostId);
+        if (author) targetPubkey = author;
     }
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;

@@ -62,6 +62,7 @@ import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
+import { communitySwitched } from '../utils/community-switch';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -816,6 +817,8 @@ export default function WelcomeScreen() {
                         // node (its database, its sync, the recheck below), and the phone may have none ("Wipe & Join Fresh"
                         // removes it) or another community's.
                         await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                        // The update screen asks the community now in use (utils/community-switch.ts).
+                        communitySwitched();
                         await clearPendingOnboarding();
                         await recheckNodeStatus().catch(() => {});
                         setIdentity(storedIdentity);
@@ -856,6 +859,8 @@ export default function WelcomeScreen() {
                 setCallsignSuggestions([]);
 
                 await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                // The update screen asks the community now in use (utils/community-switch.ts).
+                communitySwitched();
 
                 const identity = storedIdentity
                     ? { ...storedIdentity, callsign: callsign.trim() }
@@ -1432,6 +1437,8 @@ export default function WelcomeScreen() {
         // On the phone first, under the name the node kept: the wizard's record below means nothing without it.
         const identity = await keepJoinedIdentity(joined);
         await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
+        // The update screen asks the community now in use (utils/community-switch.ts).
+        communitySwitched();
         await addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});
         await clearGuestNode(GLOBAL_NODE_URL);
         await setPendingOnboarding({

@@ -68,4 +68,9 @@ INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0006_request_nonces.sql'
 WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name = 'request_nonces') OR (type = 'index' AND name = 'idx_request_nonces_ts')) = 2;
 
+-- 0007: its column.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0007_content_swap.sql'
+WHERE (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%swap_fails INTEGER%';
+
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

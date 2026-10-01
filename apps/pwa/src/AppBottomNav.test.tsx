@@ -48,6 +48,8 @@ vi.mock('./lib/avatar', () => ({
 }));
 
 vi.mock('./lib/api', () => ({
+    // The page's own server unless Settings points it elsewhere: App reads it for the web app's update banner.
+    getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(async () => ({ ok: true })),
     checkMembership: vi.fn(async () => ({ isMember: true })),
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),

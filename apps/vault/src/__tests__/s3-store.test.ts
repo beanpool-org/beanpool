@@ -78,6 +78,11 @@ describe('the store', () => {
         stub.failWith = 500;
         const s3 = new S3Store(parseSettings({ v: 1, offsite: stub.settings() }).offsite!);
         await expect(s3.list()).rejects.toMatchObject({ short: 'HTTP 500 InternalError' });
+        // A redirect is not followed: the signed request goes to the store set, or nowhere.
+        stub.failWith = 307;
+        const before = stub.requests.length;
+        await expect(s3.put('bv-20261001T120000Z.bin', Buffer.from('x'))).rejects.toMatchObject({ short: 'HTTP 307 InternalError' });
+        expect(stub.requests.length).toBe(before + 1);
         await stub.stop();
         stubs.length = 0;
         const e = await s3.put('bv-20261001T120000Z.bin', Buffer.from('x')).catch(err => err as OffsiteError);

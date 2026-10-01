@@ -153,7 +153,8 @@ export class S3Store implements BackupStore {
         try {
             const sendHeaders: Record<string, string> = { 'x-amz-content-sha256': payloadSha256, 'x-amz-date': amzDate, Authorization: authorization };
             if (opts.body) sendHeaders['Content-Type'] = 'application/octet-stream';
-            const res = await this.fetch(url, { method, headers: sendHeaders, body: opts.body, signal: controller.signal });
+            // No redirect is followed: a signed request goes to the store set, or nowhere.
+            const res = await this.fetch(url, { method, headers: sendHeaders, body: opts.body, signal: controller.signal, redirect: 'manual' });
             return { status: res.status, body: Buffer.from(await res.arrayBuffer()) };
         } catch (e) {
             if (e instanceof OffsiteError) throw e;

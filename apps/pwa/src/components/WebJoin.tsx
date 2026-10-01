@@ -863,7 +863,10 @@ export function WebJoin({
             const got = await k.take();
             if (!mounted.current) return;
             if (!got.ok) {
-                if (got.state.status === 'closed') setWordsShut(true);
+                // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the
+                // 12-words choice goes, so it is said at the top.
+                if (got.state.status !== 'closed') return toProviders(p, null);
+                setWordsShut(true);
                 return toProviders(p, { tone: 'error', text: got.state.message });
             }
             setScreen({ name: 'joining' });

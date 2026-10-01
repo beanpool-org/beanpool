@@ -1060,7 +1060,8 @@ CREATE TABLE IF NOT EXISTS withheld_lines (
     edited_at TEXT,
     attachment_data TEXT,
     attachment_nonce TEXT,
-    attachment_mime TEXT
+    attachment_mime TEXT,
+    storage_key TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_withheld_lines_conversation ON withheld_lines(conversation_id, author_pubkey, timestamp);
 CREATE INDEX IF NOT EXISTS idx_withheld_lines_author ON withheld_lines(author_pubkey);

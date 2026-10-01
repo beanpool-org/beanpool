@@ -175,12 +175,27 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     // The row first, for the same reason as the photo route above.
     const row = db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined;
     if (!row) {
-        // The photo of a line kept for its sender alone (engine/withheld-lines.ts): theirs, asked for signed by them.
+        // The photo of a line kept for its sender alone (engine/withheld-lines.ts): theirs, asked for signed by them, from
+        // the row or the image store as a chat photo is.
         const own = withheldAttachmentFor(id, ctx.state.actor as string | undefined);
         if (own) {
-            ctx.set('Cache-Control', 'private, no-store');
-            ctx.body = own;
-            return;
+            let ownData: string | null = null;
+            try {
+                ownData = await attachmentDataOfAsync(own, getImageStore());
+            } catch (e) {
+                // Deleted while this read was in flight: an attachment that no longer exists, as below.
+                if (!(e instanceof MissingObjectError) || withheldAttachmentFor(id, ctx.state.actor as string | undefined)?.storage_key === own.storage_key) {
+                    console.error(`[Attachments] ${id}:`, e);
+                    ctx.status = 503;
+                    ctx.body = { error: 'This attachment is temporarily unavailable' };
+                    return;
+                }
+            }
+            if (ownData !== null) {
+                ctx.set('Cache-Control', 'private, no-store');
+                ctx.body = { data: ownData, nonce: own.nonce, mime: own.mime };
+                return;
+            }
         }
         ctx.status = 404;
         ctx.body = { error: 'Attachment not found' };

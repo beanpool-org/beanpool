@@ -48,6 +48,8 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { registerVisitor } from './engine/members.js';
 import { lockedDm } from './dm-test-payload.js';
 import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
+import { getImageStore, readObject } from './storage/image-store.js';
+import { sweepOrphanedImageObjects } from './engine/storage-health.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -250,6 +252,17 @@ async function main(): Promise<void> {
     assert(boPhoto.status === 200 && boPhoto.body?.data === photo.ciphertext && boPhoto.body?.nonce === photo.nonce,
         `Bo's photo comes back to him (${show(boPhoto)})`);
     assert(annPhoto.status === 404 && anonPhoto.status === 404, `to nobody else (${annPhoto.status}, ${anonPhoto.status})`);
+    // Kept in the image store as a chat photo is, never whole in the database's row (#1403 review, NON-BLOCKING).
+    const photoRow = attempt(() => db.prepare('SELECT attachment_data, storage_key FROM withheld_lines WHERE id = ?').get(boIds[2]) as any);
+    const photoKey: string | undefined = photoRow?.storage_key ?? undefined;
+    const photoBytes = photoKey ? await readObject(getImageStore(), photoKey) : null;
+    assert(!!photoRow && photoRow.attachment_data === null && photoBytes?.toString('base64') === photo.ciphertext,
+        `his photo is in the image store, not the row (${photoKey}; row data ${photoRow?.attachment_data === null ? 'none' : 'kept'})`);
+    // The daily orphan sweep, two hours on (past its grace period), counts the row as naming it: it stays.
+    const swept = await sweepOrphanedImageObjects({ nowMs: Date.now() + 2 * 3_600_000 });
+    const afterSweep = await call('GET', bo, `/api/messages/${boIds[2]}/attachment`);
+    assert(!!photoKey && (await readObject(getImageStore(), photoKey)) !== null && afterSweep.status === 200 && afterSweep.body?.data === photo.ciphertext,
+        `the orphan sweep leaves it, and it still comes back to him (removed ${swept.removed}; ${afterSweep.status})`);
     const boMark = await call('POST', bo, '/api/messages/mark-read', { conversationId: boConv });
     assert(boMark.status === 200, `Bo marks it read as any chat (${show(boMark)})`);
     // Mute and his own read marker answer and show as a real conversation's do (#1403 review, NON-BLOCKING): Cy's chat
@@ -344,6 +357,16 @@ async function main(): Promise<void> {
     const deeView = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages?.find((m: any) => m.id === d2id);
     assert(ownEd.status === 200 && !!ownEd.body?.message?.editedAt && ownDel.status === 200 && ownDel.body?.message?.type === 'removed'
         && deeView?.type === 'removed', `she edits and deletes her own withheld line as any line (${show(ownEd)}, ${show(ownDel)})`);
+    // A withheld photo's object goes with its line, as a chat photo's does.
+    const deePhoto = lockedDm(48);
+    const dp = await call('POST', dee, '/api/messages/send', dm(deeConv, dee, { type: 'image', attachment: { data: deePhoto.ciphertext, nonce: deePhoto.nonce, mime: 'image/jpeg' } }));
+    const dpKey: string | undefined = attempt(() => (db.prepare('SELECT storage_key FROM withheld_lines WHERE id = ?').get(dp.body?.message?.id) as any)?.storage_key) ?? undefined;
+    const dpHeld = dpKey ? (await readObject(getImageStore(), dpKey))?.toString('base64') === deePhoto.ciphertext : false;
+    const dpDel = await call('POST', dee, '/api/messages/delete', { messageId: dp.body?.message?.id });
+    const dpGone = dpKey ? (await readObject(getImageStore(), dpKey)) === null : false;
+    const dpPhoto = await call('GET', dee, `/api/messages/${dp.body?.message?.id}/attachment`);
+    assert(dp.status === 200 && dpHeld && dpDel.status === 200 && dpGone && dpPhoto.status === 404,
+        `Dee's withheld photo is stored, and gone from the store when she deletes the line (${dpKey}; ${dpHeld}, ${dpGone}, ${dpPhoto.status})`);
     const ctrlDel = await call('POST', dee, '/api/messages/delete', { messageId: ctrlLine.body?.message?.id });
     const ownDelAgain = await call('POST', dee, '/api/messages/delete', { messageId: d2id });
     const ctrlDelAgain = await call('POST', dee, '/api/messages/delete', { messageId: ctrlLine.body?.message?.id });
@@ -481,6 +504,7 @@ async function main(): Promise<void> {
     adminPruneUser(bo.pk, owner.pk);
     const boLeft = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM withheld_lines WHERE author_pubkey = ?').get(bo.pk) as { n: number }).n);
     assert(boLeft === 0, `a prune takes Bo's withheld lines (${boLeft})`);
+    assert(!!photoKey && (await readObject(getImageStore(), photoKey)) === null, `and his withheld photo from the image store (${photoKey})`);
 
     // ── 11. pushes that aren't a blocked member's words ─────────────────────────────────────────
     // #1403 review, BLOCKING 3: a block silences the pushes that carry the blocked member's own lines (a group's line,

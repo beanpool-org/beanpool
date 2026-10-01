@@ -25,12 +25,15 @@
  *   vanish on their next read (#1403 review); the line itself, which the other person sees, never changes.
  *
  * A promoted standby has none of these: the sender's own copies of lines nobody else ever saw are what a take-over
- * loses. A line's photo is kept in its row (a chat photo isn't copied either; replication-manifest message_attachments).
+ * loses. A line's photo is kept in the image store as a chat photo is, its key in the row (a chat photo isn't copied
+ * either; replication-manifest message_attachments), and its object goes with the line.
  * Gone with their sender on a prune or a self-deletion (dropWithheldOf); a re-key moves them (engine/key-move.ts).
  */
 import { avatarUrlFor } from '@beanpool/core';
 import type { Message } from '@beanpool/engine';
-import { db } from '../db/db.js';
+import { db, afterTransactionCommit } from '../db/db.js';
+import { attachmentKey, getImageStore } from '../storage/image-store.js';
+import { storeAttachmentColumns, deleteStoredObjects, type AttachmentRow } from '../storage/image-columns.js';
 
 export interface WithheldConversation {
     id: string;
@@ -54,6 +57,8 @@ export interface WithheldLine {
     attachment_data: string | null;
     attachment_nonce: string | null;
     attachment_mime: string | null;
+    /** Where the photo's ciphertext is in the image store, as a chat photo's is (storage design §7); `attachment_data` then null. */
+    storage_key?: string | null;
 }
 
 // ── conversations ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -113,14 +118,24 @@ export function ownWithheldLine(id: unknown, author: string | undefined): Withhe
     return row && author && row.author_pubkey === author ? row : undefined;
 }
 
-/** Keeps a line for its sender alone, with its photo in the row. */
+/**
+ * Keeps a line for its sender alone. Its photo's ciphertext goes to the image store and the row keeps a key, exactly as
+ * a chat photo's does (engine/messaging.ts sendMessage; storage design §7), so a blocked sender's photos don't grow the
+ * database file (#1403 review). An id no key is built from, or a store that refuses it, keeps it in the row.
+ */
 export function storeWithheldLine(msg: Message, attachment?: { data: string; nonce: string; mime?: string }): void {
     const photo = attachment?.data && attachment?.nonce ? attachment : undefined;
+    let cols: { data: string | null; storage_key: string | null } = { data: null, storage_key: null };
+    if (photo) {
+        let key: string | null = null;
+        try { key = attachmentKey(msg.id); } catch { /* kept in the row */ }
+        cols = key ? storeAttachmentColumns(getImageStore(), key, photo.data) : { data: photo.data, storage_key: null };
+    }
     db.prepare(`INSERT INTO withheld_lines (id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata, timestamp,
-                                            attachment_data, attachment_nonce, attachment_mime)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                                            attachment_data, attachment_nonce, attachment_mime, storage_key)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(msg.id, msg.conversationId, msg.authorPubkey, msg.ciphertext, msg.nonce, msg.type, msg.metadata ?? null, msg.timestamp,
-            photo?.data ?? null, photo?.nonce ?? null, photo ? (photo.mime || 'image/jpeg') : null);
+            cols.data, photo?.nonce ?? null, photo ? (photo.mime || 'image/jpeg') : null, cols.storage_key);
 }
 
 /** New words on a withheld line (its sender's edit). */
@@ -135,8 +150,11 @@ export function setWithheldLineMetadata(id: string, metadata: string): void {
 
 /** A withheld line made a tombstone (its sender's delete), its photo gone with it, as a line in `messages` is. */
 export function tombstoneWithheldLine(id: string, ciphertext: string, metadata: string): void {
+    const key = (db.prepare('SELECT storage_key FROM withheld_lines WHERE id = ?').get(id) as { storage_key: string | null } | undefined)?.storage_key;
     db.prepare(`UPDATE withheld_lines SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ?,
-                       attachment_data = NULL, attachment_nonce = NULL, attachment_mime = NULL WHERE id = ?`).run(ciphertext, metadata, id);
+                       attachment_data = NULL, attachment_nonce = NULL, attachment_mime = NULL, storage_key = NULL WHERE id = ?`).run(ciphertext, metadata, id);
+    // The stored object once the row no longer names it (after the caller's transaction commits, if there is one).
+    if (key) afterTransactionCommit(() => deleteStoredObjects(db, [key]));
 }
 
 /** A withheld line in the wire shape of a line in `messages` (engine getConversationMessages). */
@@ -158,11 +176,14 @@ export function withheldLineMessage(r: WithheldLine): Message {
     };
 }
 
-/** A withheld line's photo, for its sender only. */
-export function withheldAttachmentFor(id: unknown, viewer: string | undefined): { data: string; nonce: string; mime: string } | undefined {
+/**
+ * A withheld line's photo, for its sender only, as an attachment row (routes/marketplace.ts reads its ciphertext from the
+ * row or the image store, as for a chat photo).
+ */
+export function withheldAttachmentFor(id: unknown, viewer: string | undefined): (AttachmentRow & { nonce: string; mime: string }) | undefined {
     const row = ownWithheldLine(id, viewer);
-    if (!row?.attachment_data || !row.attachment_nonce) return undefined;
-    return { data: row.attachment_data, nonce: row.attachment_nonce, mime: row.attachment_mime || 'image/jpeg' };
+    if ((!row?.attachment_data && !row?.storage_key) || !row.attachment_nonce) return undefined;
+    return { data: row.attachment_data, storage_key: row.storage_key ?? null, nonce: row.attachment_nonce, mime: row.attachment_mime || 'image/jpeg' };
 }
 
 // ── a blocked member's reaction or edit on a line in `messages` ─────────────────────────────────────────────────
@@ -345,7 +366,11 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
 
 /** A prune or a self-deletion: their withheld lines and conversations go. Withheld from them, nothing is theirs. */
 export function dropWithheldOf(publicKey: string): void {
+    const keys = (db.prepare('SELECT storage_key FROM withheld_lines WHERE author_pubkey = ? AND storage_key IS NOT NULL').all(publicKey) as { storage_key: string }[])
+        .map(r => r.storage_key);
     db.prepare('DELETE FROM withheld_lines WHERE author_pubkey = ?').run(publicKey);
+    // Their photos' objects, once the rows are gone for good (after the caller's transaction commits).
+    if (keys.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, keys));
     db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ?').run(publicKey);
     db.prepare('DELETE FROM withheld_overlays WHERE author_pubkey = ?').run(publicKey);
 }

@@ -41,6 +41,15 @@
  *         and the key Abe kept opens nothing written after.
  *  10. Two admins to confirm with exactly two admins: each can confirm the other (no second admin could), and a member
  *      waits for the second.
+ *  11. PR #1411's second deciding review. The phones' side again with core (the gate the app's Share runs, and the walk):
+ *      a. The only key-holder, made a moderator and an admin again, starts a new key: her phone doesn't name herself as
+ *         dropped, and the server doesn't ask it to (it answered 409 `drops_changed` to every tap).
+ *      b. THE RE-KEY: with the owner password only, over HTTP, the operator re-keys Ada's account to a key it holds.
+ *         Owen's phone drops Ada's old key, makes a new list key for itself, and offers no Share to the key under her
+ *         name: it is not one it checked, and the real Ada's phone shows a different code. Re-keyed to her real new
+ *         phone and checked in person, it is shared with, and that phone opens the list. The operator's key holds nothing.
+ *      c. A new key is numbered past the current generation (up to 1000 past), never at or below it.
+ *      d. THE ROLLBACK: rows written back to an older generation; a phone that took a newer one sees it rolled back.
  *
  * A standby's copy and a take-over: test-standby-names-list.
  *
@@ -57,6 +66,7 @@ import path from 'node:path';
 import {
     newNamesListKey, newNamesEntryId, wrapNamesListKey, unwrapNamesListKey, sealNamesEntry, openNamesEntry, NamesListCryptoError,
     signedNamesWrap, signNamesWrap, namesWrapDigest, verifyNamesWrap, traceNamesTrust, type NamesEntryText, type NamesTrustPin,
+    namesKeyChanges, pinKeyChanges, pinCallsigns, pinCheckedKey, namesShareCheck, namesKeyQr, namesKeyCode, namesKeyCheckMatches,
 } from '@beanpool/core';
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
@@ -237,8 +247,8 @@ async function main(): Promise<void> {
         && fresh.body.settings.namesShownToMembers === false, `2. as it ships: no key, one admin confirms, real names to members off (${show(fresh)})`);
     assert(JSON.stringify(fresh.body.admins.map((a: any) => a.callsign)) === JSON.stringify(['Owen', 'Ada', 'Abe']), `2. the admins are the owner and the two admins, not the moderator (${JSON.stringify(fresh.body.admins)})`);
     const k1 = newNamesListKey();
-    const stale = await call(owen, 'POST', '/api/names/key', { generation: 2, wraps: [wrapFor(owen, k1, owen, 2)] });
-    assert(stale.status === 409 && stale.body?.code === 'stale_generation', `2. a key for the wrong generation: 409 stale_generation (${show(stale)})`);
+    const stale = await call(owen, 'POST', '/api/names/key', { generation: 1001, wraps: [wrapFor(owen, k1, owen, 1001)] });
+    assert(stale.status === 409 && stale.body?.code === 'stale_generation', `2. a key numbered more than 1000 past the current one: 409 stale_generation (${show(stale)})`);
     const notSelf = await call(owen, 'POST', '/api/names/key', { generation: 1, wraps: [wrapFor(owen, k1, ada, 1)] });
     assert(notSelf.status === 400 && notSelf.body?.code === 'bad_wraps', `2. a key its maker doesn't hold: 400 (${show(notSelf)})`);
     const toMember = await call(owen, 'POST', '/api/names/key', { generation: 1, wraps: [wrapFor(owen, k1, owen, 1), wrapFor(owen, k1, mel, 1)] });
@@ -612,6 +622,106 @@ async function main(): Promise<void> {
     assert(moWaits.status === 201 && moWaits.body?.status === 'awaiting_second', `10. a member still waits for a second admin (${show(moWaits)})`);
     const adaSeconds = await call(adaNew, 'POST', `/api/names/confirmations/${moWaits.body.id}/second`, {});
     assert(adaSeconds.status === 200 && adaSeconds.body?.status === 'confirmed', `10. whom Ada gives (${show(adaSeconds)})`);
+
+    // ── 11. PR #1411's second deciding review ────────────────────────────────────────────────────
+    // a. The only key-holder, out and back. Ada's phone makes generation 5 for her alone (Oscar was dropped from 4).
+    const st11 = (await state(adaNew)).body;
+    require_(st11.newKeyNeeded && JSON.stringify(st11.droppedHolders) === JSON.stringify([oscar.pk]), `11a. a new key is needed: Oscar was dropped (${JSON.stringify(st11.droppedHolders)})`);
+    const adaK4 = (await phoneTrace(adaNew, adaNewPin)).keys.get(4)!;
+    const k5 = newNamesListKey();
+    require_((await call(adaNew, 'POST', '/api/names/key', { generation: 5, wraps: [wrapFor(adaNew, k5, adaNew, 5, [oscar.pk])] })).status === 201, "11a. Ada's phone makes generation 5, for her alone");
+    const old5 = (await entries(adaNew)).body.entries;
+    require_((await call(adaNew, 'POST', '/api/names/entries/re-encrypt', {
+        generation: 5, entries: old5.map((e: any) => ({ id: e.id, ciphertext: sealNamesEntry(k5, e.id, 5, openNamesEntry(adaK4, e.id, 4, e.ciphertext)) })),
+    })).status === 200, '11a. and seals every entry again under it: she is the only holder');
+    require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${adaNew.pk}/admin`, undefined, PASSWORD)).status === 200
+        && (await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaNew.pk, role: 'moderator' }, PASSWORD)).status === 200, '11a. the owner makes Ada a moderator');
+    require_((await state(owen)).status === 200, "11a. (the next names-list request drops Ada's wrap)");
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: adaNew.pk, role: 'admin' }, PASSWORD)).status === 200, '11a. and an admin again');
+    const outBack = (await state(adaNew)).body;
+    assert(outBack.nobodyHoldsKey === true && JSON.stringify(outBack.droppedHolders) === JSON.stringify([adaNew.pk]),
+        `11a. nobody holds the key, and the state lists Ada herself as dropped (${JSON.stringify({ nobody: outBack.nobodyHoldsKey, dropped: outBack.droppedHolders })})`);
+    const k6 = newNamesListKey();
+    const restart = await call(adaNew, 'POST', '/api/names/key', { generation: 6, wraps: [wrapFor(adaNew, k6, adaNew, 6, [])] });
+    assert(restart.status === 201, `11a. her phone starts a new key, naming nobody (not herself) as dropped: 201, not 409 drops_changed (${show(restart)})`);
+    const adaRestarted = await phoneTrace(adaNew, adaNewPin);
+    assert(adaRestarted.keys.has(6) && adaRestarted.currentTraced, "11a. and her phone takes it");
+    // The entries sealed under 5 are locked now (nobody holds its key): Ada types each one again from the paper copy.
+    for (const e of (await entries(adaNew)).body.entries as any[]) {
+        const retyped = await call(adaNew, 'PUT', `/api/names/entries/${e.id}`, { ciphertext: sealNamesEntry(k6, e.id, 6, openNamesEntry(k5, e.id, 5, e.ciphertext)), keyGeneration: 6 });
+        require_(retyped.status === 200, `11a. Ada types an entry again under generation 6 (${show(retyped)})`);
+    }
+    require_((await call(adaNew, 'POST', '/api/names/key/share', { generation: 6, wraps: [wrapFor(adaNew, k6, owen, 6)] })).status === 200, "11a. she shares it with Owen");
+    // Owen's phone as the app keeps it: whom it trusts, and the callsign each of them shows.
+    const owen11 = await phoneTrace(owen, owenPin);
+    require_(owen11.keys.has(6) && owen11.trusted.has(adaNew.pk), `11a. Owen's phone takes generation 6 and trusts Ada (${JSON.stringify(owen11.refused)})`);
+    owenPin = pinCallsigns(owen11.pin!, (await state(owen)).body.admins);
+    require_(owenPin.names[adaNew.pk] === 'Ada', "11a. Owen's phone knows Ada's key by her callsign");
+
+    // b. THE RE-KEY, with the owner password only, over HTTP.
+    const op = newId('Ada');
+    const issued = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/issue-code`, {}, PASSWORD);
+    const moved = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/complete`, { code: issued.body?.code, newPubkey: op.pk }, PASSWORD);
+    require_(issued.status === 200 && issued.body?.operator === 'owner:password' && moved.status === 200,
+        `11b. the owner password alone re-keys Ada's account to a key the operator holds (${show(issued)} | ${show(moved)})`);
+    const stOp = (await state(owen)).body;
+    require_(stOp.admins.some((a: any) => a.pubkey === op.pk && a.callsign === 'Ada') && !stOp.admins.some((a: any) => a.pubkey === adaNew.pk),
+        `11b. the server now shows "Ada" on the operator's key (${JSON.stringify(stOp.admins.map((a: any) => `${a.callsign}:${a.pubkey.slice(0, 6)}`))})`);
+    // Owen's phone opens the list: Ada's callsign is on a key it doesn't trust, and the key it trusted under it is gone.
+    const changes = namesKeyChanges(owenPin, stOp.admins);
+    assert(changes.length === 1 && changes[0].callsign === 'Ada' && changes[0].was === adaNew.pk && changes[0].now === op.pk,
+        `11b. Owen's phone sees Ada's key changed (${JSON.stringify(changes)})`);
+    owenPin = pinKeyChanges(owenPin, changes, stOp.generation);
+    const owenRekeyed = traceNamesTrust({ communityId: stOp.communityId, me: keysOf(owen), pin: owenPin, records: stOp.records, myKeys: stOp.myKeys, generation: stOp.generation });
+    assert(!owenRekeyed.trusted.has(adaNew.pk) && !owenRekeyed.trusted.has(op.pk) && owenRekeyed.keys.has(6),
+        "11b. it trusts neither Ada's old key (dropped for good: a lost phone may hold it) nor the key now under her name, and still holds generation 6");
+    owenPin = owenRekeyed.pin!;
+    require_(stOp.newKeyNeeded && JSON.stringify(stOp.droppedHolders) === JSON.stringify([adaNew.pk]), `11b. the list needs a new key (${JSON.stringify(stOp.droppedHolders)})`);
+    const k7 = newNamesListKey();
+    require_((await call(owen, 'POST', '/api/names/key', { generation: 7, wraps: [wrapFor(owen, k7, owen, 7, stOp.droppedHolders)] })).status === 201,
+        "11b. Owen's phone makes generation 7, for itself alone, naming Ada's old key as dropped");
+    const old7 = (await entries(owen)).body.entries;
+    require_((await call(owen, 'POST', '/api/names/entries/re-encrypt', {
+        generation: 7, entries: old7.map((e: any) => ({ id: e.id, ciphertext: sealNamesEntry(k7, e.id, 7, openNamesEntry(k6, e.id, 6, e.ciphertext)) })),
+    })).status === 200, '11b. and seals the entries again under it');
+    const opRow = (await state(owen)).body.admins.find((a: any) => a.pubkey === op.pk);
+    assert(opRow && opRow.holdsKey === false && namesShareCheck(owenPin, opRow) === 'changed',
+        `11b. "Ada" waits for the key, and Owen's phone offers no Share: her key changed, so it must be checked in person (${namesShareCheck(owenPin, opRow)})`);
+    assert(!namesKeyCheckMatches(namesKeyQr(adaNew.pk), op.pk) && !namesKeyCheckMatches(namesKeyCode(adaNew.pk), op.pk),
+        "11b. checked in person, the real Ada's phone shows its own key and code, which don't match the key under her name: still no Share");
+    assert(count('names_list_keys', `holder_pubkey = '${op.pk}'`) === 0 && (await state(op)).body?.myKeys?.length === 0,
+        "11b. the operator's key holds no wrap of any generation: it opens no name");
+    // Ada's real new phone: the owner re-keys the account to it, and Owen checks it in person before sharing.
+    const adaReal = newId('Ada');
+    const issued2 = await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/issue-code`, {}, PASSWORD);
+    require_((await call(null, 'POST', `/api/local/admin/members/${op.pk}/rekey/complete`, { code: issued2.body?.code, newPubkey: adaReal.pk }, PASSWORD)).status === 200,
+        "11b. the owner moves Ada's account to her real new phone");
+    const realRow = (await state(owen)).body.admins.find((a: any) => a.pubkey === adaReal.pk);
+    assert(realRow && namesShareCheck(owenPin, realRow) === 'changed', '11b. still no Share before the check in person');
+    assert(namesKeyCheckMatches(namesKeyCode(adaReal.pk), adaReal.pk), "11b. her phone's code matches the key the server lists for her");
+    owenPin = pinCheckedKey(owenPin, adaReal.pk, 'Ada');
+    assert(namesShareCheck(owenPin, realRow) === 'trusted', '11b. checked in person: Share is offered');
+    require_((await call(owen, 'POST', '/api/names/key/share', { generation: 7, wraps: [wrapFor(owen, k7, adaReal, 7)] })).status === 200, "11b. Owen's phone shares generation 7 with her");
+    const adaRealFirst = await phoneTrace(adaReal, null);
+    assert(adaRealFirst.keys.has(7) && adaRealFirst.firstTrust === owen.pk && allOpenWith(adaRealFirst.keys.get(7)!, 7),
+        "11b. her new phone opens every entry, and trusts Owen, whose code it shows her to compare");
+
+    // c. Numbering a new key.
+    const atCurrent = await call(owen, 'POST', '/api/names/key', { generation: 7, wraps: [wrapFor(owen, newNamesListKey(), owen, 7)] });
+    assert(atCurrent.status === 409 && atCurrent.body?.code === 'stale_generation', `11c. a key numbered at the current generation: 409 stale_generation (${show(atCurrent)})`);
+    const k9 = newNamesListKey();
+    const leap = await call(owen, 'POST', '/api/names/key', { generation: 9, wraps: [wrapFor(owen, k9, owen, 9)] });
+    assert(leap.status === 201 && (await state(owen)).body.generation === 9,
+        `11c. a key numbered past it (a phone that took a newer one than this server has now): 201, and it is current (${show(leap)})`);
+    const owenAt9 = await phoneTrace(owen, owenPin);
+    require_(owenAt9.keys.has(9) && owenAt9.pin!.newest === 9, `11c. Owen's phone takes generation 9 and remembers it (${owenAt9.pin?.newest})`);
+
+    // d. THE ROLLBACK: whoever runs the server deletes the newer rows; generation 7 is current again, and Abe-style keys with it.
+    db.prepare('DELETE FROM names_list_keys WHERE generation > 7').run();
+    const rolled = await phoneTrace(owen, owenAt9.pin!);
+    assert(rolled.generation === 7 && rolled.rolledBack === true && rolled.pin!.newest === 9,
+        `11d. Owen's phone, which took generation 9, sees the server offer 7: rolled back, so it reads and seals nothing (${JSON.stringify({ g: rolled.generation, rolledBack: rolled.rolledBack })})`);
+    assert((await phoneTrace(adaReal, adaRealFirst.pin)).rolledBack === false, '11d. a phone that never took a newer one has nothing to tell it by: the documented limit');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

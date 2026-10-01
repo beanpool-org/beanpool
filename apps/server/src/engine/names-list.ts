@@ -8,13 +8,17 @@
  *
  * The community's owners and admins whose role acts (node_roles, NODE_ROLE_ACTS): signed with their own key, through the
  * signature middleware (routes/names-list.ts). A moderator, a member and anyone else are refused. Key-holding admins
- * only: an owner who has only the password runs a server and can't read the list (design §4.3).
+ * only: the owner password reads no name through this server's routes (design §4.3). It is not what keeps the names from
+ * whoever runs the server, who can make any key an admin and re-key any account: the admins' phones are (below).
  *
  * ## The list key, its generations, and what happens when an admin goes
  *
  * The first admin to open the list makes its key on their phone (generation 1) and wraps it to themselves; every write
  * is sealed under the current generation. An admin made since (by an owner) waits until an admin who holds the key
- * shares it with them, a tap on that admin's phone ({@link shareKey}): the node never decides who reads the names.
+ * shares it with them, a tap on that admin's phone ({@link shareKey}). The phone offers that tap only for a key it
+ * trusts: one its admin checked in person (a QR code or a code shown on the other admin's phone), or one a trusted
+ * admin's signed share added; never for a key this server names by a callsign alone, since a re-key here can put an
+ * admin's callsign on any key (PR #1411's second deciding review; @beanpool/core names-list-trust.ts).
  *
  * Every wrap is SIGNED by the admin who made it (@beanpool/core names-list-trust.ts), over this community's id, the
  * generation, the holder, a digest of the wrap and, for a new generation, the admins its maker dropped. This server
@@ -294,18 +298,24 @@ function assertWholeNumber(v: unknown, field: string): number {
     return v as number;
 }
 
+/** How far past the current generation a new key may be numbered (see {@link installKey}). */
+export const NAMES_GENERATION_LEAP = 1000;
+
 /**
- * The list's first key, or a new one (see the header). `generation` must be the next one, the maker must be among the
- * holders, and every holder must be an owner or admin here. Where an admin still holds the current key, only such an
- * admin may make the next: anyone else is asked to wait for a share. The maker's own wrap names, signed, every holder
- * dropped from the current generation (the reason for a new key), so every phone stops trusting them; no other wrap
- * names any.
+ * The list's first key, or a new one (see the header). `generation` must be newer than the current one: usually the next,
+ * but a phone that already took a newer generation than this server now has (a server put back to an older copy) numbers
+ * its key past what it took, so it never goes back (@beanpool/core names-list-trust.ts `newest`), at most
+ * {@link NAMES_GENERATION_LEAP} ahead. The maker must be among the holders, and every holder must be an owner or admin
+ * here. Where an admin still holds the current key, only such an admin may make the next: anyone else is asked to wait
+ * for a share. The maker's own wrap names, signed, every holder dropped from the current generation (the reason for a
+ * new key), so every phone stops trusting them, except the maker itself (an admin who was the only holder, out and made
+ * an admin again, starts a new key); no other wrap names any.
  */
 export function installKey(actor: string, body: { generation?: unknown; wraps?: unknown }): { generation: number } {
     assertPlainTablesWritable();
     const current = currentGeneration();
     const generation = assertWholeNumber(body.generation, 'generation');
-    if (generation !== current + 1) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
+    if (generation <= current || generation > current + NAMES_GENERATION_LEAP) throw new NamesListError(409, 'stale_generation', NAMES_MESSAGES.staleGeneration);
     const wraps = readWraps(body.wraps, 'A new key', actor, generation);
     const admins = new Set(namesAdmins().map((a) => a.pubkey));
     const own = wraps.find((w) => w.holder === actor);
@@ -316,8 +326,9 @@ export function installKey(actor: string, body: { generation?: unknown; wraps?: 
         if (holders.size > 0 && !holders.has(actor)) throw new NamesListError(409, 'ask_for_share', NAMES_MESSAGES.askForShare);
     }
     if (wraps.some((w) => w !== own && w.drops.length > 0)) throw new NamesListError(400, 'bad_wraps', 'Only the maker’s own wrap names who was dropped.');
-    const mustDrop = current > 0 ? droppedHoldersOf(current) : [];
-    if (mustDrop.some((k) => !own.drops.includes(k)) || own.drops.includes(actor)) {
+    // Its maker is never among those it must name: a maker naming itself drops nobody (the phones' walk ignores it).
+    const mustDrop = current > 0 ? droppedHoldersOf(current).filter((k) => k !== actor) : [];
+    if (mustDrop.some((k) => !own.drops.includes(k))) {
         throw new NamesListError(409, 'drops_changed', NAMES_MESSAGES.dropsChanged);
     }
     db.transaction(() => {

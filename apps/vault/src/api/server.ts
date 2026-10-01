@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, sta
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+import type tls from 'node:tls';
 import {
     checkVaultTicket,
     isVaultChallenge,
@@ -28,12 +29,24 @@ import {
 } from '@beanpool/signin';
 import { BACKUP_NAME_RE, backupNameFor, backupTimeOf, compareBackupNames, parseBackupFile, RESTORE_PENDING_NAME } from '../shared/backup-format.js';
 import { isVaultProvider } from '../shared/providers.js';
+import {
+    parseSettings,
+    parseSettingsFile,
+    SETTINGS_MAX_BYTES,
+    SettingsError,
+    settingsHash,
+    settingsSummary,
+    type OperatorSettings,
+    type SettingsFile,
+} from '../shared/settings.js';
+import { AlertBook, AlertChannelSender, type Condition } from './alerts.js';
 import { NonceStore, verifySignedRequest } from './auth.js';
 import { BackupTooLarge, type BackupStore } from './backup-store.js';
 import { DB_FILE, VaultDb, type CopyRow, type DeletionRow, type HoldRow } from './db.js';
 import { KeyholderCallError, KeyholderClient, KeyholderUnavailable } from './keyholder-client.js';
 import { PushSender, type PushKind } from './push.js';
 import { addressBucket, RateLimiter } from './rate-limit.js';
+import { OffsiteError, S3Store } from './s3-store.js';
 
 /**
  * vault-api (key vault design §1.3, §3): plain `node:http`, the routes, the database, the holds, the pushes, the
@@ -58,6 +71,18 @@ const RESTORE_BUILD = `${DB_FILE}.restore`;
 /** After a restore from backup failed to finish, the next try waits this long (requests meanwhile get 503 at once). */
 export const RESTORE_RETRY_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Locked (or the keyholder unreachable) this long: the custodians are told (design §3). */
+export const LOCKED_ALERT_MS = 5 * 60 * 1000;
+/** Backups run hourly: two missed hours (and a little, for the timer) and the custodians are told (design §4). */
+export const BACKUP_STALE_MS = 2 * 60 * 60 * 1000 + 10 * 60 * 1000;
+/** A failure this many times in a row is an alert too. */
+export const BACKUP_FAILURES_ALERT = 2;
+/** A day's signed report is made at the first check after midnight UTC; by this long after, its absence is an alert. */
+export const REPORT_GRACE_MS = 2 * 60 * 60 * 1000;
+/** A custodian's settings wait this long for a second custodian to send the same. */
+export const SETTINGS_PROPOSAL_MS = 60 * 60 * 1000;
+/** How many custodians must send the same settings (the vault's threshold). */
+export const SETTINGS_APPROVALS = 2;
 
 /** §1.6. */
 export const LIMITS = {
@@ -98,6 +123,17 @@ export interface VaultApiOptions {
     /** Whether the data partition is mounted at `dataDir` (default: `dataDir` is on another device than its parent). */
     dataMounted?: () => boolean;
     dataPollMs?: number;
+    /**
+     * Where the operator settings are kept (shared/settings.ts: the off-box store and the alert channels), set by two
+     * custodians through `/v1/unlock/settings`. The image: `/var/lib/beanpool-vault/settings/settings.json` on the state
+     * partition, readable while the vault is locked (the alerts need it then). Without it, settings can't be set: the
+     * vault keeps its backups on its own disk and sends no alert.
+     */
+    settingsFile?: string;
+    /** The off-box store and the webhook (tests: a stub on this machine). Defaults to the global fetch. */
+    outboundFetch?: FetchLike;
+    /** Extra TLS options for the mail server (tests: their own CA). */
+    smtpTls?: tls.ConnectionOptions;
 }
 
 export interface AboutThisApi {
@@ -124,6 +160,8 @@ export interface VaultApi {
     runBackup(): Promise<string>;
     /** The hourly job: a backup, and the expiry of holds, deletion records and nonces. */
     maintenance(): Promise<void>;
+    /** Looks at what the custodians are told about (locked, backups, the off-box copy, the daily report); every minute. */
+    checkAlerts(): Promise<void>;
     /** Resolves once background work (pushes, re-wraps) has finished. */
     idle(): Promise<void>;
 }
@@ -218,7 +256,7 @@ class Counters {
     private empty() {
         return {
             tickets: 0, deposits: 0, replaced: 0, restores: {} as Record<string, number>, holds: 0, approvals: 0, cancels: 0,
-            releases: 0, deletes: 0, pushTokens: 0, errors: 0, backupsOk: 0, backupsFailed: 0,
+            releases: 0, deletes: 0, pushTokens: 0, errors: 0, backupsOk: 0, backupsFailed: 0, offsiteOk: 0, offsiteFailed: 0,
         };
     }
 
@@ -248,6 +286,61 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let backupFailuresInARow = 0;
     /** Why the last backup failed, for the report: a backup past the store's budget says so; anything else, 'failed'. */
     let backupError: string | null = null;
+
+    // ─── Operator settings: the off-box store and the alert channels (shared/settings.ts) ──────────
+
+    const vaultName = opts.hosts[0] ?? 'vault';
+    let settings: SettingsFile | null = loadSettings();
+    let offsite: BackupStore | null = null;
+    /** When this process first had the off-box store it has now: the first copy is due within the hour after. */
+    let offsiteSince = clock();
+    const offsiteStatus = { lastOkAt: null as number | null, lastName: null as string | null, failuresInARow: 0, error: null as string | null };
+    useSettings(settings);
+    /** Settings sent by one custodian, waiting for a second to send the same (by hash). In memory only. */
+    const proposals = new Map<string, { settings: OperatorSettings; by: Set<string>; at: number }>();
+
+    function loadSettings(): SettingsFile | null {
+        if (!opts.settingsFile || !existsSync(opts.settingsFile)) return null;
+        try {
+            if (statSync(opts.settingsFile).size > SETTINGS_MAX_BYTES) throw new Error('too large');
+            const f = parseSettingsFile(readFileSync(opts.settingsFile, 'utf8'));
+            if (!f) throw new Error('not a settings file');
+            return f;
+        } catch (e) {
+            console.error(`vault-api: the settings file is not used: ${(e as Error).message}`);
+            return null;
+        }
+    }
+
+    function useSettings(f: SettingsFile | null): void {
+        settings = f;
+        const o = f?.settings.offsite ?? null;
+        offsite = o ? new S3Store(o, { fetch: opts.outboundFetch, clock }) : null;
+        offsiteSince = clock();
+        offsiteStatus.failuresInARow = 0;
+        offsiteStatus.error = null;
+    }
+
+    function saveSettings(f: SettingsFile): void {
+        const file = opts.settingsFile as string;
+        mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+        const part = `${file}.${process.pid}.part`;
+        writeFileSync(part, `${JSON.stringify(f, null, 2)}\n`, { mode: 0o600 });
+        renameSync(part, file);
+    }
+
+    // ─── Alerts (alerts.ts) ─────────────────────────────────────────────────────────────────
+
+    const alertSender = new AlertChannelSender({ fetch: opts.outboundFetch, heloName: vaultName, smtpTls: opts.smtpTls, clock });
+    const alertBook = new AlertBook({ vaultName, sender: alertSender, channels: () => settings?.settings.alerts ?? null, clock });
+    /** Since when the vault has been locked (or unreachable) to the outside, as this process saw it; null while open. */
+    let lockedSince: number | null = null;
+    /** Since when it has been open, as this process saw it; null while locked. */
+    let openSince: number | null = null;
+    /** The last finished day whose signed report was made, and why the last one wasn't. */
+    let lastReportDay: string | null = null;
+    let reportFailure: string | null = null;
+    let alertRun: Promise<void> | null = null;
 
     const limits = {
         tickets: new RateLimiter(LIMITS.ticketsPerAddressPerMinute, 60_000),
@@ -425,9 +518,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         const built = VaultDb.open(opts.dataDir, RESTORE_BUILD);
         let reheld: HoldRow[];
         try {
-            const newer = (await store.list()).filter(n => compareBackupNames(n, opened.result.header.name) > 0).sort(compareBackupNames);
+            const newer = (await allBackupNames()).filter(n => compareBackupNames(n, opened.result.header.name) > 0);
             for (const name of newer) {
-                const bytes = await store.get(name);
+                const bytes = await readBackup(name);
                 if (parseBackupFile(bytes).header.vaultId !== opened.result.header.vaultId) continue;
                 const d = await call<{ deletions: string }>('openBackupDeletions', {}, bytes, 300_000);
                 const records = JSON.parse(d.deletions) as WireDeletion[];
@@ -459,6 +552,26 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             }
         })());
         return restored;
+    }
+
+    /**
+     * Every backup name in the vault's own store and the off-box one, oldest first. An off-box store that can't be
+     * listed fails it: a restore that skipped one could bring back copies their members deleted (completeRestore).
+     */
+    async function allBackupNames(): Promise<string[]> {
+        const names = new Set(await store.list());
+        if (offsite) for (const n of await offsite.list()) names.add(n);
+        return [...names].sort(compareBackupNames);
+    }
+
+    /** A backup by name: from the vault's own store, or else the off-box one (the cold path: a new machine has none). */
+    async function readBackup(name: string): Promise<Buffer> {
+        try {
+            return await store.get(name);
+        } catch (e) {
+            if (!offsite) throw e;
+            return offsite.get(name);
+        }
     }
 
     /** Every envelope under the current K_wrap (after a reshare, or resuming one cut short by a restart). */
@@ -885,6 +998,11 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             // After a reshare, envelopes still under the old K_wrap (which the old M opens) until the re-wrap is done.
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
             backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow, error: backupError },
+            // The off-box copy (design §4), when a store is set: never its address, bucket or key.
+            offsite: offsite ? { ...offsiteStatus } : null,
+            // What the custodians are told about, and whether it reached them: never an address or a URL.
+            alerts: { ...alertBook.status(), lastReportDay },
+            settings: settingsSummary(settings),
             pushes: { sent: push.sent, failed: push.failed },
             // After a genesis or reshare at this boot: how many of the new custodians have shown they hold their share.
             shares: status.switched ? { generation: status.switched.generation, confirmed: status.switched.confirmed.length, of: status.switched.custodians.length } : null,
@@ -894,13 +1012,26 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         });
     }
 
+    /**
+     * At the first call on a new day: the finished day's report, signed. A day whose report can't be made (the vault
+     * wasn't open, or the keyholder didn't sign) is lost, and the alerts say so (checkAlerts: `report`).
+     */
     async function rollReport(now: number): Promise<void> {
         const finished = counters.roll(now);
-        if (!finished || !db) return;
+        if (!finished) return;
         const status = await keyholderStatus();
-        if (status.state !== 'open') return;
+        if (status.state !== 'open' || !db) {
+            reportFailure = `the vault was not open to make it at ${new Date(now).toISOString().slice(0, 16)}Z`;
+            return;
+        }
         const text = reportText(now, finished.day, finished.counts, db, status);
-        previousReport = { text, signature: (await call<{ signature: string }>('signReport', { text })).signature };
+        try {
+            previousReport = { text, signature: (await call<{ signature: string }>('signReport', { text })).signature };
+            lastReportDay = finished.day;
+            reportFailure = null;
+        } catch {
+            reportFailure = 'the keyholder did not sign it';
+        }
     }
 
     // ─── The ceremonies (custodians only) ───────────────────────────────────────────────────
@@ -974,9 +1105,9 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) throw new HttpError(400, 'bad_backup', 'That is not a backup name.');
         let bytes: Buffer;
         try {
-            bytes = await store.get(name);
+            bytes = await readBackup(name);
         } catch {
-            throw new HttpError(404, 'no_backup', 'The backup store has no backup by that name.');
+            throw new HttpError(404, 'no_backup', 'Neither backup store has a backup by that name (or the off-box one can\'t be reached).');
         }
         let header;
         try {
@@ -1013,14 +1144,66 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         return json(200, await call('share', { submission }));
     });
 
+    /**
+     * The operator settings (shared/settings.ts): where backups go off the box, and where alerts go. They take effect
+     * when two of the vault's custodians in force (the genesis keys, on a fresh vault) have each sent the same settings
+     * within an hour; each custodian's newest counts. Answered while locked and on a fresh vault too: the alerts are
+     * needed then, and the cold path (design §4) needs the off-box store before its restore. The answer never repeats
+     * the settings: only their hash, which a custodian checks against their own file (`vault-custodian settings hash`).
+     */
+    route('POST', '/v1/unlock/settings', 'custodian', true, async ctx => {
+        if (!opts.settingsFile) throw new HttpError(409, 'no_settings_file', 'This vault has nowhere to keep settings (no settingsFile in its config).');
+        if (!ctx.status.custodians.includes(ctx.key)) throw new HttpError(403, 'not_custodian', 'Settings are agreed by the vault\'s custodians in force.');
+        let wanted: OperatorSettings;
+        try {
+            wanted = parseSettings(ctx.body.settings);
+        } catch (e) {
+            if (e instanceof SettingsError) throw new HttpError(400, 'bad_settings', e.message);
+            throw e;
+        }
+        const hash = settingsHash(wanted);
+        if (settings?.hash === hash) return json(200, { state: 'in_force', hash, approvals: settings.approvedBy.length, needed: SETTINGS_APPROVALS });
+        for (const [h, p] of proposals) {
+            p.by.delete(ctx.key);
+            if (!p.by.size || ctx.now - p.at > SETTINGS_PROPOSAL_MS) proposals.delete(h);
+        }
+        const p = proposals.get(hash) ?? { settings: wanted, by: new Set<string>(), at: ctx.now };
+        p.by.add(ctx.key);
+        proposals.set(hash, p);
+        if (p.by.size < SETTINGS_APPROVALS) return json(200, { state: 'waiting', hash, approvals: p.by.size, needed: SETTINGS_APPROVALS });
+        const file: SettingsFile = { v: 1, settings: wanted, hash, approvedBy: [...p.by].sort(), approvedAt: ctx.now };
+        saveSettings(file);
+        useSettings(file);
+        proposals.clear();
+        console.log(`vault-api: settings ${hash.slice(0, 16)} in force (off-box store ${wanted.offsite ? 'set' : 'none'}; alerts ${settingsSummary(file).alerts.join(', ') || 'none'}).`);
+        // The new channels hear at once what is already raised, rather than at the next minute's check.
+        track(checkAlerts());
+        return json(200, { state: 'in_force', hash, approvals: file.approvedBy.length, needed: SETTINGS_APPROVALS });
+    });
+
+    /** The backups the vault can see, by name: its own store's and the off-box store's (for the cold path's restore). */
+    route('POST', '/v1/unlock/backups', 'custodian', true, async () => {
+        let remote: string[] | null = null;
+        let offsiteError: string | null = null;
+        if (offsite) {
+            try {
+                remote = await offsite.list();
+            } catch (e) {
+                offsiteError = e instanceof OffsiteError ? e.short : 'failed';
+            }
+        }
+        return json(200, { local: await store.list(), offsite: remote, offsiteError });
+    });
+
     // ─── Backups ────────────────────────────────────────────────────────────────────────────
 
     async function runBackup(): Promise<string> {
         const status = await keyholderStatus();
         if (status.state !== 'open') throw new Error('The vault is locked: no backup.');
         const database = await ensureDb();
+        let made: { name: string; bytes: Uint8Array; now: number };
         try {
-            const name = await withWriteLock(async () => {
+            made = await withWriteLock(async () => {
                 const now = clock();
                 const existing = new Set(await store.list());
                 let name = backupNameFor(now);
@@ -1035,18 +1218,50 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 for (const old of await store.list()) {
                     if (backupTimeOf(old) < now - BACKUP_RETENTION_MS) await store.delete(old);
                 }
-                return name;
+                return { name, bytes: sealed.binary, now };
             });
             lastBackupOkAt = clock();
             backupFailuresInARow = 0;
             backupError = null;
             counters.counts.backupsOk++;
-            return name;
         } catch (e) {
             backupFailuresInARow++;
             backupError = e instanceof BackupTooLarge ? e.message : 'failed';
             counters.counts.backupsFailed++;
             throw e;
+        }
+        // Off the box, outside the write lock: an upload can take minutes, and deposits mustn't wait for it.
+        await copyOffsite(made.name, made.bytes, made.now);
+        return made.name;
+    }
+
+    /**
+     * The backup just written, copied to the off-box store (design §4: another provider, another country), and the
+     * copies there older than 30 days removed, as at home (§1.7: a deleted copy leaves the backups within 30 days).
+     * A failure is counted and said (the report, the alerts); the next hour's backup is the next try. Each backup holds
+     * every deletion record of the last 30 days, so a gap in the off-box copies loses nothing a restore needs.
+     */
+    async function copyOffsite(name: string, bytes: Uint8Array, now: number): Promise<void> {
+        const target = offsite;
+        if (!target) return;
+        try {
+            await target.put(name, bytes);
+            for (const old of await target.list()) {
+                if (backupTimeOf(old) < now - BACKUP_RETENTION_MS) await target.delete(old);
+            }
+            // Settings changed meanwhile: this store's result says nothing about the one in force now.
+            if (target !== offsite) return;
+            offsiteStatus.lastOkAt = clock();
+            offsiteStatus.lastName = name;
+            offsiteStatus.failuresInARow = 0;
+            offsiteStatus.error = null;
+            counters.counts.offsiteOk++;
+        } catch (e) {
+            if (target !== offsite) return;
+            offsiteStatus.failuresInARow++;
+            offsiteStatus.error = e instanceof OffsiteError ? e.short : 'failed';
+            counters.counts.offsiteFailed++;
+            console.error(`vault-api: the off-box copy of a backup failed: ${offsiteStatus.error}`);
         }
     }
 
@@ -1061,6 +1276,80 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         database.pruneHolds(now);
         database.pruneDeletions(dayOf(now - BACKUP_RETENTION_MS));
         await runBackup().catch(() => undefined);
+    }
+
+    /**
+     * What the custodians are told about (alerts.ts), every minute: the vault locked or its keyholder unreachable for
+     * five minutes (not a fresh vault, which holds nothing yet); backups failing twice or the newest over two hours old
+     * while open; the same for the off-box copy, when a store is set; a finished day with no signed report two hours
+     * into the next (only a day this process ran through: its counts live in memory). A new day's report is made here
+     * too, so it doesn't wait for the hourly job.
+     */
+    function checkAlerts(): Promise<void> {
+        alertRun ??= runAlertCheck().finally(() => {
+            alertRun = null;
+        });
+        return alertRun;
+    }
+
+    function minute(ms: number): string {
+        return `${new Date(ms).toISOString().slice(0, 16)}Z`;
+    }
+
+    async function runAlertCheck(): Promise<void> {
+        const now = clock();
+        const status = await keyholderStatus();
+        const open = status.state === 'open' && !status.restorePending && dataReady();
+        if (open) {
+            lockedSince = null;
+            openSince ??= now;
+            if (db) await rollReport(now);
+        } else {
+            openSince = null;
+            if (status.state === 'fresh' && status.reachable) lockedSince = null;
+            else lockedSince ??= now;
+        }
+        const conditions: Condition[] = [];
+
+        const why = !status.reachable ? 'its keyholder does not answer'
+            : status.state === 'locked' ? 'its keyholder is locked (it restarted): two custodians must unlock it'
+                : status.restorePending ? 'a restore from backup is still to finish' : 'its data partition is not open yet';
+        conditions.push({
+            key: 'locked', active: lockedSince !== null && now - lockedSince >= LOCKED_ALERT_MS, since: lockedSince ?? undefined,
+            detail: lockedSince === null ? 'it is open again.'
+                : `${why}. Getting back in with a sign-in, and connecting one, are paused, and no backup is taken, until it opens. The 12 words work as always.`,
+        });
+
+        const backupBase = lastBackupOkAt ?? openSince;
+        const backupStale = open && backupBase !== null && now - backupBase > BACKUP_STALE_MS;
+        const backupFailing = backupFailuresInARow >= BACKUP_FAILURES_ALERT;
+        conditions.push({
+            key: 'backup', active: backupFailing || backupStale, since: backupBase ?? undefined,
+            detail: backupFailing ? `${backupFailuresInARow} backups in a row failed (${backupError ?? 'failed'}).`
+                : backupStale ? (lastBackupOkAt ? `the newest backup is from ${minute(lastBackupOkAt)}, over two hours ago.` : 'no backup has been made since the vault opened, over two hours ago.')
+                    : `backups work again${lastBackupOkAt ? ` (the newest at ${minute(lastBackupOkAt)})` : ''}.`,
+        });
+
+        const offsiteBase = offsiteStatus.lastOkAt ?? (openSince === null ? null : Math.max(openSince, offsiteSince));
+        const offsiteStale = !!offsite && open && offsiteBase !== null && now - offsiteBase > BACKUP_STALE_MS;
+        const offsiteFailing = !!offsite && offsiteStatus.failuresInARow >= BACKUP_FAILURES_ALERT;
+        conditions.push({
+            key: 'offsite', active: offsiteFailing || offsiteStale, since: offsiteBase ?? undefined,
+            detail: !offsite ? 'no off-box store is set now.'
+                : offsiteFailing ? `${offsiteStatus.failuresInARow} off-box copies in a row failed (${offsiteStatus.error ?? 'failed'}): the backups are on the vault's own disk only.`
+                    : offsiteStale ? 'no backup has gone off the box for over two hours: the newest are on the vault\'s own disk only.'
+                        : `backups go off the box again${offsiteStatus.lastOkAt ? ` (the newest at ${minute(offsiteStatus.lastOkAt)})` : ''}.`,
+        });
+
+        const midnight = Date.parse(`${dayOf(now)}T00:00:00Z`);
+        const yesterday = dayOf(now - DAY_MS);
+        const reportMissing = startedAt < midnight && now - midnight >= REPORT_GRACE_MS && (lastReportDay === null || lastReportDay < yesterday);
+        conditions.push({
+            key: 'report', active: reportMissing, since: midnight,
+            detail: reportMissing ? `no signed daily report for ${yesterday}: ${reportFailure ?? 'the vault was not open to make it'}.`
+                : `the daily report is signed again (${lastReportDay ?? 'today'}).`,
+        });
+        await alertBook.update(conditions);
     }
 
     // ─── HTTP ───────────────────────────────────────────────────────────────────────────────
@@ -1219,7 +1508,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
 
     async function closeRest(): Promise<void> {
         if (dataWatch) clearInterval(dataWatch);
-        await Promise.allSettled([...background]);
+        await Promise.allSettled([...background, alertRun]);
         await push.idle();
         kh.close();
         db?.close();
@@ -1266,6 +1555,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         },
         runBackup,
         maintenance,
+        checkAlerts,
         idle: async () => {
             while (background.size) await Promise.allSettled([...background]);
             await push.idle();

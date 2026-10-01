@@ -34,7 +34,7 @@ BeanPool never asks for your 12 words or a password in an alert.
 
 Each alert carries your community's signature, made for you alone. BeanPool checks it before doing anything:
 
-- **It checks out:** BeanPool asks your community what the alert was about and opens it.
+- **It checks out:** BeanPool asks your community what the alert was about and opens it, if it's from the community you're in. An alert from another of your communities opens BeanPool where you left off: switch to that community to see it.
 - **It doesn't:** BeanPool opens nothing and tells you once: "That notification didn't come from your community. Ignore what it said. BeanPool never asks for your 12 words or a password in a notification."
 
 While BeanPool is open, an alert that doesn't check out isn't shown at all, and neither is one you've already seen.
@@ -44,6 +44,8 @@ Your phone shows an alert's words before BeanPool can check them. So someone who
 An alert from a community you've removed from this phone does nothing either.
 
 If your community's server hasn't been updated yet, its alerts carry no signature. BeanPool shows them in general words ("There is news from your community.") and, when you tap one, opens where you left off.
+
+If your community's server is newer than your copy of BeanPool, some of its alerts may show in general words, and a tap may open where you left off. That's expected, not a warning sign: once you update BeanPool, they show and open as usual.
 
 ## Notices when BeanPool checks in
 

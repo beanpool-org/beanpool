@@ -442,7 +442,7 @@ async function main(): Promise<void> {
             assert(w3more.every((p) => p.ok === false && /no longer on the main server/.test(p.error ?? '')) && refsOpen.length === 0,
                 `three staged copies that failed in their fetch leave no descriptor open on the references file each read from `
                 + `(${refsOpen.length} open${refsOpen.length ? `: ${refsOpen.slice(0, 3).join(' | ')}` : ''}; before: one more for each; `
-                + `${JSON.stringify(w3more.map((p) => p.error?.slice(0, 90) ?? null))})`);
+                + `${JSON.stringify(w3more.map((p) => p.error?.slice(0, 160) ?? null))})`);
             await main.send('sql', { sql: 'DELETE FROM post_photos WHERE order_num >= 10' });
             assert(d3.ok === false && w3b.ok === false && /no longer on the main server/.test(d3.error ?? '') && /no longer on the main server/.test(w3b.error ?? '')
                 && !st3.staging && JSON.stringify(before.tables) === JSON.stringify(after.tables) && rec3b.lastWhy === 'http-404',

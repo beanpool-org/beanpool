@@ -307,7 +307,7 @@ async function main(): Promise<void> {
         const m = `https://localhost:${await main.send('serve')}`;
         for (const who of [ann, bo]) {
             const inv = built(`Gwen makes an invite for ${who.name}`, await api(m, '/api/invite/generate', gwen, { publicKey: gwen.pk }));
-            built(`${who.name} joins with it`, await api(m, '/api/invite/redeem', null, { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name }));
+            built(`${who.name} joins with it`, await api(m, '/api/invite/redeem', who, { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name }));
             built(`${who.name} sets a profile photo (listings need one)`, await api(m, '/api/profile/update', who, { avatar: TINY_PNG }));
         }
         const offer = async (who: Id, title: string) => built(`${who.name} offers ${title}`, await api(m, '/api/marketplace/posts', who, {

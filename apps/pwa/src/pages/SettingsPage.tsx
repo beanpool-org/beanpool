@@ -505,7 +505,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         setError(null);
         setSuccess(null);
         try {
-            await redeemInvite(redeemInviteCode.trim(), identity.publicKey, identity.callsign);
+            // Signed with the key it names (the node registers no key a redeem isn't signed by).
+            await redeemInvite(redeemInviteCode.trim(), identity.publicKey, identity.callsign, identity);
             setSuccess('Invite redeemed successfully on current node!');
             setRedeemInviteCode('');
         } catch (e: any) {

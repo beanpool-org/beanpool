@@ -514,7 +514,7 @@ async function main(): Promise<void> {
         };
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip, rex, lou, nia, pam, moe]) {
-            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { body: { code: await invite(), publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: await invite(), publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         for (const who of [gwen, cy, nia]) built(`the admin makes ${who.name} an Elder`, await A(`/api/local/admin/users/${who.pk}/elder`, { grant: true }));
@@ -635,7 +635,7 @@ async function main(): Promise<void> {
         const onS = (who: Id | null, route: string, body: unknown = {}) => api(sv, 'POST', route, who ? { as: who, body } : { admin: PW_STANDBY, body });
         const routes: [string, Promise<Answer>][] = [
             ['an invite made', onS(gwen, '/api/invite/generate', { publicKey: gwen.pk })],
-            ['an invite redeemed', api(sv, 'POST', '/api/invite/redeem', { body: { code: unused, publicKey: newId('X').pk, callsign: 'Stranger' } })],
+            ['an invite redeemed', (() => { const x = newId('X'); return api(sv, 'POST', '/api/invite/redeem', { as: x, body: { code: unused, publicKey: x.pk, callsign: 'Stranger' } }); })()],
             ['a keeper request', onS(moe, `/api/treasury/${probe.publicKey}/keepers/request`, { pledgedBacking: 0 })],
             ['a keeper request approved', onS(cy, `/api/enterprise/${probe.publicKey}/keepers/requests/${requestId}/approve`)],
             ['a succession vote', onS(bo, `/api/treasury/${probe.publicKey}/succession/${successionId}/vote`, { choice: 'yes' })],
@@ -771,7 +771,7 @@ async function main(): Promise<void> {
         f = await standby.send('facts', { ids });
         assert(f.payouts === 1, `and only once: a later sale pays it no second time (${f.payouts} payout)`);
         const oli = newId('Oli');
-        const redeemed = await api(p, 'POST', '/api/invite/redeem', { body: { code: unused, publicKey: oli.pk, callsign: 'Oli' } });
+        const redeemed = await api(p, 'POST', '/api/invite/redeem', { as: oli, body: { code: unused, publicKey: oli.pk, callsign: 'Oli' } });
         assert(redeemed.status === 200 && redeemed.body?.success !== false, `Oli joins with the invite Gwen made before the take-over (${brief(redeemed)})`);
         const newPam = newId('Pam2');
         const rekeyed = await PA(`/api/local/admin/members/${pam.pk}/rekey/complete`, { code: rekeyCode, newPubkey: newPam.pk });

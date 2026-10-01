@@ -68,7 +68,7 @@ export function newIdentity(callsign) {
     };
 }
 
-/** Plain request — for the /api/local/ and /api/invite/ paths, which bypass the signature middleware. */
+/** Plain request — for the /api/local/ paths, which bypass the signature middleware. (An invite redeem is signed.) */
 export async function plain(node, method, path, body, headers = {}) {
     const res = await fetch(`${base(node)}${path}`, {
         method,
@@ -156,7 +156,8 @@ export async function seedElder(node, callsign) {
     console.log(`  ${node}: elder invite ${invite.json.code} (${invite.json.type})`);
 
     const identity = newIdentity(callsign);
-    const redeemed = await plain(node, 'POST', '/api/invite/redeem', {
+    // Signed by the key it registers: the node registers no key a redeem isn't signed by.
+    const redeemed = await signed(node, identity, 'POST', '/api/invite/redeem', {
         code: invite.json.code, publicKey: identity.publicKey, callsign,
     });
     if (redeemed.status !== 200) {

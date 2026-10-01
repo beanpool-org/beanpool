@@ -4,6 +4,10 @@ import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
+import { isBreakGlassCodeShape } from './break-glass-code.js';
+import { resetKeySigninBrake } from './key-signin-brake.js';
+import { logger } from './logger.js';
+import { logAddressTag } from './log-address.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -101,6 +105,11 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                         reqPath === '/api/local/admin/auth/break-glass/status' ||
                         reqPath === '/api/local/admin/auth/break-glass-status';
 
+    // The only routes a break-glass code opens, whatever the mode (§2.2: "can do exactly one thing: enrol a new admin
+    // key"). Until 2026-10-01 a code was tried for any password on any route while the mode was off (the default), so it
+    // was a second owner password that never changed (Fable's security review, MEDIUM 1).
+    const isBreakGlassEnrolment = reqPath === '/api/local/admin/auth/enrol' || reqPath === '/api/local/admin/auth/break-glass/enrol';
+
     if (isBreakGlass && !isEnrolment) {
         ctx.status = 403;
         ctx.body = {
@@ -140,20 +149,33 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         else chargedAt = admission.chargedAt;
         let pwOk = false;
         try {
-            // While the source is braked the password is not checked at all; a break-glass code still is (64 random
-            // bits: not guessable online, and how an owner enrols a key while the password is under attack).
+            // While the source is braked the password is not checked at all. On the enrol routes a break-glass code
+            // still is (64 random bits: not guessable online, and how an owner enrols a key while the password is under
+            // attack), at most once every BREAK_GLASS_WHILE_BRAKED_MS per source and BREAK_GLASS_WHILE_BRAKED_PER_MIN a
+            // minute across the node, since each check is an scrypt per owner. On every other route a code is a wrong
+            // password: the same answer, counted by the same brake.
             if (admitted && config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
                 pwOk = true;
                 // Which password this request proved, so a route that must also be sent the current password (change
                 // password) need not run scrypt, and take the brake, a second time for the same string.
                 if (!ctx.state) ctx.state = {};
                 ctx.state.verifiedAdminPassword = password;
-            } else {
-                const ownerMatch = verifyBreakGlassCode(password);
-                if (ownerMatch) {
-                    pwOk = true;
-                    breakGlassOwner = ownerMatch.member_pubkey;
+            } else if (isBreakGlassEnrolment && isBreakGlassCodeShape(password)) {
+                const wait = admitted ? 0 : admitBreakGlassWhileBraked(brakeKey);
+                if (wait > 0 && refusal) {
+                    refusal = { ...refusal, retryAfter: wait };
+                } else {
+                    const ownerMatch = await verifyBreakGlassCode(password);
+                    if (ownerMatch) {
+                        pwOk = true;
+                        breakGlassOwner = ownerMatch.member_pubkey;
+                    }
+                    logger.security('AUTH', ownerMatch
+                        ? `Break-glass code of ${breakGlassOwner!.slice(0, 12)}… accepted to enrol an admin key (${reqPath}, from ${logAddressTag(brakeKey)})`
+                        : `A wrong break-glass code was refused at ${reqPath} (from ${logAddressTag(brakeKey)})`);
                 }
+            } else if (isBreakGlassCodeShape(password) && admitted) {
+                logger.security('AUTH', `A break-glass code was sent to ${reqPath}; it only enrols an admin key, so it was answered as a wrong password (from ${logAddressTag(brakeKey)})`);
             }
         } finally {
             if (admitted) settlePasswordAttempt(brakeKey, pwOk, !totpOn);
@@ -408,10 +430,40 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
     return true;
 }
 
+/**
+ * A break-glass code from a source the password brake holds (checkAdminAuth, enrol routes only): at most one check per
+ * source every BREAK_GLASS_WHILE_BRAKED_MS, and BREAK_GLASS_WHILE_BRAKED_PER_MIN a minute across the node. Each check is
+ * an scrypt per owner (break-glass-code.ts), and a held source is otherwise checked for nothing, so without this bound a
+ * few addresses sending well-formed junk could keep the node's threadpool busy. An owner recovering sends one or two;
+ * a source the brake admits is not held here (its attempt is already counted), so another network always works.
+ */
+export const BREAK_GLASS_WHILE_BRAKED_MS = 10_000;
+export const BREAK_GLASS_WHILE_BRAKED_PER_MIN = 30;
+const breakGlassWhileBraked = new Map<string, number>();
+let breakGlassWhileBrakedNode: number[] = [];
+
+/** 0 when this held source may have its code checked now; otherwise the seconds to wait. */
+function admitBreakGlassWhileBraked(key: string, now = Date.now()): number {
+    const last = breakGlassWhileBraked.get(key);
+    if (last !== undefined && now - last < BREAK_GLASS_WHILE_BRAKED_MS) return Math.ceil((BREAK_GLASS_WHILE_BRAKED_MS - (now - last)) / 1000);
+    breakGlassWhileBrakedNode = breakGlassWhileBrakedNode.filter(t => now - t < 60_000);
+    if (breakGlassWhileBrakedNode.length >= BREAK_GLASS_WHILE_BRAKED_PER_MIN) {
+        return Math.max(1, Math.ceil((breakGlassWhileBrakedNode[0] + 60_000 - now) / 1000));
+    }
+    breakGlassWhileBrakedNode.push(now);
+    breakGlassWhileBraked.delete(key);
+    breakGlassWhileBraked.set(key, now);
+    if (breakGlassWhileBraked.size > 10_000) breakGlassWhileBraked.delete(breakGlassWhileBraked.keys().next().value!);
+    return 0;
+}
+
 export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
     resetPasswordBrake();
+    resetKeySigninBrake();
+    breakGlassWhileBraked.clear();
+    breakGlassWhileBrakedNode = [];
 }
 
 // ===================== CSRF TOKEN STORE =====================

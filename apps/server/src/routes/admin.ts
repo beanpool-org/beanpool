@@ -44,6 +44,7 @@ import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { clientLimiterKey } from '../client-ip.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER } from '@beanpool/core';
@@ -135,12 +136,14 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
         return;
     }
 
-    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor });
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor, source: clientLimiterKey(ctx) });
     if (!res.ok) {
         let status = 400;
         if (res.status) {
-            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts)
+            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts); 429 the 2FA brake, 410 a challenge burned
+            // by wrong codes (key-signin-brake.ts)
             status = res.status;
+            if (res.retryAfter) ctx.set('Retry-After', String(res.retryAfter));
         } else if (res.totpRequired) {
             status = 401;
         } else if (res.error?.includes('Challenge not found')) {
@@ -149,7 +152,7 @@ router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
             status = 403;
         }
         ctx.status = status;
-        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}) };
+        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
         return;
     }
 

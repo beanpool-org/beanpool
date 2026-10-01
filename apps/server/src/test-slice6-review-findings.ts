@@ -393,7 +393,7 @@ async function main() {
         const sig = crypto.sign(null, Buffer.from(payload), lead.priv).toString('base64');
         const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
         const joiner = keypair();
-        const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` });
+        const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` }, joiner);
         assert(res.status === 200 && res.json?.success, `fixture: the ticket redeems (got ${res.status} ${res.json?.error})`);
         const leadRow = db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(lead.pub) as any;
         assert(leadRow.last_active_at === longAgo, `redeeming does not stamp the inviter active (got ${leadRow.last_active_at})`);

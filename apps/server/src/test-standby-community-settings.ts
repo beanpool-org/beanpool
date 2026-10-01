@@ -453,7 +453,7 @@ async function main(): Promise<void> {
         const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
         for (const who of [ann, bo]) {
             const inv = built(`Gwen makes an invite for ${who.name}`, await api(m, 'POST', '/api/invite/generate', { as: gwen, body: { publicKey: gwen.pk } }));
-            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
         }
         built('the community names itself, its place and its contacts', await A('/api/local/update-identity', {
             callsign: 'riverbend', communityName: 'Riverbend Commons', lat: -33.71, lng: 151.1, contactEmail: 'hello@riverbend.example', contactPhone: '+61 2 5550 0101',

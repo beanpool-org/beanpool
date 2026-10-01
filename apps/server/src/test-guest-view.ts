@@ -1082,14 +1082,16 @@ async function main(): Promise<void> {
         }
 
         // 11c. The redeem card: a code or a ticket names nobody to its holder, but a member re-entering, who signs the
-        // redeem with their own key, still reads their own photo from it (native utils/db.ts redeemInvite).
+        // redeem with their own key, still reads their own photo from it (native utils/db.ts redeemInvite). Until
+        // 2026-10-01 a redeem not signed by Alice's key was answered "already a member" (and on a local node with her card,
+        // below); now a redeem must be signed by the key it names (Fable's review, LOW 4), so it is refused, naming nobody.
         {
             const redeemers: Array<[string, Id | null]> = [['unsigned', null], ['a non-member signer', newId()], ['a pruned account', pruned], ['Bob, signing for Alice', bob]];
             for (const [who, id] of redeemers) {
                 const r1 = await call('POST', id, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
                 const r2 = await call('POST', id, '/api/invite/redeem-offline', { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-                assert([r1, r2].every(r => r.status === 200 && r.body?.alreadyMember === true && r.body?.member === undefined && noPerson(r, [alice.pk])),
-                    `${who}: redeeming a code and a ticket for Alice's key says she is a member and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
+                assert([r1, r2].every(r => r.status === 401 && r.body?.code === 'redeem_unsigned' && r.body?.member === undefined && noPerson(r, [alice.pk])),
+                    `${who}: redeeming a code and a ticket for Alice's key is refused, not signed by her key, and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
             }
             // The card holds the photo itself, as stored: the phone keeps it only if the node can serve it.
             const photo = (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(alice.pk) as { avatar_url: string }).avatar_url;
@@ -1609,9 +1611,10 @@ async function main(): Promise<void> {
             `and a listing's photo URL carries its key, which opens it unsigned, and nothing else does (${offerPhoto})`);
 
         // Round 3's rules are every node's now (2026-10-01): here too a signer who is no member reads no trust profile (the
-        // exact lookup's key would walk the invite tree from one name), and a code's holder gets no member's card but their
-        // own. A pruned account is refused every read it signs, here as on every node (#1177 settles #1156's call: it passed
-        // the gated reads here until then). A HEAD to a gated read is refused as its GET is on every node.
+        // exact lookup's key would walk the invite tree from one name). A redeem must be signed by the key it names
+        // (2026-10-01), so a code's holder who names someone else's key is refused and gets no card; only that member's own
+        // signed redeem gets it. A pruned account is refused every read it signs, here as on every node (#1177 settles
+        // #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its GET is on every node.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         const tp = await call('POST', outsider, '/api/trust/profile', { targetPubkey: alice.pk });
         assert(tp.status === 403 && tp.body?.code === 'members_only' && leaks(tp.text).length === 0,
@@ -1620,10 +1623,11 @@ async function main(): Promise<void> {
         assert(memberTp.status === 200 && memberTp.body?.callsign === 'SentinelAlice', `a member reads it (${memberTp.status})`);
         const code = se.generateInvite(bob.pk)!.code;
         const card = await call('POST', null, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-        assert(card.status === 200 && card.body?.alreadyMember === true && !card.body?.member && leaks(card.text).length === 0,
-            `an unsigned redeem naming Alice's key learns she is a member, and gets no card of hers (${card.status} ${card.text.slice(0, 80)})`);
+        assert(card.status === 401 && card.body?.code === 'redeem_unsigned' && card.body?.member === undefined && leaks(card.text).length === 0,
+            `an unsigned redeem naming Alice's key is refused and gets no card of hers (${card.status} ${card.text.slice(0, 80)})`);
         const ownCard = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-        assert(ownCard.status === 200 && ownCard.body?.member?.callsign === 'SentinelAlice', `Alice, signing her own redeem, gets her own card (${ownCard.status})`);
+        assert(ownCard.status === 200 && ownCard.body?.alreadyMember === true && ownCard.body?.member?.callsign === 'SentinelAlice',
+            `Alice, signing her own redeem, gets her own card (${ownCard.status})`);
         for (const p of ['/api/members', `${POSTS}?${ALL_TYPES}`]) {
             const prunedRead = await call('GET', pruned, p);
             assert(prunedRead.status === 403 && prunedRead.body?.code === 'account_closed' && !prunedRead.text.includes(alice.pk),

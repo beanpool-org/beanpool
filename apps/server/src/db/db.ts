@@ -12,6 +12,7 @@ import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
+import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1401,6 +1402,14 @@ export function initSchema() {
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
+    // Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at
+    // this boot rather than on each code's next use, which may be never.
+    try {
+        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
+        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
+    }
 
     // On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
     // takes over boots as a main server, which seeds one if the copy brought none.

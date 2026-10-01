@@ -1049,10 +1049,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         if (pendingInviteCode.length > 20 && pendingInviteCode.startsWith('BP-')) {
                             // Offline ticket cryptographic redemption
                             const ticketB64 = pendingInviteCode.slice(3); // Remove 'BP-' prefix
-                            await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign);
+                            // Signed with the key it names: the node registers no key a redeem isn't signed by.
+                            await redeemOfflineTicket(ticketB64, pendingIdentity.publicKey, pendingIdentity.callsign, pendingIdentity);
                         } else {
                             // Legacy short-hash central database redemption
-                            await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign);
+                            await redeemInvite(pendingInviteCode, pendingIdentity.publicKey, pendingIdentity.callsign, pendingIdentity);
                         }
                     } catch (err: any) {
                         // Already-redeemed is not a failure here. Step 1 treats it as

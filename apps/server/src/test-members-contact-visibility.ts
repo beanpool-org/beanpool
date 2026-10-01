@@ -271,26 +271,34 @@ async function main() {
             `a re-key-pending key is refused the ${k} owner's profile page with 403 and no contact (got ${asRekeyPending.status})`);
     }
 
-    console.log('\n── the unsigned invite-redeem routes, named with an existing member\'s key ──');
+    console.log('\n── the invite-redeem routes, named with an existing member\'s key ──');
     {
-        // Any recent invite code will do: the "already a member" answer comes before the code is checked as used.
+        // Any recent invite code will do: the "already a member" answer comes before the code is checked as used. Until
+        // 2026-10-01 these routes answered an unsigned redeem naming a member's key with that member's card; a redeem must
+        // now be signed by the key it names (Fable's review, LOW 4), so unsigned is refused with no card at all, and the
+        // card goes only to the member's own signed redeem (a phone re-entering).
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-PROBE-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
         const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
         const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
         const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
+        const CARD = ['avatarUrl', 'callsign', 'joinedAt', 'publicKey'].join(',');
         for (const [k, o] of Object.entries(owners)) {
             for (const [route, body] of [
                 ['/api/invite/redeem', { code: 'INV-PROBE-0001', publicKey: o.pubKeyHex, callsign: 'probe' }],
                 ['/api/invite/redeem-offline', { ticketB64, publicKey: o.pubKeyHex, callsign: 'probe' }],
             ] as const) {
-                const r = await post(route, body);
-                assert(r.status === 200 && r.body?.alreadyMember === true, `unsigned ${route} for the ${k} owner's key answers alreadyMember (got ${r.status})`);
+                const u = await post(route, body);
+                assert(u.status === 401 && u.body?.code === 'redeem_unsigned' && u.body?.member === undefined,
+                    `unsigned ${route} for the ${k} owner's key is refused with no card (got ${u.status})`);
+                assert(secretsIn(u.text).size === 0 && !anyInviteCode(u.text), `…and carries no contact and no invite code (saw ${fmt(secretsIn(u.text))})`);
+                const r = await post(route, body, o);
+                assert(r.status === 200 && r.body?.alreadyMember === true, `${route} signed by the ${k} owner's own key answers alreadyMember (got ${r.status})`);
                 assert(secretsIn(r.text).size === 0, `…and carries no contact (saw ${fmt(secretsIn(r.text))})`);
                 assert(!anyInviteCode(r.text), '…and no invite code');
-                // An existing member's card goes only to a redeem signed by that member's own key, on every node
-                // (2026-10-01; routes/community.ts redeemedCard): an unsigned one gets none.
-                assert(r.body?.member === undefined,
-                    `…and no card of theirs (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
+                // An existing member's card goes only to a redeem signed by that member's own key (2026-10-01;
+                // routes/community.ts redeemedCard): the unsigned `u` above got none, and this signed one gets the public card.
+                assert(Object.keys(r.body?.member || {}).sort().join(',') === CARD,
+                    `…and only the public card (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
             }
         }
     }
@@ -301,7 +309,7 @@ async function main() {
         await sleep(200);
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-JOIN-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
         const joiner = keypair();
-        const joined = await post('/api/invite/redeem', { code: 'INV-JOIN-0001', publicKey: joiner.pubKeyHex, callsign: 'newcomer' });
+        const joined = await post('/api/invite/redeem', { code: 'INV-JOIN-0001', publicKey: joiner.pubKeyHex, callsign: 'newcomer' }, joiner);
         assert(joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember, `a newcomer joins with a fresh code (got ${joined.status})`);
         assert(!joined.text.includes('INV-JOIN-0001'), 'the join response does not echo the invite code back in the member');
         await sleep(400);

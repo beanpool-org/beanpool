@@ -337,6 +337,7 @@ export const SUITES = [
     'test-enterprise-closed-states',
     'test-slice6-review-findings',
     'test-security-followups-0919',
+    'test-security-followups-1001',
 ];
 
 /**

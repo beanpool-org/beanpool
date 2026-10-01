@@ -126,10 +126,12 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             signature,
             totpCode: typeof totpCode === 'string' ? totpCode : undefined,
             signedFor,
+            source: clientLimiterKey(ctx),
         });
         if (!res.ok) {
             ctx.status = res.status;
-            ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}), ...(res.totpRequired ? { totpRequired: true } : {}) };
+            if (res.retryAfter) ctx.set('Retry-After', String(res.retryAfter));
+            ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}), ...(res.totpRequired ? { totpRequired: true } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
             return;
         }
         ctx.body = { success: true, role: res.role };

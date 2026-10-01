@@ -549,7 +549,7 @@ async function main(): Promise<void> {
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip]) {
             const inv = built(`Gwen makes an invite for ${who.name}`, await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
-            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         }
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
@@ -813,7 +813,7 @@ async function main(): Promise<void> {
         const Z_ = (who: Id, route: string, body: unknown = {}) => api(z, 'POST', route, { as: who, body });
         built('M0: Gwen sets a profile photo', await Z_(gwen0, '/api/profile/update', { avatar: TINY_PNG }));
         const inv0 = built('M0: Gwen makes an invite for Yan', await Z_(gwen0, '/api/invite/generate', { publicKey: gwen0.pk }));
-        built('M0: Yan joins with it', await api(z, 'POST', '/api/invite/redeem', { body: { code: inv0.invite?.code ?? inv0.code, publicKey: yan.pk, callsign: 'Yan' } }));
+        built('M0: Yan joins with it', await api(z, 'POST', '/api/invite/redeem', { as: yan, body: { code: inv0.invite?.code ?? inv0.code, publicKey: yan.pk, callsign: 'Yan' } }));
         built('M0: Yan sets a profile photo', await Z_(yan, '/api/profile/update', { avatar: TINY_PNG }));
         // Gwen and Yan joined a month ago: their trades are with each other only, and a new pair's would be a flagged cluster
         // with no earned credit, so each of Yan's sends (steps 11 and 17) would pass only on a wash analysis cached before it.
@@ -1110,7 +1110,7 @@ async function main(): Promise<void> {
         // before it writes, through its routes (409 standby) and in its engine under them.
         const zed = newId('Zed');
         const invZ = built('M0: Gwen makes an invite for Zed', await Z_(gwen0, '/api/invite/generate', { publicKey: gwen0.pk }));
-        built('M0: Zed joins with it', await api(z, 'POST', '/api/invite/redeem', { body: { code: invZ.invite?.code ?? invZ.code, publicKey: zed.pk, callsign: 'Zed' } }));
+        built('M0: Zed joins with it', await api(z, 'POST', '/api/invite/redeem', { as: zed, body: { code: invZ.invite?.code ?? invZ.code, publicKey: zed.pk, callsign: 'Zed' } }));
         built('M0: Zed sets a profile photo', await Z_(zed, '/api/profile/update', { avatar: TINY_PNG }));
         await offer0(yan2, 'Pears', 3);
         const figs = await offer0(gwen0, 'Figs', 4);

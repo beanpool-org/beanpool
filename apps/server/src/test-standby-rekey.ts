@@ -652,9 +652,10 @@ async function main(): Promise<void> {
         assert(door.status === 403 && door.body?.code === 'key_invalidated', `the open door refuses it (${door.status} ${JSON.stringify(door.body)})`);
         const inviteCode = await standby.send('make-invite', { pk: anna.pk });
         require_(typeof inviteCode === 'string', `Anna makes an invite on the new main server (${inviteCode})`);
-        const invite = await call(port, null, 'POST', '/api/invite/redeem', { code: inviteCode, publicKey: rex.pk, callsign: 'RexAgain' });
+        // Signed with his old key, as his old phone would: a redeem must be signed by the key it names.
+        const invite = await call(port, rex, 'POST', '/api/invite/redeem', { code: inviteCode, publicKey: rex.pk, callsign: 'RexAgain' });
         assert(invite.status === 400 && /replaced by a new one/.test(invite.body?.error ?? ''), `an invite refuses it (${invite.status} ${JSON.stringify(invite.body)})`);
-        const ticket = await call(port, null, 'POST', '/api/invite/redeem-offline', { ticketB64: offlineTicket(anna), publicKey: rex.pk, callsign: 'RexAgain' });
+        const ticket = await call(port, rex, 'POST', '/api/invite/redeem-offline', { ticketB64: offlineTicket(anna), publicKey: rex.pk, callsign: 'RexAgain' });
         assert(ticket.status === 400 && /replaced by a new one/.test(ticket.body?.error ?? ''), `an offline ticket refuses it (${ticket.status} ${JSON.stringify(ticket.body)})`);
 
         // What the deletes before a re-key keep from a member who was removed, after a take-over.

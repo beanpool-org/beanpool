@@ -203,13 +203,14 @@ async function main() {
     const rex = seedMember('RekeyRex');       // a member whose phone is lost: an operator issues a re-key code
     const reporter = seedMember('ReporterRae');
 
-    // Real members, every way in. Unsigned, as a key with no row may redeem; `signer` signs the redeem, as both apps do.
-    const joinWithInvite = async (id: Id, signer?: Id) => {
+    // Real members, every way in. A redeem is signed by the key it registers, as both apps sign theirs (the node
+    // registers no key a redeem isn't signed by).
+    const joinWithInvite = async (id: Id, signer: Id = id) => {
         const invite = se.generateInvite(gen.pubKeyHex)!;
         const res = await post('/api/invite/redeem', { code: invite.code, publicKey: id.pubKeyHex, callsign: id.callsign }, signer);
         return { res, code: invite.code };
     };
-    const joinWithTicket = async (id: Id, signer?: Id) => {
+    const joinWithTicket = async (id: Id, signer: Id = id) => {
         const ticketB64 = offlineTicket(gen);
         return post('/api/invite/redeem-offline', { ticketB64, publicKey: id.pubKeyHex, callsign: id.callsign }, signer);
     };
@@ -532,10 +533,10 @@ async function main() {
     console.log('\n── 5. invites refuse a key a re-key replaced ──');
     {
         const invite = se.generateInvite(gen.pubKeyHex)!;
-        const res = await post('/api/invite/redeem', { code: invite.code, publicKey: rex.pubKeyHex, callsign: 'RexAgain' });
+        const res = await post('/api/invite/redeem', { code: invite.code, publicKey: rex.pubKeyHex, callsign: 'RexAgain' }, rex);
         const used = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(invite.code) as any;
         assert(res.status === 400 && /replaced/i.test(res.body?.error ?? '') && !used?.used_by, `an invite code refuses it, unused (${res.status} ${res.text.slice(0, 100)})`);
-        const ticket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(gen), publicKey: rex.pubKeyHex, callsign: 'RexAgain' });
+        const ticket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(gen), publicKey: rex.pubKeyHex, callsign: 'RexAgain' }, rex);
         const usedByRex = db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE used_by = ?').get(rex.pubKeyHex) as any;
         assert(ticket.status === 400 && /replaced/i.test(ticket.body?.error ?? '') && usedByRex.n === 0, `an offline ticket refuses it, unused (${ticket.status} ${ticket.text.slice(0, 100)})`);
     }
@@ -661,9 +662,11 @@ async function main() {
             ["an unsigned invite redeem naming a federation visitor's key", '/api/invite/redeem', { code, publicKey: vera.pubKeyHex, callsign: gen.callsign }, undefined, vera],
             ['an unsigned offline-ticket redeem naming it', '/api/invite/redeem-offline', { ticketB64, publicKey: vera.pubKeyHex, callsign: gen.callsign }, undefined, vera],
         ];
+        // Refused 400 by the visitors' rule (engine/invites.ts unsignedVisitorRefusal) until 2026-10-01; now 401 before
+        // that, since no redeem may name a key it isn't signed by (routes/community.ts requireRedeemSignature).
         for (const [label, p, body, signer, target] of attempts) {
             const r = await post(p, body, signer);
-            assert(r.status === 400 && r.body?.success !== true && !r.body?.member,
+            assert(r.status === 401 && r.body?.code === 'redeem_unsigned' && r.body?.success !== true && !r.body?.member,
                 `${label} is refused (${r.status} ${r.text.slice(0, 140)})`);
             assert(snapshot(target.pubKeyHex) === before.get(target.pubKeyHex) && feedLines(target.pubKeyHex) === 0 && codesUsedBy(target.pubKeyHex) === 0,
                 `…and writes nothing: no rename, no inviter or code, no joined_at, no feed line, no code used, still a visitor (${row(target.pubKeyHex).callsign}, is_visitor ${visitorFlag(target.pubKeyHex)})`);
@@ -685,15 +688,24 @@ async function main() {
         assert(veraJoin.status === 200 && !veraJoin.body?.alreadyMember && visitorFlag(vera.pubKeyHex) === 0 && row(vera.pubKeyHex).invited_by === gen.pubKeyHex,
             `Vera's own signed redeem of the same ticket makes her row a member's (${veraJoin.status} ${veraJoin.text.slice(0, 100)})`);
 
-        // A key with no row still joins unsigned, code and ticket, as before.
+        // A key with no row joined unsigned too, until 2026-10-01 (Fable's review, LOW 4: anyone with a code could register
+        // someone else's key). Now it is refused unsigned, writing nothing, and joins with its own signed redeem.
         const nell = keypair('NewNell');
-        const nellJoin = await post('/api/invite/redeem', { code: se.generateInvite(gen.pubKeyHex)!.code, publicKey: nell.pubKeyHex, callsign: nell.callsign });
+        const nellCode = se.generateInvite(gen.pubKeyHex)!.code;
+        const nellUnsigned = await post('/api/invite/redeem', { code: nellCode, publicKey: nell.pubKeyHex, callsign: nell.callsign });
+        assert(nellUnsigned.status === 401 && nellUnsigned.body?.code === 'redeem_unsigned' && !row(nell.pubKeyHex) && codeUser(nellCode) === null,
+            `a key with no row is refused an unsigned invite redeem, and the code stays unused (${nellUnsigned.status} ${nellUnsigned.text.slice(0, 100)})`);
+        const nellJoin = await post('/api/invite/redeem', { code: nellCode, publicKey: nell.pubKeyHex, callsign: nell.callsign }, nell);
         assert(nellJoin.status === 200 && !nellJoin.body?.alreadyMember && visitorFlag(nell.pubKeyHex) === 0,
-            `a key with no row still joins with an unsigned invite redeem (${nellJoin.status} ${nellJoin.text.slice(0, 100)})`);
+            `…and joins with its own signed one (${nellJoin.status} ${nellJoin.text.slice(0, 100)})`);
         const nora = keypair('NewNora');
-        const noraJoin = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(gen), publicKey: nora.pubKeyHex, callsign: nora.callsign });
+        const noraTicket = offlineTicket(gen);
+        const noraUnsigned = await post('/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pubKeyHex, callsign: nora.callsign });
+        assert(noraUnsigned.status === 401 && noraUnsigned.body?.code === 'redeem_unsigned' && !row(nora.pubKeyHex),
+            `the same with an offline ticket, refused unsigned (${noraUnsigned.status} ${noraUnsigned.text.slice(0, 100)})`);
+        const noraJoin = await post('/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pubKeyHex, callsign: nora.callsign }, nora);
         assert(noraJoin.status === 200 && !noraJoin.body?.alreadyMember && visitorFlag(nora.pubKeyHex) === 0,
-            `…and with an unsigned offline-ticket redeem (${noraJoin.status} ${noraJoin.text.slice(0, 100)})`);
+            `…and joining signed (${noraJoin.status} ${noraJoin.text.slice(0, 100)})`);
 
         // A visitor's row brings nobody in: no invite, no offline ticket, no answer to a knock. A key with no row gets the
         // same answers.
@@ -730,13 +742,13 @@ async function main() {
         const pip = keypair('NewPip');
         const checked = await get(`/api/invite/check?code=${wesCode}`);
         assert(checked.status === 200 && checked.body?.valid === false, `the pre-flight check calls a visitor's code no good (${checked.text.slice(0, 100)})`);
-        const viaWesCode = await post('/api/invite/redeem', { code: wesCode, publicKey: pip.pubKeyHex, callsign: pip.callsign });
+        const viaWesCode = await post('/api/invite/redeem', { code: wesCode, publicKey: pip.pubKeyHex, callsign: pip.callsign }, pip);
         assert(viaWesCode.status === 400 && !row(pip.pubKeyHex) && codeUser(wesCode) === null,
             `a code a visitor made brings nobody in, and stays unused (${viaWesCode.status} ${viaWesCode.text.slice(0, 100)})`);
         const selfRedeem = await post('/api/invite/redeem', { code: wesCode, publicKey: wes.pubKeyHex, callsign: 'WesTheMember' }, wes);
         assert(selfRedeem.status === 400 && visitorFlag(wes.pubKeyHex) === 1 && codeUser(wesCode) === null,
             `…nor the visitor itself, with its own signed redeem (${selfRedeem.status} ${selfRedeem.text.slice(0, 100)})`);
-        const viaWesTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(wes), publicKey: pip.pubKeyHex, callsign: pip.callsign });
+        const viaWesTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(wes), publicKey: pip.pubKeyHex, callsign: pip.callsign }, pip);
         assert(viaWesTicket.status === 400 && !row(pip.pubKeyHex),
             `an offline ticket a visitor signs brings nobody in (${viaWesTicket.status} ${viaWesTicket.text.slice(0, 100)})`);
         const selfTicket = await post('/api/invite/redeem-offline', { ticketB64: offlineTicket(wes), publicKey: wes.pubKeyHex, callsign: 'WesTheMember' }, wes);

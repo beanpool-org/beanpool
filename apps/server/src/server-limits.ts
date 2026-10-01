@@ -12,11 +12,15 @@
  *     (gateway-rate-limit.ts `claim:`), so what a slow sender can hold is bounded by those and the cap below.
  *   - keepAliveTimeout, 5 s: Node's default, explicit.
  *   - maxConnections, 4,096 a listener: every live socket the WebSocket caps allow (2,000 on /ws and 16 on /ws/logs:
- *     ws-limits.ts), and as many again for HTTP beside them. Past it Node closes a new connection at once.
+ *     ws-limits.ts), and as many again for HTTP beside them. Past it Node closes a new connection at once. It follows
+ *     the socket caps: on the global node's 5,000 it is 10,032, and an operator's WS_MAX_SOCKETS moves it too
+ *     (connectionCapForSockets). Each connection is a file descriptor; Node raises its soft limit to the hard one at
+ *     start, and a container's hard limit is far above these.
  *   - connectionsCheckingInterval, 5 s: how often Node looks for a connection past either timeout (its default, 30 s,
  *     would let a 20 s header timeout run to 50).
  */
 import type { Server as HttpServer } from 'node:http';
+import { wsLimits, type WsLimits } from './ws-limits.js';
 
 export interface ServerLimits {
     headersTimeoutMs: number;
@@ -34,19 +38,26 @@ export const DEFAULT_SERVER_LIMITS: Readonly<ServerLimits> = Object.freeze({
     connectionsCheckingIntervalMs: 5_000,
 });
 
-let limits: ServerLimits = { ...DEFAULT_SERVER_LIMITS };
+/** A listener's connection cap for the socket caps `l`: every place on /ws and /ws/logs and as many again, at least 4,096. */
+export function connectionCapForSockets(l: Readonly<WsLimits> = wsLimits()): number {
+    return Math.max(DEFAULT_SERVER_LIMITS.maxConnections, 2 * (l.maxSockets + l.maxLogSockets));
+}
 
+let testOverrides: Partial<ServerLimits> = {};
+
+/** What a server started now takes: the defaults, with the connection cap the socket caps need. */
 export function serverLimits(): Readonly<ServerLimits> {
-    return limits;
+    return { ...DEFAULT_SERVER_LIMITS, maxConnections: connectionCapForSockets(), ...testOverrides };
 }
 
 /** Tests only: other limits for the next server started. `undefined` puts the defaults back. */
 export function setServerLimitsForTests(overrides: Partial<ServerLimits> | undefined): void {
-    limits = { ...DEFAULT_SERVER_LIMITS, ...(overrides ?? {}) };
+    testOverrides = { ...(overrides ?? {}) };
 }
 
 /** The options http.createServer and https.createServer take at construction (the checking interval is read only then). */
 export function serverTimeoutOptions(): { headersTimeout: number; requestTimeout: number; keepAliveTimeout: number; connectionsCheckingInterval: number } {
+    const limits = serverLimits();
     return {
         headersTimeout: limits.headersTimeoutMs,
         requestTimeout: limits.requestTimeoutMs,
@@ -57,6 +68,7 @@ export function serverTimeoutOptions(): { headersTimeout: number; requestTimeout
 
 /** Set the limits a server takes after construction (the connection cap), and the timeouts again, to be sure. */
 export function applyServerLimits(server: HttpServer): void {
+    const limits = serverLimits();
     server.headersTimeout = limits.headersTimeoutMs;
     server.requestTimeout = limits.requestTimeoutMs;
     server.keepAliveTimeout = limits.keepAliveTimeoutMs;

@@ -27,7 +27,26 @@
  * retry with their backoff (@beanpool/core reconnectDelayMs); a refused app still reads everything over HTTP.
  *
  * Each upgrade is also charged to the gateway limiter (gateway-rate-limit.ts gatewayAdmitUpgrade), as an HTTP request.
+ *
+ * THE GLOBAL NODE (scratch/global-node/DESIGN-global-two-doors-fable.md §6.4). Those numbers suit a community on a
+ * 1 GB server. The lobby on the same server meets a viral day behind carrier NATs, so its profile has its own:
+ *   - 5,000 sockets on the node: about 50 MB at 10 KB each. 1,500 of them strangers' (members first: a refused visitor
+ *     reads over HTTP).
+ *   - 1,000 from one address: a hall, a campus or a carrier's shared address, and still not the node.
+ *   - 4 for one member: a phone, the web app, a tablet and one still closing. An account costs nothing at the open door,
+ *     so each holds fewer.
+ *   - 8 strangers' from one address, as everywhere: the guest pass that would let a visitor's key hold its own is not
+ *     built yet.
+ *   - `noRoomClose`: a socket over a cap is let in and closed at once with the "no room" close and a wait (@beanpool/core
+ *     WS_NO_ROOM_CLOSE_CODE, 5 minutes), which the apps can read, instead of a refusal they can't; such a refusal is not
+ *     charged to the address's requests (gateway-rate-limit.ts gatewayNoRoomUpgrade). A refused app retried within 30 s,
+ *     so on a full node the retries alone spent every address's request budget.
+ * A local community keeps every number above. An operator scales a cap with the server in the node's .env (WS_LIMIT_ENV:
+ * WS_MAX_SOCKETS=20000 on a 4 GB server, say), on either profile; anything but a whole number above 0 is ignored, and
+ * said once in the log. Strangers never get more places than the node has, nor more from one address than it may hold.
+ * The listeners' connection cap follows (server-limits.ts).
  */
+import { getNodeProfile, type NodeProfile } from './config/node-profile.js';
 
 export interface WsLimits {
     maxPayloadBytes: number;
@@ -38,8 +57,11 @@ export interface WsLimits {
     maxSocketsPerMember: number;
     maxLogSockets: number;
     framesPerMinute: number;
+    /** A socket over a cap is let in and closed with the "no room" close (above), rather than refused before the upgrade. */
+    noRoomClose: boolean;
 }
 
+/** A local community's: every node's before the global profile. */
 export const DEFAULT_WS_LIMITS: Readonly<WsLimits> = Object.freeze({
     maxPayloadBytes: 4 * 1024,
     maxSockets: 2000,
@@ -49,18 +71,63 @@ export const DEFAULT_WS_LIMITS: Readonly<WsLimits> = Object.freeze({
     maxSocketsPerMember: 8,
     maxLogSockets: 16,
     framesPerMinute: 60,
+    noRoomClose: false,
 });
 
-let limits: WsLimits = { ...DEFAULT_WS_LIMITS };
+/** The global node's, on the 1 GB server (above). */
+export const GLOBAL_WS_LIMITS: Readonly<WsLimits> = Object.freeze({
+    ...DEFAULT_WS_LIMITS,
+    maxSockets: 5000,
+    maxStrangerSockets: 1500,
+    maxSocketsPerAddress: 1000,
+    maxSocketsPerMember: 4,
+    noRoomClose: true,
+});
 
+const BY_PROFILE: Readonly<Record<NodeProfile, Readonly<WsLimits>>> = { local: DEFAULT_WS_LIMITS, global: GLOBAL_WS_LIMITS };
+
+/** The .env lines that set a cap, on any profile: a whole number above 0, or empty for the profile's own. */
+export const WS_LIMIT_ENV = {
+    WS_MAX_SOCKETS: 'maxSockets',
+    WS_MAX_STRANGER_SOCKETS: 'maxStrangerSockets',
+    WS_MAX_SOCKETS_PER_ADDRESS: 'maxSocketsPerAddress',
+    WS_MAX_STRANGER_SOCKETS_PER_ADDRESS: 'maxStrangerSocketsPerAddress',
+    WS_MAX_SOCKETS_PER_MEMBER: 'maxSocketsPerMember',
+} as const satisfies Record<string, keyof WsLimits>;
+const ENV_NAMES = Object.keys(WS_LIMIT_ENV) as (keyof typeof WS_LIMIT_ENV)[];
+
+let testOverrides: Partial<WsLimits> = {};
+// Read on every upgrade and every inbound frame, so worked out once for each profile and .env and kept.
+let resolved: { key: string; limits: Readonly<WsLimits> } | null = null;
+const warned = new Set<string>();
+
+/** The caps this node runs with now: its profile's, the .env's on top. NODE_PROFILE is read every time, as everywhere. */
 export function wsLimits(): Readonly<WsLimits> {
-    return limits;
+    const profile = getNodeProfile();
+    const raw = ENV_NAMES.map((name) => process.env[name] ?? '');
+    const key = `${profile}|${raw.join('|')}`;
+    if (resolved?.key === key) return resolved.limits;
+    const l: WsLimits = { ...BY_PROFILE[profile] };
+    ENV_NAMES.forEach((name, i) => {
+        const value = raw[i].trim();
+        if (value === '') return;
+        const n = /^\d{1,9}$/.test(value) ? Number(value) : 0;
+        if (n > 0) { l[WS_LIMIT_ENV[name]] = n; return; }
+        const message = `⚠️  ${name}=${JSON.stringify(raw[i])} is not a whole number above 0, so this node keeps its ${profile} profile's ${BY_PROFILE[profile][WS_LIMIT_ENV[name]]}.`;
+        if (!warned.has(message)) { warned.add(message); console.warn(message); }
+    });
+    Object.assign(l, testOverrides);
+    l.maxStrangerSockets = Math.min(l.maxStrangerSockets, l.maxSockets);
+    l.maxStrangerSocketsPerAddress = Math.min(l.maxStrangerSocketsPerAddress, l.maxSocketsPerAddress);
+    resolved = { key, limits: Object.freeze(l) };
+    return resolved.limits;
 }
 
-/** Tests only: smaller caps, so a suite can fill them. `undefined` puts the defaults back. The frame cap is read when a
- *  server starts (its WebSocketServers take it then). */
+/** Tests only: smaller caps, so a suite can fill them, over the profile's. `undefined` puts the profile's back. The frame
+ *  cap is read when a server starts (its WebSocketServers take it then). */
 export function setWsLimitsForTests(overrides: Partial<WsLimits> | undefined): void {
-    limits = { ...DEFAULT_WS_LIMITS, ...(overrides ?? {}) };
+    testOverrides = { ...(overrides ?? {}) };
+    resolved = null;
 }
 
 const FRAME_WINDOW_MS = 60_000;
@@ -78,7 +145,7 @@ const byKey = new Map<string, number>();
 
 /** Whether /ws has room for any socket at all: the first check, before a token is verified or anything charged. */
 export function wsHasRoom(): boolean {
-    return total < limits.maxSockets;
+    return total < wsLimits().maxSockets;
 }
 
 /**
@@ -87,6 +154,7 @@ export function wsHasRoom(): boolean {
  */
 export function admitWsSocket(address: string, holder: SocketHolder): SocketAdmission {
     const at = byAddress.get(address) ?? { all: 0, strangers: 0 };
+    const limits = wsLimits();
     if (total >= limits.maxSockets) return { ok: false, status: 503, reason: 'This community has as many live connections as it can hold. Try again shortly.' };
     if (at.all >= limits.maxSocketsPerAddress) return { ok: false, status: 429, reason: 'Too many live connections from your network.' };
     if (holder.kind === 'stranger') {
@@ -124,7 +192,7 @@ export function admitWsSocket(address: string, holder: SocketHolder): SocketAdmi
 
 /** Take a /ws/logs place (an admin's live log), or null when they are all taken. */
 export function admitLogSocket(): (() => void) | null {
-    if (logs >= limits.maxLogSockets) return null;
+    if (logs >= wsLimits().maxLogSockets) return null;
     logs++;
     let released = false;
     return () => { if (!released) { released = true; logs--; } };
@@ -145,5 +213,5 @@ export function frameAllowed(socket: { _frameWindowAt?: number; _frameCount?: nu
         socket._frameCount = 0;
     }
     socket._frameCount = (socket._frameCount ?? 0) + 1;
-    return socket._frameCount <= limits.framesPerMinute;
+    return socket._frameCount <= wsLimits().framesPerMinute;
 }

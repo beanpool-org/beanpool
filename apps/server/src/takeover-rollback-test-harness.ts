@@ -106,6 +106,11 @@ export async function rollbackChild(): Promise<void> {
             setNodeRole(a.role);
             return true;
         },
+        /** Rows read, for a suite's own question. */
+        query: async (a: { sql: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(a.sql).all();
+        },
         state: async () => standbyState(),
         inspect: (a) => inspectNode(a),
     });

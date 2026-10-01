@@ -86,11 +86,11 @@ import {
     parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
-import { db, markExistingVisitors, MEMBERS_SCHEMA_RULES } from '../db/db.js';
+import { db, MEMBERS_SCHEMA_RULES } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import {
-    getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement,
+    getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement, becomeMainServerInPlace,
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMirror, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import {
@@ -113,7 +113,9 @@ import {
 import {
     getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, NODE_PROFILE_KEY, type NodeProfile,
 } from '../config/node-profile.js';
-import { resolveNodeRole, roleFromSettings, takeoverMayRollBack, TAKEOVER_STEPS_BEFORE_RESTART } from '../config/node-role.js';
+import {
+    resolveNodeRole, roleFromSettings, takeoverMayRollBack, isTakeoverJournal, journalMayRollBack, TAKEOVER_STEPS_BEFORE_RESTART,
+} from '../config/node-role.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
 import {
     installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE, CLEARED_KEY, MAIN_EPOCH_KEY, REOPENED_KEY,
@@ -304,9 +306,10 @@ function readJson<T>(name: string): T | null {
     }
 }
 
+/** The journal, or null for none and for one this code does not read (config/node-role.ts isTakeoverJournal, which the role reads by). */
 function readJournal(): Journal | null {
-    const j = readJson<Journal>(TAKEOVER_JOURNAL_FILE);
-    return j && j.v === 1 && typeof j.id === 'string' && j.steps ? j : null;
+    const j = readJson<unknown>(TAKEOVER_JOURNAL_FILE);
+    return isTakeoverJournal(j) ? j as unknown as Journal : null;
 }
 
 function writeJournal(j: Journal): void {
@@ -1361,7 +1364,10 @@ function settleStepsBeforeRestart(j: Journal | null): { resumed: boolean; rolled
         // A roll-back a crash (or a refused write) stopped part way: finished before anything reads the role or the keys.
         logger.warn('SYS', '[Takeover] Finishing the roll-back of a take-over that stopped');
         rolledBackNow = rollBackTakeover(j, false).ok;
-    } else if (j && journalUnderWay(j) && PRE_RESTART.some((s) => !j.steps[s])) {
+    } else if (j && journalMayRollBack(j)) {
+        // Under way, its restart not recorded, a step before it missing (config/node-role.ts journalMayRollBack, by which the
+        // database's boot read a standby's role). One that recorded its restart is past every step its own build had: a
+        // journal from a build without a later step is never resumed on the main server it made.
         const plan = readPlan(j.id);
         if (!plan) {
             j.error = { step: PRE_RESTART.find((s) => !j.steps[s])!, message: 'the opened keys are gone from data/takeover-bundle.json, so the take-over cannot go on by itself', at: new Date().toISOString() };
@@ -1459,13 +1465,14 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
         const configured = getLocalConfig().nodeRole;
         if ((configured === 'primary' || configured === 'backup') && getNodeRole() !== configured) {
             setNodeRole(configured);
-            // Promoted here, in this process (a take-over finished at boot after an interruption), after the database's
-            // boot left the visitors' rows to a main server as a standby's does: the pass runs now, not at the next
-            // restart. It does nothing if the main server's marks were copied (db.ts markExistingVisitors).
-            if (configured === 'primary') markExistingVisitors();
-            // And the listing-photo URLs' shape, recorded as a standby's by the state engine's boot: a main server's now,
-            // so a phone that synced from the server it replaced is answered whole at once (engine/photo-keys.ts).
-            notePhotoUrlShapeNow();
+            // Promoted here, in this process (a take-over a crash stopped before `role`, finished at boot), after the
+            // database booted as a standby's: everything a main server's boot runs and a standby's skipped runs now, not at
+            // the next restart (state-engine.ts becomeMainServerInPlace): the visitors' marks and the other main-server
+            // passes, the listing-photo URLs' shape (a main server's now, so a phone that synced from the server it
+            // replaced is answered whole at once), and the main server's timers.
+            if (configured === 'primary') becomeMainServerInPlace();
+            // Made a standby: the photo URLs' shape is a standby's again.
+            else notePhotoUrlShapeNow();
         }
 
         auditRan = runPendingPromotionAudit(j);

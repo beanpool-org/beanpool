@@ -45,32 +45,47 @@ export const TAKEOVER_STEPS_BEFORE_RESTART = [
     'undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'community-settings', 'role', 'pull-config',
 ] as const;
 
-/** The take-over journal as this module reads it: the fields that say where it stands. */
-interface JournalState { state?: unknown; rolledBack?: unknown; steps?: Record<string, unknown> }
+/**
+ * The take-over journal's head, as services/takeover.ts reads it (readJournal): version 1, a string id, an object of steps.
+ * Anything else (`{}`, `[]`, no steps, another version) is no journal to the take-over code, which never resumes or rolls it
+ * back, so it decides nothing here either.
+ */
+export interface TakeoverJournalHead { v: 1; id: string; state?: unknown; rolledBack?: unknown; steps: Record<string, unknown> }
 
-function readTakeoverJournal(): JournalState | null {
+export function isTakeoverJournal(j: unknown): j is TakeoverJournalHead {
+    if (!j || typeof j !== 'object' || Array.isArray(j)) return false;
+    const o = j as Record<string, unknown>;
+    return o.v === 1 && typeof o.id === 'string' && !!o.steps && typeof o.steps === 'object' && !Array.isArray(o.steps);
+}
+
+function readTakeoverJournal(): TakeoverJournalHead | null {
     try {
         const dataDir = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-        const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8')) as JournalState | null;
-        return j && typeof j === 'object' ? j : null;
+        const j = JSON.parse(fs.readFileSync(path.join(dataDir, 'takeover-journal.json'), 'utf-8')) as unknown;
+        return isTakeoverJournal(j) ? j : null;
     } catch {
         return null;
     }
 }
 
 /**
- * Whether a start may still roll back the take-over the journal records (read from the file, as db/swap-at-boot.ts
- * takeoverUnderWay reads it): one being rolled back ('rolling-back'), or one under way (neither complete nor rolled back)
- * with a step before the restart not recorded, which the start resumes, and rolls back if that step fails or its opened
- * keys are gone. One past all of them only goes on.
+ * Whether a start may still roll back the take-over this journal records, exactly when services/takeover.ts would resume
+ * or roll it back at a start: one being rolled back ('rolling-back'), or one under way (neither complete nor rolled back)
+ * that has not recorded its restart and lacks a step before it. Its start resumes it, and rolls it back if that step fails
+ * or its opened keys are gone. One that recorded its restart ran every step its own build had before it (a journal from a
+ * build without a later step lacks that step for good) and only goes on, on a main server.
  */
-export function takeoverMayRollBack(): boolean {
-    const j = readTakeoverJournal();
-    if (!j) return false;
+export function journalMayRollBack(j: TakeoverJournalHead): boolean {
     if (j.state === 'rolling-back') return true;
     if (j.state === 'complete' || (j.state === 'failed' && !!j.rolledBack)) return false;
-    const steps = j.steps && typeof j.steps === 'object' ? j.steps : {};
-    return TAKEOVER_STEPS_BEFORE_RESTART.some((s) => !steps[s]);
+    if (j.steps.restart) return false;
+    return TAKEOVER_STEPS_BEFORE_RESTART.some((s) => !j.steps[s]);
+}
+
+/** journalMayRollBack for data/takeover-journal.json as it is on disk; false when there is none the take-over code reads. */
+export function takeoverMayRollBack(): boolean {
+    const j = readTakeoverJournal();
+    return !!j && journalMayRollBack(j);
 }
 
 export function getNodeRole(): NodeRole {

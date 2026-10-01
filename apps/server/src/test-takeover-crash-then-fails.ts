@@ -34,6 +34,10 @@
  *     control's, whose journal says 'rolling-back' from the first line), the recovery seal's records as before the
  *     take-over (rows a main server's boot already wrote are put back), and no main server's timer runs or fails, nor on a
  *     main server made a standby while it runs. Taken over again with no restart, the photo URLs' shape changes then.
+ *  8. A main server whose journal is one the take-over code never resumes or rolls back (past its restart from a build with
+ *     no `undo-copy`; `{}`, `[]`, no steps, another version) boots its database as the main server, as the merge base does.
+ *  9. Killed before `role`, finished at the next start, which makes the process the main server in place: an expired vote,
+ *     a passed hardship grant and a 10-day-old request are handled within its first ticks, with no restart.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-crash-then-fails.ts
@@ -44,7 +48,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { spawnNode, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, copyDir, type NodeProc } from './takeover-test-harness.js';
 import {
     rollbackChild, buildWorld, openAndConfirm, standbyCopy, ownParts, differences, assert, tally, PW_STANDBY, TUNNEL_TOKEN, type World,
 } from './takeover-rollback-test-harness.js';
@@ -333,7 +337,7 @@ const TIMER_FAILED = /Periodic tick failed|Convenor vote tick failed|Reminder sw
  * timers, armed at its boot, return quietly. A is then taken over again with no restart between: the main
  * server's start records the photo URLs' new shape at that start, so a phone that synced after the failed try still heals.
  */
-async function bootRollBackAsStandby(world: World, root: string): Promise<void> {
+async function bootRollBackAsStandby(world: World, root: string): Promise<{ mainDir: string; photoKeysSince: string }> {
     const label = 'killed after role, rolled back at the next start (A/B)';
     const crash = standbyCopy(world, root, 'ab-crash');
     await killedAfter(world, crash, 'role');
@@ -410,12 +414,115 @@ async function bootRollBackAsStandby(world: World, root: string): Promise<void> 
         assert(s.role === 'primary' && s.journal?.state === 'complete', `[${label}] A is the main server now, the journal complete (${s.role}, ${s.journal?.state})`);
         assert(since >= retriedAt && !/@standby/.test(s.mainBootRows.photoKeysShape ?? '@standby'),
             `[${label}] the photo URLs' shape is the main server's, changed at this take-over, not at the failed start (${s.mainBootRows.photoKeysSince}, retried ${new Date(retriedAt).toISOString()})`);
+        return { mainDir: dirA, photoKeysSince: s.mainBootRows.photoKeysSince };
     } catch (e: any) {
         for (const [name, node] of Object.entries(nodes)) console.error(`[${label}] ${name}:\n${node.output().slice(-4000)}`);
         if (e?.output) console.error(String(e.output).slice(-4000));
         throw e;
     } finally {
         await Promise.all(Object.values(nodes).map((n) => n.kill()));
+    }
+}
+
+/**
+ * 8. A main server after a take-over, its journal replaced by one the take-over code never resumes or rolls back (the
+ * 2026-10-02 review of #1448, node-role.ts:73). Each start boots its database as the main server, as the merge base does:
+ * never as a standby's promoted in the process, the photo URLs' shape as it was. Two kinds:
+ *   - a take-over past its restart, not yet done, whose build had no `undo-copy` (a journal from before #1433): it goes
+ *     on, and no step before the restart runs again on the main server;
+ *   - a journal the take-over code does not read: `{}`, `[]`, no steps, another version.
+ */
+async function journalsDecidedByConfig(root: string, promoted: { mainDir: string; photoKeysSince: string }): Promise<void> {
+    const complete = JSON.parse(fs.readFileSync(path.join(promoted.mainDir, 'takeover-journal.json'), 'utf-8'));
+    const olderBuild = { ...complete, state: 'restarting', completedAt: null, steps: { ...complete.steps } };
+    for (const step of ['undo-copy', 'done']) delete olderBuild.steps[step];
+    const kinds: [string, unknown][] = [
+        ['past its restart, from a build with no undo-copy', olderBuild],
+        ['{}', {}],
+        ['[]', []],
+        ['no steps', { v: 1, id: complete.id, state: 'running' }],
+        ['another version', { ...complete, v: 2, state: 'running', steps: { opened: complete.steps.opened } }],
+    ];
+    await Promise.all(kinds.map(async ([kind, journal], i) => {
+        const label = `a main server's journal: ${kind}`;
+        const dir = path.join(root, `journal-kind-${i}`);
+        copyDir(promoted.mainDir, dir);
+        const written = JSON.stringify(journal, null, 2);
+        fs.writeFileSync(path.join(dir, 'takeover-journal.json'), written, { mode: 0o600 });
+        const undoCopies = fs.readdirSync(dir).filter((n) => n.startsWith('pre-takeover-')).sort();
+        const node = await spawnNode(SCRIPT, dir, STANDBY_ENV);
+        try {
+            const s = await node.send('state');
+            assert(node.ready.role === 'primary' && !/NODE_ROLE set to 'primary'/.test(node.output()) && !/a standby holds no key of its own/.test(node.output()),
+                `[${label}] its database boots as the main server, never as a standby's promoted in the process (${node.ready.role})`);
+            assert(s.mainBootRows.photoKeysSince === promoted.photoKeysSince,
+                `[${label}] the photo URLs' shape as it was: no phone's next sync answered whole (${promoted.photoKeysSince} → ${s.mainBootRows.photoKeysSince})`);
+            if (i === 0) {
+                assert(!/Resuming an interrupted take-over/.test(node.output()) && !s.journal?.steps?.['undo-copy']
+                    && JSON.stringify([...s.preTakeoverDirs].sort()) === JSON.stringify(undoCopies) && s.journal?.state === 'complete',
+                    `[${label}] it goes on to the end, and no step before the restart runs again on the main server (${s.journal?.state}; undo copies ${undoCopies.length} → ${s.preTakeoverDirs.length})`);
+            } else {
+                assert(fs.readFileSync(path.join(dir, 'takeover-journal.json'), 'utf-8') === written, `[${label}] the journal is left as it is`);
+            }
+        } catch (e: any) {
+            console.error(`[${label}]\n${node.output().slice(-4000)}`);
+            throw e;
+        } finally {
+            await node.kill();
+        }
+    }));
+}
+
+/**
+ * 9. Killed after `roles` (before `role`), with an expired open vote, a passed hardship grant and a request nobody answered
+ * for 10 days in the copy (the 2026-10-02 review of #1448, takeover.ts:1384). The next start boots its database as a
+ * standby's, finishes the take-over and makes the process the main server in place: it runs what a main server's boot runs,
+ * so within its first ticks the vote closes, the grant is paid or queued, the request expires, and the members' schema-rules
+ * pass has run, with no restart.
+ */
+async function promotedInPlaceRunsMainServer(world: World, root: string): Promise<void> {
+    const label = 'killed after roles, finished in place';
+    const dir = standbyCopy(world, root, 'in-place');
+    await killedAfter(world, dir, 'roles');
+    const conn = new Database(path.join(dir, 'state.db'));
+    try {
+        const at = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+        const decision = conn.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params, franchise, status,
+                opens_at, closes_at, created_at, updated_at) VALUES (?, ?, ?, 'Seeded', 'pool', 'grant_hardship', ?, '{"amount":1}', '1m1v', ?, ?, ?, ?, ?)`);
+        decision.run('seed-open', world.anna, 'An expired vote', world.ben, 'open', at(8), at(1), at(8), at(8));
+        decision.run('seed-passed', world.ben, 'A passed hardship grant', world.ben, 'passed', at(9), at(2), at(9), at(2));
+        conn.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey) VALUES ('seed-post', 'offer', 'food', 'Eggs', 'Fresh eggs', 1, ?)`)
+            .run(world.anna);
+        conn.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
+                      VALUES ('seed-tx', 'seed-post', ?, ?, 1, 'requested', ?)`).run(world.ben, world.anna, at(10));
+    } finally {
+        conn.close();
+    }
+    const node = await spawnNode(SCRIPT, dir, STANDBY_ENV);
+    const started = Date.now();
+    try {
+        assert(node.ready.role === 'primary' && /NODE_ROLE set to 'primary'/.test(node.output()) && node.ready.resumed === true,
+            `[${label}] the start resumed the take-over and made this process the main server in place (${node.ready.role})`);
+        const seeded = async () => (await node.send('query', { sql: `SELECT
+            (SELECT status FROM decisions WHERE id = 'seed-open') AS vote,
+            (SELECT status FROM decisions WHERE id = 'seed-passed') AS grant_,
+            (SELECT status FROM marketplace_transactions WHERE id = 'seed-tx') AS request,
+            (SELECT value FROM node_config WHERE key = 'migration_members_schema_rules_v1') AS schemaRules` }))[0];
+        let now = await seeded();
+        while (Date.now() - started < 75_000 && (now.vote === 'open' || now.grant_ === 'passed' || now.request === 'requested')) {
+            await new Promise((r) => setTimeout(r, 2000));
+            now = await seeded();
+        }
+        const took = Math.round((Date.now() - started) / 1000);
+        assert(now.vote !== 'open', `[${label}] the expired vote is closed by the first Decisions tick (${now.vote}, ${took} s)`);
+        assert(now.grant_ !== 'passed', `[${label}] the passed hardship grant is paid or queued for funds (${now.grant_})`);
+        assert(now.request === 'cancelled', `[${label}] the request nobody answered for 10 days expires at the first hygiene sweep (${now.request})`);
+        assert(now.schemaRules === '1', `[${label}] the members' schema-rules pass ran (${now.schemaRules})`);
+    } catch (e: any) {
+        console.error(`[${label}]\n${node.output().slice(-6000)}`);
+        throw e;
+    } finally {
+        await node.kill();
     }
 }
 
@@ -438,7 +545,11 @@ async function main(): Promise<void> {
         console.log('\n— 6. the undo copy gone: nothing put back or deleted, and the journal says so —');
         await undoCopyGone(world, root);
         console.log('\n— 7. killed after "role", rolled back at the next start: its database never boots as the main server (A/B) —');
-        await bootRollBackAsStandby(world, root);
+        const promoted = await bootRollBackAsStandby(world, root);
+        console.log('\n— 8. journals the take-over code never resumes or rolls back: the database boots as the main server —');
+        await journalsDecidedByConfig(root, promoted);
+        console.log('\n— 9. killed before "role", finished at the next start in place: it runs what a main server\'s boot runs —');
+        await promotedInPlaceRunsMainServer(world, root);
     } finally {
         await world.main.kill();
     }

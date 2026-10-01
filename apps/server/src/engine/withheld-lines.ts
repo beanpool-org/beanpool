@@ -177,11 +177,13 @@ export function withheldLineMessage(r: WithheldLine): Message {
 }
 
 /**
- * A withheld line's photo, for its sender only, as an attachment row (routes/marketplace.ts reads its ciphertext from the
- * row or the image store, as for a chat photo).
+ * A withheld line's photo as an attachment row (routes/marketplace.ts reads its ciphertext from the row or the image
+ * store, as for a chat photo). Served by its id to whoever asks, unsigned too, exactly as a stored chat photo is
+ * (/api/messages/:id/attachment is a public read): only its sender ever has the id, and a 404 for anyone else would
+ * tell them they are blocked (#1403 re-review). The ciphertext is E2E; the node can't read it.
  */
-export function withheldAttachmentFor(id: unknown, viewer: string | undefined): (AttachmentRow & { nonce: string; mime: string }) | undefined {
-    const row = ownWithheldLine(id, viewer);
+export function withheldAttachmentFor(id: unknown): (AttachmentRow & { nonce: string; mime: string }) | undefined {
+    const row = withheldLine(id);
     if ((!row?.attachment_data && !row?.storage_key) || !row.attachment_nonce) return undefined;
     return { data: row.attachment_data, storage_key: row.storage_key ?? null, nonce: row.attachment_nonce, mime: row.attachment_mime || 'image/jpeg' };
 }

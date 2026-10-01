@@ -107,7 +107,7 @@ function member(name: string): Id {
     return id;
 }
 
-interface Res { status: number; body: any }
+interface Res { status: number; body: any; headers: Record<string, string> }
 async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: unknown): Promise<Res> {
     resetGatewayRateLimit();
     const raw = method === 'GET' ? '' : JSON.stringify(body ?? {});
@@ -124,7 +124,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty or not JSON */ }
-    return { status: res.status, body: parsed };
+    return { status: res.status, body: parsed, headers: Object.fromEntries(res.headers.entries()) };
 }
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body)?.slice(0, 160)}`;
 const keysOf = (o: any) => Object.keys(o ?? {}).sort().join(',');
@@ -251,7 +251,16 @@ async function main(): Promise<void> {
     const anonPhoto = await call('GET', null, `/api/messages/${boIds[2]}/attachment`);
     assert(boPhoto.status === 200 && boPhoto.body?.data === photo.ciphertext && boPhoto.body?.nonce === photo.nonce,
         `Bo's photo comes back to him (${show(boPhoto)})`);
-    assert(annPhoto.status === 404 && anonPhoto.status === 404, `to nobody else (${annPhoto.status}, ${anonPhoto.status})`);
+    // Served by its id as any stored chat photo is, to anyone, unsigned too: a 404 for others would tell its sender they
+    // are blocked (#1403 re-review). Only its sender ever has the id; the blocker never does.
+    const ctrlConvId: string = cc.body?.conversation?.id;
+    const ctrlSend = await call('POST', cy, '/api/messages/send', dm(ctrlConvId, cy, { type: 'image', attachment: { data: photo.ciphertext, nonce: photo.nonce, mime: 'image/jpeg' } }));
+    const ctrlPhoto = await call('GET', null, `/api/messages/${ctrlSend.body?.message?.id}/attachment`);
+    assert(annPhoto.status === 200 && anonPhoto.status === 200 && annPhoto.body?.data === photo.ciphertext && anonPhoto.body?.data === photo.ciphertext
+        && JSON.stringify(anonPhoto.body) === JSON.stringify(boPhoto.body)
+        && ctrlPhoto.status === 200 && keysOf(ctrlPhoto.body) === keysOf(anonPhoto.body)
+        && ctrlPhoto.headers['cache-control'] === anonPhoto.headers['cache-control'] && ctrlPhoto.headers['content-type'] === anonPhoto.headers['content-type'],
+        `served to anyone by its id as a stored photo is (${annPhoto.status}, ${anonPhoto.status})`);
     // Kept in the image store as a chat photo is, never whole in the database's row (#1403 review, NON-BLOCKING).
     const photoRow = attempt(() => db.prepare('SELECT attachment_data, storage_key FROM withheld_lines WHERE id = ?').get(boIds[2]) as any);
     const photoKey: string | undefined = photoRow?.storage_key ?? undefined;

@@ -48,7 +48,7 @@ The screen stops your community only, never the member's account. From it a memb
 - **See their 12 words** on the screen itself, after the phone's own lock, or add them to a phone that has none, so they never lose the account.
 - **Leave this community.** The phone forgets it and its copy, and opens the next community on the phone. Nothing is deleted on your server: the member can come back with an invite or their 12 words. On a phone with no other community, leaving takes the account off the phone, as Sign Out does, after showing the 12 words. Someone who never finished joining simply forgets your community and can use another invite.
 
-None of these asks your server anything. Leaving only asks it, in passing, to stop sending that phone notifications, and never waits for the answer. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it.
+None of these asks your server anything. Leaving asks it, in passing, to stop sending that phone notifications, and nothing it answers changes what happens. Leaving for another community on the phone never waits for it; leaving the last one, as Sign Out, waits a few seconds at most. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it.
 
 ## The web app
 

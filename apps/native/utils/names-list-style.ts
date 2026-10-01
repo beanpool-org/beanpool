@@ -34,6 +34,9 @@ export const NAMES_TEXT_ON = {
     input: 'input',
     search: 'search',
     switchLabel: 'switchRow',
+    keyCardTitle: 'keyCard',
+    keyCardText: 'keyCard',
+    codeText: 'keyCard',
 } as const;
 
 export function namesListStyleSpec(colors: AppColors) {
@@ -103,5 +106,15 @@ export function namesListStyleSpec(colors: AppColors) {
         },
         switchLabel: { flex: 1, fontSize: 15, lineHeight: 21, color: colors.text.body },
         logLine: { fontSize: 13, lineHeight: 19, color: colors.text.body },
+
+        // This phone's key, for another admin to check in person: the QR code sits on white in both themes (a scanner
+        // needs dark on light), 200dp wide with its margin, inside a card that grows with the code at 1.3× text.
+        keyCard: { padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, gap: 8, alignItems: 'stretch' as const },
+        keyCardTitle: { fontSize: 15, fontWeight: '700' as const, color: colors.text.heading },
+        keyCardText: { fontSize: 14, lineHeight: 20, color: colors.text.body },
+        qrBox: { alignSelf: 'center' as const, padding: 8, borderRadius: 8, backgroundColor: '#ffffff' },
+        codeText: { fontSize: 18, lineHeight: 26, fontWeight: '700' as const, letterSpacing: 1, color: colors.text.heading, textAlign: 'center' as const },
+        // The camera, while scanning another admin's code: square, as wide as the screen allows.
+        camera: { aspectRatio: 1, alignSelf: 'stretch' as const, borderRadius: 12, overflow: 'hidden' as const, backgroundColor: '#000000' },
     };
 }

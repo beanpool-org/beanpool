@@ -35,7 +35,7 @@ import {
     offersNamesList, keyPlan, traceFor, waitingAdmins, shareKeyWith, openEntries, filterEntries, sealedFor,
     addNamesEntry, editNamesEntry, reEncryptBatches, sendReEncrypted, confirmableMembers, confirmationActions, confirmationLine,
     logLineText, namesListHtml, fetchNamesState, fetchNamesList, confirmMember, deleteNamesEntry, openNamesList, readNamesTrust,
-    namesTrustStoreKey, trustAdminKey, NAMES_COPY,
+    namesTrustStoreKey, checkAdminInPerson, myKeyCheck, inPersonResult, installKeyFor, NAMES_COPY,
     type NamesState, type NamesListBody, type ConfirmationRow, type NamesAdminRow, type SealedEntryRow,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -236,8 +236,8 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(screen.indexOf("plan?.kind === 'refused'")).toBeLessThan(screen.indexOf("plan?.kind === 'ready' && state"));
     });
 
-    it('a key the node made an admin, signing its own key: refused, and the admin is asked before trusting it', async () => {
-        const { node, ada } = await community();
+    it('a key the node made an admin, signing its own key: refused; trusted only after an in-person check, and asked first', async () => {
+        const { node, owen, ada } = await community();
         const oscar = await admin('Oscar');
         node.admins.push({ pubkey: oscar.publicKey, callsign: 'Oscar', role: 'admin', holdsKey: false });
         const k2 = newNamesListKey();
@@ -248,12 +248,23 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(sent.filter((s) => s.method !== 'GET')).toEqual([]);
         expect((await pinOf(ada))?.trusted).not.toContain(oscar.publicKey);
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
-        const trust = screen.slice(screen.indexOf('const trustMaker'), screen.indexOf('const openForm'));
-        expect(trust.indexOf('Alert.alert(COPY.trustTitle')).toBeGreaterThan(-1);
-        expect(trust.indexOf('Alert.alert(COPY.trustTitle')).toBeLessThan(trust.indexOf('trustAdminKey('));
-        expect(NAMES_COPY.trust('Oscar')).toMatch(/whoever runs the server can make any key an admin/);
-        // Only if the admin says yes: then the phone takes it.
-        if (opened.ok) await trustAdminKey(STORE, ada, COMMUNITY, opened.value.state, oscar.publicKey);
+        // The screen offers a check in person, never "trust" on the server's word; a match is asked about before it is kept.
+        expect(screen).not.toContain('trustAdminKey');
+        const check = screen.slice(screen.indexOf('const finishCheck'), screen.indexOf('const onScanned'));
+        expect(check.indexOf("inPersonResult(text, admin.pubkey)")).toBeGreaterThan(-1);
+        expect(check.indexOf('Alert.alert(COPY.trustTitle')).toBeGreaterThan(check.indexOf("if (purpose === 'share')"));
+        expect(check.slice(check.indexOf('const keep'), check.indexOf("if (purpose === 'share')"))).toContain('checkAdminInPerson(');
+        expect(check.indexOf('void keep()', check.indexOf('Alert.alert(COPY.trustTitle'))).toBeGreaterThan(check.indexOf('Alert.alert(COPY.trustTitle'));
+        if (!opened.ok) return;
+        // The code on someone else's phone (the operator's, say) doesn't match: nothing is kept.
+        expect(await checkAdminInPerson(STORE, ada, COMMUNITY, opened.value.state, { pubkey: oscar.publicKey, callsign: 'Oscar' }, myKeyCheck(owen).qr))
+            .toEqual({ ok: false, reason: 'mismatch' });
+        expect(await checkAdminInPerson(STORE, ada, COMMUNITY, opened.value.state, { pubkey: oscar.publicKey, callsign: 'Oscar' }, 'hello'))
+            .toEqual({ ok: false, reason: 'unreadable' });
+        expect((await pinOf(ada))?.trusted).not.toContain(oscar.publicKey);
+        // Oscar's own phone, checked in person (the code typed): then the phone takes his key.
+        expect(await checkAdminInPerson(STORE, ada, COMMUNITY, opened.value.state, { pubkey: oscar.publicKey, callsign: 'Oscar' }, myKeyCheck(oscar).code))
+            .toEqual({ ok: true });
         const again = await openNamesList(COMMUNITY, ada, STORE);
         expect(again.ok && again.value.keys.has(2)).toBe(true);
     });
@@ -336,8 +347,9 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(body.generation).toBe(2);
         expect(body.wraps.map((w: any) => w.holder)).toEqual([owen.publicKey]);
         expect(opened.ok && opened.value.notice).toBe(NAMES_COPY.newKeyMade);
-        // Once the new key is in, Ada and Cy are both waiting, each for a tap.
-        expect(opened.ok && waitingAdmins(opened.value.state, owen.publicKey).map((a) => a.callsign)).toEqual(['Ada', 'Cy']);
+        // Once the new key is in, Ada and Cy are both waiting. Ada's key this phone signed a share to before: Share. Cy's it
+        // never checked: check in person first.
+        expect(opened.ok && waitingAdmins(opened.value.state, owen.publicKey, opened.value.pin).map((a) => `${a.callsign}:${a.check}`)).toEqual(['Ada:trusted', 'Cy:check']);
         // Ada, who doesn't hold the current key, waits and is told who can make it.
         const adaPlan = keyPlan({ ...node.stateFor(ada.publicKey), newKeyNeeded: true }, ada.publicKey, traceFor(node.stateFor(ada.publicKey), ada, null), false);
         expect(adaPlan).toMatchObject({ kind: 'wait' });
@@ -367,16 +379,29 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(screen.indexOf('Alert.alert(COPY.startAgainTitle')).toBeLessThan(screen.indexOf('installKeyFor(anchor, identity, state, plan, AsyncStorage)'));
     });
 
-    it('sharing: only admins waiting; the wrap is signed and opens for that admin only; the screen asks before sharing', async () => {
+    it('SHARE NEVER TO A CALLSIGN ALONE: only to a key this phone checked in person; the wrap is signed and opens for that admin only', async () => {
         const [owen, cy] = [await admin('Owen'), await admin('Cy')];
         const node = new FakeNode();
         node.admins = [{ pubkey: owen.publicKey, callsign: 'Owen', role: 'owner', holdsKey: false }, { pubkey: cy.publicKey, callsign: 'Cy', role: 'admin', holdsKey: false }];
         const key = newNamesListKey();
         node.wrapBy(owen, key, owen.publicKey, 1);
-        const st = node.stateFor(owen.publicKey);
-        const waiting = waitingAdmins(st, owen.publicKey);
-        expect(waiting.map((a) => a.callsign)).toEqual(['Cy']);
         answer = (req) => node.answer(req);
+        const opened = await openNamesList(COMMUNITY, owen, STORE);
+        expect(opened.ok).toBe(true);
+        if (!opened.ok) return;
+        const st = opened.value.state;
+        const waiting = waitingAdmins(st, owen.publicKey, opened.value.pin);
+        expect(waiting.map((a) => `${a.callsign}:${a.check}`)).toEqual(['Cy:check']);
+        // The server names Cy by callsign: that alone shares nothing, and sends nothing.
+        sent = [];
+        const refused = await shareKeyWith(COMMUNITY, owen, st, key, waiting[0], STORE);
+        expect(refused).toMatchObject({ ok: false, code: 'check_in_person' });
+        expect(sent).toEqual([]);
+        expect(node.rows.filter((r) => r.holder === cy.publicKey)).toEqual([]);
+        // Owen scans the QR code on Cy's phone: it is the key the server lists for Cy, so this phone trusts it, and shares.
+        expect(inPersonResult(myKeyCheck(cy).qr, cy.publicKey)).toBe('match');
+        expect(await checkAdminInPerson(STORE, owen, COMMUNITY, st, waiting[0], myKeyCheck(cy).qr)).toEqual({ ok: true });
+        expect(waitingAdmins(st, owen.publicKey, await pinOf(owen)).map((a) => a.check)).toEqual(['trusted']);
         await shareKeyWith(COMMUNITY, owen, st, key, waiting[0], STORE);
         expect(sent[0].url).toBe(`${COMMUNITY}/api/names/key/share`);
         expect(boundSignatureValid(sent[0], owen.publicKey)).toBe(true);
@@ -385,12 +410,139 @@ describe('the key: made, opened, and passed on only by a tap', () => {
         expect(verifyNamesWrap({ communityId: CID, generation: 1, holder: cy.publicKey, wrappedBy: owen.publicKey, wrapDigest: namesWrapDigest(wrap), drops: [] }, wrap.signature)).toBe(true);
         expect(Buffer.from(unwrapNamesListKey(wrap, cy.privateKey, cy.publicKey, 1)).equals(Buffer.from(key))).toBe(true);
         expect(() => unwrapNamesListKey(wrap, owen.privateKey, owen.publicKey, 1)).toThrow();
-        // Owen's phone vouched for Cy: it trusts Cy from now on.
+        // Owen's phone checked Cy: it trusts Cy from now on.
         expect((await pinOf(owen))?.trusted).toContain(cy.publicKey);
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
-        const share = screen.slice(screen.indexOf('const share = '), screen.indexOf('const trustMaker'));
+        const share = screen.slice(screen.indexOf('const share = '), screen.indexOf('const startCheck'));
+        // The screen sends anyone it hasn't checked to the in-person check, and asks before sharing with the rest.
+        expect(share.indexOf("if (admin.check !== 'trusted') { startCheck(admin, 'share'); return; }")).toBeGreaterThan(-1);
+        expect(share.indexOf("startCheck(admin, 'share')")).toBeLessThan(share.indexOf('Alert.alert(COPY.shareTitle'));
         expect(share.indexOf('Alert.alert(COPY.shareTitle')).toBeLessThan(share.indexOf('shareKeyWith('));
-        expect(NAMES_COPY.share('Cy')).toMatch(/whoever runs the server can make any key an admin/);
+        // A waiting row offers Share only for a key this phone trusts; any other gets "Check @X in person".
+        expect(screen).toContain("{a.check === 'trusted'\n                                ? btn(`Share with @${a.callsign}`, () => share(a), 'small')\n                                : btn(COPY.checkButton(a.callsign), () => startCheck(a, 'share'), 'small')}");
+        expect(NAMES_COPY.share('Cy')).toMatch(/This phone has checked @Cy’s key, in person/);
+    });
+
+    it("THE SECOND REVIEW'S RE-KEY: the owner password moves Ada's account to the operator's key; Owen's phone offers no Share until the real Ada is checked in person", async () => {
+        const { node, owen, ada, ids } = await community();
+        // Whoever runs the server re-keys Ada's account (the lost-phone routes) to a key it holds. The node drops Ada's
+        // old key from the list (it is no admin now), and the list needs a new key.
+        const op = await admin('Ada');
+        node.admins = node.admins.map((a) => (a.pubkey === ada.publicKey ? { ...a, pubkey: op.publicKey } : a));
+        node.rows = node.rows.map((r) => (r.holder === ada.publicKey ? { ...r, live: false } : r));
+        node.newKeyNeeded = true;
+        node.droppedHolders = [ada.publicKey];
+        const opened = await openNamesList(COMMUNITY, owen, STORE);
+        expect(opened.ok && opened.value.plan.kind).toBe('ready');
+        if (!opened.ok) return;
+        // Owen's phone made generation 2 for itself, naming Ada's old key as dropped, and says her key changed.
+        const made = JSON.parse(sentAs('POST', '/api/names/key')[0].body);
+        expect(made.generation).toBe(2);
+        expect(made.wraps.map((w: any) => w.holder)).toEqual([owen.publicKey]);
+        expect(made.wraps[0].drops).toEqual([ada.publicKey]);
+        expect(opened.value.keyChanged).toEqual(['Ada']);
+        expect(opened.value.notice).toContain(NAMES_COPY.keyChanged('Ada'));
+        expect(NAMES_COPY.keyChanged('Ada')).toMatch(/^@Ada’s phone key changed: check it with @Ada in person before sharing/);
+        // Her old key is dropped from Owen's pin for good, and the operator's key under her name is not trusted: no Share.
+        const pin = await pinOf(owen);
+        expect(pin?.trusted).not.toContain(ada.publicKey);
+        expect(pin?.trusted).not.toContain(op.publicKey);
+        const waiting = waitingAdmins(opened.value.state, owen.publicKey, opened.value.pin);
+        expect(waiting.map((a) => `${a.callsign}:${a.check}`)).toEqual(['Ada:changed']);
+        // The tap the review made: Share with "@Ada". It sends nothing; the operator gets no wrap and opens no name.
+        sent = [];
+        const tapped = await shareKeyWith(COMMUNITY, owen, opened.value.state, opened.value.keys.get(2)!, waiting[0], STORE);
+        expect(tapped).toMatchObject({ ok: false, code: 'check_in_person' });
+        expect(sent).toEqual([]);
+        expect(node.rows.filter((r) => r.holder === op.publicKey)).toEqual([]);
+        // Owen meets the real Ada and scans her phone: it shows her own key, not the one the server put her name on.
+        expect(await checkAdminInPerson(STORE, owen, COMMUNITY, opened.value.state, waiting[0], myKeyCheck(ada).qr)).toEqual({ ok: false, reason: 'mismatch' });
+        expect(NAMES_COPY.mismatch('Ada')).toMatch(/isn’t the key the server has for @Ada/);
+        expect((await pinOf(owen))?.trusted).not.toContain(op.publicKey);
+        // The owner puts her account on her real new phone. Owen checks that phone in person: then, and only then, Share.
+        const adaNew = await admin('Ada');
+        node.admins = node.admins.map((a) => (a.pubkey === op.publicKey ? { ...a, pubkey: adaNew.publicKey } : a));
+        const again = await openNamesList(COMMUNITY, owen, STORE);
+        if (!again.ok) throw new Error(again.message);
+        const row = waitingAdmins(again.value.state, owen.publicKey, again.value.pin)[0];
+        expect(`${row.callsign}:${row.check}`).toBe('Ada:changed');
+        expect(await checkAdminInPerson(STORE, owen, COMMUNITY, again.value.state, row, myKeyCheck(adaNew).code)).toEqual({ ok: true });
+        const checked = waitingAdmins(again.value.state, owen.publicKey, await pinOf(owen))[0];
+        expect(checked.check).toBe('trusted');
+        expect((await shareKeyWith(COMMUNITY, owen, again.value.state, again.value.keys.get(2)!, checked, STORE)).ok).toBe(true);
+        // Ada's new phone opens the list, sealed again under generation 2, and is shown Owen's code to compare.
+        const adaOpens = await openNamesList(COMMUNITY, adaNew, STORE);
+        expect(adaOpens.ok && adaOpens.value.plan.kind).toBe('ready');
+        expect(adaOpens.ok && adaOpens.value.notice).toContain(myKeyCheck(owen).code);
+        expect(adaOpens.ok && openEntries(adaOpens.value.list!, adaOpens.value.keys).filter((e) => e.text).length).toBe(ids.length);
+    });
+
+    it('THE ROLLBACK: a server put back to generation 1 (whose key a removed admin kept) is refused; a new key on this phone is numbered past it', async () => {
+        const { node, owen, ada, k1, ids } = await community();
+        const abe = await admin('Abe');
+        node.admins.push({ pubkey: abe.publicKey, callsign: 'Abe', role: 'admin', holdsKey: false });
+        node.wrapBy(owen, k1, abe.publicKey, 1);
+        // Abe is removed: Ada's phone makes generation 2, dropping him, and Owen's phone later makes 3.
+        node.admins = node.admins.filter((a) => a.pubkey !== abe.publicKey);
+        node.rows = node.rows.map((r) => (r.holder === abe.publicKey ? { ...r, live: false } : r));
+        node.newKeyNeeded = true;
+        node.droppedHolders = [abe.publicKey];
+        const two = await openNamesList(COMMUNITY, ada, STORE);
+        expect(two.ok && two.value.state.generation).toBe(2);
+        const k2 = two.ok ? two.value.keys.get(2)! : new Uint8Array();
+        node.wrapBy(ada, k2, owen.publicKey, 2);
+        const k3 = newNamesListKey();
+        node.wrapBy(owen, k3, owen.publicKey, 3);
+        node.wrapBy(owen, k3, ada.publicKey, 3);
+        for (const e of node.entries) { e.ciphertext = sealNamesEntry(k3, e.id, 3, openNamesEntry(k2, e.id, 2, e.ciphertext)); e.keyGeneration = 3; }
+        expect((await openNamesList(COMMUNITY, ada, STORE)).ok).toBe(true);
+        expect((await pinOf(ada))?.newest).toBe(3);
+        // Whoever runs the server, with Abe, puts generation 1 back as it was: Abe's wrap live, the entries under key 1.
+        node.rows = node.rows.filter((r) => r.generation === 1).map((r) => ({ ...r, live: true }));
+        node.admins.push({ pubkey: abe.publicKey, callsign: 'Abe', role: 'admin', holdsKey: true });
+        node.newKeyNeeded = false;
+        node.droppedHolders = [];
+        for (const e of node.entries) { e.ciphertext = sealNamesEntry(k1, e.id, 1, openNamesEntry(k3, e.id, 3, e.ciphertext)); e.keyGeneration = 1; }
+        sent = [];
+        const back = await openNamesList(COMMUNITY, ada, STORE);
+        expect(back.ok && back.value.plan).toMatchObject({ kind: 'refused', refusal: { reason: 'rolled_back', offered: 1, newest: 3, canMakeNew: true } });
+        expect(sent.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual(['GET /api/names/state']);
+        expect(back.ok && NAMES_COPY.refused(back.value.plan.kind === 'refused' ? back.value.plan.refusal : (null as never), [])).toMatch(/older key of the list \(number 1\) than this phone already took \(number 3\)/);
+        // Abe stays out, and nothing would be shared with him.
+        expect((await pinOf(ada))?.trusted).not.toContain(abe.publicKey);
+        // Ada chooses a new key on this phone (the screen asks first): number 4, past what she took, naming Abe as dropped.
+        if (!back.ok || back.value.plan.kind !== 'refused') return;
+        const made = await installKeyFor(COMMUNITY, ada, back.value.state, back.value.plan, STORE);
+        expect(made.ok && made.value.generation).toBe(4);
+        expect(JSON.parse(sentAs('POST', '/api/names/key')[0].body).wraps[0].drops).toEqual([abe.publicKey]);
+        const after = await openNamesList(COMMUNITY, ada, STORE);
+        expect(after.ok && after.value.plan.kind).toBe('ready');
+        for (const id of ids) {
+            const e = node.entries.find((x) => x.id === id)!;
+            expect(e.keyGeneration).toBe(4);
+            expect(() => openNamesEntry(k1, id, 4, e.ciphertext)).toThrow();
+        }
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        const make = screen.slice(screen.indexOf('const makeNewKey'), screen.indexOf('const openForm'));
+        expect(make.indexOf('Alert.alert(COPY.makeNewTitle')).toBeLessThan(make.indexOf('installKeyFor('));
+    });
+
+    it('the only key-holder, out and made an admin again, starts a new key without naming itself as dropped', async () => {
+        const ada = await admin('Ada');
+        const node = new FakeNode();
+        node.admins = [{ pubkey: ada.publicKey, callsign: 'Ada', role: 'admin', holdsKey: false }];
+        answer = (req) => node.answer(req);
+        expect((await openNamesList(COMMUNITY, ada, STORE)).ok).toBe(true);
+        // Moved to moderator and back: the node cleared her wrap, so nobody holds the key, and it lists her as dropped.
+        node.rows = node.rows.map((r) => ({ ...r, live: false }));
+        node.droppedHolders = [ada.publicKey];
+        const opened = await openNamesList(COMMUNITY, ada, STORE);
+        expect(opened.ok && opened.value.plan).toEqual({ kind: 'start_again' });
+        if (!opened.ok) return;
+        sent = [];
+        const made = await installKeyFor(COMMUNITY, ada, opened.value.state, opened.value.plan, STORE);
+        expect(made.ok && made.value.generation).toBe(2);
+        expect(JSON.parse(sentAs('POST', '/api/names/key')[0].body).wraps[0].drops).toEqual([]);
     });
 });
 
@@ -580,6 +732,16 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the name
         expect(spec.buttonRow.flexWrap).toBe('wrap');
         expect(Number(spec.primaryBtn.flexBasis) * 2 + Number(spec.buttonRow.gap)).toBeLessThanOrEqual(320 - 2 * Number(spec.scroll.padding));
         for (const k of ['primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn']) expect(spec[k].flexGrow, k).toBe(1);
+    });
+    it('this phone’s QR code fits its card at 320dp, on white in both themes; the camera is square with no fixed size', () => {
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        const qr = screen.match(/<QRCode value=\{mine\.qr\} size=\{(\d+)\} quietZone=\{(\d+)\}/);
+        expect(qr).not.toBeNull();
+        const drawn = Number(qr![1]) + 2 * Number(qr![2]) + 2 * Number(spec.qrBox.padding);
+        const room = 320 - 2 * Number(spec.scroll.padding) - 2 * Number(spec.keyCard.padding) - 2 * Number(spec.keyCard.borderWidth);
+        expect(drawn).toBeLessThanOrEqual(room);
+        expect(spec.qrBox.backgroundColor).toBe('#ffffff');
+        expect(spec.camera.aspectRatio).toBe(1);
     });
     it('text is readable on its background (WCAG AA, 4.5:1)', () => {
         for (const [text, bg] of Object.entries(NAMES_TEXT_ON)) {

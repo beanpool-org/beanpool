@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { FullWindowOverlay } from 'react-native-screens';
 import appConfig from '../app.json';
 import { useIdentity } from '../app/IdentityContext';
@@ -306,6 +307,19 @@ export default function ForceUpdateBlock() {
             <View style={card}>{children}</View>
         </ScrollView>
     );
+    /**
+     * The page with boxes to type in (Add my 12 words): it keeps the focused box and the rows below it above the keyboard,
+     * as Settings does for the same form. A plain ScrollView can't on Android: the page is in an edge-to-edge Modal,
+     * whose window the keyboard no longer shrinks from Android 11 on, and automaticallyAdjustKeyboardInsets is iOS only
+     * (#1415's third deciding review). The app's one KeyboardProvider (app/_layout.tsx) already hears the keyboard in a
+     * Modal's window: never a second one in here, which stops keyboard avoidance across the app
+     * (react-native-keyboard-controller's ModalAttachedWatcher holds the dialog's one dismiss listener).
+     */
+    const typingPageScroll = (children: ReactNode) => (
+        <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={16}>
+            <View style={card}>{children}</View>
+        </KeyboardAwareScrollView>
+    );
 
     let pageView: ReactNode = null;
     if (page.kind === 'words') {
@@ -329,7 +343,7 @@ export default function ForceUpdateBlock() {
     } else if (page.kind === 'add-words') {
         pageView = (
             <WordsWindow onClose={toMain} background={colors.surface.app}>
-                {pageScroll(wordsAdded ? (
+                {typingPageScroll(wordsAdded ? (
                     <>
                         <Text style={[styles.body, { color: colors.feedback.success.fg }]} accessibilityLiveRegion="polite">
                             Your 12 words are on this phone again.

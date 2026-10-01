@@ -32,7 +32,9 @@
  *   with the provider `sub` (keeper-crypto.ts `openSeedFromSso`), and saves the seed only if it makes `pubkey`.
  *
  * `clientCopy` is exactly what the apps seal today, `sealSeedToSso(seed, provider, sub, {words})`: this module never
- * changes that format and the vault never holds the plain seed.
+ * changes that format, and the vault stores no plain seed. It can still open any copy it keeps: it checks the sign-in
+ * itself, so it learns the `sub` that opens the copy, at every deposit and every restore. What stands between the vault
+ * and a member's seed is who runs it (its custodians and its host), not this format.
  *
  * ## Signed answers
  *
@@ -290,8 +292,9 @@ export function isVaultPushToken(value: unknown): value is string {
 export const MAX_VAULT_CLIENT_COPY_CHARS = 8192;
 
 /**
- * Whether `value` has the shape of what `sealSeedToSso` returns: a single-blob sign-in copy of a 32-byte seed. The
- * vault can't open it (it has no `sub` to open it with, by design); this only stops it keeping something no app can.
+ * Whether `value` has the shape of what `sealSeedToSso` returns: a single-blob sign-in copy of a 32-byte seed. This
+ * only stops the vault keeping something no app can open. It is no lock against the vault: the vault sees the `sub` that
+ * opens the copy whenever it checks that member's sign-in (see the header).
  */
 export function isVaultClientCopy(value: unknown): value is SealedShare {
     const c = value as Record<string, unknown> | null;

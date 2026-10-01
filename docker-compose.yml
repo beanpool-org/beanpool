@@ -79,6 +79,26 @@ services:
       - IMAGE_S3_REGION=${IMAGE_S3_REGION:-}
       - IMAGE_S3_ACCESS_KEY_ID=${IMAGE_S3_ACCESS_KEY_ID:-}
       - IMAGE_S3_SECRET_ACCESS_KEY=${IMAGE_S3_SECRET_ACCESS_KEY:-}
+      # Backups off the server (optional): up to two S3-compatible destinations for the main server's LOCKED backups.
+      # EMPTY = none, as every node starts; more can be added in Settings. None is BeanPool's and none is needed. From
+      # .env only: never stored in node_config, never put in a backup, never logged. See .env.example and
+      # apps/server/src/services/offbox-backups.ts.
+      - BACKUP_OFFBOX_1_ENDPOINT=${BACKUP_OFFBOX_1_ENDPOINT:-}
+      - BACKUP_OFFBOX_1_BUCKET=${BACKUP_OFFBOX_1_BUCKET:-}
+      - BACKUP_OFFBOX_1_REGION=${BACKUP_OFFBOX_1_REGION:-}
+      - BACKUP_OFFBOX_1_PREFIX=${BACKUP_OFFBOX_1_PREFIX:-}
+      - BACKUP_OFFBOX_1_ACCESS_KEY_ID=${BACKUP_OFFBOX_1_ACCESS_KEY_ID:-}
+      - BACKUP_OFFBOX_1_SECRET_ACCESS_KEY=${BACKUP_OFFBOX_1_SECRET_ACCESS_KEY:-}
+      - BACKUP_OFFBOX_1_NAME=${BACKUP_OFFBOX_1_NAME:-}
+      - BACKUP_OFFBOX_2_ENDPOINT=${BACKUP_OFFBOX_2_ENDPOINT:-}
+      - BACKUP_OFFBOX_2_BUCKET=${BACKUP_OFFBOX_2_BUCKET:-}
+      - BACKUP_OFFBOX_2_REGION=${BACKUP_OFFBOX_2_REGION:-}
+      - BACKUP_OFFBOX_2_PREFIX=${BACKUP_OFFBOX_2_PREFIX:-}
+      - BACKUP_OFFBOX_2_ACCESS_KEY_ID=${BACKUP_OFFBOX_2_ACCESS_KEY_ID:-}
+      - BACKUP_OFFBOX_2_SECRET_ACCESS_KEY=${BACKUP_OFFBOX_2_SECRET_ACCESS_KEY:-}
+      - BACKUP_OFFBOX_2_NAME=${BACKUP_OFFBOX_2_NAME:-}
+      - BACKUP_OFFBOX_INTERVAL_HOURS=${BACKUP_OFFBOX_INTERVAL_HOURS:-}
+      - BACKUP_OFFBOX_RETENTION_DAYS=${BACKUP_OFFBOX_RETENTION_DAYS:-}
       # The Expo access token this server's push notifications go with (Authorization: Bearer). EMPTY = pushes go
       # without one, as they always have. Once BeanPool's Expo project asks for it, a phone's push token alone can no
       # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.

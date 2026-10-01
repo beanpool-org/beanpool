@@ -282,6 +282,11 @@ run_check "balance_writes" node scripts/check-balance-writes.mjs
 # to it reaches only new databases. New numbered files only. Instant; skipped where there is no origin/main.
 run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 
+# Every GitHub workflow pins its actions to a full commit SHA, says what its token may do, and gates the job that moves
+# the image's :latest or makes a Release on the `release` environment (Marty approves each release). The tests check
+# the repository's workflows and each edit the check exists to catch. Instant.
+run_check "workflows" node --test scripts/check-workflows.test.mjs
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

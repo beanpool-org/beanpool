@@ -1,5 +1,15 @@
 name: Build and Push Docker Image
 
+# A push to main builds an amd64 image tagged with its commit, which DEPLOY_TAG deploys. A `v*` tag builds the
+# multi-arch release image, moves :latest and the semver tags (what every self-hoster and DEPLOY_PULL=1 pulls) and makes
+# the GitHub Release. That job names the `release` environment, which waits for Marty's approval ("approve each
+# release", board, 2026-10-01; scratch/reviews/FABLE-sec-infra.md M4), so a pushed tag alone publishes nothing. The
+# environment and its reviewer are a repo setting, not this file: a run that names an environment that doesn't exist
+# yet creates it, empty and unprotected.
+#
+# Every action is pinned to a full commit SHA with its version in a comment, and every job asks for only the token
+# scopes it uses (scripts/check-workflows.mjs keeps all of this).
+
 on:
   push:
     branches: [main]
@@ -9,32 +19,30 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/beanpool-node
 
+# Nothing by default; each job asks for what it uses.
+permissions: {}
+
 jobs:
-  build-and-push:
+  # A push to main: amd64 only, tagged with the commit sha. Never :latest or a semver tag, and no Release.
+  build-main:
+    if: github.ref_type == 'branch'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       packages: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - name: Extract version and platforms
+      - name: Extract version
         id: version
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-            echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "platforms=linux/amd64,linux/arm64" >> $GITHUB_OUTPUT
-          else
-            echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-            echo "is_release=false" >> $GITHUB_OUTPUT
-            echo "platforms=linux/amd64" >> $GITHUB_OUTPUT
-          fi
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -42,44 +50,92 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only a release claims :latest. A push to main builds amd64 only, so letting it move :latest left arm64
+          # nodes (Raspberry Pi) unable to pull it at all — "no matching manifest for linux/arm64". Main builds are
+          # addressable by their sha tag.
           tags: |
-            # Only a release claims :latest. A push to main builds amd64 only, so letting
-            # it move :latest left arm64 nodes (Raspberry Pi) unable to pull it at all —
-            # "no matching manifest for linux/arm64". :latest now always points at a
-            # multi-arch release image. Main builds are still addressable by their sha tag.
-            type=raw,value=latest,enable=${{ steps.version.outputs.is_release }}
             type=sha,prefix=
-            type=semver,pattern={{version}},enable=${{ steps.version.outputs.is_release }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ steps.version.outputs.is_release }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: true
-          platforms: ${{ steps.version.outputs.platforms }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+
+  # A `v*` tag: the multi-arch release image, :latest, the semver tags and the GitHub Release. The job starts only
+  # once Marty approves it in the `release` environment.
+  release:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # :latest always points at a multi-arch release image.
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
 
       - name: Generate Release Notes
-        if: steps.version.outputs.is_release == 'true'
         run: |
           cat << 'EOF' > release_notes.md
           ## 📦 How to Install / Upgrade
-          
+
           BeanPool is distributed as a Docker container. You can pull the latest version directly from the GitHub Container Registry.
-          
+
           **Using Docker Compose:**
           ```yaml
           services:
@@ -92,9 +148,9 @@ jobs:
                 - "4001:4001"
                 - "4002:4002"
               volumes:
-                - ./data:/app/data
+                - ./data:/data
           ```
-          
+
           **Using Docker CLI:**
           ```bash
           docker pull ghcr.io/${{ github.repository_owner }}/beanpool-node:latest
@@ -102,8 +158,7 @@ jobs:
           EOF
 
       - name: Create GitHub Release
-        if: steps.version.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           generate_release_notes: true
           body_path: release_notes.md

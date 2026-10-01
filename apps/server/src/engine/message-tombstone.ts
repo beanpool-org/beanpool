@@ -90,6 +90,26 @@ export function blankedWithAccount(metadata: string | null | undefined): boolean
 }
 
 /**
+ * Which of `keys` are accounts their owners deleted (purgeMemberSelf sets members.deleted_by_owner_at), every line of
+ * which blankMessagesOf has blanked. GET /api/messages/conversations names them among the people in a member's chats
+ * (`deletedAccounts`), so the phone blanks the lines of theirs it already holds (apps/native/utils/db.ts
+ * blankLinesOfDeletedAccounts): its sync carries only the newest 50 lines of a conversation, and the purge sends no
+ * event per line. It is state, not an event, so a phone that was offline when it happened learns it on its next sync.
+ * A community's removal (adminPruneUser) blanks nothing and is never named. Sorted; never throws on an empty list.
+ */
+export function accountsDeletedAmong(keys: Iterable<string>): string[] {
+    const all = [...new Set(keys)].filter((k) => typeof k === 'string' && k.length > 0);
+    const out: string[] = [];
+    for (let i = 0; i < all.length; i += 500) {
+        const chunk = all.slice(i, i + 500);
+        const rows = db.prepare(`SELECT public_key FROM members WHERE deleted_by_owner_at IS NOT NULL AND public_key IN (${chunk.map(() => '?').join(',')})`)
+            .all(...chunk) as { public_key: string }[];
+        for (const r of rows) out.push(r.public_key);
+    }
+    return out.sort();
+}
+
+/**
  * Delete account (report F1; Marty, 2026-10-01: "Yes, blank lines and photos"): every line the member wrote, in every
  * chat — a group's, an enterprise's, an event's, and their own half of each DM — becomes a tombstone of their own
  * (`removedBy` is their key, `accountDeleted` says why), and every photo they sent goes: the row now, the stored object
@@ -99,10 +119,11 @@ export function blankedWithAccount(metadata: string | null | undefined): boolean
  *
  * Each line stays where it was, so a conversation still reads in order ("This message was deleted"), and each one's
  * updated_at moves (messages_touch_updated_at): a standby's next copy carries the tombstone, never the words. A phone's
- * next sync carries it only for the newest 50 lines of a conversation: the app asks GET /api/messages/:id with no limit,
- * so the other person's phone keeps any older DM line of theirs it already holds (the guide page says so). Group, event
- * and enterprise chats are read live from the server and are all blanked. Everyone else's lines are theirs and stay exactly as they are. A line already down keeps whoever took it
- * down first, and loses a photo still hung off it. Returns how many lines it blanked.
+ * next sync carries it only for the newest 50 lines of a conversation (the app asks GET /api/messages/:id with no
+ * limit), so the phone blanks the older lines of theirs it holds itself: the conversation list names them as deleted
+ * (accountsDeletedAmong). An app build from before that keeps them. Group, event and enterprise chats are read live from
+ * the server and are all blanked. Everyone else's lines are theirs and stay exactly as they are. A line already down
+ * keeps whoever took it down first, and loses a photo still hung off it. Returns how many lines it blanked.
  *
  * One transaction (the caller's, when there is one) and statements prepared once: a member with years of lines must not
  * prepare three statements a line (better-sqlite3 compiles on every prepare, and frees only when the collector runs).

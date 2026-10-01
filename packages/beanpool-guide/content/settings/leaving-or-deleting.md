@@ -38,7 +38,7 @@ This cannot be undone, even with your 12 words.
 - If you are below zero, the Commons covers the debt.
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
-- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). In a chat with a person, older messages already on the other person's phone may stay there, like a screenshot or a backup.
+- Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.
 - Events you host are cancelled and wiped the same way. The people going can still read the rest of the event's chat until 30 days after the event.
 - A poll you asked is closed. It keeps its question and its votes.
 - The block list your community kept for you goes too.

@@ -1080,6 +1080,13 @@ CREATE TABLE IF NOT EXISTS withheld_overlays (
     PRIMARY KEY (message_id, author_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
+-- The note on Beans a member sent to someone who has blocked them (engine/withheld-notes.ts): the Beans move as any send's,
+-- the ledger row stores no note (`transactions.memo` = ''), and the note is kept here, for its sender alone, laid over
+-- their own reads of the row. One row per ledger row. Local, as the lines above are: never in a copy.
+CREATE TABLE IF NOT EXISTS withheld_notes (
+    transaction_id TEXT PRIMARY KEY,
+    memo TEXT NOT NULL
+);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

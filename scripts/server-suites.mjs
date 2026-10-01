@@ -15,6 +15,8 @@
 /** Set for every run unless the entry overrides it; an override of null removes the variable. */
 export const DEFAULT_ENV = {
     ENABLE_PEER_CONNECTORS: 'true',
+    // No test node asks GitHub for the latest release (its 30s timer fires in a slow run and trips the off-machine checks).
+    DISABLE_UPDATE_CHECK: 'true',
 };
 
 /**

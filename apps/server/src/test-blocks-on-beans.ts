@@ -65,6 +65,7 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             const { setReplicationToken } = await import('./config/local-config.js');
+            const { putPushTokenRow } = await import('./services/push-token-seal.js');
             se.seedGenesisMember(a.genesis, 'Gwen');
             setReplicationToken(a.replicationToken);
             for (const [key, name] of a.members) {
@@ -72,7 +73,7 @@ async function child(): Promise<void> {
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active', 'data:image/png;base64,iVBORw0KGgo=',
                                     strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, name, a.genesis, `INV-${name}`);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
-                db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(key, `ExponentPushToken[${name}]`);
+                putPushTokenRow(key, `ExponentPushToken[${name}]`, 'android');
             }
             // Each sender holds Beans and has a completed trade behind them: a direct send needs both (state-engine transfer).
             const offer = (pk: string, title: string) => se.createPost('offer', 'produce', title, `${title}, fresh`, 10, 'fixed', pk)!;

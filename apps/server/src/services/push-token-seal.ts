@@ -132,6 +132,19 @@ export function lockPushToken(publicKey: string, token: string): { tokenId: stri
     return { tokenId, tokenBox: boxUnder(keys, publicKey, tokenId, token) };
 }
 
+/**
+ * The ids this token had under each key a carried one replaced, for a leave statement applied under one of them: a
+ * relock gives each phone's row a new id, but the statement keeps the id it was made under. Never throws; none when
+ * there is no retired key (the usual).
+ */
+export function retiredPushTokenIds(token: string): string[] {
+    try {
+        return retiredRecoverySealSubkeys(INFO, 2 * KEY_BYTES).map((k) => idUnder(split(k), token));
+    } catch {
+        return [];
+    }
+}
+
 /** Opens a row's token: {@link openPushToken}'s answer, under the key it was made with. */
 export type PushTokenOpener = (publicKey: string, tokenId: unknown, tokenBox: unknown) => string | null;
 

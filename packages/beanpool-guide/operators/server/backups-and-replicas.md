@@ -144,6 +144,8 @@ At its first start after the update that locks them, a main server locks the pus
 - A standby says once "Push tokens: this standby dropped the …": it has no key to lock them with. It copies its main server again in full, once, and gets the locked ones.
 - A server that took over or was restored without this community's recovery-seal.key says "Push tokens: removed … phone registrations locked with a key this server doesn't have". Those phones get notifications again once their apps next open. Nothing else waits on it.
 
+Going back to an older version: first, on the main server, still on the newer image and with the server stopped, run: docker compose run --rm --no-deps beanpool-node node dist/services/push-token-seal.js --unlock-push-tokens. It puts every phone's address back in the old form, and then you set the older BEANPOOL_IMAGE_TAG. Without it the older server starts, but it cannot register a phone or send a notification (it looks for a column that is no longer there), and members' actions that notify someone, such as a request or an accept, go through but answer them with an error, until you run it. It refuses on a standby, which has no key. A standby that goes back keeps the locked table until its next full copy of its main server, within about 15 minutes, which rebuilds it in the old form; a server promoted from it before then can neither register a phone nor send. Go back on the main server first, and run the command there before the standby copies it.
+
 Backups, snapshots and copies of the data folder made before this update hold the addresses in the clear. Delete them as the steps above say for the recovery seal, once you have a new backup.
 
 ### GitHub copies

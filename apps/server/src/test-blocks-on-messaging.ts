@@ -38,6 +38,7 @@ process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -111,7 +112,7 @@ function member(name: string): Id {
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0, ?)`)
         .run(id.pk, name, owner.pk, `https://example.org/${name}.jpg`);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
-    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, tokenOf(id));
+    putPushTokenRow(id.pk, tokenOf(id), 'android');
     return id;
 }
 

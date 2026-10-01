@@ -19,7 +19,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
-import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, type PushTokenOpener } from './services/push-token-seal.js';
+import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -8114,8 +8114,10 @@ export function registerPushToken(
         const { tokenId, tokenBox } = lockPushToken(publicKey, token);
         return db.transaction((): PushRegistration => {
             if (registeredAt !== null) {
-                const left = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ? AND left_at >= ?
-                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, tokenId, registeredAt, PUSH_LEAVE_REMEMBERED);
+                // A leave applied under a key since replaced (a carried one) names the token by the id it had then.
+                const leftStmt = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ? AND left_at >= ?
+                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`);
+                const left = [tokenId, ...retiredPushTokenIds(token)].some((id) => leftStmt.get(publicKey, id, registeredAt, PUSH_LEAVE_REMEMBERED));
                 if (left) {
                     console.log(`[Push] A registration for ${publicKey.slice(0, 8)} from before its leave statement arrived late; not registered`);
                     return 'left';

@@ -34,11 +34,12 @@ process.env.BEANPOOL_ADDRESSES = 'mullum.test';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { KEY_PUSH_RULES, STRANGER_LEAVE_RULES, applyPushLeave, initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
+import { KEY_PUSH_RULES, registerPushToken, STRANGER_LEAVE_RULES, applyPushLeave, initStateEngine, PUSH_LEAVE_PRUNE_SQL } from './state-engine.js';
 import { travellingRows } from './engine/replication-manifest.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { pushTokenId } from './services/push-token-seal.js';
+import { installCarriedRecoverySealKey } from './services/recovery-seal-key.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -311,6 +312,19 @@ async function main(): Promise<void> {
     const rule = travellingRows('push_token_leaves');
     const outside = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE NOT (${rule})`).get() as { n: number }).n;
     assert(outside === nodeDay, `the ${nodeDay} leaves of keys with no row stay on this server: none travel to a standby (${outside})`);
+
+    // ── A key replaced after a leave (a take-over or restore brings the community's key) ────────────
+    console.log('\n── A leave statement applied before a key replacement still refuses a late registration');
+    const dee = member('dee');
+    const DEE_PHONE = 'ExponentPushToken[dees-phone]';
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 100) === 'registered', 'Dee registers her phone, stamped 100');
+    assert(typeof applyPushLeave(dee.pub, DEE_PHONE, 200) === 'number', 'her leave statement (stamp 200) is applied');
+    db.prepare(`UPDATE push_token_leaves SET applied_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-25 minutes') WHERE public_key = ?`).run(dee.pub);
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 150) === 'left', 'control: a registration stamped 150 arrives late and is refused');
+    const replaced = installCarriedRecoverySealKey(crypto.randomBytes(32).toString('base64'));
+    assert(replaced.outcome === 'replaced', `the key is replaced by a carried one (${replaced.outcome})`);
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 150) === 'left', 'after the replacement the late registration is still refused');
+    assert(registerPushToken(dee.pub, DEE_PHONE, 'android', 300) === 'registered', 'a registration stamped after the leave is accepted');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) {

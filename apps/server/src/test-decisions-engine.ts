@@ -790,15 +790,20 @@ async function runDecisionsSuite() {
     closeForTick(decQCredits.id);
     tickDecisions(); // Closes decQCredits
 
-    // 11e. Sole node owner removal blocked in preflight
-    const decSoleOwnerRemoval = createDecision({
+    // 11e. Sole node owner removal: refused when proposed (§3.8, as for any owner or admin since 2026-10-01), and
+    // blocked in preflight for a vote a node running the older code had already opened.
+    const refusalOf = (fn: () => unknown): string => { try { fn(); return ''; } catch (e: any) { return e?.message || String(e); } };
+    const soleOwnerRemovalRefusal = refusalOf(() => createDecision({
         authorPubkey: admin,
         title: 'Attempt removal of sole node owner',
-        description: 'Should be blocked in preflight',
+        description: 'Refused when proposed',
         touches: 'member',
         effect: 'remove_member',
         subject: admin,
-    });
+    }));
+    testAssert(/can't remove or suspend an owner or admin/.test(soleOwnerRemovalRefusal), `Sole owner removal refused when proposed (§3.8): ${soleOwnerRemovalRefusal}`);
+    // A vote a node running the older code had already opened (the suite's stored-row helper).
+    const decSoleOwnerRemoval = { id: insertStoredDecision({ author: admin, effect: 'remove_member', touches: 'member', subject: admin }) };
     castDecisionVote(decSoleOwnerRemoval.id, voterA, true);
     castDecisionVote(decSoleOwnerRemoval.id, voterB, true);
     castDecisionVote(decSoleOwnerRemoval.id, voterC, true);
@@ -808,15 +813,17 @@ async function runDecisionsSuite() {
     testAssert(soleOwnerDec.status === 'execution_blocked', 'Sole owner removal blocked before grace window or suspension');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(admin) as any).status === 'active', 'Sole node owner remains active');
 
-    // 11e-2. Sole node owner suspend blocked in preflight per §3.8
-    const decSoleOwnerSuspend = createDecision({
+    // 11e-2. Sole node owner suspend: refused when proposed, and blocked in preflight per §3.8
+    const soleOwnerSuspendRefusal = refusalOf(() => createDecision({
         authorPubkey: admin,
         title: 'Attempt to suspend sole owner',
-        description: 'Should fail at preflight',
+        description: 'Refused when proposed',
         touches: 'member',
         effect: 'suspend_member',
         subject: admin,
-    });
+    }));
+    testAssert(/can't remove or suspend an owner or admin/.test(soleOwnerSuspendRefusal), `Sole owner suspension refused when proposed (§3.8): ${soleOwnerSuspendRefusal}`);
+    const decSoleOwnerSuspend = { id: insertStoredDecision({ author: admin, effect: 'suspend_member', touches: 'member', subject: admin }) };
     castDecisionVote(decSoleOwnerSuspend.id, voterA, true);
     castDecisionVote(decSoleOwnerSuspend.id, voterB, true);
     castDecisionVote(decSoleOwnerSuspend.id, voterC, true);
@@ -825,6 +832,38 @@ async function runDecisionsSuite() {
     const soleOwnerSuspendDec = getDecision(decSoleOwnerSuspend.id)!;
     testAssert(soleOwnerSuspendDec.status === 'execution_blocked', 'Sole owner suspension blocked in preflight (§3.8)');
     testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(admin) as any).status === 'active', 'Sole node owner remains active after suspend attempt');
+
+    // 11e-3. Not only the sole owner (§3.8): a co-owner or an admin is refused when proposed, and a vote that opened while
+    // its subject held no role is blocked if they hold one when it would be carried out. They keep it, and stay active.
+    const coOwnerE = 'co_owner_' + Date.now();
+    seedTestMember(coOwnerE, 'CoOwnerErin');
+    grantNodeRole(coOwnerE, 'owner', admin);
+    testAssert(/can't remove or suspend an owner or admin/.test(refusalOf(() => createDecision({
+        authorPubkey: admin, title: 'Remove a co-owner', description: 'Refused when proposed', touches: 'member', effect: 'remove_member', subject: coOwnerE,
+    }))), 'A co-owner removal is refused when proposed (§3.8)');
+    const lateAdmin = 'late_admin_' + Date.now();
+    seedTestMember(lateAdmin, 'LateAdminLou');
+    const decLateAdmin = createDecision({
+        authorPubkey: admin, title: 'Suspend Lou', description: 'Opened while Lou held no role', touches: 'member', effect: 'suspend_member', subject: lateAdmin,
+    });
+    grantNodeRole(lateAdmin, 'admin', admin);
+    castDecisionVote(decLateAdmin.id, voterA, true);
+    castDecisionVote(decLateAdmin.id, voterB, true);
+    castDecisionVote(decLateAdmin.id, voterC, true);
+    closeForTick(decLateAdmin.id);
+    tickDecisions();
+    testAssert(getDecision(decLateAdmin.id)!.status === 'execution_blocked', 'A suspension of someone made an admin while it was open is blocked in preflight (§3.8)');
+    testAssert((db.prepare("SELECT status FROM members WHERE public_key = ?").get(lateAdmin) as any).status === 'active'
+        && (db.prepare("SELECT role FROM node_roles WHERE member_pubkey = ?").get(lateAdmin) as any)?.role === 'admin',
+        'and the admin stays active, with their role');
+    // A moderator is a member with a job: a vote can still suspend one.
+    const modE = 'moderator_' + Date.now();
+    seedTestMember(modE, 'ModMia');
+    grantNodeRole(modE, 'moderator', admin);
+    const decMod = createDecision({ authorPubkey: admin, title: 'Suspend Mia', description: 'A moderator, as any member', touches: 'member', effect: 'suspend_member', subject: modE });
+    testAssert(decMod.status === 'open', 'A Decision to suspend a moderator still opens');
+    closeForTick(decMod.id);
+    tickDecisions(); // closes unvoted, out of the way of the author's one-open limit
 
     // 11f. Hardship grant validates recipient is not treasury or missing
     const decBadHardship = createDecision({

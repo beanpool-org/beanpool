@@ -19,7 +19,7 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
-import { getMember, getConversation, isVisitorKey, type Conversation, type Message } from '@beanpool/engine';
+import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
 import type { GroupRole, GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
@@ -442,6 +442,8 @@ export function removeGroupThreadMessage(
     if (groupChatRole(groupId, actorPubkey) !== 'convenor') {
         throw new Error('Only a convenor can remove messages from this group chat');
     }
+    // A convenor whose account is suspended removes nothing until it ends (the route answers 403 for "suspended").
+    assertConvenorPowersActive(db, actorPubkey);
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?').get(messageId, groupId) as any;
     if (!msgRow) throw new Error('Message not found');
     if (msgRow.type === 'system') throw new Error('A system line cannot be removed');

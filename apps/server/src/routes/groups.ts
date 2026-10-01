@@ -28,6 +28,7 @@ import {
     deleteGroupPost,
     getGroupsVersion,
     isGroupConvenor,
+    isActingGroupConvenor,
     getGroupThread,
     postGroupThreadMessage,
     removeGroupThreadMessage,
@@ -37,6 +38,7 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
@@ -209,7 +211,8 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.status = 200;
             ctx.body = { success: true, member };
         } catch (e: any) {
-            ctx.status = 400;
+            // A suspended member joins nothing until it ends (engine joinGroup): 403, like every refusal of who they are.
+            ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.body = { error: e.message || 'Failed to join group' };
         }
     });
@@ -228,11 +231,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only members of this group can see who is in it' };
             return;
         }
-        const isConvenor = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
+        // Who asked to join and who is invited is for a convenor whose powers are not resting: a suspended convenor sees
+        // the roster any member sees, and is told why when they ask for more.
+        const isConvenor = Boolean(viewerPubkey && isActingGroupConvenor(ctx.params.id, viewerPubkey));
         if (status && status !== 'active') {
             if (!isConvenor) {
+                const paused = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
                 ctx.status = 403;
-                ctx.body = { error: 'Only convenors can view pending or invited members' };
+                ctx.body = { error: paused ? `UNAUTHORIZED: ${CONVENOR_POWERS_PAUSED}` : 'Only convenors can view pending or invited members' };
                 return;
             }
         }

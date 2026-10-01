@@ -34,6 +34,7 @@ import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
 import { postOutOfSight } from '../engine/post-sight.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
+import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches } from '../config/node-profile.js';
@@ -527,7 +528,8 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         }
         ctx.body = { success: removed };
     } catch (e: any) {
-        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
+        // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to remove post' };
     }
 });
@@ -562,7 +564,8 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
+        // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
         ctx.body = { error: e.message || 'Failed to update post' };
     }
 });

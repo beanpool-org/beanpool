@@ -1,9 +1,9 @@
 // Beanpool node-address registrar — Cloudflare Worker.
-//   fetch:     claim / heal / status / release / holder (signed by node key) + admin approve/pause/resume/block/release +
-//              switchboard
-//   scheduled: attestation sweep — pauses a live name's routing only on proof that ANOTHER node key answers at it,
-//              never on anything the registrar merely can't verify, and never when the sweep as a whole looks wrong;
-//              then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
+//   fetch:     claim / heal / rotate / status / release / holder (signed by node key) + admin approve/pause/resume/block/
+//              release + switchboard
+//   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
+//              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
+//              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
 //              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried.
 // A name belongs to the node key that claimed it; the registrar can stop routing it but never hands it to another
 // key. It frees only when its owner releases it (after a 30-day hold for that key), when the admin releases it (the
@@ -565,7 +565,8 @@ const overLimit = (held, limit) => json({
     limit, held,
 }, 403);
 
-const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0 };
+// Routing back on: every run of foreign answers (applyVerdict) starts again from nothing.
+const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0, swap_fails: 0 };
 
 // Routing back on for the owner's name that is not live — a pause its heal lifts, or its own release taken back —
 // only when nobody but the owner can be answering: at once on a tunnel made in this request (only this signed
@@ -686,7 +687,7 @@ async function takeName(env, existing, pubkey, b, now) {
         node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: takeBack ? 'paused' : 'pending',
         community_name: set.community_name ?? null,
         origin: set.origin ?? null, public_ip: set.public_ip ?? null, contact: set.contact ?? null,
-        attest_fails: 0, requested_at: now,
+        attest_fails: 0, swap_fails: 0, requested_at: now,
         decided_at: takeBack ? decided.decided_at : null, decided_by: takeBack ? decided.decided_by : null,
         pause_reason: takeBack ? 'unverified' : null, paused_at: takeBack ? now : null,
         released_at: null, warned_at: null, last_contact_at: now,
@@ -836,6 +837,68 @@ async function handleHeal(request, env, bodyText) {
         if (token !== undefined) body.tunnelToken = token;
     }
     return json(body);
+}
+
+// POST /api/registrar/rotate {name?, origin?} — the owner's name onto a fresh tunnel (M3 of the 2026-10-01 review): a new
+// token, and the old tunnel deleted at Cloudflare, so a connector running on a copy of its token (a copied data folder or
+// backup, a standby given away, a token shown on a screen) is cut off. `origin` re-points the tunnel at the same time.
+// Signed by the name's key, for its own tunnel name that is live, or paused by anything but the admin (then the rotate is
+// its heal, on a fresh tunnel). The record at the hostname is kept and re-pointed, never deleted: a resolver that saw the
+// name missing would remember that for up to half an hour.
+// Row first, as every take-down: the old tunnel leaves the row (a decision) before Cloudflare deletes it, so a request
+// that read the row earlier (a heal, the sweep's repair) misses its write rather than route the name onto it again. If
+// Cloudflare won't delete it, it goes back on the row and nothing has changed: 503, since its token still works and the
+// rotate must not look done. Then the owner's heal (heal()) makes the fresh tunnel, and the answer carries its token. If
+// that fails, the old tunnel is gone all the same, and the node's next heal (or the sweep's repair) makes the new one.
+async function handleRotate(request, env, bodyText) {
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
+    const now = nowS();
+    const read = () => (typeof b.name === 'string' && b.name
+        ? db.getAllocation(env, b.name.toLowerCase())
+        : db.getOwnAllocation(env, pubkey));
+    const first = await read();
+    if (isOwnRow(first, pubkey)) dropBadLabels(b, `${first.name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
+    return onFreshRow(read, async (cur) => {
+        if (blockedOut(env, cur, pubkey, now)) return json({ error: 'name blocked' }, 403);
+        if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to rotate', status: 'none' }, 404);
+        if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
+        if (cur.status === 'released' || cur.status === 'revoked')
+            return json({ error: 'name released — claim it to take it back (a take-back is on a fresh tunnel)', status: cur.status, name: cur.name }, 409);
+        if (cur.status === 'paused' && cur.pause_reason === 'admin') return json({ error: 'paused by the admin' }, 403);
+        if (await awaitingApproval(env, cur)) return json({ error: 'awaiting approval: the name has no tunnel yet', status: 'pending', name: cur.name }, 409);
+        if ((b.mode === 'tunnel' || b.mode === 'direct' ? b.mode : cur.mode) !== 'tunnel')
+            return json({ error: 'a direct name runs no tunnel, so it has no token to rotate: a heal with its new public_ip re-points it' }, 400);
+
+        const old = cur.tunnel_id ?? null;
+        const dropped = { ...cur, tunnel_id: null, ...decision(cur) };
+        if (!(await db.updateIfUnchanged(env, cur.name, cur, { tunnel_id: null, decision_seq: dropped.decision_seq }, { withIds: true }))) return null;
+        const kept = old ? await tunnelOff(env, { tunnel_id: old }) : null;
+        if (kept) {
+            // Recorded on the row again (a tunnel nobody records would block every fresh one for the name), or — the row
+            // changed meanwhile — owed, so the sweep deletes it once Cloudflare lets it.
+            if (!(await db.updateIfUnchanged(env, cur.name, dropped, { tunnel_id: kept }, { withIds: true })))
+                await owe(env, '[ROTATE_LEFT]', cur.name, 'tunnel', kept, 'Cloudflare refused its delete, and the row changed meanwhile');
+            console.warn('[ROTATE_REFUSED]', cur.name, `Cloudflare did not delete tunnel ${kept}: nothing rotated`);
+            return json({ error: 'Cloudflare did not delete the old tunnel, so nothing changed and its token still works: try again shortly' }, 503);
+        }
+        await logEvent(env, cur.name, 'rotated', `rotated by its owner ${key16(pubkey)}: ${old ? `tunnel ${old} deleted, so nothing runs on a copy of its token any more` : 'it had no tunnel'}; a fresh one is made now`);
+        const out = await heal(env, dropped, b, now);
+        if (out instanceof Response) return out;
+        const body = { ...out, rotated: true };
+        delete body.newTunnel; delete body.tunnel_id;
+        if (body.status === 'live') {
+            const token = await tunnelTokenOrNothing(env, out);
+            if (token !== undefined) body.tunnelToken = token;
+        }
+        return json(body);
+    });
 }
 
 // Answers a live tunnel name's token: only to its key, and under v2 only to a request nobody sent before (signer), so a
@@ -1222,8 +1285,11 @@ h1{font-size:1.5rem;color:#dc2626}</style></head><body>
 //                    or a signature that verifies under no key we can check (an unknown signing format, or a
 //                    `proto` this Worker doesn't speak). That is what a sleeping solar node, a format drift, or a
 //                    bug on OUR side looks like — never evidence.
-// Content that isn't an attest at all (a swapped origin) is unverifiable here too; what to do about it is a
-// separate, slower decision (design D2). Such replies carry `swap: true` so the sweep log can count them.
+// Content that isn't an attest at all — a 2xx that is not JSON, or JSON with no signature: a page, so something other
+// than a BeanPool node answers at the name (a stranger's server at a direct name's old IP address, a connector on a
+// copy of the tunnel's token) — is unverifiable here too, and carries `swap: true`. A BeanPool node never answers it:
+// its /api/attest is an attest, or a 4xx/5xx. It is evidence only slowly, over an hour of sweeps (design D2:
+// applyVerdict).
 const ATTEST_TIMEOUT_MS = 15_000;
 
 async function classify(env, a) {
@@ -1255,69 +1321,124 @@ export async function attestOne(env, a) {
     return (await classify(env, a)).verdict;
 }
 
+// Did something other than the name's own node answer? Another node's key, or a page (design D2).
+const foreign = (r) => r.verdict === 'impostor' || !!r.swap;
+// Is a run of foreign answers open on the row?
+const runOpen = (a) => !!(a.attest_fails || a.swap_fails);
+
+// What answers at a live name in this sweep: classify, and while a run is open on the row, an 'ok' is asked again, up to
+// RUN_ASKS answers in all. Two connectors on one tunnel — its node's, and one on a copy of its token — share the name's
+// visitors between them, so the owner's own answer must not hide the other's (M3 of the 2026-10-01 review: with one
+// ask a sweep, a run of impostor answers was ended by every 'ok' in between, and never paused). The first foreign
+// answer is the sweep's; three of the node's own end the run. A name with no run open is asked once.
+const RUN_ASKS = 3;
+async function sight(env, a) {
+    const r = await classify(env, a);
+    if (r.verdict !== 'ok' || !runOpen(a)) return r;
+    for (let i = 1; i < RUN_ASKS; i++) {
+        const again = await classify(env, a);
+        if (foreign(again)) return { ...again, why: `${again.why}, between answers from its own key` };
+    }
+    return r;
+}
+
+// How many sweeps in a row of foreign answers pause a name for a content swap: SWAP_FAIL_LIMIT, 12 unless set (design
+// D2 = b, Marty 2026-09-24: about an hour of sweeps every 5 minutes).
+export function swapFailLimit(env) {
+    const n = parseInt(env.SWAP_FAIL_LIMIT, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 12;
+}
+
 // Is this sweep's picture of the world believable? (design §2.4) If not, the registrar assumes it is the one at
 // fault and acts on no row.
 //   - the canary (CANARY_NAME, one of our own nodes) must be live and 'ok'. Unset = no canary check.
-//   - impostors must not exceed max(2, 10% of live): real ones are rare and independent; many at once is us.
-//     Nor may every live name be one: max(2, …) can't be exceeded while live <= 2, and a small fleet (the live
-//     set after 09-24) is where a key-comparison bug would otherwise pause every name in two sweeps.
+//   - foreign answers (impostors and content swaps together, design §2.4) must not exceed max(2, 10% of live): real
+//     ones are rare and independent; many at once is us. Nor may every live name have one: max(2, …) can't be
+//     exceeded while live <= 2, and a small fleet (the live set after 09-24) is where a key-comparison or parsing bug
+//     would otherwise pause every name.
 //   - unverifiable must not exceed half of live: a registrar that can't see most of the world shouldn't trust
 //     what it thinks it sees in the rest.
+// verifiedSweep: an applied sweep in which the verifier was seen working — the canary 'ok', or with no canary
+// configured at least one name 'ok'. Only such a sweep counts a content swap (design D2: "the canary passed in every
+// one of them").
 function judgeSweep(env, results) {
     const count = (v) => results.filter((r) => r.verdict === v).length;
     const s = {
         live: results.length, ok: count('ok'), unverifiable: count('unverifiable'), impostor: count('impostor'),
-        content_swap: results.filter((r) => r.swap).length,   // counted only; never acted on here
+        content_swap: results.filter((r) => r.swap).length,
     };
+    const many = s.impostor + s.content_swap;
     const canary = env.CANARY_NAME ? results.find((r) => r.a.name === env.CANARY_NAME) : null;
     if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
-    else if (s.impostor > Math.max(2, s.live * 0.1) || (s.live > 0 && s.impostor === s.live)) s.action = 'suspended:mass';
+    else if (many > Math.max(2, s.live * 0.1) || (s.live > 0 && many === s.live)) s.action = 'suspended:mass';
     else if (s.unverifiable > s.live / 2) s.action = 'suspended:unverifiable';
     else s.action = 'applied';
     return s;
 }
+const verifiedSweep = (env, s) => s.action === 'applied' && (env.CANARY_NAME ? true : s.ok > 0);
 
 // Phase 2 for one row. Re-reads it first, so a verdict is only ever applied to the allocation that was attested,
-// not one the owner re-claimed or released while the sweep ran.
-// 'unverifiable' is never evidence: it never counts and never pauses. It does end a run of impostor verdicts
-// (attest_fails counts CONSECUTIVE ones), so a sighting can't pair with another one days of silence later.
-async function applyVerdict(env, a, verdict, why, limit) {
-    if (verdict === 'unverifiable' && !a.attest_fails) return;   // no run to end: no read, no write
+// not one the owner re-claimed or released while the sweep ran. Two runs are counted, over applied sweeps in a row:
+//   attest_fails — 'impostor' verdicts (another node's key signed our nonce): ATTEST_FAIL_LIMIT (2) of them pause the
+//                  name, pause_reason 'impostor';
+//   swap_fails   — sweeps in which something other than the name's own node answered (an impostor, or a content swap:
+//                  a page, `swap`): swapFailLimit (12, about an hour) of them pause it, pause_reason 'content-swap'
+//                  (design D2 = b). A content swap counts only in a sweep that saw the verifier working (`verified`):
+//                  otherwise it neither counts nor ends a run.
+// 'ok' (three of them, while a run is open: sight) ends both runs. Any other 'unverifiable' — nothing answered, an
+// error, a signature we can't check — is never evidence: it never counts and never pauses, but it ends both runs, so a
+// sighting can't pair with another one days of silence later. A content swap ends a run of impostor verdicts, as it
+// always did (attest_fails counts consecutive ones), and continues the run of foreign answers.
+// A pause is the kill switch: it stops ROUTING, and the name stays its owner's (design §2.3). Tunnel and DNS both go: a
+// connector running on a leaked token dies with the tunnel, and the owner's heal comes back on a fresh tunnel whose
+// token only its signed request receives — or, a direct name, only after an attest through the name under its key —
+// so nobody else can ride the resume.
+async function applyVerdict(env, r, limits, verified) {
+    const { a, verdict, why } = r;
+    const swap = !!r.swap;
+    if (swap && !verified) return;                                     // not counted, and no run ended
+    if (verdict === 'unverifiable' && !swap && !runOpen(a)) return;   // no run to end: no read, no write
     const cur = await db.getAllocation(env, a.name);
     if (!cur || cur.status !== 'live' || cur.node_pubkey !== a.node_pubkey || cur.requested_at !== a.requested_at) return;
-    if (verdict === 'unverifiable') {
-        if (cur.attest_fails) await db.updateAllocation(env, a.name, { attest_fails: 0 });
-        return;
-    }
+    const ended = { ...(cur.attest_fails ? { attest_fails: 0 } : {}), ...(cur.swap_fails ? { swap_fails: 0 } : {}) };
     if (verdict === 'ok') {
         const now = nowS();
-        await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: now, last_ok_at: now });
+        await db.updateAllocation(env, a.name, { ...ended, attest_fails: 0, last_attest_at: now, last_ok_at: now });
         return;
     }
-    // 'impostor': the kill switch — it stops ROUTING, and the name stays its owner's (design §2.3). Tunnel and DNS
-    // both go: a connector running on a leaked token dies with the tunnel, and the owner's heal comes back on a
-    // fresh tunnel whose token only its signed request receives, so the impostor cannot ride the resume.
-    const fails = (cur.attest_fails || 0) + 1;
-    if (fails >= limit) {
-        // Row first (stopRouting): an owner's heal that read it live meanwhile then misses its write, and undoes.
-        const to = { status: 'paused', pause_reason: 'impostor', paused_at: nowS(), attest_fails: fails };
-        if (!(await stopRouting(env, cur, to))) return;   // changed since the re-read: the next sweep looks again
-        console.warn(`[ATTEST_PAUSE] ${a.name}: impostor ${fails}× (${why}) — routing off, name kept for its key`);
-        await logEvent(env, a.name, 'paused', `impostor ${fails}× in a row (${why}): tunnel and DNS removed; name kept for ${key16(cur.node_pubkey)}, whose heal resumes it`);
-    } else {
-        await db.updateAllocation(env, a.name, { attest_fails: fails });
+    if (!foreign(r)) {
+        await db.updateAllocation(env, a.name, ended);
+        return;
     }
+    const fails = verdict === 'impostor' ? (cur.attest_fails || 0) + 1 : 0;
+    const swaps = (cur.swap_fails || 0) + 1;
+    const reason = verdict === 'impostor' && fails >= limits.impostor ? 'impostor' : (swaps >= limits.swap ? 'content-swap' : null);
+    if (!reason) {
+        await db.updateAllocation(env, a.name, { attest_fails: fails, swap_fails: swaps });
+        return;
+    }
+    // Row first (stopRouting): an owner's heal that read it live meanwhile then misses its write, and undoes.
+    const to = { status: 'paused', pause_reason: reason, paused_at: nowS(), attest_fails: fails, swap_fails: swaps };
+    if (!(await stopRouting(env, cur, to))) return;   // changed since the re-read: the next sweep looks again
+    const seen = reason === 'impostor'
+        ? `impostor ${fails}× in a row (${why})`
+        : `content swap: something other than its node answered at ${cur.hostname} in ${swaps} sweeps in a row, the last ${why} — no attest`;
+    console.warn(`[ATTEST_PAUSE] ${a.name}: ${seen} — routing off, name kept for its key`);
+    await logEvent(env, a.name, 'paused', `${seen}: tunnel and DNS removed; name kept for ${key16(cur.node_pubkey)}, whose heal resumes it`);
 }
 
 // Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
 // A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged).
 export async function attestSweep(env) {
-    const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive IMPOSTOR verdicts before a pause
+    const limits = {
+        impostor: parseInt(env.ATTEST_FAIL_LIMIT || '2', 10),   // consecutive IMPOSTOR verdicts before a pause
+        swap: swapFailLimit(env),                               // consecutive sweeps of foreign answers before a pause
+    };
     const live = await db.listByStatus(env, 'live');
     const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
     const results = [];
     for (let i = 0; i < live.length; i += BATCH) {
-        results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await classify(env, a)) }))));
+        results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await sight(env, a)) }))));
     }
 
     const s = judgeSweep(env, results);
@@ -1328,8 +1449,9 @@ export async function attestSweep(env) {
         console.error(`${line} — acting on NO verdict; the registrar assumes it is at fault. ${seen.join(' ')}`);
     } else {
         console.log(line);
+        const verified = verifiedSweep(env, s);
         for (let i = 0; i < results.length; i += BATCH) {
-            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r.a, r.verdict, r.why, limit)));
+            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r, limits, verified)));
         }
     }
     await upkeep(env, results, BATCH);
@@ -1400,6 +1522,7 @@ export default {
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());
+            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, await request.text());
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
             if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, await request.text());

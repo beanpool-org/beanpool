@@ -20,6 +20,9 @@ ATTEST_FAIL_LIMIT = "2"     # consecutive IMPOSTOR verdicts (a valid signature b
                             # routing is paused (the name stays its owner's). Anything the registrar can't
                             # verify (offline, 5xx, an unknown signing format) never counts (solar-node safe;
                             # 2026-09-24 incident).
+SWAP_FAIL_LIMIT = "12"      # sweeps in a row (5 min apart: about an hour) in which something other than a name's own node
+                            # answered at it (another node's key, or a page that is no attest at all) before routing is
+                            # paused, the name kept for its key (design D2 = b, Marty 2026-09-24). Its node's heal resumes it.
 RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this long for the same key only
                                 # (design D3), then free. An admin release frees at once.
 CLAIM_LIMIT_PER_KEY = "3"   # names one node key may hold at once (live, pending, paused, blocked, or its own release

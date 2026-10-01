@@ -367,8 +367,10 @@ describe('the phone and the web app read each other', () => {
     };
 
     it('both seal and open the frozen vectors byte for byte', async () => {
-        // Imported here, not at the top: the rest of this file runs against a checkout that predates the vectors.
-        const { checkDmLineVectors } = await import('@beanpool/core/dm-line-vectors');
+        // Imported here, by a name Vite resolves only when this test runs: the rest of the file then still runs against
+        // a checkout from before the vectors existed (a fail-first run of the attacks above).
+        const vectors = '@beanpool/core/dm-line-vectors';
+        const { checkDmLineVectors } = await import(/* @vite-ignore */ vectors) as typeof import('@beanpool/core/dm-line-vectors');
         checkDmLineVectors(phoneCrypto);
         checkDmLineVectors(webCrypto);
     });

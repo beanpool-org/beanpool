@@ -42,6 +42,7 @@ import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
 import { FindCommunityCard } from '../../components/FindCommunityCard';
+import { OneWayBackCard } from '../../components/OneWayBackCard';
 import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
@@ -1168,6 +1169,8 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
+            {/* In by 12 words with no sign-in: "Your account has one way back" (two-doors design §2.5). Dismissible. */}
+            {!categoryPanel.open && <OneWayBackCard place="landing" colors={colors} />}
             {/* The worldwide community's way out to a local one (design §3.1). */}
             {isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}
             {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}

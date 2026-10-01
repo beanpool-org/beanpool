@@ -697,8 +697,9 @@ export async function submitJoin(
  * none (the sign-in door at ordinary rates asks none), or the door's answer when it gives no work (a ceiling, the door
  * shut). `again`: the node refused the work it was sent, so a new challenge.
  *
- * The sign-in door needs no work at ordinary rates, so a work route that couldn't be asked leaves the join to the door,
- * which asks for work only when it wants it (`work_again`). The 12-words door always does.
+ * The sign-in door needs no work at ordinary rates, so only a ceiling at its work route stops its join; anything else
+ * there (no answer, a door from before the work that has no such route, a solver that can't run) leaves the join to
+ * the door, which asks for work only when it wants it (`work_again`). The 12-words door always needs it.
  */
 async function workForJoin(
     run: DoorWorkRun | null, door: DoorWorkDoor, again: boolean,
@@ -710,7 +711,7 @@ async function workForJoin(
         case 'none': return { kind: 'work', work: null };
         case 'cancelled': return { kind: 'answer', answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain } };
         case 'refused':
-            if (door === 'sign-in' && (outcome.answer.kind === 'unreachable' || outcome.answer.kind === 'try_again')) {
+            if (door === 'sign-in' && outcome.answer.kind !== 'rate_limited' && outcome.answer.kind !== 'joined') {
                 return { kind: 'work', work: null };
             }
             return { kind: 'answer', answer: outcome.answer };

@@ -60,6 +60,7 @@ import {
     startDoorWork,
     type DoorWorkFetch,
     type DoorWorkState,
+    type IssuedDoorWork,
     type PhoneSolve,
 } from '../door-work';
 import type { BeanPoolIdentity } from '../identity';
@@ -227,7 +228,7 @@ describe('a run started when the door opens: ready by Join, and a challenge that
         const fetchWork = vi.fn(async (): Promise<DoorWorkFetch> => {
             const challenge = challengeAt(level, Date.now() + issued.length);
             issued.push(challenge);
-            return { kind: 'work', work: readIssuedWork({ work: { challenge, level, expiresInSeconds: seconds } })!, receivedAt: clock };
+            return { kind: 'work', work: readIssuedWork({ work: { challenge, level, expiresInSeconds: seconds } }) as IssuedDoorWork, receivedAt: clock };
         });
         const solve = vi.fn(async (challenge: string, o: any): Promise<PhoneSolve | null> => {
             o.onPart?.(8, 8);

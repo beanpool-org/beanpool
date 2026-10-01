@@ -8,11 +8,16 @@ import { StatusBar } from 'expo-status-bar';
 import { useTheme, useStyles } from './ThemeContext';
 import { GoogleButton, AppleButton, FacebookButton } from '../components/SsoButton';
 import { authenticateUser } from '../utils/LocalAuth';
-import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, checkGlobalDoor } from '../utils/node-profile';
+import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, checkGlobalDoor, wordsDoorOn } from '../utils/node-profile';
 import {
-    MAX_JOIN_NAME, checkNameAtDoor, doorWaysOut, nameCheckMessage, nextStepFor, signInAtDoor, submitJoin,
-    type DoorAnswer, type DoorPhase, type DoorSignIn, type JoinKey,
+    MAX_JOIN_NAME, checkNameAtDoor, doorMessage, doorWaysOut, nameCheckMessage, nextStepFor, signInAtDoor, submitJoin, submitWordsJoin,
+    type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
+import { useDoorWork } from '../utils/use-door-work';
+import { DOOR_WORK_MESSAGES } from '../utils/door-work';
+import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
+import { startOneWayBack } from '../utils/one-way-back';
+import { vaultCopyKnown } from '../utils/vault';
 import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
 import { HOME_REDIRECT } from '../utils/join-another-community';
 import { signInCopiesAt } from '../utils/vault-config';
@@ -70,6 +75,15 @@ export default function JoinGlobalScreen() {
     const [suggestions, setSuggestions] = useState<string[]>([]);
     /** Under the joining spinner while the door's sign-in is asked for once more (global-join.ts `submitJoin`). */
     const [notice, setNotice] = useState<string | null>(null);
+    /**
+     * The 12-words door (two-doors design §2): whether this door has it, the way chosen, and the work, started when the
+     * door opens with the key on this phone. The same key either way: one identity per device.
+     */
+    const [wordsDoor, setWordsDoor] = useState(false);
+    const [way, setWay] = useState<DoorWay>('sign-in');
+    const doorWork = useDoorWork();
+    /** Join tapped before the work was done: it finishes under "Setting up your account…", and Back still works. */
+    const [workWaiting, setWorkWaiting] = useState(false);
     /** Stops the name step's check when the member leaves it. */
     const nameCheckRef = useRef<AbortController | null>(null);
     /** From the join's send until its answer: the screen is not left mid-join. */
@@ -96,7 +110,13 @@ export default function JoinGlobalScreen() {
         checkGlobalDoor()
             .then(check => {
                 if (cancelled) return;
-                if (check.ok) { setPhase('signIn'); return; }
+                if (check.ok) {
+                    // Two ways in where the door has the 12-words one; the sign-in alone where it doesn't, as before.
+                    const words = wordsDoorOn(check.profile.features);
+                    setWordsDoor(words);
+                    setPhase(words ? 'choose' : 'signIn');
+                    return;
+                }
                 setMessage(GLOBAL_DOOR_MESSAGES[check.reason]);
                 setPhase('unavailable');
             })
@@ -108,6 +128,19 @@ export default function JoinGlobalScreen() {
         return () => { cancelled = true; };
     }, [phase]);
 
+    // The 12-words door's work starts as the door opens, signed by the key on this phone, so it is done by Join.
+    const startWork = doorWork.start;
+    useEffect(() => {
+        if (phase !== 'choose') return;
+        let cancelled = false;
+        accountKeyForDoor().then(account => {
+            if (cancelled || !account) return;
+            setKey(account);
+            startWork(GLOBAL_NODE_URL, account.identity, 'words');
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [phase, startWork]);
+
     function leave() {
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
@@ -118,10 +151,20 @@ export default function JoinGlobalScreen() {
     function signInAgain() {
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
+        setWorkWaiting(false);
         setSignin(null);
         setSuggestions([]);
         setError(null);
-        setPhase('signIn');
+        setPhase(wordsDoor ? 'choose' : 'signIn');
+    }
+
+    /** "Create an account with 12 secret words": the name next, while the work goes on. No sign-in, so no copy, and no lock. */
+    function chooseWords() {
+        setError(null);
+        setSignin(null);
+        setWay('words');
+        if (!name.trim() && key?.identity.callsign) setName(key.identity.callsign.slice(0, MAX_JOIN_NAME));
+        setPhase('name');
     }
 
     /** Step one: the phone's lock, then the sign-in, both for the key the phone holds. */
@@ -144,6 +187,10 @@ export default function JoinGlobalScreen() {
                 return;
             }
             setSignin(result.signin);
+            setWay('sign-in');
+            // From the 30th join an hour from one network the sign-in door asks for work too: asked now, while the name
+            // is typed (only at a door with the 12-words door; one from before it has none to give).
+            if (wordsDoor) doorWork.start(GLOBAL_NODE_URL, account.identity, 'sign-in');
             if (!name.trim() && account.identity.callsign) setName(account.identity.callsign.slice(0, MAX_JOIN_NAME));
             setPhase('name');
         } catch (e) {
@@ -179,13 +226,13 @@ export default function JoinGlobalScreen() {
             setSuggestions([]);
             joinSendingRef.current = true;
             setPhase('joining');
-            const answer = await submitJoin(GLOBAL_NODE_URL, key.identity, typed, signin, { onSignInAgain: setNotice });
+            const answer = await submitJoin(GLOBAL_NODE_URL, key.identity, typed, signin, { onSignInAgain: setNotice, work: doorWork.runFor('sign-in') });
             setSignin(null);
             await afterAnswer(answer, key, typed);
         } catch (e) {
             setSignin(null);
             setError((e as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
-            setPhase('signIn');
+            setPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
             setNotice(null);
@@ -194,12 +241,73 @@ export default function JoinGlobalScreen() {
         }
     }
 
+    /**
+     * The 12-words way with the key on this phone: the name, checked at the door; the work (done already at ordinary
+     * levels; otherwise it finishes here, and Back still works); then the join, with no sign-in. Nothing on the phone
+     * changes until the door has let the member in.
+     */
+    async function handleWordsJoin() {
+        const typed = name.trim().slice(0, MAX_JOIN_NAME).trim();
+        if (typed.length < 2) {
+            setError('Please choose a name of at least 2 characters.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        nameCheckRef.current?.abort();
+        const stop = new AbortController();
+        nameCheckRef.current = stop;
+        try {
+            const account = await accountKeyForDoor();
+            if (!account) {
+                setError(ACCOUNT_DOOR_MESSAGES.noAccount);
+                return;
+            }
+            setKey(account);
+            const run = doorWork.start(GLOBAL_NODE_URL, account.identity, 'words');
+            const check = await checkNameAtDoor(GLOBAL_NODE_URL, typed, account, { signal: stop.signal });
+            if (check.kind === 'cancelled' || stop.signal.aborted) return;
+            if (check.kind !== 'free') {
+                setSuggestions(check.kind === 'taken' ? check.suggestions : []);
+                setError(nameCheckMessage(typed, check));
+                return;
+            }
+            setSuggestions([]);
+            setWorkWaiting(run.state().phase !== 'ready');
+            const ready = await run.solution();
+            setWorkWaiting(false);
+            if (stop.signal.aborted || ready.kind === 'cancelled') return;
+            if (ready.kind === 'refused') {
+                await afterAnswer(ready.answer, account, typed, 'words');
+                return;
+            }
+            joinSendingRef.current = true;
+            setPhase('joining');
+            const answer = await submitWordsJoin(GLOBAL_NODE_URL, account.identity, typed, run);
+            await afterAnswer(answer, account, typed, 'words');
+        } catch (e) {
+            setError((e as Error | null)?.message || 'Your join could not be completed. Please try again.');
+            setPhase('name');
+        } finally {
+            joinSendingRef.current = false;
+            setWorkWaiting(false);
+            if (nameCheckRef.current === stop) nameCheckRef.current = null;
+            setLoading(false);
+        }
+    }
+
     /** Where each answer takes the member. A refusal changes nothing on the phone: there is nothing to put back. */
-    async function afterAnswer(answer: DoorAnswer, account: JoinKey, typed: string) {
+    async function afterAnswer(answer: DoorAnswer, account: JoinKey, typed: string, joinedBy: DoorWay = 'sign-in') {
         if (answer.kind === 'joined') {
             let joined: Awaited<ReturnType<typeof finishJoinFromAccount>>;
             try {
                 joined = await finishJoinFromAccount(answer, account, typed, { stillWanted: () => !goneRef.current });
+                doorWork.stop();
+                // In by 12 words: unless the key vault already keeps a copy of this key (a way back in every community),
+                // the account has one way back here, and the card says so (utils/one-way-back.ts).
+                if (joined && joinedBy === 'words' && !(await vaultCopyKnown(account.identity.publicKey))) {
+                    await startOneWayBack(account.identity.publicKey, GLOBAL_NODE_URL);
+                }
             } catch {
                 // In, but the phone could not switch to it: nothing is lost, and the sheet opens it.
                 setSignin(null);
@@ -217,9 +325,17 @@ export default function JoinGlobalScreen() {
         }
         if (answer.kind === 'account_closed') await rememberAccountClosed(account.identity.publicKey);
         const next = nextStepFor(answer);
+        if (next === 'sign_in') {
+            // This door takes no 12-words joins now: the sign-in buttons, with why.
+            setWordsDoor(false);
+            doorWork.stop('words');
+            setError(doorMessage(answer));
+            setPhase('signIn');
+            return;
+        }
         if (next === 'retry') {
             setError(accountDoorMessage(answer));
-            setPhase('signIn');
+            setPhase(joinedBy === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
             return;
         }
         setSignin(null);
@@ -278,6 +394,31 @@ export default function JoinGlobalScreen() {
                         </>
                     )}
 
+                    {/* Two ways in, side by side, words first (two-doors design §2.6). Either way, the account on this phone. */}
+                    {phase === 'choose' && (
+                        <>
+                            <Text style={styles.body}>
+                                Meet people from everywhere and find communities near you, as the account on this phone. Your key
+                                and your 12 words stay the same, and nothing changes in your other communities.
+                            </Text>
+                            {loading && (
+                                <View style={styles.busy} accessibilityLiveRegion="polite">
+                                    <ActivityIndicator size="large" color={colors.brand.primary} />
+                                </View>
+                            )}
+                            {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
+                            <DoorChoices
+                                colors={colors}
+                                onWords={chooseWords}
+                                onSignIn={handleSignIn}
+                                disabled={loading}
+                                busy={doorWork.busy}
+                                wordsProblem={doorWork.state('words')?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
+                                signInNote={`${keeper.charAt(0).toUpperCase()}${keeper.slice(1)} BeanPool never sees your password and never posts anything for you.`}
+                            />
+                        </>
+                    )}
+
                     {phase === 'signIn' && (
                         <>
                             <Text style={styles.body}>
@@ -302,6 +443,11 @@ export default function JoinGlobalScreen() {
                                     )}
                                     <GoogleButton title="Continue with Google" onPress={() => handleSignIn('google')} style={styles.sso} />
                                     <FacebookButton title="Continue with Facebook" onPress={() => handleSignIn('facebook')} style={styles.sso} />
+                                    {wordsDoor && (
+                                        <Pressable style={styles.quiet} onPress={() => { setError(null); setPhase('choose'); }} accessibilityRole="button">
+                                            <Text style={styles.quietText}>Choose another way</Text>
+                                        </Pressable>
+                                    )}
                                 </>
                             )}
                         </>
@@ -309,7 +455,9 @@ export default function JoinGlobalScreen() {
 
                     {phase === 'name' && (
                         <>
-                            {signedInWith && <Text style={styles.small}>✅ Signed in with {signedInWith}</Text>}
+                            {way === 'words'
+                                ? <Text style={styles.small}>🔑 With your 12 words: the ones this phone already has. No sign-in needed.</Text>
+                                : signedInWith && <Text style={styles.small}>✅ Signed in with {signedInWith}</Text>}
                             <Text style={styles.label}>Your name in the global community</Text>
                             <TextInput
                                 style={styles.input}
@@ -339,11 +487,13 @@ export default function JoinGlobalScreen() {
                                 </View>
                             )}
                             {error && <Text style={[styles.error, { marginTop: 12 }]} accessibilityLiveRegion="polite">{error}</Text>}
-                            <Pressable style={styles.primary} onPress={handleJoin} disabled={loading} accessibilityRole="button" accessibilityLabel="Join">
+                            {way === 'words' && doorWork.busy && <Text style={styles.helper} accessibilityLiveRegion="polite">{doorWork.busy}</Text>}
+                            {way === 'words' && workWaiting && <DoorWorkProgress state={doorWork.state('words')} colors={colors} />}
+                            <Pressable style={styles.primary} onPress={way === 'words' ? handleWordsJoin : handleJoin} disabled={loading} accessibilityRole="button" accessibilityLabel="Join">
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryText}>Join →</Text>}
                             </Pressable>
                             <Pressable style={styles.secondary} onPress={signInAgain} disabled={!ways.otherSignIn} accessibilityRole="button">
-                                <Text style={styles.secondaryText}>Use a different sign-in</Text>
+                                <Text style={styles.secondaryText}>{wordsDoor ? 'Choose another way' : 'Use a different sign-in'}</Text>
                             </Pressable>
                         </>
                     )}

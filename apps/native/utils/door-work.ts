@@ -121,7 +121,7 @@ export async function fetchDoorWork(
     url: string, identity: BeanPoolIdentity, door: DoorWorkDoor, options: { timeoutMs?: number; now?: () => number } = {},
 ): Promise<DoorWorkFetch> {
     const now = options.now ?? Date.now;
-    let res: Response | null = null;
+    let res: Response | null;
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? JOIN_TIMEOUT_MS);
     try {

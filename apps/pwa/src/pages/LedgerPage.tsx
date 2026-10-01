@@ -14,9 +14,10 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
+import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -85,6 +86,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    // Beans from someone this member has blocked show BLOCKED_BEANS_NOTE in place of their note (@beanpool/core
+    // ledgerLineNote): one the community kept from them already comes so, and this covers the rest.
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
+    useEffect(() => onBlocklistUpdated(() => setBlocklistVersion(v => v + 1)), []);
+    const blockedSet = useMemo(() => new Set(getBlockedUsers()), [blocklistVersion]);
 
     function renderMemoText(memo: string) {
         const sanitized = memo
@@ -775,15 +781,20 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-col gap-2.5">
                             {txns.map(tx => {
                                 const isSent = tx.from === identity.publicKey;
+                                const note = ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet);
                                 return (
                                     <div key={tx.id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
                                         <div>
                                             <p className={`text-[14px] font-bold ${isSent ? 'text-nature-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
                                                 {isSent ? '↑ Sent' : '↓ Received'}
                                             </p>
-                                            {tx.memo && (
+                                            {note === BLOCKED_BEANS_NOTE ? (
+                                                <p className="text-[13px] italic text-nature-500 dark:text-nature-400 mt-1 leading-snug">
+                                                    {BLOCKED_BEANS_NOTE}
+                                                </p>
+                                            ) : note && (
                                                 <p className="text-[13px] text-nature-550 dark:text-nature-400 mt-1 leading-snug">
-                                                    {renderMemoText(tx.memo)}
+                                                    {renderMemoText(note)}
                                                 </p>
                                             )}
                                             <p className="text-[11px] font-bold text-nature-400 mt-1.5 uppercase tracking-wide">

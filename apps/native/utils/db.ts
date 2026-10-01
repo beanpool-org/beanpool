@@ -1540,6 +1540,9 @@ export async function getTransactions(pubkey: string) {
             amount: row.amount,
             taxFee: row.tax_fee || 0,
             peer: peerName,
+            // The other account's key: the Ledger tab shows Beans from someone blocked on this phone without their note
+            // (utils/ledger-note.ts).
+            peerPubkey: row.peer_pubkey,
             timestamp: new Date(row.timestamp).toLocaleDateString(),
             memo: displayMemo
         };

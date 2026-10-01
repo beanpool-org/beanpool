@@ -10,7 +10,7 @@
       "id": "people",
       "title": "People and roles",
       "summary": "Owners, admins and moderators, and looking after members and invites.",
-      "pages": ["roles", "members-and-invites"]
+      "pages": ["roles", "members-and-invites", "running-a-known-community"]
     },
     {
       "id": "safety",

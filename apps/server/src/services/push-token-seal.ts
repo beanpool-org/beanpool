@@ -46,12 +46,23 @@
  * and the WAL is emptied after (db/wal-truncate.ts). Backups and snapshots made before the update are copies of the
  * database as it was then, tokens included; nothing here reaches them.
  *
+ * Rolling the server back past this change needs the tables in the shape the code before reads, with the server stopped
+ * ({@link unlockPushRowsForRollback}):
+ *
+ *     node dist/services/push-token-seal.js --unlock-push-tokens          # in the image (/app/apps/server)
+ *     pnpm exec tsx src/services/push-token-seal.ts --unlock-push-tokens  # from a checkout
+ *
+ * with BEANPOOL_DATA_DIR pointing at the node's data folder (the image sets /data). It prints counts only, on the main
+ * server; a standby holds no key, and takes its main server's rows again from its next whole copy.
+ *
  * ## What this does not do
  *
  * Keep the tokens from whoever runs the server: its process holds the key, and sends with the tokens (design §4.2).
  */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { db, deletePlainRows, PLAIN_PUSH_TOKENS, PLAIN_PUSH_LEAVES } from '../db/db.js';
 import { truncateWalAfterDelete } from '../db/wal-truncate.js';
@@ -344,5 +355,72 @@ export function installPushTokenSealAtBoot(opts: { standby: boolean }): void {
     } catch (e) {
         installedAs = null;
         console.warn(`⚠️ Push tokens: ${(e as Error)?.message || e} The server runs; the next boot tries again.`);
+    }
+}
+
+// ── the rollback command ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The reverse, for a rollback past this change, with the server stopped: push_tokens and push_token_leaves rebuilt in the
+ * shape the code before reads (each token in the clear, and in the key), each row this server's key opens put back with
+ * its token, in one transaction. A row it doesn't open is left out, and so is every leave statement (it names its phone
+ * by id, which can't be undone; one refuses a late registration for a day at most): those phones register again when
+ * their apps next open. Tombstones stay as they are; the code before matches no row by them. The next boot on this code
+ * locks the rows again. Throws {@link RecoverySealKeyMissing}, changing nothing.
+ */
+export function unlockPushRowsForRollback(): { tokens: number; leftOut: number; leaves: number } {
+    const keys = requireKeys();
+    if (!hasTable('push_tokens') || db.prepare(`SELECT 1 FROM pragma_table_info('push_tokens') WHERE name = 'token'`).get()) {
+        return { tokens: 0, leftOut: 0, leaves: 0 };
+    }
+    const rows = db.prepare('SELECT public_key, token_id, token_box, platform, created_at, registered_at FROM push_tokens').all() as
+        { public_key: string; token_id: string; token_box: string; platform: string | null; created_at: string | null; registered_at: number | null }[];
+    const leaves = (db.prepare('SELECT COUNT(*) AS n FROM push_token_leaves').get() as { n: number }).n;
+    let tokens = 0;
+    db.transaction(() => {
+        db.exec(`DROP TABLE push_tokens; DROP TABLE push_token_leaves;
+            CREATE TABLE push_tokens (
+                public_key TEXT NOT NULL REFERENCES members(public_key),
+                token TEXT NOT NULL,
+                platform TEXT DEFAULT 'ios',
+                created_at DATETIME DEFAULT (${NOW}),
+                registered_at INTEGER,
+                updated_at DATETIME DEFAULT (${NOW}),
+                PRIMARY KEY (public_key, token)
+            );
+            CREATE TABLE push_token_leaves (
+                public_key TEXT NOT NULL,
+                token TEXT NOT NULL,
+                left_at INTEGER NOT NULL,
+                applied_at DATETIME NOT NULL DEFAULT (${NOW}),
+                updated_at DATETIME DEFAULT (${NOW}),
+                PRIMARY KEY (public_key, token)
+            );
+            CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
+            CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);`);
+        const put = db.prepare(`INSERT OR IGNORE INTO push_tokens (public_key, token, platform, created_at, registered_at) VALUES (?, ?, ?, COALESCE(?, ${NOW}), ?)`);
+        for (const r of rows) {
+            const token = openUnder(keys, r.public_key, r.token_id, r.token_box);
+            if (token !== null) tokens += put.run(r.public_key, token, r.platform ?? 'ios', r.created_at, r.registered_at).changes;
+        }
+    })();
+    return { tokens, leftOut: rows.length - tokens, leaves };
+}
+
+const invokedDirectly = !!process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+if (invokedDirectly) {
+    if (!process.argv.includes('--unlock-push-tokens')) {
+        console.error('Usage: push-token-seal --unlock-push-tokens   (with the server stopped; BEANPOOL_DATA_DIR = its data folder)');
+        process.exit(2);
+    }
+    try {
+        const done = unlockPushRowsForRollback();
+        console.log(`Put back ${done.tokens} phone registration${done.tokens === 1 ? '' : 's'} in the clear for an older server; `
+            + `${done.leftOut} that this key doesn't open and ${done.leaves} leave statement(s) were left out. `
+            + 'Start the older server before this one, which would lock them again at boot.');
+        process.exit(0);
+    } catch (e) {
+        console.error(`Nothing was changed: ${(e as Error)?.message || e}`);
+        process.exit(1);
     }
 }

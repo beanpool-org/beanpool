@@ -20,6 +20,8 @@
  *     boot on this code is killed (SIGKILL on the node process) half way through locking them, and every row is still
  *     there, none half done. The next boot locks them all: every phone is reached, the leave statement still refuses the
  *     late registration it was made for, the tombstone names the phone by id, and no file holds a token in the clear.
+ *  6. The rollback command (services/push-token-seal.ts --unlock-push-tokens), run with that server stopped, rebuilds both
+ *     tables in the shape the code before reads, every token put back; the next boot on this code locks them again.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-push-tokens-at-rest.ts
@@ -463,6 +465,38 @@ async function main(): Promise<void> {
         const onOld = filesHolding(dir('old'), plantedNeedles);
         assert(onOld.read > 0 && onOld.found.length === 0, `no file in its data folder holds a token any more (${onOld.read} files; found ${shown(onOld.found)})`);
         refused.push(...(await again5.send('fetches')).blocked);
+        await again5.kill('SIGTERM');
+
+        // ── 6. A rollback past this change, and back ──
+        console.log('\n— 6. the rollback command puts the tables back as the code before reads them; the next boot locks them again —');
+        let unlocked = '';
+        try {
+            unlocked = execFileSync(process.execPath, [...process.execArgv, path.join(path.dirname(SCRIPT), 'services', 'push-token-seal.ts'), '--unlock-push-tokens'],
+                { env: { ...process.env, BEANPOOL_DATA_DIR: dir('old') }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch (e: any) {
+            unlocked = `failed: ${String(e?.stderr ?? e?.message ?? e).slice(-300)}`;
+        }
+        const rolled = (() => {
+            const d = new Database(path.join(dir('old'), 'state.db'));
+            try {
+                const columns = (t: string) => (d.prepare('SELECT name FROM pragma_table_info(?)').pluck().all(t) as string[]).join(' ');
+                return {
+                    tokens: columns('push_tokens').split(' ').includes('token') ? d.prepare('SELECT token FROM push_tokens').pluck().all() as string[] : [],
+                    shape: `${columns('push_tokens')} / ${columns('push_token_leaves')}`,
+                };
+            } finally { d.close(); }
+        })();
+        assert(/Put back 40 phone registrations in the clear/.test(unlocked) && sameSet(rolled.tokens, planted.map((p) => p.token))
+            && rolled.shape === 'public_key token platform created_at registered_at updated_at / public_key token left_at applied_at updated_at',
+            `with the server stopped, the command rebuilds both tables as the code before reads them, every phone's token put back (${rolled.tokens.length}; ${unlocked.trim().slice(0, 120)})`);
+        const back = await spawnNode(SCRIPT, dir('old'), env(PW_MAIN, 'primary'));
+        nodes.push(back);
+        const backRows = await back.send('rows');
+        const backSent = await back.send('send-all', {});
+        assert(/Push tokens: locked the 40 phone registrations/.test(back.output()) && backRows.push.length === planted.length
+            && sameSet(backSent.to, planted.map((p) => p.token)),
+            `the next boot on this code locks them again, and a push reaches every phone (${backRows.push.length} rows, ${backSent.handed} reached)`);
+        refused.push(...(await back.send('fetches')).blocked);
 
         assert(refused.length === 0, `no node reached anything off this machine (${refused.join(', ') || 'nothing'})`);
     } finally {

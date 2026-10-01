@@ -15,6 +15,24 @@
  * `autosnapshot_config` = { enabled, intervalHours, keep }. Defaults:
  * enabled=true, intervalHours=24 (daily), keep=7.
  *
+ * ## How long a snapshot lives (data-at-rest report F3)
+ *
+ * A snapshot is the whole database, so a member who deletes their account is still in every snapshot taken before,
+ * until that snapshot goes. So a snapshot goes on two counts, whichever comes first: when newer ones push it past
+ * `keep` (at most {@link MAX_SNAPSHOTS_KEPT}), and when it is {@link SNAPSHOT_MAX_AGE_DAYS} days old. Every server
+ * checks both every hour ({@link expireSnapshots}), whatever its role and whether snapshots are on, so one an operator
+ * took by hand, one a standby took before it stopped taking them, and the last ones of a server whose schedule was
+ * turned off all go too. With the defaults, a deleted member's data is in snapshots for up to 7 days; never more
+ * than 14.
+ *
+ * ## The main server only
+ *
+ * The scheduler takes snapshots on the main server alone. A standby's database is its main server's, copied; its own
+ * snapshots were a second set of the same community's data, on a second machine, kept for a week. So `arm()` reads the
+ * role each time it runs (index.ts arms it once the role is loaded, after step 2.6), each tick checks it again, and a
+ * role change in this process (config/node-role.ts setNodeRole: a take-over finished at boot) re-arms: a promoted
+ * standby starts, a demoted main server stops.
+ *
  * IMPORTANT: snapshots live UNDER data/ but the manual backup tar deliberately
  * excludes data/snapshots/ (it snapshots state.db via VACUUM INTO a temp dir and
  * tars only that), so backups never recursively swallow prior snapshots.
@@ -50,6 +68,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 import { db } from '../db/db.js';
 import { logger } from '../logger.js';
+import { getNodeRole, onNodeRoleChange } from '../config/node-role.js';
 import { assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import { copyWithoutAddresses } from './address-retention.js';
@@ -72,6 +91,23 @@ export const DEFAULT_AUTOSNAPSHOT_CONFIG: AutoSnapshotConfig = {
 };
 
 /**
+ * The most snapshots a server keeps. The settings route refuses more; a row that says more (written before the cap, or
+ * brought back by a restore or a kept community settings record) is read as this.
+ */
+export const MAX_SNAPSHOTS_KEPT = 14;
+export function isAutoSnapshotKeep(v: unknown): v is number {
+    return Number.isInteger(v) && (v as number) >= 1 && (v as number) <= MAX_SNAPSHOTS_KEPT;
+}
+/** A number of snapshots to keep, 1 to {@link MAX_SNAPSHOTS_KEPT}. */
+const keptCount = (n: number): number => Math.min(MAX_SNAPSHOTS_KEPT, Math.max(1, Math.round(n)));
+
+/** No snapshot is kept past this age, whatever `keep` says. */
+export const SNAPSHOT_MAX_AGE_DAYS = 14;
+export const SNAPSHOT_MAX_AGE_MS = SNAPSHOT_MAX_AGE_DAYS * 24 * 60 * 60_000;
+/** How often every server removes the snapshots past their count or age. */
+const EXPIRE_EVERY_MS = 60 * 60_000;
+
+/**
  * How often a snapshot is taken, in whole hours. The scheduler's timer can't wait longer than 2^31 - 1 ms (596 hours):
  * past that, or an interval that rounds to nothing, Node fires it every millisecond, a VACUUM INTO after another until
  * the disk is full. The admin route (routes/backup.ts) and a kept community settings record
@@ -88,6 +124,10 @@ let snapshotTimer: ReturnType<typeof setInterval> | null = null;
 /** The interval the running timer was armed with, in hours. */
 let armedHours: number | null = null;
 let creating = false;
+/** The hourly expiry, on every role ({@link expireSnapshots}). */
+let expiryTimer: ReturnType<typeof setInterval> | null = null;
+/** Set by initSnapshotScheduler: from then on a role change re-arms. */
+let initialized = false;
 
 /**
  * Shared helper: write a consistent SQLite snapshot of the live DB to `destPath`
@@ -115,7 +155,7 @@ export function getAutoSnapshotConfig(): AutoSnapshotConfig {
             intervalHours: Number.isFinite(stored.intervalHours) && stored.intervalHours > 0
                 ? timerHours(stored.intervalHours) : DEFAULT_AUTOSNAPSHOT_CONFIG.intervalHours,
             keep: Number.isFinite(stored.keep) && stored.keep > 0
-                ? Math.round(stored.keep) : DEFAULT_AUTOSNAPSHOT_CONFIG.keep,
+                ? keptCount(stored.keep) : DEFAULT_AUTOSNAPSHOT_CONFIG.keep,
         };
     } catch (e) {
         logger.warn('SYS', `[Snapshots] Failed to read autosnapshot_config: ${(e as any)?.message || e}`);
@@ -127,17 +167,19 @@ export function updateAutoSnapshotConfig(update: Partial<AutoSnapshotConfig>): A
     const current = getAutoSnapshotConfig();
     const next: AutoSnapshotConfig = {
         enabled: update.enabled !== undefined ? !!update.enabled : current.enabled,
-        // Clamp to sane bounds: 1 hour to what the timer can hold, at least 1 kept snapshot.
+        // Clamp to sane bounds: 1 hour to what the timer can hold, 1 to MAX_SNAPSHOTS_KEPT kept snapshots (the route
+        // refuses more; this is for any other caller).
         intervalHours: update.intervalHours !== undefined
             ? timerHours(Number(update.intervalHours) || current.intervalHours)
             : current.intervalHours,
         keep: update.keep !== undefined
-            ? Math.max(1, Math.round(Number(update.keep) || current.keep))
+            ? keptCount(Number(update.keep) || current.keep)
             : current.keep,
     };
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('autosnapshot_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
-    // Re-arm the timer so interval/enabled changes take effect immediately.
+    // Re-arm the timer so interval/enabled changes take effect immediately, and keep a lower `keep` at once.
     restartScheduler();
+    expireSnapshots();
     return next;
 }
 
@@ -279,10 +321,15 @@ export function listSnapshots(): SnapshotInfo[] {
     }
 }
 
-/** Delete snapshots beyond the configured `keep` count (oldest first). */
-function prune(keep: number): void {
+/**
+ * Delete the snapshots beyond the newest `keep`, and every one {@link SNAPSHOT_MAX_AGE_DAYS} days old or more by its file
+ * time, which is when it was taken (the address scrub keeps it, services/address-retention.ts). Returns how many.
+ */
+function prune(keep: number, now = Date.now()): number {
     const all = listSnapshots(); // newest first
-    const stale = all.slice(keep);
+    const cutoff = now - SNAPSHOT_MAX_AGE_MS;
+    const stale = all.filter((s, i) => i >= keep || s.createdAt <= cutoff);
+    let removed = 0;
     for (const s of stale) {
         try {
             const full = path.join(SNAPSHOTS_DIR, s.name);
@@ -290,10 +337,29 @@ function prune(keep: number): void {
             // and `listSnapshots` would no longer name the snapshot it belonged to.
             removeSnapshotImages(full);
             fs.unlinkSync(full);
-            logger.info('SYS', `[Snapshots] Pruned old snapshot ${s.name}`);
+            removed++;
+            logger.info('SYS', s.createdAt <= cutoff
+                ? `[Snapshots] Removed snapshot ${s.name}: it was ${SNAPSHOT_MAX_AGE_DAYS} days old`
+                : `[Snapshots] Pruned old snapshot ${s.name}`);
         } catch (e) {
             logger.warn('SYS', `[Snapshots] Failed to prune ${s.name}: ${(e as any)?.message || e}`);
         }
+    }
+    return removed;
+}
+
+/**
+ * Remove the snapshots past their count or their age, now. Every server runs it every hour (initSnapshotScheduler),
+ * whatever its role and whether snapshots are on: a standby takes none but may hold some from before, and a server
+ * with its schedule off still holds the last ones it took. Never throws. Returns how many went.
+ */
+export function expireSnapshots(now = Date.now()): number {
+    if (creating) return 0; // the snapshot being taken prunes when it is done
+    try {
+        return prune(getAutoSnapshotConfig().keep, now);
+    } catch (e) {
+        logger.warn('SYS', `[Snapshots] Could not remove old snapshots: ${(e as any)?.message || e}`);
+        return 0;
     }
 }
 
@@ -360,24 +426,45 @@ function arm(): void {
         snapshotTimer = null;
     }
     armedHours = null;
+    // The main server only (see the note at the top). The schedule row stays as it is: a standby keeps its own, and its
+    // main server's in the kept community settings, for the day it takes over.
+    if (getNodeRole() !== 'primary') {
+        logger.info('SYS', `[Snapshots] This server is a standby: it takes no snapshots (its main server does). `
+            + `Any it took before are removed once they are ${SNAPSHOT_MAX_AGE_DAYS} days old.`);
+        return;
+    }
     const cfg = getAutoSnapshotConfig();
     if (!cfg.enabled) {
         logger.info('SYS', '[Snapshots] Auto-snapshots disabled.');
         return;
     }
     const intervalMs = cfg.intervalHours * 60 * 60 * 1000;
-    logger.info('SYS', `[Snapshots] Auto-snapshots enabled — every ${cfg.intervalHours}h, keeping ${cfg.keep}.`);
+    logger.info('SYS', `[Snapshots] Auto-snapshots enabled — every ${cfg.intervalHours}h, keeping ${cfg.keep}, none older than ${SNAPSHOT_MAX_AGE_DAYS} days.`);
     snapshotTimer = setInterval(() => {
+        // A role that changed without setNodeRole's announcement still stops it here, before a snapshot is taken.
+        if (getNodeRole() !== 'primary') { arm(); return; }
         try { createSnapshot(); }
         catch (e) { logger.warn('SYS', `[Snapshots] Scheduled snapshot failed: ${(e as any)?.message || e}`); }
     }, intervalMs);
     armedHours = cfg.intervalHours;
 }
 
-/** Initialize the scheduler. Call once after initStateEngine(). */
+/**
+ * Initialize the scheduler: the snapshot timer for the role as it stands (call it once the role is loaded, after the
+ * take-over resumes at boot, index.ts step 2.6), re-armed at every role change after; and, on every role, the hourly
+ * expiry, run once now.
+ */
 export function initSnapshotScheduler(): void {
     ensureDir();
+    if (!initialized) {
+        initialized = true;
+        onNodeRoleChange(() => arm());
+    }
     arm();
+    expireSnapshots();
+    if (expiryTimer) clearInterval(expiryTimer);
+    expiryTimer = setInterval(() => { expireSnapshots(); }, EXPIRE_EVERY_MS);
+    expiryTimer.unref?.();
 }
 
 /** Re-read config and re-arm the timer (used when config changes). */

@@ -1,8 +1,12 @@
+# Docker's copy of what the server prints holds the same lines as its log, members' names included, and nothing can
+# take a deleted member's name out of it afterwards. So it is kept small: two files of 5 MB, the oldest dropped as the
+# next fills (Docker has no age limit). It goes with the container, so an update that replaces the container starts a
+# new one. The operator manual says so (Privacy and what your server can see).
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "3"
+    max-size: "5m"
+    max-file: "2"
 
 services:
   beanpool-node:

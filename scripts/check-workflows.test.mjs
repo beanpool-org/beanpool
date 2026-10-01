@@ -102,6 +102,38 @@ ${env}    steps:
     assert.deepEqual(workflowProblems(wf().replace('      - run: echo hi\n', '      # type=raw,value=latest\n      - run: docker pull x:latest\n')), []);
 });
 
+test('every other way of moving :latest from an ungated job fails too', () => {
+    const meta = (withLines) => `name: t
+on: push
+permissions: {}
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/metadata-action@${SHA} # v5.10.0
+        with:
+${withLines}`;
+    const cases = {
+        'control: type=raw,value=latest': meta('          tags: |\n            type=raw,value=latest\n'),
+        'flavor block latest=true': meta('          flavor: |\n            latest=true\n            prefix=x\n'),
+        'flavor inline latest=true': meta('          flavor: latest=true\n'),
+        'tags inline with :latest': meta('          tags: ${{ steps.meta.outputs.tags }},ghcr.io/x/y:latest\n'),
+        'tags block with :latest': meta('          tags: |\n            ghcr.io/x/y:v1\n            ghcr.io/x/y:latest\n'),
+        'docker buildx build --push -t :latest': wf().replace('      - run: echo hi\n', '      - run: docker buildx build --push -t ghcr.io/x/y:latest .\n'),
+        'docker buildx imagetools create -t :latest': wf().replace('      - run: echo hi\n', '      - run: docker buildx imagetools create -t ghcr.io/x/y:latest ghcr.io/x/y:sha-1\n'),
+        'multi-line build with --tag :latest': wf().replace('      - run: echo hi\n', '      - run: |\n          docker buildx build --push \\\n            --tag ghcr.io/x/y:latest .\n'),
+    };
+    for (const [name, text] of Object.entries(cases)) {
+        assert.match(workflowProblems(text).join(), /does not name environment: release/, name);
+    }
+    // Behind the release environment each one is fine.
+    for (const [name, text] of Object.entries(cases))
+        assert.deepEqual(workflowProblems(text.replace('    runs-on: ubuntu-latest\n', '    runs-on: ubuntu-latest\n    environment: release\n')), [], name);
+    // Not publishing: flavor without latest=true, tags without :latest, a pull, a FROM-style reference in a comment.
+    assert.deepEqual(workflowProblems(meta('          flavor: |\n            latest=false\n          tags: |\n            type=sha\n')), []);
+    assert.deepEqual(workflowProblems(wf().replace('      - run: echo hi\n', '      - run: docker run --rm ghcr.io/x/y:latest --version\n')), []);
+});
+
 test('jobs indented by four spaces are read as jobs too', () => {
     const four = (env) => `name: t
 on: push

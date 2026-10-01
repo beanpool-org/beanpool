@@ -7,7 +7,7 @@
  *     a sha256 digest. Local actions (./...) are this repository's own code.
  *   - every workflow has a top-level `permissions:`, so no job gets the repository's default token scope, and none
  *     says write-all.
- *   - a job that moves the image's :latest or a semver tag, or makes a GitHub Release, names the `release`
+ *   - a job that moves the image's :latest (type=raw, flavor latest=true, a tags: or -t value ending :latest) or a semver tag, or makes a GitHub Release, names the `release`
  *     environment, which waits for Marty's approval ("approve each release", board, 2026-10-01).
  * apps/registrar/scripts/check-deploy-workflow.mjs adds the registrar deploy's own rules on top of these.
  *
@@ -28,9 +28,26 @@ const DOCKER_DIGEST = /^docker:\/\/\S+@sha256:[0-9a-f]{64}$/;
 const VERSION_COMMENT = /^\s*#\s*v\d+(\.\d+)*\s*$/;
 // What publishes a release: the :latest tag, a semver tag (docker/metadata-action) or a GitHub Release.
 const PUBLISHES_RELEASE = [
-    /type=raw,value=latest\b/, /type=semver\b/, /\bdocker\s+(?:image\s+)?(?:push|tag)\b.*:latest\b/,
+    /type=raw,value=latest\b/, /\blatest=true\b/, // metadata-action flavor, block or inline
+    /(?:^|\s)(?:-t|--tag)[\s=]['"]?\S*:latest\b/, // docker buildx build --push -t / imagetools create -t, even over several lines
+ /type=semver\b/, /\bdocker\s+(?:image\s+)?(?:push|tag)\b.*:latest\b/,
     /\bsoftprops\/action-gh-release@/, /\bgh\s+release\s+create\b/,
 ];
+
+/** True when a `tags:` input of the job (inline, or the block under it) names an image reference ending :latest. */
+function tagsInputNamesLatest(body) {
+    for (const [i, line] of body.entries()) {
+        const m = /^(\s*)(?:-\s+)?tags:\s*(.*)$/.exec(line);
+        if (!m) continue;
+        if (/:latest\b/.test(m[2])) return true;
+        for (const next of body.slice(i + 1)) {
+            if (!next.trim()) continue;
+            if (indentOf(next) <= m[1].length) break;
+            if (/:latest\b/.test(next)) return true;
+        }
+    }
+    return false;
+}
 
 const withoutComment = (line) => line.replace(/^\s*#.*$/, '').replace(/\s+#.*$/, '');
 const indentOf = (line) => /^ */.exec(line)[0].length;
@@ -100,7 +117,7 @@ export function workflowProblems(text) {
 
     for (const job of jobsOf(lines)) {
         const body = job.lines.map(withoutComment);
-        const publishes = PUBLISHES_RELEASE.some((re) => body.some((l) => re.test(l)));
+        const publishes = PUBLISHES_RELEASE.some((re) => body.some((l) => re.test(l))) || tagsInputNamesLatest(body);
         if (publishes && environmentOf(job) !== RELEASE_ENVIRONMENT)
             problems.push(`jobs.${job.id} (line ${job.line}): publishes a release (:latest, a semver tag or a GitHub Release) but does not name environment: ${RELEASE_ENVIRONMENT}`);
     }

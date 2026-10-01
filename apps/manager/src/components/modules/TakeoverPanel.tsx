@@ -42,6 +42,8 @@ export interface TakeoverProgressData {
         /** `addsUp` and `copy` are absent on servers before the ledger copy was checked; `ok` is both. */
         audit?: {
             ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** Balances that are not a finite number; absent on servers before they were counted here. */
+            badBalances?: number;
             copy?: { match: boolean; here: LedgerHeld; lastCopy: (LedgerHeld & { generatedAt: string | null }) | null } | null;
         } | null;
         announcement?: string | null;
@@ -126,7 +128,12 @@ function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['resul
     if (audit.ok) return 'The ledger adds up.';
     const held = (h: LedgerHeld) => `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`;
     const reasons: string[] = [];
-    if (audit.addsUp !== true) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    // Balances that are not a number leave the difference at 0, so they are said as themselves, as the copy is.
+    const bad = audit.badBalances ?? 0;
+    if (audit.addsUp !== true && bad > 0) reasons.push(`${bad} account balance(s) are not a number, so the ledger can't add up.`);
+    if (audit.addsUp !== true && (bad === 0 || Math.abs(audit.drift) >= 0.01 || audit.strandedEscrows > 0)) {
+        reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    }
     if (audit.copy && !audit.copy.match) {
         reasons.push(audit.copy.lastCopy
             ? `The ledger is not the main server's as this server last copied it: here ${held(audit.copy.here)}, the main server's ${held(audit.copy.lastCopy)}.`

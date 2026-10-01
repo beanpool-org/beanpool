@@ -247,6 +247,18 @@ describe('TakeoverPanel', () => {
             },
             // A server from before the copy was checked: its "not ok" is the sum's, as it always said.
             { audit: { ok: false, drift: 2.5, strandedEscrows: 0 }, says: [/The ledger does NOT add up \(difference 2\.5\)\. Check it before members trade\./], never: [/main server's/] },
+            // Balances that are not a number, and nothing else: said as themselves, never "does NOT add up (difference 0)".
+            {
+                audit: { ok: false, drift: 0, strandedEscrows: 0, addsUp: false, badBalances: 2, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
+                says: [/2 account balance\(s\) are not a number, so the ledger can't add up\. Check it before members trade\./],
+                never: [/does NOT add up/, /not the main server's/],
+            },
+            // Both: each said.
+            {
+                audit: { ok: false, drift: -3, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },
+                says: [/1 account balance\(s\) are not a number, so the ledger can't add up\. The ledger does NOT add up \(difference -3\)\. Check it before members trade\./],
+                never: [/not the main server's/],
+            },
         ];
         for (const c of cases) {
             sessionStorage.setItem('bp-takeover-progress:standby-1', 'd'.repeat(64));

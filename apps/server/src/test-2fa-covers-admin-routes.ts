@@ -17,7 +17,8 @@
  *   7. the brake-reset hole (#937 review, finding 1): with 2FA on, a caller who knows the password but not the code
  *      used to wipe their source's count of wrong codes by sending the password alone to one of these routes, and so
  *      guess codes without end. Now the count survives, and the source is braked after the free failures;
- *   8. /ws/logs?auth=<password> (password alone) is refused under 2FA.
+ *   8. /ws/logs?auth=<password> (password alone) is refused under 2FA, and with 2FA off too: the query-string
+ *      password is no door at all any more (Fable's web review, L5); a ticket is the only way in.
  *
  * A Koa app with the real checkAdminAuth and the real community and settings routes, without the per-IP auth rate
  * limit (15 a minute would stop the matrix half way; the password brake is real). No request leaves this process:
@@ -323,7 +324,8 @@ async function main() {
         assert(wsOn === 401, `/ws/logs?auth=<password> under 2FA → 401 (got ${wsOn})`);
         set2fa(false);
         const wsOff = await wsStatus();
-        assert(wsOff === 101, `/ws/logs?auth=<password> with 2FA off still connects, as before (got ${wsOff})`);
+        // Until 2026-10-01 this connected (101): the admin password in a URL, which lands in proxy and browser logs.
+        assert(wsOff === 401, `/ws/logs?auth=<password> with 2FA off is refused too: the password in a URL opens nothing (got ${wsOff})`);
     } finally {
         server.close();
     }

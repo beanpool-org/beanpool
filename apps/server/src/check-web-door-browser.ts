@@ -7,7 +7,8 @@
  * The node serves a stand-in public/ folder: an index.html with one script from the node (it must run) and one
  * inline script (it must not), and stand-ins for the pages that keep the older header, each with an inline script
  * that must still run there. /app is the control: the inline script is blocked AND the browser reports it, so
- * "didn't run" is never a page that simply didn't load.
+ * "didn't run" is never a page that simply didn't load. Settings and the manager are under the app document's policy
+ * too (Fable's web review M2): an inline script in their stand-ins must be blocked and reported, as in the web app.
  *
  * Not in scripts/test-all.sh: it needs Playwright's Chromium, which the web app's package brings
  * (pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium, once).
@@ -54,7 +55,10 @@ interface Browser {
 }
 
 /** The pages that keep the older header: their inline script must still run. */
-const OLDER_HEADER_PAGES = ['/settings', '/settings/members', '/manager', '/auth/facebook.html'];
+const OLDER_HEADER_PAGES = ['/settings.html', '/auth/facebook.html'];
+
+/** Settings and the manager, every way they are reached: an inline script there must be blocked and reported. */
+const MANAGER_PAGES = ['/settings', '/settings/members', '/settings/index.html', '/manager', '/manager/fleet'];
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(publicDir, 'index.html'), '<!doctype html><title>BeanPool</title><div id="root">the web app</div>'
         + '<script src="/assets/probe.js"></script><script>window.inlineRan = true</script>');
     fs.writeFileSync(path.join(publicDir, 'assets', 'probe.js'), 'window.externalRan = true;');
-    for (const [file, title] of [['settings/index.html', 'Settings'], ['manager/index.html', 'Manager'], ['auth/facebook.html', 'Facebook return']]) {
+    for (const [file, title] of [['settings/index.html', 'Settings'], ['manager/index.html', 'Manager'], ['settings.html', 'Old settings'], ['auth/facebook.html', 'Facebook return']]) {
         fs.writeFileSync(path.join(publicDir, file), `<!doctype html><title>${title}</title><script>window.inlineRan = true</script>`);
     }
     process.chdir(webRoot);
@@ -118,6 +122,12 @@ async function main(): Promise<void> {
         for (const pagePath of OLDER_HEADER_PAGES) {
             const r = await open(pagePath);
             assert(r.inline && r.blocked.length === 0, `${pagePath}: its inline script still runs, nothing blocked (ran ${r.inline}, ${r.blocked.length} report(s))`);
+        }
+        console.log('\n── Settings and the manager: the app document\'s policy ──');
+        for (const pagePath of MANAGER_PAGES) {
+            const r = await open(pagePath);
+            assert(r.status === 200 && !r.inline && r.blocked.length > 0,
+                `${pagePath}: an inline script is blocked and reported (status ${r.status}, ran ${r.inline}, ${r.blocked.length} report(s))`);
         }
         const invite = await open('/?invite=BP-TEST-0003');
         assert(invite.status === 200 && invite.blocked.length === 0, `/?invite=: the install page's inline script is not blocked (${invite.blocked.length} report(s))`);

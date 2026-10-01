@@ -14,7 +14,7 @@ import { assertNotMuted } from './auto-moderation.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
-import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
@@ -82,6 +82,7 @@ function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
 
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
 export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
+export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
 /**
@@ -348,7 +349,16 @@ export function createPost(
     // text that names no money: no account, member, escrow, project, deal or settlement (db.ts idNamesMoney). Nothing turns
     // a post's id into an account now; the boot migration that read `escrow_<post id>` moved Beans out of whichever
     // escrow a chosen id named, and nothing should be able to again.
-    if (id && (typeof id !== 'string' || idNamesMoney(id))) throw new Error(POST_ID_TAKEN_ERROR);
+    //
+    // It names the post's photos in the image store as well (storage/image-store.ts postPhotoKey: `posts/<id>/…`), and
+    // they are stored before the row is written. So it is a key segment as it stands, in lowercase as every id the node
+    // and the apps make is: one that only a strip, a cut or a disk that folds case could make another post's would put
+    // this post's photos under that post's keys, and its edit or delete would take that post's photos (review
+    // FABLE-sec-images, HIGH). And never a post's that is here already, whose photos the stores below would write over.
+    if (id !== undefined && id !== null && id !== '') {
+        if (typeof id !== 'string' || !isKeySafeId(id) || id !== id.toLowerCase()) throw new Error(POST_ID_SHAPE_ERROR);
+        if (idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw new Error(POST_ID_TAKEN_ERROR);
+    }
 
     const audienceScope: AudienceScope = (options?.audienceScope as AudienceScope) || 'public';
     if (!['public', 'group', 'direct'].includes(audienceScope)) {
@@ -956,7 +966,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
             );
             nextPhotoColumns.forEach((c, idx) => insertPhoto.run(id, c.photo_data, idx, now, c.storage_key, c.sha256, c.bytes, c.mime));
-            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomed));
+            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
 

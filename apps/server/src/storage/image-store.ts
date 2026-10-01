@@ -219,11 +219,24 @@ export const STORE_NAMESPACES = ['posts', 'attachments'] as const;
 // littering. The post/project id and order number stay in the key so a human (or an orphan sweep) can see at
 // a glance which row an object belongs to.
 
-/** `<postId>` and `<projectId>` are UUIDs or hex ids, but they come from rows — sanitise, never trust. */
+/** An id that is a key segment as it stands: a segment's characters, at most 128 of them. */
+const ID_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** Whether `raw` is an id {@link postPhotoKey} and {@link attachmentKey} put in a key exactly as it is. */
+export function isKeySafeId(raw: unknown): raw is string {
+    return typeof raw === 'string' && ID_SEGMENT.test(raw);
+}
+
+/**
+ * `<postId>`, `<messageId>` and `<projectId>` as the key segment, unchanged, or no key at all. They come from rows, and a
+ * post's id from whoever made the post, so nothing here is trusted. Never sanitised: an id stripped or cut down to
+ * another's segment (`X!`, `X ` or a 129th character beside `X`) shares that post's keys, and its edit or delete then
+ * removes the other post's photos (scratch/reviews/FABLE-sec-images.md, HIGH). Every id this node and its apps make (a
+ * UUID, `pulse_<date>`) is already in this shape; a row whose id is not keeps its bytes in the row, as before the store.
+ */
 function idSegment(raw: string, what: string): string {
-    const clean = String(raw ?? '').replace(/[^A-Za-z0-9._-]/g, '').slice(0, 128);
-    if (!clean || !SEGMENT.test(clean)) throw new ImageStoreError(`Cannot build an image store key from this ${what}`);
-    return clean;
+    if (!isKeySafeId(raw)) throw new ImageStoreError(`Cannot build an image store key from this ${what}`);
+    return raw;
 }
 
 export function postPhotoKey(postId: string, orderNum: number, sha256: string, mime: string): string {

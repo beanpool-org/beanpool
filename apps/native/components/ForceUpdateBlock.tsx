@@ -10,6 +10,7 @@ import { bootClockMs } from '../modules/boot-clock';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { checkCommunityForUpdate, createForceUpdateGate, STORE_URLS } from '../utils/force-update';
 import { hasMnemonic } from '../utils/identity';
+import { isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import {
     accountSectionInFront, onAccountSectionInFront, otherCommunitiesOnPhone, switchFromUpdateBlock, type AccountSection,
     type OtherCommunity,
@@ -81,6 +82,9 @@ export default function ForceUpdateBlock() {
                 platform: Platform.OS,
             }),
             show: (next) => { if (mounted) setBlock(next); },
+            // App Lock's own unlock prompt is not the member leaving (utils/force-update.ts).
+            appLockPromptOpen: isAppLockPromptOpen,
+            whenAppLockPromptsClose,
         });
         void gate.start(AppState.currentState);
         const sub = AppState.addEventListener('change', (next) => { void gate.appStateChanged(next); });

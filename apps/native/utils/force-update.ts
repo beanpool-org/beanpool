@@ -73,6 +73,13 @@ export interface ForceUpdateGateDeps {
     check(): Promise<ForceUpdateDecision>;
     /** Put the block up, naming the build to install, or take it down (null). */
     show(block: { version: string } | null): void;
+    /**
+     * Whether App Lock's own unlock prompt is open now (LocalAuth.isAppLockPromptOpen). Leaving the front while it is open
+     * is the prompt's doing, not the member's: see createForceUpdateGate. Absent: never.
+     */
+    appLockPromptOpen?(): boolean;
+    /** Resolves once no App Lock prompt is open (LocalAuth.whenAppLockPromptsClose). Absent: at once. */
+    whenAppLockPromptsClose?(): Promise<void>;
 }
 
 export interface ForceUpdateGate {
@@ -88,21 +95,70 @@ export interface ForceUpdateGate {
     communitySwitched(): Promise<void>;
 }
 
+/**
+ * When the block goes up. Every safe moment asks the community, and a "block" answer goes up only if it came within
+ * DECIDE_WITHIN_MS while the app was still in front.
+ *
+ * App Lock's own prompt is not the member leaving. It opens at the very safe moments the block waits for (at launch, and
+ * on every return after 15 seconds), and while it is open the app is out of the front: iOS's Face ID and passcode make
+ * it 'inactive', Android 8-10's PIN screen sends it to 'background'. Counted as a leave, the answer that landed during
+ * the prompt was dropped and the 'active' after it looked like a return after a second, so a member with App Lock on was
+ * almost never shown the block (#1415's deciding review). So a leave while App Lock's prompt is open keeps the app
+ * counted as in front: an answer that lands meanwhile is held, and goes up as soon as the prompt has closed and the app
+ * is back. The prompt closing while the app is still away (Android hands the answer over before the app is back; a
+ * member who pressed home during it) starts an ordinary leave from that moment, so the next return is timed from it, and
+ * a held answer still goes up on that return unless it was a safe moment of its own (then the community is asked anew).
+ * A door's prompt (the member's words, a payment) is not App Lock's, and still counts as leaving: the block never lands
+ * in the middle of what the member started.
+ */
 export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGate {
     let blocked: { version: string } | null = null;
+    /** In front, or out of it only while App Lock's prompt is open (promptAway). */
     let inFront = false;
     let beenInFront = false;
+    /** The app left the front while App Lock's prompt was open, and has not come back yet. */
+    let promptAway = false;
     let leftAt: number | null = null;
     let asks = 0;
+    /** A block decided at a safe moment while App Lock's prompt was up: it goes up once the prompt has closed. */
+    let held: { version: string } | null = null;
+
+    const promptOpen = () => {
+        try { return deps.appLockPromptOpen?.() === true; } catch { return false; }
+    };
 
     const show = (next: { version: string } | null) => {
+        held = null;
         if (next?.version === blocked?.version) return;
         blocked = next;
         deps.show(next);
     };
 
+    /** Shows a held block if the app is in front with no App Lock prompt open now. */
+    const showHeld = () => {
+        if (held && inFront && !promptAway && !promptOpen()) show(held);
+    };
+
+    /** Once App Lock's prompts have closed: show what was held, or start the leave the prompt was covering. */
+    function afterPrompt(): void {
+        const wait = deps.whenAppLockPromptsClose ? deps.whenAppLockPromptsClose() : Promise.resolve();
+        void wait.then(() => {
+            // Another prompt opened at once (a cancelled launch prompt, then Unlock App): wait for that one too.
+            if (promptOpen()) { afterPrompt(); return; }
+            if (promptAway) {
+                // Still out of the front with no prompt open: from now on that is the member away.
+                promptAway = false;
+                inFront = false;
+                leftAt = deps.now();
+                return;
+            }
+            showHeld();
+        }, () => {});
+    }
+
     async function safeMoment(): Promise<void> {
         const ask = ++asks;
+        held = null;
         const at = deps.now();
         let decision: ForceUpdateDecision;
         try { decision = await deps.check(); } catch { decision = { kind: 'unknown' }; }
@@ -114,9 +170,15 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
             return;
         }
         if (decision.kind !== 'block') return;
-        // Raised only at the safe moment itself: the app is still in front and the answer came in time. NaN is not.
+        // Raised only at the safe moment itself: the app is still in front (App Lock's prompt aside) and the answer came
+        // in time. NaN is not.
         const took = deps.now() - at;
         if (!inFront || !(took <= DECIDE_WITHIN_MS)) return;
+        if (promptAway || promptOpen()) {
+            held = { version: decision.version };
+            afterPrompt();
+            return;
+        }
         show({ version: decision.version });
     }
 
@@ -130,6 +192,13 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         },
         async appStateChanged(next) {
             if (next === 'active') {
+                if (promptAway) {
+                    // Back from App Lock's prompt: not a return. What it held goes up once no prompt is open.
+                    promptAway = false;
+                    if (promptOpen()) afterPrompt();
+                    else showHeld();
+                    return;
+                }
                 if (inFront) return;
                 inFront = true;
                 const first = !beenInFront;
@@ -137,19 +206,27 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
                 const away = leftAt === null ? Number.NaN : deps.now() - leftAt;
                 leftAt = null;
                 // While the block is up, every return asks again: it can only take it down or keep it.
-                if (first || blocked || away >= SAFE_RETURN_MS) await safeMoment();
+                if (first || blocked || away >= SAFE_RETURN_MS) { await safeMoment(); return; }
+                // A block held through App Lock's prompt, whose answer came while the app was away only because of it.
+                showHeld();
                 return;
             }
             if (next === 'background' || next === 'inactive') {
-                if (!inFront) return;
+                if (!inFront || promptAway) return;
+                if (promptOpen()) {
+                    promptAway = true;
+                    afterPrompt();
+                    return;
+                }
                 inFront = false;
+                held = null;
                 leftAt = deps.now();
             }
         },
         async communitySwitched() {
             asks++;
             show(null);
-            if (inFront) await safeMoment();
+            if (inFront && !promptAway) await safeMoment();
         },
     };
 }

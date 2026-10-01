@@ -10,7 +10,7 @@ custodians one person, BeanPool's founder, holds all three shares, every release
 (1984 Hosting in Iceland, not bought yet) is an ordinary rented server: **the host can read the vault's memory, and
 nothing proves in hardware what it runs** (`platform: none`). **The vault can open every copy it keeps**: it checks the
 sign-in itself, so it learns the `sub` that opens a copy, at every deposit and every restore. Against the vault itself,
-only who runs it protects a member; against someone else using their sign-in, the 24-hour wait on every restore, the
+only who runs it protects a member; against someone else using their sign-in, the 24-hour wait on every restore (unless another of the member's own devices approves it), the
 alert to their devices and Stop do. Nothing here
 holds a real member's copy until the reshare is done.
 

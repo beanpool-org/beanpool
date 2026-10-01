@@ -3,6 +3,7 @@ import { HelpLink, ManualProvider, useManual } from '../manual/Manual';
 import { PhoneReturnLink } from '../layout/ReturnLinks';
 import type { BackLink } from '../../lib/came-from';
 import { MODERATOR_MANUAL_PAGES } from '../../lib/manual';
+import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import {
     REMOVAL_REASONS,
     actionNodeReport,
@@ -52,6 +53,10 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
     const [pendingCount, setPendingCount] = useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    // Clean-up by burst (BurstCleanup.tsx), on a node whose open door labels joins: the global community.
+    const [burstsHere, setBurstsHere] = useState(false);
+    const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
+    const [burstReload, setBurstReload] = useState(0);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -123,6 +128,18 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                     The author is told their post was removed and why, never by whom; whoever reported it hears the outcome.
                 </p>
 
+                <BurstDigestCard nodeUrl={nodeUrl} onOpen={setBurstAnchor} reloadKey={burstReload} onAvailability={setBurstsHere} />
+                {burstAnchor && (
+                    <BurstPanel
+                        key={burstAnchor}
+                        nodeUrl={nodeUrl}
+                        anchor={burstAnchor}
+                        canRemove={false}
+                        onClose={() => setBurstAnchor(null)}
+                        onChanged={() => { setBurstReload(n => n + 1); void load(); }}
+                    />
+                )}
+
                 <div role="group" aria-label="Show reports" className="flex flex-wrap gap-2">
                     {FILTERS.map(f => (
                         <button
@@ -155,7 +172,8 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                 ) : (
                     <ul className="space-y-3 list-none p-0 m-0">
                         {reports.map(r => (
-                            <ReportCard key={r.id} report={r} nodeUrl={nodeUrl} onDone={load} />
+                            <ReportCard key={r.id} report={r} nodeUrl={nodeUrl} onDone={load}
+                                onShowBurst={burstsHere ? setBurstAnchor : undefined} />
                         ))}
                     </ul>
                 )}
@@ -173,7 +191,11 @@ function when(iso: string): string {
     return Number.isNaN(t.getTime()) ? '' : t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function ReportCard({ report, nodeUrl, onDone }: { report: ListedReport; nodeUrl: string; onDone: () => void }) {
+function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
+    report: ListedReport; nodeUrl: string; onDone: () => void;
+    /** Open the accounts that joined with the reported one (global community only). */
+    onShowBurst?: (pubkey: string) => void;
+}) {
     const [choosingReason, setChoosingReason] = useState(false);
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState<string | null>(null);
@@ -267,6 +289,12 @@ function ReportCard({ report, nodeUrl, onDone }: { report: ListedReport; nodeUrl
                             onClick={() => void run('pulse', () => actionNodeReport(nodeUrl, report.id, { removePulseItem: true }))}
                             className={`${btn} bg-red-900/80 hover:bg-red-800 border border-red-700 text-white`}>
                             {busy === 'pulse' ? 'Removing…' : 'Remove from the Pulse'}
+                        </button>
+                    )}
+                    {onShowBurst && typeof report.targetPubkey === 'string' && report.targetPubkey && (
+                        <button type="button" disabled={!!busy} onClick={() => onShowBurst(report.targetPubkey as string)}
+                            className={`${btn} bg-nature-900 hover:bg-nature-800 border border-nature-700 text-nature-100`}>
+                            Who joined with them
                         </button>
                     )}
                     {!canRemovePost && !canRemovePulse && (

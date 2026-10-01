@@ -9,6 +9,7 @@ import { DoorSettingPanel } from './DoorSettingPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
+import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -62,6 +63,10 @@ export function PeopleSafetySection({
     const [reportsLoading, setReportsLoading] = useState(false);
     const [dismissedReportIds, setDismissedReportIds] = useState<Set<string>>(new Set());
     const [actionedReportIds, setActionedReportIds] = useState<Set<string>>(new Set());
+    // Clean-up by burst (BurstCleanup.tsx), on a node whose open door labels joins: the global community.
+    const [burstsHere, setBurstsHere] = useState(false);
+    const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
+    const [burstReload, setBurstReload] = useState(0);
 
     const loadReports = async () => {
         if (!activeNode?.url) return;
@@ -129,6 +134,9 @@ export function PeopleSafetySection({
 
     const rawReports: NodeReport[] = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
+    // Bursts exist only where members join through the open door (`invited_by` 'open:<provider>', the global community):
+    // anywhere else this screen asks the node nothing about them.
+    const hasDoorMembers = members.some(m => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:'));
 
     const getOutcome = (r: NodeReport): 'open' | 'dismissed' | 'actioned' => {
         const id = String(r.id);
@@ -365,6 +373,31 @@ export function PeopleSafetySection({
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    {hasDoorMembers && (
+                        <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
+                            <BurstDigestCard
+                                nodeUrl={activeNode.url}
+                                adminPassword={activeNode.adminPassword}
+                                tfaToken={getTfaSessionToken(activeNode.id)}
+                                onOpen={setBurstAnchor}
+                                reloadKey={burstReload}
+                                onAvailability={setBurstsHere}
+                            />
+                            {burstAnchor && (
+                                <BurstPanel
+                                    key={burstAnchor}
+                                    nodeUrl={activeNode.url}
+                                    anchor={burstAnchor}
+                                    canRemove
+                                    adminPassword={activeNode.adminPassword}
+                                    tfaToken={getTfaSessionToken(activeNode.id)}
+                                    onClose={() => setBurstAnchor(null)}
+                                    onChanged={() => { setBurstReload(n => n + 1); refreshReports(); }}
+                                />
+                            )}
+                        </SectionErrorBoundary>
+                    )}
+
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
                         <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
@@ -525,7 +558,7 @@ export function PeopleSafetySection({
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                                            <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
                                                 {report.pulseItem && typeof report.pulseItem === 'object' && !report.pulseItem.removed && report.id && (
                                                     <button
                                                         onClick={() => handleRemovePulseItem(String(report.id))}
@@ -535,6 +568,19 @@ export function PeopleSafetySection({
                                                         {removingReportId === report.id ? 'Removing...' : 'Remove from the Pulse'}
                                                     </button>
                                                 )}
+                                                {hasDoorMembers && burstsHere && (() => {
+                                                    const target = typeof report.targetPubkey === 'string' ? report.targetPubkey
+                                                        : (typeof report.target_pubkey === 'string' ? report.target_pubkey : '');
+                                                    return target ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setBurstAnchor(target)}
+                                                            className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all min-h-[48px] lg:min-h-0"
+                                                        >
+                                                            Who joined with them
+                                                        </button>
+                                                    ) : null;
+                                                })()}
                                                 <button
                                                     onClick={() => setSelectedThreat(report)}
                                                     className="px-3 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-sm min-h-[48px] lg:min-h-0"

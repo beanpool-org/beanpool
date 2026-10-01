@@ -331,7 +331,7 @@ function openDoorAfterRestore(dataDir: string, carried: boolean): { records: num
         const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
         try {
             if (!handle.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_joins'").get()) return null;
-            records = (handle.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%'").get() as { n: number }).n;
+            records = (handle.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%' AND join_hash NOT LIKE 'words:%'").get() as { n: number }).n;
             const config = (key: string) => (handle.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value?: unknown } | undefined)?.value;
             if (records === 0 || config(LEGACY_OPEN_JOIN_KEY_ROW) != null) return null;
             const id = config(OPEN_JOIN_KEY_ID_ROW);

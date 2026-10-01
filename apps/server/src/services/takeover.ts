@@ -30,7 +30,10 @@
  * standby-state.json for the database's part), the opened keys are deleted, and the journal ends 'failed' with
  * `rolledBack` set: finished, not under way. The server is the standby it was, copying its main server, and a new
  * take-over can start (the code typed again). A crash mid-way through the roll-back leaves the journal 'rolling-back',
- * and the next start finishes it. Before this (F2 of the 2026-10-01 standby review), a 'failed' journal counted as under
+ * and the next start finishes it. While it is 'rolling-back' (a crash, or a write the roll-back could not make) the server
+ * runs as a standby whatever local-config.json says, with no tunnel and no copies, and the journal says why
+ * (`rollBackStopped`); an undo copy that is gone is never "put back" from (checkUndoCopy). Before this (F2 of the
+ * 2026-10-01 standby review), a 'failed' journal counted as under
  * way for good: no new take-over, and every whole copy the standby built was thrown away at the restart that swapped it
  * in, the next one too. A crash is still resumed, not rolled back: only a step that fails, at the confirm or at the
  * start that resumes it, rolls back; so does a resumed take-over whose opened keys are gone.
@@ -232,6 +235,11 @@ interface Journal {
     state: 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
     /** When the standby was put back as it was, and what was put back. Absent until then. */
     rolledBack?: { at: string; detail: string } | null;
+    /**
+     * While 'rolling-back': why the last try to put the standby back stopped, in words for Settings. `undoCopyMissing`: the
+     * copy `undo-copy` made is gone or incomplete, so nothing was put back or deleted, and a restart alone won't finish it.
+     */
+    rollBackStopped?: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string;
     completedAt: string | null;
     envelopeId: string;
@@ -306,10 +314,14 @@ function mark(j: Journal, step: TakeoverStep, detail?: string): void {
 /**
  * A take-over that has restarted this server but not yet reached its tunnel step: the tunnel waits for it
  * (services/tunnel-connector.ts), so the web address comes back after the community is told and the keys are locked again.
+ * And one being rolled back: the server runs as a standby until it is put back (resumeTakeoverAtBoot), and a standby runs
+ * no tunnel; this holds it too, should anything set the role otherwise.
  */
 export function takeoverHoldsTunnel(): boolean {
     const j = readJournal();
-    return !!j && j.state !== 'complete' && !!j.steps.restart && !j.steps.tunnel;
+    if (!j) return false;
+    if (j.state === 'rolling-back') return true;
+    return j.state !== 'complete' && !!j.steps.restart && !j.steps.tunnel;
 }
 
 function readPlan(journalId: string): Plan | null {
@@ -1019,8 +1031,10 @@ function runPreRestartSteps(j: Journal, plan: Plan, inProcess: boolean): void {
             throw new TakeoverError(500, back.ok
                 ? `${stopped} Nothing of it was kept: this server is the standby it was, with its own keys, settings and copy of the main server, `
                     + 'and it goes on copying. Fix what stopped it, then take over again (the recovery code, or an owner\'s phone, opens the keys again).'
-                : `${stopped} Putting this standby back as it was did not finish (${back.why}). Restart the server: it finishes putting itself back `
-                    + `before anything else. Its own files from before are in data/${j.undoDir}.`,
+                : back.undoCopyMissing
+                    ? `${stopped} It could not be undone: ${back.why}`
+                    : `${stopped} Putting this standby back as it was did not finish (${back.why}). Restart the server: it finishes putting itself back `
+                        + `before anything else. Its own files from before are in data/${j.undoDir}.`,
             { failedStep: step, rolledBack: back.ok });
         }
     }
@@ -1101,14 +1115,19 @@ function putStandbyStateBack(state: StandbyState): void {
             db.prepare(`INSERT INTO node_roles (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
                 .run(...cols.map((c) => row[c] as string | number | null));
         }
-        for (const [key, value] of Object.entries(state.rows ?? {})) {
-            if (!UNDO_ROW_KEYS.includes(key)) continue;
+        // Each key named where test-replication-manifest.ts can read it: the rows by UNDO_ROW_KEYS (the keys readStandbyState
+        // read, a row the undo copy does not name left as it is), the overrides as `nodeProfile.<switch>`.
+        const rows = state.rows ?? {};
+        for (const key of UNDO_ROW_KEYS) {
+            if (!Object.prototype.hasOwnProperty.call(rows, key)) continue;
+            const value = rows[key];
             if (value === null || value === undefined) remove.run(key);
             else upsert.run(key, value);
         }
         db.prepare('DELETE FROM node_config WHERE substr(key, 1, ?) = ?').run(PROFILE_OVERRIDE_PREFIX.length, PROFILE_OVERRIDE_PREFIX);
         for (const [key, value] of Object.entries(state.profileOverrides ?? {})) {
-            if (key.startsWith(PROFILE_OVERRIDE_PREFIX)) upsert.run(key, value);
+            if (!key.startsWith(PROFILE_OVERRIDE_PREFIX)) continue;
+            upsert.run(`${PROFILE_OVERRIDE_PREFIX}${key.slice(PROFILE_OVERRIDE_PREFIX.length)}`, value);
         }
         const stored = storedNodeConfig();
         for (const f of UNDO_NODE_CONFIG_FIELDS) {
@@ -1132,6 +1151,24 @@ function putLocalConfigBack(dir: string): void {
     if (unsaved.length) throw new Error(`local-config.json could not be written (${unsaved.join(', ')} not put back)`);
 }
 
+/**
+ * The copy `undo-copy` made is gone, or incomplete: public-address.json, which it always writes (after the files), is not
+ * in it. Then "not in the copy" says nothing about what was here before, and putting back from it would delete the
+ * identity files the take-over wrote (the node key, genesis, links) and wipe settings, with nothing of the standby's own to
+ * put in their place. So nothing is put back or deleted, and the journal says why (rollBackTakeover).
+ */
+class UndoCopyMissing extends Error {}
+
+function checkUndoCopy(j: Journal, dir: string): void {
+    const gone = !fs.existsSync(dir);
+    if (!gone && fs.existsSync(path.join(dir, 'public-address.json'))) return;
+    throw new UndoCopyMissing(`the copy of this standby's own files from before the take-over, data/${j.undoDir}, `
+        + `${gone ? 'is gone' : 'is incomplete (public-address.json is not in it)'}, so nothing was put back and nothing was deleted. `
+        + "This server still holds the community's keys, settings and roles as the take-over left them; it runs as a standby and "
+        + 'copies nothing. Restarting alone will not change that: put that folder back (from a backup of the data directory), then '
+        + 'restart the server and it finishes putting itself back.');
+}
+
 /** The identity files as the undo copy holds them; one it does not hold was not here before the take-over, and goes. */
 function putFilesBack(dir: string): void {
     for (const f of RESTORED_FILES) {
@@ -1151,11 +1188,13 @@ function putFilesBack(dir: string): void {
  *   community settings, profile, open door's key id and copy cursor in the database (standby-state.json; a copy made by an
  *   older build has none, and then only the web address comes back, from public-address.json). The undo copy stays.
  * - The opened keys (data/takeover-bundle.json) go last of all.
+ * - An undo copy that is gone or incomplete (checkUndoCopy): nothing is put back or deleted; the journal stays
+ *   'rolling-back' and says why (`rollBackStopped`), and the server runs as a standby (resumeTakeoverAtBoot).
  *
  * What a step merged from the main server's own records (open-door records it had newer) stays: they are the main server's,
  * as the next copy brings them. Never throws: says whether it finished, and why not.
  */
-function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: false; why: string } {
+function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: false; why: string; undoCopyMissing: boolean } {
     try {
         j.state = 'rolling-back';
         writeJournal(j);
@@ -1163,6 +1202,7 @@ function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: 
         const dir = dataPath(j.undoDir);
         let detail: string;
         if (j.steps['undo-copy']) {
+            checkUndoCopy(j, dir);
             putFilesBack(dir);
             crashPoint('rollback-files');
             putLocalConfigBack(dir);
@@ -1190,13 +1230,19 @@ function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: 
         }
         j.state = 'failed';
         j.rolledBack = { at: new Date().toISOString(), detail: `${detail}; deleted the opened keys` };
+        j.rollBackStopped = null;
         writeJournal(j);
         logger.warn('SYS', `[Takeover] Rolled back: ${j.rolledBack.detail}. This server is the standby it was.`);
         return { ok: true };
     } catch (e: any) {
         const why = e?.message || String(e);
-        logger.error('SYS', `[Takeover] Rolling back did not finish: ${why}. The next start tries again; this standby's own files are in data/${j.undoDir}.`);
-        return { ok: false, why };
+        const undoCopyMissing = e instanceof UndoCopyMissing;
+        if (undoCopyMissing) logger.error('SYS', `[Takeover] Rolling back cannot start: ${why}`);
+        else logger.error('SYS', `[Takeover] Rolling back did not finish: ${why}. The next start tries again; this standby's own files are in data/${j.undoDir}.`);
+        // For Settings: the journal is still 'rolling-back', and says why. A journal that can't be written either is said in the log.
+        j.rollBackStopped = { at: new Date().toISOString(), why, ...(undoCopyMissing ? { undoCopyMissing: true } : {}) };
+        try { writeJournal(j); } catch { /* said above */ }
+        return { ok: false, why, undoCopyMissing };
     }
 }
 
@@ -1317,6 +1363,15 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
             j.state = 'restarting';
             mark(j, 'restart', 'finished at boot, after an interruption');
         }
+        if (j && j.state === 'rolling-back') {
+            // A roll-back that did not finish here (a refused write, an undo copy that is gone), by any path into it: a journal
+            // left 'rolling-back', a resumed step that failed, opened keys that are gone. A take-over only ever starts on a
+            // standby (takeoverPreconditions), and one that did not finish never made this server the main one, whatever
+            // local-config.json says by now (its `role` step may have run): it runs as a standby, the tunnel held
+            // (takeoverHoldsTunnel), and copies held (swap-at-boot takeoverUnderWay, the puller), until a start finishes it.
+            holdAsStandby();
+            return { resumed, auditRan };
+        }
         if (rolledBackNow) {
             // The database's boot read the role before this put the standby's own back (a take-over stopped after its `role`
             // step): this process is a standby again, as local-config.json, or NODE_ROLE, now says.
@@ -1340,8 +1395,21 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
         deletePreviousDatabaseOnMainServer(j);
     } catch (e: any) {
         logger.error('SYS', `[Takeover] Boot check failed: ${e?.message || e}`);
+        // Whatever stopped it, a take-over that is being rolled back still never leaves this server the main one.
+        if (readJournal()?.state === 'rolling-back') holdAsStandby();
     }
     return { resumed, auditRan };
+}
+
+/** This process runs as a standby while a take-over's roll-back is unfinished (resumeTakeoverAtBoot). Never throws. */
+function holdAsStandby(): void {
+    try {
+        if (getNodeRole() !== 'backup') setNodeRole('backup');
+        logger.error('SYS', '[Takeover] A take-over that stopped is not yet rolled back: this server runs as a standby, with no tunnel, '
+            + 'and copies nothing until it is. Settings (Take over as the main server) says why.');
+    } catch (e: any) {
+        logger.error('SYS', `[Takeover] Could not hold this server as a standby: ${e?.message || e}`);
+    }
 }
 
 /** How long a promoted server keeps the database its last swap replaced after the take-over's audit found trouble. */
@@ -1508,6 +1576,8 @@ export interface TakeoverProgress {
     /** 'failed' with `rolledBack`: stopped, and this server is the standby it was; a new take-over can start. */
     state: 'none' | 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
     rolledBack: { at: string; detail: string } | null;
+    /** 'rolling-back': why putting it back stopped, if it did (Journal.rollBackStopped). */
+    rollBackStopped: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string | null;
     completedAt: string | null;
     authorisedBy: string | null;
@@ -1535,6 +1605,7 @@ export function getTakeoverProgress(): TakeoverProgress {
         role: getNodeRole(),
         state: j ? j.state : 'none',
         rolledBack: j?.rolledBack ?? null,
+        rollBackStopped: j?.state === 'rolling-back' ? (j.rollBackStopped ?? null) : null,
         startedAt: j?.startedAt ?? null,
         completedAt: j?.completedAt ?? null,
         authorisedBy: j ? describeAuthority(j.authorisedBy) : null,

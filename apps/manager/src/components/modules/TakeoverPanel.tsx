@@ -30,6 +30,11 @@ export interface TakeoverProgressData {
     state: 'none' | 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
     /** When a take-over that stopped was rolled back, and what was put back. Absent on older servers, which left it failed. */
     rolledBack?: { at: string; detail: string } | null;
+    /**
+     * 'rolling-back': why putting the standby back stopped. `undoCopyMissing`: the copy of its own files is gone, so nothing
+     * was put back and a restart alone won't finish it. Absent on older servers.
+     */
+    rollBackStopped?: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string | null;
     completedAt: string | null;
     authorisedBy: string | null;
@@ -399,8 +404,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                             </span>
                         )}
                         {state === 'failed' && !progress.rolledBack && <span className="text-red-300">The take-over stopped. It is tried again from the same step when the server restarts.</span>}
-                        {state === 'rolling-back' && (
+                        {state === 'rolling-back' && !progress.rollBackStopped?.undoCopyMissing && (
                             <span className="text-red-300">The take-over stopped. This server is putting itself back as the standby it was; if that does not finish, restart it.</span>
+                        )}
+                        {state === 'rolling-back' && progress.rollBackStopped?.undoCopyMissing && (
+                            <span className="text-red-300">The take-over stopped, and this server cannot put itself back as the standby it was by itself. It runs as a standby and copies nothing until it can.</span>
                         )}
                         {(state === 'running' || state === 'restarting') && !unreachable && <span className="text-amber-200">Taking over…</span>}
                         {(state === 'running' || state === 'restarting') && unreachable && (
@@ -426,6 +434,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                     {progress.error && (
                         <div role="alert" className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs" style={WRAP}>
                             Stopped at “{progress.error.label}”: {progress.error.message}
+                        </div>
+                    )}
+                    {state === 'rolling-back' && progress.rollBackStopped && (
+                        <div role="alert" id="takeover-rollback-stopped" className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs" style={WRAP}>
+                            Putting it back stopped ({when(progress.rollBackStopped.at)}): {progress.rollBackStopped.why}
                         </div>
                     )}
                     {state === 'complete' && progress.result && (

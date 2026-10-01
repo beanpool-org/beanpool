@@ -298,6 +298,25 @@ describe('TakeoverPanel', () => {
         expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
     });
 
+    it('a roll-back that stopped says why; one whose undo copy is gone never says "restart" or "put back"', async () => {
+        const why = "the copy of this standby's own files from before the take-over, data/pre-takeover-x, is gone, so nothing was put back and nothing was deleted.";
+        for (const [stopped, headline] of [
+            [{ at: '2026-09-20T01:00:05.000Z', why: 'local-config.json could not be written (nodeRole not put back)' }, /if that does not finish, restart it/],
+            [{ at: '2026-09-20T01:00:05.000Z', why, undoCopyMissing: true }, /cannot put itself back as the standby it was by itself/],
+        ] as const) {
+            stubFetch({ '/api/local/admin/takeover/progress': () => ({ status: 200, body: progress('rolling-back', 4, { rollBackStopped: stopped }) }) });
+            const { unmount, container } = render(<TakeoverPanel activeNode={node} isStandby pollMs={60_000} />);
+            expect(await screen.findByText(headline)).toBeInTheDocument();
+            expect(container.querySelector('#takeover-rollback-stopped')?.textContent).toContain(stopped.why);
+            if ('undoCopyMissing' in stopped) {
+                expect(screen.queryByText(/restart it\./)).toBeNull();
+                expect(screen.queryByText(/nothing of it was kept/)).toBeNull();
+            }
+            expect(screen.queryByRole('button', { name: 'Take over as the main server' })).toBeNull();
+            unmount();
+        }
+    });
+
     it('a confirm that stops and rolls back, or finds another server took over: the reason, and back to the start', async () => {
         for (const answer of [
             { status: 500, body: { error: 'The take-over stopped at "Brought back the community\'s owners and admins": disk full. Nothing of it was kept.', failedStep: 'roles', rolledBack: true } },

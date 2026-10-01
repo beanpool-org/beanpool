@@ -132,7 +132,7 @@ async function standbyState(): Promise<Record<string, any>> {
         bundleFile: fs.existsSync(path.join(dataDir, 'takeover-bundle.json')),
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),
         pullerRunning: getBackupStatus().running,
-        progress: { state: progress.state, rolledBack: progress.rolledBack ?? null, error: progress.error ?? null },
+        progress: { state: progress.state, rolledBack: progress.rolledBack ?? null, error: progress.error ?? null, rollBackStopped: progress.rollBackStopped ?? null },
     };
 }
 

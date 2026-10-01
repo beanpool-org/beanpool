@@ -3,11 +3,10 @@
  */
 
 import Router from '@koa/router';
-import { getVersion } from '../version.js';
+import { getVersion, getCommit } from '../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'node:child_process';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
     getNodeRole, getMemberStats, type NodeConfig,
@@ -353,14 +352,7 @@ router.get('/api/directory/info', async (ctx) => {
 // ===================== VERSION & UPDATES =====================
 
 // Version now lives in ../version.js so /api/version and /api/community/health
-// cannot drift apart again.
-
-// Get git commit hash
-function getCommitHash(): string {
-    try {
-        return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    } catch { return 'unknown'; }
-}
+// cannot drift apart again. So does the commit, asked of git once rather than on every request.
 
 // ===================== BACKGROUND UPDATE CHECKER =====================
 let cachedUpdateInfo: {
@@ -418,15 +410,20 @@ async function backgroundUpdateCheck() {
     }
 }
 
-// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit)
-setTimeout(() => backgroundUpdateCheck(), 30000).unref();
-setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
+// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit).
+// DISABLE_UPDATE_CHECK=true turns the background lookup off (the server-suites runner sets it: a test node must never
+// ask GitHub, and a slow run used to outlive the 30s delay and trip the suites' "nothing leaves this machine" check).
+// Unset, a real node behaves exactly as before. The manual "check for updates" route is unaffected.
+if (process.env.DISABLE_UPDATE_CHECK !== 'true') {
+    setTimeout(() => backgroundUpdateCheck(), 30000).unref();
+    setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
+}
 
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     ctx.body = {
         version: getVersion(),
-        commit: getCommitHash(),
+        commit: getCommit(),
         buildTime: new Date().toISOString(),
         node: process.env.CF_RECORD_NAME || 'local',
         // Include cached update info if available

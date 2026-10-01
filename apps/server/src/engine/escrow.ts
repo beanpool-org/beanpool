@@ -13,6 +13,7 @@ import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
 import { isDealQuantity, POST_HOURS_MAX } from './post-fields.js';
+import { hasBlocked } from './member-blocks.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -306,8 +307,10 @@ export function requestPost(
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
+    // A request from someone the listing's author has blocked (engine/member-blocks.ts) waits in their deals with no push:
+    // it holds no Beans and carries no words of the requester's, and refusing it would tell the requester they are blocked.
     cb.dispatchPushNotification(
-        [post.author_pubkey],
+        hasBlocked(post.author_pubkey, requesterPublicKey) ? [] : [post.author_pubkey],
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
@@ -765,8 +768,11 @@ export function acceptPost(
         console.warn('[Marketplace] ESCROW_FUNDED system message failed:', e);
     }
 
+    // A 1-step accept by someone the seller has blocked (engine/member-blocks.ts) comes with no push, as their request
+    // does: with the buyer's own cancel it could be repeated at will to push the seller (#1403 review). The deal itself,
+    // its escrow and its SYSTEM lines are as for anyone, and the seller sees it in their deals.
     cb.dispatchPushNotification(
-        [post.authorPublicKey],
+        hasBlocked(post.authorPublicKey, buyerPublicKey) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
         `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
@@ -1070,8 +1076,11 @@ export function cancelPostTransaction(
     }
 
     const otherParty = cancellerPublicKey === row.buyer_pubkey ? row.seller_pubkey : row.buyer_pubkey;
+    // The buyer's cancel tells a seller who has blocked them nothing, as their accept didn't (#1403 review): the deal is
+    // back on the seller's board, refunded, with its SYSTEM line in their chat. A seller's cancel always tells the buyer.
+    const silenced = cancellerPublicKey === row.buyer_pubkey && hasBlocked(row.seller_pubkey, row.buyer_pubkey);
     cb.dispatchPushNotification(
-        [otherParty],
+        silenced ? [] : [otherParty],
         cancellerPublicKey,
         '🚫 Deal Cancelled',
         `Deal for "${post?.title || 'the post'}" was cancelled — escrow funds refunded.`,

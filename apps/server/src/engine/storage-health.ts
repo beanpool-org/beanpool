@@ -18,6 +18,7 @@ import {
     type ImageStore, type ObjectInfo,
 } from '../storage/image-store.js';
 import { stagedObjects } from '../services/stager.js';
+import { OPTIONAL_STORAGE_KEY_TABLES } from '../storage/image-columns.js';
 
 export interface DiskBreakdownItem {
     dbSizeBytes: number;
@@ -385,9 +386,19 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
     let listed: ObjectInfo[];
     try { listed = await scanOurObjectsAsync(store); } catch { return out; }
     const referenced = new Set<string>();
+    // A withheld line's photo (engine/withheld-lines.ts), its sender's alone, when this database has the table
+    // (OPTIONAL_STORAGE_KEY_TABLES): one it doesn't have names nothing; one it has must be read like the rest.
+    let optional: string[];
+    try {
+        const present = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(r => r.name));
+        optional = OPTIONAL_STORAGE_KEY_TABLES.filter(t => present.has(t)).map(t => `SELECT storage_key FROM ${t} WHERE storage_key IS NOT NULL`);
+    } catch {
+        return out;
+    }
     for (const sql of [
         'SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL',
         'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL',
+        ...optional,
     ]) {
         try {
             for (const r of db.prepare(sql).all() as any[]) referenced.add(r.storage_key as string);

@@ -489,7 +489,8 @@ async function main() {
     // ── 4. A visitor joins ─────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 4. a visitor joins for real ──');
     {
-        const probe = await get(`/api/community/membership/${dee.pubKeyHex}`);
+        // Signed by the visitor's own key, as both apps ask it: the probe answers no one else (multi-community review F3).
+        const probe = await get(`/api/community/membership/${dee.pubKeyHex}`, dee);
         assert(probe.status === 200 && probe.body?.isMember === false, `the membership probe says the DM-made visitor is no member (${probe.text.slice(0, 80)})`);
         assert(knockerRefusal(vo.pubKeyHex) === null, `a visitor may ask to join (knockerRefusal ${knockerRefusal(vo.pubKeyHex)})`);
         // Each visitor signs its own redeem, as both apps do: only its own key makes its row a member's (§7).
@@ -499,7 +500,7 @@ async function main() {
         const used = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(deeJoin.code) as any;
         assert(visitorFlag(dee.pubKeyHex) === 0 && deeRow.invited_by === gen.pubKeyHex && deeRow.invite_code === deeJoin.code && used?.used_by === dee.pubKeyHex,
             `its row is now a member's, with who invited it and the code, and the code is used (is_visitor ${visitorFlag(dee.pubKeyHex)}, invited_by ${String(deeRow.invited_by).slice(0, 8)})`);
-        const after = await get(`/api/community/membership/${dee.pubKeyHex}`);
+        const after = await get(`/api/community/membership/${dee.pubKeyHex}`, dee);
         assert(after.body?.isMember === true, 'the probe says it is a member now');
         await expectReader('the DM-made visitor, joined', dee);
         const convs = await get(`/api/messages/conversations/${dee.pubKeyHex}`, dee);

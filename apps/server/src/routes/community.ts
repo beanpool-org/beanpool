@@ -875,20 +875,40 @@ router.get('/api/community/health', async (ctx) => {
     ctx.body = getPublicCommunityHealth();
 });
 
+/** The membership probe's refusal of an unsigned request (401) and of one signed by another key (403). */
+const MEMBERSHIP_PROBE_UNSIGNED = 'Ask this signed by the key you are asking about: a community tells only that key whether it is one of its members.';
+const MEMBERSHIP_PROBE_NOT_YOURS = 'A community tells only the key itself whether it is one of its members.';
+
 // Lightweight membership probe — returns whether a public key is a registered member or recovering.
 // A visitor's row (isVisitorKey: a key someone sent a message or Beans to, or a member of another community) is no
 // member: the apps read `isMember: false` as "join here", and joining with an invite or through the open door makes
 // that same row a member's (engine/members.ts registerMemberInternal).
+//
+// Answered only to a request signed by the key it asks about, on every node, the global one included (multi-community
+// review F3, 2026-10-01). One key is a person's on every community, and members see each other's keys: answered to
+// anyone, the probe let whoever holds a key ask every community whether that person is in it, and watch a recovery. An
+// unsigned request is refused 401 and one signed by another key 403, the same whatever the key is, so the refusal says
+// nothing about it. The apps only ever ask about their own key and sign the probe with it (native membership-probe.ts and
+// db.ts fetchNodeCallsign, the web app's lib/api.ts request and lib/web-join.ts), and read a refusal as no answer.
 router.get('/api/community/membership/:publicKey', async (ctx) => {
-    const member = getMember(ctx.params.publicKey);
+    ctx.set('Cache-Control', 'private, no-store');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: MEMBERSHIP_PROBE_UNSIGNED, code: 'signature_required' };
+        return;
+    }
+    // The signer is in the member table's spelling (lower case); the key asked about is read the same way.
+    if (provenKeySpelling(ctx.params.publicKey) !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: MEMBERSHIP_PROBE_NOT_YOURS, code: 'not_your_key' };
+        return;
+    }
+    const member = getMember(actor);
     if (member && !isVisitorKey(member.publicKey)) {
-        // A key is not turned into a name for anyone but its holder, on every node (G9a on the global node; a local
-        // community since 2026-10-01, "nothing on a private node should be public"): the only readers of the name are
-        // the web app adopting its own (lib/member-name.ts, signed as that key) and the phone's restore, which signs
-        // with the key it restored (native db.ts fetchNodeCallsign). Whether the key is a member stays public: the
-        // apps ask it unsigned of every community they know, and it takes the key to ask.
-        const named = ctx.state.actor === ctx.params.publicKey;
-        ctx.body = { isMember: true, callsign: named ? member.callsign : null };
+        // The key's own signer: its name too (the web app adopting its own, lib/member-name.ts; the phone's restore,
+        // native db.ts fetchNodeCallsign).
+        ctx.body = { isMember: true, callsign: member.callsign };
     } else {
         ctx.body = {
             isMember: false,
@@ -1001,7 +1021,8 @@ router.post('/api/invite/generate', async (ctx) => {
  * The member card a redeem answers with. A new join's is its own. An existing member's, on every node (G9a on the global
  * node; a local community since 2026-10-01), goes only to a request signed by that member's key: the phone re-entering
  * signs its redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a
- * code or a ticket learns only that the key is a member, as the public membership probe says, and not its name or face.
+ * code or a ticket learns only that the key is a member (the redeem's answer), and not its name or face. The membership
+ * probe tells no one but the key itself (multi-community review F3).
  */
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;

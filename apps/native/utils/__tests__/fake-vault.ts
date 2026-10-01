@@ -410,17 +410,57 @@ export class CommunityKeepingCopies {
     }
 }
 
-/** The global community's door (apps/server routes/open-join.ts), as far as the phone meets it. */
+/** The door's 401 code for each way a vault ticket fails its check (V5 design §1.2). */
+const DOOR_TICKET_CODES: Record<string, string> = {
+    malformed: 'ticket_malformed',
+    signature: 'ticket_signature',
+    expired: 'ticket_expired',
+    wrong_key: 'ticket_key',
+    wrong_purpose: 'ticket_purpose',
+};
+
+/**
+ * The global community's door (apps/server routes/open-join.ts), as far as the phone meets it, with V5's ticket check
+ * (scratch/global-node/DESIGN-v5-global-door-vault-fable.md §1.2, §1.3): its nonce answer says which vault ticket keys
+ * it takes, and a join is let in only on its own nonce or on a ticket it takes, with that ticket's hash as the nonce.
+ */
 export class FakeGlobal {
     /** The door's own nonce, for a sign-in that has no vault ticket. */
     readonly nonce = 'door-nonce-1';
+    /**
+     * The vault ticket keys the door takes, and says it takes in its nonce answer (`vault`): the test vault's, as
+     * global with `BEANPOOL_VAULT_TICKET_KEYS` set. Null: a door with none set (`vault: null`), which takes no ticket.
+     */
+    ticketKeys: string[] | null = [TICKET_KEY];
+    /** A door from before V5, as main's is: no `vault` in its nonce answer, and only its own nonce lets a join in. */
+    beforeV5 = false;
+    /** Refuse every join that carries a ticket, 401 with this code (a ticket that ran out between the sheet and the join). */
+    refuseTickets: string | null = null;
 
     handle(req: SentRequest): Reply {
         if (req.method === 'POST' && req.path === '/api/join/sso-nonce') {
-            return reply(200, { nonce: this.nonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'] });
+            const answer = { nonce: this.nonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'] };
+            if (this.beforeV5) return reply(200, answer);
+            return reply(200, { ...answer, vault: this.ticketKeys ? { ticketKeys: this.ticketKeys } : null });
         }
         if (req.method === 'POST' && req.path === '/api/join') {
-            return reply(200, { success: true, member: { publicKey: req.headers['X-Public-Key'], callsign: req.body?.callsign } });
+            const b = req.body ?? {};
+            const signedIn = claimsOf(b.idToken)?.nonce;
+            const refused = (code: string) => reply(401, { error: 'Your sign-in could not be used.', code });
+            if (typeof b.vaultTicket === 'string' && !this.beforeV5) {
+                if (this.refuseTickets) return refused(this.refuseTickets);
+                if (!this.ticketKeys) return refused('ticket_unsupported');
+                const check = checkVaultTicket(b.vaultTicket, {
+                    ticketKeys: this.ticketKeys, now: Date.now(), key: req.headers['X-Public-Key'], purpose: 'deposit',
+                });
+                if (!check.ok) return refused(DOOR_TICKET_CODES[check.reason]);
+                if (b.nonce !== vaultTicketNonce(b.vaultTicket)) return reply(400, { error: 'The nonce is not this ticket\'s.', code: 'bad_request' });
+                if (signedIn !== b.nonce) return refused('sign_in');
+            } else if (signedIn !== this.nonce || b.nonce !== this.nonce) {
+                // Before V5 a ticket rides along unread, and its hash is not a nonce this door gave out.
+                return refused('sign_in');
+            }
+            return reply(200, { success: true, member: { publicKey: req.headers['X-Public-Key'], callsign: b.callsign } });
         }
         return reply(404, { error: 'Not Found' });
     }

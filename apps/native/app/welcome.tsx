@@ -298,6 +298,8 @@ export default function WelcomeScreen() {
     const [globalKey, setGlobalKey] = useState<JoinKey | null>(null);
     /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
     const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
+    /** Under the joining spinner while the door's sign-in is asked for once more (utils/global-join.ts `submitJoin`). */
+    const [doorNotice, setDoorNotice] = useState<string | null>(null);
     /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
     const [joinBeansOn, setJoinBeansOn] = useState(true);
     /** Stops the name step's check when the member leaves it (Back to Home, Use a different sign-in). */
@@ -1373,7 +1375,8 @@ export default function WelcomeScreen() {
             joinSendingRef.current = true;
             setGlobalPhase('joining');
             const identity = await commitJoinKey(key, name);
-            const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
+            // A door that refuses the vault's ticket gets the provider's sheet once more, with its own nonce, and says so.
+            const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin, { onSignInAgain: setDoorNotice });
             setDoorSignIn(null);
             await afterDoorAnswer(answer, key, identity, 'join');
         } catch (err) {
@@ -1382,6 +1385,7 @@ export default function WelcomeScreen() {
             setGlobalPhase('signIn');
         } finally {
             joinSendingRef.current = false;
+            setDoorNotice(null);
             if (nameCheckRef.current === leave) nameCheckRef.current = null;
             setLoading(false);
         }
@@ -2439,7 +2443,7 @@ export default function WelcomeScreen() {
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
                                     <ActivityIndicator size="large" color={palette.blue600} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        Joining the global community…
+                                        {doorNotice ?? 'Joining the global community…'}
                                     </Text>
                                 </View>
                             )}

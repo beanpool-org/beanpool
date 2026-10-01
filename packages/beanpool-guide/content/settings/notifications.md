@@ -45,8 +45,6 @@ An alert from a community you've removed from this phone does nothing either.
 
 If your community's server hasn't been updated yet, its alerts carry no signature. BeanPool shows them in general words ("There is news from your community.") and, when you tap one, opens where you left off.
 
-If your community's server is newer than your copy of BeanPool, some of its alerts may show in general words, and a tap may open where you left off. That's expected, not a warning sign: once you update BeanPool, they show and open as usual.
-
 ## Notices when BeanPool checks in
 
 Every so often your phone lets BeanPool check in with your community in the background. If your community kept a notice for you that you haven't seen, such as what happened to one of your posts, BeanPool shows it on your phone in full, once.

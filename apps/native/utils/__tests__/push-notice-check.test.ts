@@ -712,39 +712,38 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
         expect(noticeRoute(NEW_KIND, null)).toBe('/(tabs)');
     });
 
-    describe('a newer notice format (bp above this build\'s): its bytes can\'t be rebuilt, so it is treated as unsigned, without a warning', () => {
-        const newer = (extra: Record<string, unknown> = {}) => ({
-            ...mullum.notice('chat.message', kim.publicKey), bp: 2, ...extra,
+    describe('a notice format above this build\'s (bp 2, 3, 99, "2") is an unsigned push: a forger writing it escapes nothing', () => {
+        const forged = (bp: unknown) => ({
+            bp, c: mullum.tag, k: 'group.invite', i: 'f'.repeat(32), t: nowSeconds(), s: 'ab'.repeat(64),
+            screen: 'post', postId: POST_ID, conversationId: CHAT_ID, url: 'https://evil.example/login',
         });
+        const FORGER_WORDS = { title: 'URGENT', body: 'Send your 12 words to evil.example' };
 
-        it('while open: general words, never its own, and nothing to act on', async () => {
-            for (const data of [newer(), newer({ bp: '2' }), newer({ k: 'group.invite', screen: 'post', postId: POST_ID })]) {
-                expect(await open(push(data, { title: 'URGENT', body: 'Send your 12 words' })))
-                    .toEqual({ kind: 'replace', ...UNSIGNED_NOTICE_WORDS, data: { ...LOCAL_NOTICE_DATA } });
+        it('while open (every community pinned): dropped, no forger words shown', async () => {
+            for (const bp of [2, 3, 99, '2']) {
+                expect(await open(push(forged(bp), FORGER_WORDS))).toEqual({ kind: 'drop', reason: 'unsigned' });
+                expect(await open(push({ ...forged(bp), s: undefined }, FORGER_WORDS))).toEqual({ kind: 'drop', reason: 'unsigned' });
             }
         });
 
-        it('a tap opens the app where it was: no request, no navigation, and no warning', async () => {
-            for (const data of [newer(), newer({ s: undefined }), newer({ screen: 'post', postId: POST_ID })]) {
-                expect(await tap(push(data))).toEqual({ kind: 'nothing', reason: 'newer-format' });
+        it('on a tap (every community pinned): the warning once each, nothing navigates, no request', async () => {
+            for (const bp of [2, 3, 99, '2']) {
+                expect((await tap(push(forged(bp), FORGER_WORDS))).kind).toBe('warn');
+                expect(takeNoticeWarning()).toBe(true);
             }
             expect(navigated).toEqual([]);
             expect(sent).toEqual([]);
-            expect(takeNoticeWarning()).toBe(false);
         });
 
-        it('on a phone that sent its token to no community it keeps, it is no one\'s', async () => {
-            mem.async.delete(SAVED_NODES_STORE_KEY);
-            mem.async.delete(ANCHOR);
-            expect(await open(push(newer()))).toEqual({ kind: 'drop', reason: 'newer-format' });
-            expect((await tap(push(newer()))).kind).toBe('warn');
-            expect(takeNoticeWarning()).toBe(true);
-        });
-
-        it('a format number that isn\'t a whole number above this build\'s is not a newer format: unsigned, as before', async () => {
-            for (const bp of [0, -1, 1.5, '2a', 'two', null]) {
-                expect(await open(push(newer({ bp })))).toEqual({ kind: 'drop', reason: 'unsigned' });
+        it('while a community is still unpinned it goes as any unsigned push does: general words, a tap opens nothing, no warning', async () => {
+            mem.async.delete(PUSH_PINS_STORE_KEY);
+            for (const bp of [2, 99, '2']) {
+                expect(await open(push(forged(bp), FORGER_WORDS)))
+                    .toEqual({ kind: 'replace', ...UNSIGNED_NOTICE_WORDS, data: { ...LOCAL_NOTICE_DATA } });
+                expect((await tap(push(forged(bp)))).kind).toBe('nothing');
             }
+            expect(navigated).toEqual([]);
+            expect(takeNoticeWarning()).toBe(false);
         });
     });
 });

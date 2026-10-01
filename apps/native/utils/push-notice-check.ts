@@ -26,11 +26,11 @@
  *   the same bytes, with the kind as sent, by the pinned key, for this account, and the same times. Valid: shown while
  *   open with general words ({@link UNSIGNED_NOTICE_WORDS}), and a tap opens what its community answers, through the
  *   same fixed list, else the Market tab ({@link noticeRoute}), with no warning. Not valid: refused as any forgery is.
- * - **A newer format** (`data.bp` above {@link PUSH_NOTICE_VERSION}) is a new tag in the signed bytes and perhaps other
- *   fields, so this build can't rebuild what was signed and can check nothing in it. It is treated as an unsigned push
- *   from a community that signs nothing yet (below), without the warning: general words while open, and a tap opens
- *   the app where it was. So a forger who writes a newer `bp` escapes the warning, but still gets no navigation and no
- *   words of its own while open. A server that needs this build to follow its taps keeps sending format 1.
+ * - **A newer format** (`data.bp` above {@link PUSH_NOTICE_VERSION}) is treated as unsigned, exactly as a push with no
+ *   signature (below). It can't be checked here, and exempting it from the warning would let every forger write `bp: 2`
+ *   (this code is public) and escape it. Instead the server keeps a rule (core push-notice.ts): it sends a format above 1
+ *   only to a phone whose push registration declared it reads that format. This build declares nothing, so it only ever
+ *   gets format 1, and its warning never fires on a genuine notice.
  *
  * ## Pushes no community signed
  *
@@ -220,16 +220,6 @@ function signedNotice(data: unknown): Record<string, unknown> | null {
     return { ...d, bp: PUSH_NOTICE_VERSION, t: wholeNumber(d.t) };
 }
 
-/**
- * A push in a notice format newer than this build's (`data.bp` a whole number above {@link PUSH_NOTICE_VERSION}). A new
- * format is a new tag in the signed bytes (core PUSH_NOTICE_TAG), and perhaps other fields, so this build can't rebuild
- * what was signed and can check nothing about it.
- */
-function isNewerFormat(data: unknown): boolean {
-    const bp = wholeNumber(asObject(data)?.bp);
-    return typeof bp === 'number' && Number.isSafeInteger(bp) && bp > PUSH_NOTICE_VERSION;
-}
-
 /** The key vault's notice type a push (or the app's own copy of one) names, or null. */
 function vaultNoticeType(data: unknown): VaultNoticeType | null {
     const type = asObject(data)?.type;
@@ -395,12 +385,6 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             }
         }
         const pins = await readPushPins(ctx.storage);
-        if (!notice && isNewerFormat(n.data)) {
-            // A format newer than this build's (see the header): nothing can be checked, so it goes as a push from a
-            // community the phone sent its token to, with the general words, or as no one's on a phone with none.
-            if (pins.pinned.length === 0 && pins.unpinnedRegistered.length === 0) return drop('newer-format');
-            return { kind: 'replace', title: UNSIGNED_NOTICE_WORDS.title, body: UNSIGNED_NOTICE_WORDS.body, data: { ...LOCAL_NOTICE_DATA } };
-        }
         if (pins.unpinnedRegistered.length === 0) return drop(notice ? 'other-community' : 'unsigned');
         const named = asObject(n.data)?.k;
         const words = isPushNoticeKind(named) ? pushNoticeWords(named) : UNSIGNED_NOTICE_WORDS;
@@ -445,12 +429,6 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
         if (!n.remote) return vaultNoticeType(n.data) ? { kind: 'settings' } : { kind: 'nothing', reason: 'local' };
         if (!notice && vaultNoticeType(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
         const pins = await readPushPins(ctx.storage);
-        if (!notice && isNewerFormat(n.data)) {
-            // Nothing in it can be checked (see the header), so nothing is followed; and it may well be genuine, so no
-            // warning, as long as the phone sent its token to a community it keeps.
-            const anyone = pins.pinned.length > 0 || pins.unpinnedRegistered.length > 0;
-            return anyone ? { kind: 'nothing', reason: 'newer-format' } : refuse('newer-format');
-        }
         const reason: DropReason = notice ? 'other-community' : 'unsigned';
         return pins.unpinnedRegistered.length > 0 ? { kind: 'nothing', reason } : refuse(reason);
     } catch (e) {

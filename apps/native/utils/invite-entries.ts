@@ -96,5 +96,13 @@ export function mayMakeOfflineTicket(features: NodeFeatures | null | undefined, 
  */
 export const MEMBER_TICKET_REFUSED_TEXT = 'This invite was made by a member, and in this community only its admins bring people in now. Ask an admin for a fresh invite.';
 
-/** Why no offline ticket was made where only admins invite and the node couldn't be reached to ask who this member is. */
-export const OFFLINE_ADMINS_ONLY_TEXT = 'You’re offline, and in this community only its admins invite people. Try again when you’re back online.';
+/**
+ * Why no offline ticket was made where only admins invite. `role`: what the node last said for this member (heard now or
+ * remembered on the phone), or undefined when it never has. It never tells an admin that only admins invite: an admin
+ * with a remembered role makes a ticket, and one the phone has never heard from is only told to try again online.
+ */
+export function offlineTicketRefusal(role: InviteRole | undefined): { title: string; text: string } {
+    return role === undefined
+        ? { title: 'You’re offline', text: 'You’re offline. Try again when you’re back online.' }
+        : { title: 'Only admins invite here', text: 'In this community only its admins invite people.' };
+}

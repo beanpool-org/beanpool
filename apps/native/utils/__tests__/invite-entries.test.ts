@@ -19,7 +19,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 import { invitesOn, readNodeProfile } from '../node-profile';
 import {
     communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT, onlyAdminsInvite, mayInviteHere,
-    mayMakeOfflineTicket, OFFLINE_ADMINS_ONLY_TEXT, adminsOnlyText, adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
+    mayMakeOfflineTicket, offlineTicketRefusal, adminsOnlyText, adminsOnlyRefusal, ADMINS_ONLY_FALLBACK, MEMBER_TICKET_REFUSED_TEXT,
 } from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
@@ -207,7 +207,20 @@ describe('an offline ticket where only admins invite', () => {
             expect(mayMakeOfflineTicket(OLD, role)).toBe(true);
             expect(mayMakeOfflineTicket(GLOBAL, role)).toBe(false);
         }
-        expect(OFFLINE_ADMINS_ONLY_TEXT).toMatch(/only its admins invite/);
+    });
+
+    it('the refusal never tells an admin that only admins invite; a member is told, an unknown role is told to retry', () => {
+        expect(offlineTicketRefusal(null).text).toBe('In this community only its admins invite people.');
+        expect(offlineTicketRefusal('moderator').text).toBe('In this community only its admins invite people.');
+        const unknown = offlineTicketRefusal(undefined);
+        expect(unknown.text).toBe('You’re offline. Try again when you’re back online.');
+        expect(unknown.text).not.toMatch(/admins/);
+        expect(unknown.title).not.toMatch(/admins/);
+    });
+
+    it('a remembered owner or admin counts as heard: an offline ticket is made', () => {
+        // people.tsx hands the remembered role to inviteRole when the node gives no answer.
+        for (const remembered of ['owner', 'admin'] as const) expect(mayMakeOfflineTicket(ADMINS_DOOR, remembered)).toBe(true);
     });
 });
 
@@ -267,6 +280,15 @@ describe('People → Invites where only admins invite (source check)', () => {
         }
         // The link only where someone can use it to ask to join.
         expect(adminsOnly).toMatch(/\{takesKnocks && \([\s\S]*onPress=\{shareCommunityLink\}/);
+    });
+
+    it('with no answer from the node, the last role it gave for this node and key is used, and kept after each answer', () => {
+        const effect = src.slice(src.indexOf('askNodeRole(anchorUrl, identity)'), src.indexOf('const mayInvite = mayInviteHere'));
+        expect(effect).toContain('persistNodeRole(anchorUrl, identity.publicKey, r.role)');
+        expect(effect).toContain('rememberNodeRole(anchorUrl, identity.publicKey, r)');
+        expect(effect).toContain('readPersistedNodeRole(anchorUrl, identity.publicKey)');
+        expect(effect.indexOf('readPersistedNodeRole(')).toBeGreaterThan(effect.indexOf('if (r) {'));
+        expect(src).toContain('offlineTicketRefusal(inviteRole)');
     });
 
     it("a generate refused as admins_only, or offline with no answer on the role, makes no offline ticket", () => {

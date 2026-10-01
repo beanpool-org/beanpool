@@ -3,8 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 /**
  * Who may invite (the door, community modes slice 1; config/door.ts on the server): a community may choose that only
- * its owners and admins invite (`features.door === 'admins'`). There, a member who is neither gets no code, QR, ticket,
- * pending list or tree on the Invites page: the plain words, and the community's link where it takes requests to join.
+ * its owners and admins invite (`features.door === 'admins'`). There, a member who is neither gets no generator (no code, QR or
+ * ticket to make) on the Invites page, though the Tree and their still-valid pending codes stay: the plain words, and the community's link where it takes requests to join.
  * An owner or admin, a community whose members all invite, and a node too old to say: exactly as before.
  */
 
@@ -115,7 +115,7 @@ describe('node-invites: the door', () => {
 });
 
 describe('the Invites page where only admins invite', () => {
-    it('a member: the plain words and the link, no generate, code, pending list or tree', async () => {
+    it('a member: the plain words and the link, the words and link, the tree and pending codes stay, no generator', async () => {
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(ADMINS);
         render(<InvitePage identity={IDENTITY} />);
         await waitFor(() => expect(screen.getByText(adminsOnlyText(true))).toBeInTheDocument());
@@ -125,9 +125,24 @@ describe('the Invites page where only admins invite', () => {
         expect(screen.queryByRole('button', { name: /Generate New Invite/ })).toBeNull();
         expect(screen.queryByText(/Invite Someone/)).toBeNull();
         expect(screen.queryByPlaceholderText(/Who is this invite for/)).toBeNull();
-        expect(screen.queryByText(/INV-OLD1-CODE/)).toBeNull();
-        expect(screen.queryByRole('button', { name: /Tree/ })).toBeNull();
+        // The tabs, the tree and the member's still-valid codes stay; only the generator goes.
+        expect(screen.getByRole('button', { name: /Tree/ })).toBeInTheDocument();
+        expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
+        expect(screen.getByText(/Codes you made earlier still work until they lapse/)).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /Tree/ }));
+        expect(await screen.findByText(/Community Tree/)).toBeInTheDocument();
         expect(generateInvite).not.toHaveBeenCalled();
+    });
+
+    it('a paper ticket made here before the switch is not listed as a code that still works', async () => {
+        localStorage.setItem(`bp_offline_invites_${IDENTITY.publicKey}`, JSON.stringify([
+            { code: 'BP-offline-old', createdBy: IDENTITY.publicKey, createdAt: new Date().toISOString(), usedBy: null, usedAt: null },
+        ]));
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(ADMINS);
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => expect(screen.getByText(adminsOnlyText(true))).toBeInTheDocument());
+        expect(await screen.findByText(/INV-OLD1-CODE/)).toBeInTheDocument();
+        expect(screen.queryByText(/BP-OFFLINE-OLD/i)).toBeNull();
     });
 
     it('a moderator is no admin here either', async () => {

@@ -23,9 +23,9 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
 import {
     GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket,
-    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
+    adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
-import { askNodeRole } from '../../utils/node-admin';
+import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -204,7 +204,18 @@ export default function PeopleScreen() {
         setInviteRole(undefined);
         if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
         let alive = true;
-        askNodeRole(anchorUrl, identity).then(r => { if (alive && r) setInviteRole(r.role); });
+        askNodeRole(anchorUrl, identity).then(async r => {
+            if (r) {
+                // Heard: remember it (header cache and phone storage) for the next time there is no signal.
+                rememberNodeRole(anchorUrl, identity.publicKey, r);
+                void persistNodeRole(anchorUrl, identity.publicKey, r.role);
+                if (alive) setInviteRole(r.role);
+                return;
+            }
+            // No answer (offline): the last role this node gave for this key, so an owner or admin can still make a ticket.
+            const last = await readPersistedNodeRole(anchorUrl, identity.publicKey);
+            if (alive && last !== undefined) setInviteRole(last);
+        });
         return () => { alive = false; };
     }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
     const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
@@ -431,6 +442,7 @@ export default function PeopleScreen() {
                     const adminsOnly = adminsOnlyRefusal(res.status, body);
                     if (adminsOnly) {
                         setInviteRole(null);
+                        if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
                         Alert.alert('Only admins invite here', adminsOnly);
                         return;
                     }
@@ -441,7 +453,8 @@ export default function PeopleScreen() {
 
             // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
             if (!mayMakeOfflineTicket(nodeProfile?.features, inviteRole)) {
-                Alert.alert('Only admins invite here', OFFLINE_ADMINS_ONLY_TEXT);
+                const refusal = offlineTicketRefusal(inviteRole);
+                Alert.alert(refusal.title, refusal.text);
                 return;
             }
 

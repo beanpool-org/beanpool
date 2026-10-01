@@ -22,7 +22,9 @@ Joining with a code is signed by the new member's own key, from the app or the w
 Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** says who can bring people into the community: make an invite, or answer someone who asks to join. Pick one and tap **Save who may invite**.
 
 - **Invite: any member invites.** Every community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.
-- **Known: only admins invite.** Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead, says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. It is a role, not a trust badge.
+- **Known: only admins invite.** Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. It is a role, not a trust badge.
+
+Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it.
 
 Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. The server's log says who changed it.
 

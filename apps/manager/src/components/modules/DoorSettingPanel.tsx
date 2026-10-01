@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
-import { buildAdminHeaders, getTfaSessionToken, resolveNodeApiUrl } from '../../lib/node-client';
+import { buildAdminHeaders, fetchNodeRoles, getTfaSessionToken, resolveNodeApiUrl } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
 
 /**
@@ -55,6 +55,8 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
     const [saved, setSaved] = useState<Door | null>(null);
     const [choice, setChoice] = useState<CommunityDoor | null>(null);
     const [saving, setSaving] = useState(false);
+    // null = not known (not loaded, or the node would not say): never warn on a guess.
+    const [nobodyCanAct, setNobodyCanAct] = useState<boolean | null>(null);
     const [status, setStatus] = useState<Status | null>(null);
     const ids = useId();
     const ownerOnlyId = `${ids}-owner-only`;
@@ -68,6 +70,13 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         setSaved(null);
         setChoice(null);
         setStatus(null);
+        setNobodyCanAct(null);
+        (async () => {
+            try {
+                const roles = await fetchNodeRoles(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                if (mounted) setNobodyCanAct(!roles.some((r) => r.role === 'owner' || r.role === 'admin'));
+            } catch { /* the warning is a courtesy; no answer, no warning */ }
+        })();
         (async () => {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/node/config')).catch(() => null);
             if (!res || !res.ok) return;
@@ -157,6 +166,11 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
                                             {saved === p.door && <span className="ml-2 text-[11px] font-bold text-nature-400">(now)</span>}
                                         </span>
                                         <span className="block text-xs text-nature-300 mt-0.5 leading-relaxed break-words">{p.detail}</span>
+                                        {p.door === 'admins' && nobodyCanAct === true && (
+                                            <span role="note" data-testid="door-no-admins-warning" className="block text-xs text-amber-200 mt-1 leading-relaxed break-words">
+                                                Nobody here is an owner or admin in the app yet. Give someone that role first (People &amp; Safety), or requests to join will wait with nobody to answer them.
+                                            </span>
+                                        )}
                                     </span>
                                 </label>
                             );

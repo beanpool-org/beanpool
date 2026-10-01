@@ -19,6 +19,7 @@
  */
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { phoneLockPrompt, timeDoorPrompt } from './LocalAuth';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
@@ -99,6 +100,29 @@ export function cachedNodeRole(nodeUrl: string, identity: BeanPoolIdentity, now 
 /** A fresher answer (Settings asks on every focus) replaces the remembered one. */
 export function rememberNodeRole(nodeUrl: string, publicKey: string, value: MyNodeRole, now = Date.now()): void {
     roleCache.set(roleKey(nodeUrl, publicKey), { at: now, value: Promise.resolve(value) });
+}
+
+/**
+ * The last role THIS node gave for THIS key, kept on the phone (AsyncStorage) so it survives a restart. It only fills
+ * in when the node can't be reached: People -> Invites uses it so an owner or admin with no signal can still make an
+ * offline ticket where only admins invite. It decides nothing the node doesn't re-check: a stale "admin" makes a ticket
+ * the node refuses at the join. 'none' is a role the node said is not one that may invite.
+ */
+const lastRoleKey = (nodeUrl: string, publicKey: string) => `beanpool_last_node_role:${roleKey(nodeUrl, publicKey)}`;
+
+export async function persistNodeRole(nodeUrl: string, publicKey: string, role: ManageRole | null): Promise<void> {
+    try { await AsyncStorage.setItem(lastRoleKey(nodeUrl, publicKey), role ?? 'none'); } catch { /* best effort */ }
+}
+
+/** The remembered role: a role, null (the node said none), or undefined (nothing remembered). */
+export async function readPersistedNodeRole(nodeUrl: string, publicKey: string): Promise<ManageRole | null | undefined> {
+    try {
+        const v = await AsyncStorage.getItem(lastRoleKey(nodeUrl, publicKey));
+        if (v === 'none') return null;
+        return canManageNode(v) ? v : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 /** Ask again next time: the queue was refused or failed, which is what a demotion looks like. */

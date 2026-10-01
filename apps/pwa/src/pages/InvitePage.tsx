@@ -261,7 +261,10 @@ export function InvitePage({ identity }: Props) {
         }
     }
 
-    const unusedInvites = invites.filter(i => !i.usedBy);
+    // Where only admins invite, a paper ticket made on this device before the switch is refused by the node, so it is
+    // not listed as a code that still works.
+    const offlineCodes = adminsOnly ? localOfflineCodes(identity.publicKey) : new Set<string>();
+    const unusedInvites = invites.filter(i => !i.usedBy && !offlineCodes.has(i.code));
     const usedInvites = invites.filter(i => i.usedBy);
 
     // The community's plain link, to copy or share: where nobody makes invites, or where only admins do and the
@@ -311,22 +314,6 @@ export function InvitePage({ identity }: Props) {
         );
     }
 
-    // Only its admins invite here, and this member is no owner or admin: no code, QR, ticket, pending list or tree.
-    if (adminsOnly) {
-        const knocks = takesKnocks(nodeInfo);
-        return (
-            <div className="p-4 max-w-[500px] mx-auto min-h-full">
-                <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
-                    📤 Bring someone here
-                </h2>
-                <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                    {adminsRefused ?? adminsOnlyText(knocks)}
-                </p>
-                {knocks && linkActions()}
-            </div>
-        );
-    }
-
     return (
         <div className="p-4 max-w-[500px] mx-auto min-h-full">
             {/* Section tabs */}
@@ -356,6 +343,20 @@ export function InvitePage({ identity }: Props) {
             {/* =================== INVITES SECTION =================== */}
             {activeSection === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {adminsOnly ? (
+                        // Only its admins invite here and this member is no owner or admin: no generator, but the
+                        // codes they already made (below) and the Tree stay.
+                        <div className="mb-6">
+                            <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                                📤 Bring someone here
+                            </h2>
+                            <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                                {adminsRefused ?? adminsOnlyText(takesKnocks(nodeInfo))}
+                            </p>
+                            {takesKnocks(nodeInfo) && linkActions()}
+                        </div>
+                    ) : (
+                        <>
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         🎟️ Invite Someone
                     </h2>
@@ -419,10 +420,17 @@ export function InvitePage({ identity }: Props) {
                             </div>
                         </div>
                     )}
+                        </>
+                    )}
 
                     {unusedInvites.length > 0 && (
                         <div className="mb-6">
                             <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">⏳ Pending ({unusedInvites.length})</h3>
+                            {adminsOnly && (
+                                <p className="text-nature-500 dark:text-nature-400 text-[13px] mb-3 leading-relaxed">
+                                    Codes you made earlier still work until they lapse, 30 days after they were made.
+                                </p>
+                            )}
                             {unusedInvites.map(inv => (
                                 <div key={inv.code} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 shadow-sm transition-transform hover:-translate-y-0.5">
                                     <div className="flex justify-between items-center">
@@ -514,6 +522,14 @@ export function InvitePage({ identity }: Props) {
             )}
         </div>
     );
+}
+
+function localOfflineCodes(publicKey: string): Set<string> {
+    try {
+        const stored = localStorage.getItem(`bp_offline_invites_${publicKey}`);
+        const list: InviteCode[] = stored ? JSON.parse(stored) : [];
+        return new Set(list.map((i) => i.code));
+    } catch { return new Set(); }
 }
 
 // =================== SUB-COMPONENTS ===================

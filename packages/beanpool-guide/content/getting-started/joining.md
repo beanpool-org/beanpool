@@ -81,7 +81,7 @@ Any member can invite people, unless the community has chosen that only its admi
 
 A community's admins can turn invites off for the whole community.
 
-**Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
+**Where only the admins invite.** A community can choose that only its owners and admins bring people in. There, if you are not one of them, **Invites** shows **Bring someone here** instead of **Generate Ticket**, and says to ask an admin. On the web app the **Tree** stays, and so do the codes you made earlier: they still work until they lapse. An owner or admin with no signal can still make a paper ticket, from the last role the community gave them. If the community takes requests to join, **Share the link** sends its address: the person opens it in the BeanPool app, asks to join, and an admin answers. Being an admin is a job the community gives someone, not a trust badge.
 
 - Invite codes you made before the community chose this still work until their 30 days are up.
 - A ticket you made without a connection doesn't: whoever has it is asked to get a fresh invite from an admin.

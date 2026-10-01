@@ -19,8 +19,15 @@ const PASSWORD: RolesViewer = { kind: 'password' };
 
 type Answer = { ok: boolean; status?: number; body: unknown };
 
-function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, body: { success: true } }) {
+const ADMIN_ROW = { member_pubkey: 'a'.repeat(64), role: 'admin', granted_at: '2026-01-01', granted_by: null };
+
+function mockNode(config: Record<string, unknown>, save: Answer = { ok: true, body: { success: true } }, roles: unknown[] | 'fail' = [ADMIN_ROW]) {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/local/admin/node-roles')) {
+            return roles === 'fail'
+                ? Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({ error: 'no' }) })
+                : Promise.resolve({ ok: true, json: () => Promise.resolve({ roles }) });
+        }
         if (url.includes('/api/local/admin/node/config')) {
             return Promise.resolve({ ok: save.ok, status: save.status ?? (save.ok ? 200 : 403), json: () => Promise.resolve(save.body) });
         }
@@ -209,5 +216,36 @@ describe('People & Safety → Invites & QR', () => {
         const generator = screen.getByText(/Sovereign Node Invite Generator/);
         expect(heading.compareDocumentPosition(generator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.getByText('Only an owner of this community can change who may invite.')).toBeInTheDocument();
+    });
+});
+
+describe('Known with nobody to act on it', () => {
+    const WARNING = /Nobody here is an owner or admin in the app yet/;
+
+    it('warns beside Known when no owner or admin holds a role, and still saves', async () => {
+        const fetchMock = mockNode({ door: 'members' }, { ok: true, body: { success: true } }, [
+            { member_pubkey: 'm'.repeat(64), role: 'moderator', granted_at: '2026-01-01', granted_by: null },
+        ]);
+        await renderPanel(OWNER_KEY);
+        expect(await screen.findByText(WARNING)).toBeTruthy();
+        expect(screen.getByText(WARNING).textContent).toMatch(/People & Safety/);
+        await act(async () => { fireEvent.click(radio(/Known/)); });
+        await act(async () => { fireEvent.click(saveButton()); });
+        expect(saveCalls(fetchMock)).toHaveLength(1);
+        expect(JSON.parse(saveCalls(fetchMock)[0][1].body).door).toBe('admins');
+    });
+
+    it('says nothing when an owner or an admin holds a role', async () => {
+        mockNode({ door: 'members' }, undefined, [ADMIN_ROW]);
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByRole('radio', { name: /Known/ })).toBeTruthy());
+        expect(screen.queryByText(WARNING)).toBeNull();
+    });
+
+    it('says nothing when the node would not give the roles', async () => {
+        mockNode({ door: 'members' }, undefined, 'fail');
+        await renderPanel(OWNER_KEY);
+        await waitFor(() => expect(screen.getByRole('radio', { name: /Known/ })).toBeTruthy());
+        expect(screen.queryByText(WARNING)).toBeNull();
     });
 });

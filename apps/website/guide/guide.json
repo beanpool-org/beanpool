@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 91,
-  "hash": "127d8a7f6f13af1950d95fc14005abf65784cda29434dbdae8a00bb627ba1769",
+  "version": 92,
+  "hash": "984b7e2a245a5e5ac98001507bc51d11a38bf5c7360de21ee761c2a28f4a3cb1",
   "sections": [
     {
       "id": "about",
@@ -926,7 +926,7 @@
         },
         {
           "type": "p",
-          "text": "The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. After joining you don't sign in to open the app: your account is the key on your phone, like any other."
+          "text": "The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see \"Getting your account back\". After joining you don't sign in to open the app: your account is the key on your phone, like any other."
         },
         {
           "type": "h2",
@@ -1237,7 +1237,7 @@
         },
         {
           "type": "p",
-          "text": "On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account together with your community's server can restore your account on a new phone. See \"Getting your account back\"."
+          "text": "On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account can restore your account on a new phone, through your community's server, which keeps a locked copy for it. The people who run that server can open that copy. See \"Getting your account back\"."
         },
         {
           "type": "p",
@@ -1805,7 +1805,7 @@
         },
         {
           "type": "p",
-          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account together with your community's server can open it, as with a sign-in account linked on the phone app. The people who run the server can open it too: see \"Getting your account back\". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
+          "text": "The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in, as with a sign-in account linked on the phone app: see \"Getting your account back\". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back."
         },
         {
           "type": "p",
@@ -4613,7 +4613,8 @@
           "items": [
             "Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See \"Messages\".",
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
-            "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust."
+            "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
+            "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\"."
           ]
         },
         {
@@ -5207,7 +5208,7 @@
         },
         {
           "type": "p",
-          "text": "A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it."
+          "text": "A linked sign-in account works because your community's server keeps a locked copy of your account for it. The people who run that server can open this copy, because their server checks your sign-in. On the global community, that is BeanPool. A stolen copy of the server's database can't, once the server has been updated for it. Anyone who takes over your sign-in account can get in too: see \"If someone else tries\"."
         },
         {
           "type": "p",

@@ -77,7 +77,7 @@ function addMember(id: Identity, callsign: string): void {
 
 const bound = (text: string) => Buffer.concat([Buffer.from([0xff]), Buffer.from(text, 'utf8')]);
 
-interface Answer { status: number; body: any; text: string }
+interface Answer { status: number; body: any; text: string; headers: Record<string, string> }
 
 /** A GET to this community, signed by `signer` for it (request binding) or unsigned, with `extra` headers. */
 async function get(path: string, signer: Identity | null, extra: Record<string, string> = {}): Promise<Answer> {
@@ -96,7 +96,7 @@ async function get(path: string, signer: Identity | null, extra: Record<string, 
     const text = await res.text();
     let body: any;
     try { body = JSON.parse(text); } catch { body = text; }
-    return { status: res.status, body, text };
+    return { status: res.status, body, text, headers: Object.fromEntries(res.headers.entries()) };
 }
 
 const counted = (platform: 'android' | 'ios') => Object.fromEntries(getAppVersionCounts().platforms[platform].map(v => [v.version, v.members]));
@@ -251,6 +251,18 @@ async function main(): Promise<void> {
     assert(JSON.stringify(r.body.appFloors?.ios) === '{"min":null,"blocking":false}',
         `iOS: held for its store, blocking nobody (got ${JSON.stringify(r.body.appFloors?.ios)})`);
     assert(r.text.length < 800, `the public payload stays small (${r.text.length} bytes)`);
+    // The banner's number: an app naming its platform gets that platform's floor; anything else the generic one.
+    setEnv({ MIN_APP_VERSION_IOS: '1.2.59' });
+    r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 android' });
+    assert(r.body.minAppVersion === '1.2.60', `an Android app's minAppVersion is the Android floor (got ${r.body.minAppVersion})`);
+    r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: '1.2.57 ios' });
+    assert(r.body.minAppVersion === '1.2.59', `an iPhone app's is the iOS floor (got ${r.body.minAppVersion})`);
+    assert(String(r.headers?.vary ?? '').toLowerCase().includes('x-beanpool-app'), `the answer varies by the header (Vary: ${r.headers?.vary})`);
+    r = await get('/api/community/health', null, { [APP_VERSION_HEADER]: 'nonsense' });
+    assert(r.body.minAppVersion === '1.0.75', `a garbled header gets MIN_APP_VERSION (got ${r.body.minAppVersion})`);
+    r = await get('/api/community/health', null);
+    assert(r.body.minAppVersion === '1.0.75', 'and so does a request without one (an older app, the web app)');
+    setEnv({ MIN_APP_VERSION_IOS: '1.2.60' });
     assert(r.body.flags === undefined, 'and still carries no flags');
 
     // Counting, from the verified signer only.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FullWindowOverlay } from 'react-native-screens';
 import appConfig from '../app.json';
 import { useTheme } from '../app/ThemeContext';
 import { bootClockMs } from '../modules/boot-clock';
@@ -12,8 +13,11 @@ import { checkCommunityForUpdate, createForceUpdateGate, STORE_URLS } from '../u
  * utils/force-update.ts: only at a safe moment (a cold start, or back after five minutes away), and only when the
  * community says this build is below its floor and the store has one that meets it.
  *
- * A Modal, so it is above every screen and sheet, and a screen reader stays inside it. Android's back button leaves the
- * app rather than moving the screens hidden underneath.
+ * Above every screen and sheet, with a screen reader kept inside it. On Android a Modal, a window of its own; its back
+ * button leaves the app rather than moving the screens hidden underneath. On iOS a FullWindowOverlay (react-native-screens),
+ * a window of its own too: React Native's Modal is presented by the root view controller (RCTModalHostViewComponentView
+ * presentViewController, RN 0.83), which cannot present while a sheet (post/[id], propose-project, …) is already up, so
+ * a block raised after five minutes away with a sheet open would never have appeared.
  */
 
 /** The phone's since-boot clock when it has one (counts while asleep); the wall clock otherwise, chosen once. */
@@ -73,42 +77,49 @@ export default function ForceUpdateBlock() {
     if (!block) return null;
     const store = Platform.OS === 'ios' ? 'the App Store' : 'Google Play';
 
+    const screen = (
+        <View style={[styles.fill, { backgroundColor: colors.surface.app }]} accessibilityViewIsModal>
+            <ScrollView contentContainerStyle={styles.scroll}>
+                <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}>
+                    <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
+                    <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
+                        Update required
+                    </Text>
+                    <Text style={[styles.body, { color: colors.text.body }]}>
+                        Your community needs a newer BeanPool than the one on this phone ({appConfig.expo.version}).
+                        Version {block.version} is waiting in {store}.
+                    </Text>
+                    <Text style={[styles.body, { color: colors.text.secondary }]}>
+                        Updating keeps your account and everything on this phone.
+                    </Text>
+                    <Pressable
+                        onPress={openStore}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Update BeanPool in ${store}`}
+                        style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.dark : colors.brand.primary }]}
+                    >
+                        <Text style={[styles.buttonText, { color: colors.text.inverse }]}>Update</Text>
+                    </Pressable>
+                    <Text style={[styles.hint, { color: colors.text.secondary }]}>
+                        Can't update? Ask the people who run your community.
+                    </Text>
+                </View>
+            </ScrollView>
+        </View>
+    );
+
+    if (Platform.OS === 'ios') {
+        return <FullWindowOverlay unstable_accessibilityContainerViewIsModal>{screen}</FullWindowOverlay>;
+    }
     return (
         <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => BackHandler.exitApp()}>
-            <View style={[styles.fill, { backgroundColor: colors.surface.app }]}>
-                <ScrollView contentContainerStyle={styles.scroll} accessibilityViewIsModal>
-                    <View style={[styles.card, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}>
-                        <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
-                        <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
-                            Update required
-                        </Text>
-                        <Text style={[styles.body, { color: colors.text.body }]}>
-                            Your community needs a newer BeanPool than the one on this phone ({appConfig.expo.version}).
-                            Version {block.version} is waiting in {store}.
-                        </Text>
-                        <Text style={[styles.body, { color: colors.text.secondary }]}>
-                            Updating keeps your account and everything on this phone.
-                        </Text>
-                        <Pressable
-                            onPress={openStore}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Update BeanPool in ${store}`}
-                            style={({ pressed }) => [styles.button, { backgroundColor: pressed ? colors.brand.dark : colors.brand.primary }]}
-                        >
-                            <Text style={[styles.buttonText, { color: colors.text.inverse }]}>Update</Text>
-                        </Pressable>
-                        <Text style={[styles.hint, { color: colors.text.secondary }]}>
-                            Can't update? Ask the people who run your community.
-                        </Text>
-                    </View>
-                </ScrollView>
-            </View>
+            {screen}
         </Modal>
     );
 }
 
 const styles = StyleSheet.create({
-    fill: { flex: 1 },
+    fill: { ...StyleSheet.absoluteFillObject },
     scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
     card: { width: '100%', maxWidth: 360, borderRadius: 20, borderWidth: 1, paddingVertical: 28, paddingHorizontal: 20, alignItems: 'center' },
     icon: { fontSize: 40, marginBottom: 12 },

@@ -15,6 +15,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
+import { hasBlocked } from './member-blocks.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
@@ -402,13 +403,16 @@ export function createPost(
         }
         if (options?.targetPubkey) {
             const targetMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.targetPubkey) as any;
-            if (!targetMem || targetMem.status === 'pruned') {
+            // A listing addressed to someone who has blocked its author (engine/member-blocks.ts) would put their words
+            // and photos in that person's feed: refused in the words a target who isn't here gets. No app addresses a
+            // listing to one member; only a request made by hand meets this.
+            if (!targetMem || targetMem.status === 'pruned' || hasBlocked(options.targetPubkey, authorPublicKey)) {
                 throw new Error('Target member not found or pruned');
             }
         }
         if (options?.assignedTo) {
             const assignedMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.assignedTo) as any;
-            if (!assignedMem || assignedMem.status === 'pruned') {
+            if (!assignedMem || assignedMem.status === 'pruned' || hasBlocked(options.assignedTo, authorPublicKey)) {
                 throw new Error('Assigned member not found or pruned');
             }
         }

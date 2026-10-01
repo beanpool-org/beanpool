@@ -19,10 +19,10 @@
  *     inbox) or by writing to them, when neither has reached the other before. A reply to someone who wrote or
  *     opened first is never limited, and neither is anyone they have reached before. A trade's conversation is
  *     nobody's opening (`dmContacts`).
- *   - 1 knock (asking a community to let them in): `knockRefusal`, for a node that keeps its members' knocks. G6 keeps
- *     none on the global node: the app knocks on the community itself (routes/knocks.ts), which can't see how new the
- *     applicant's global account is. There the limits are the community's own (engine/knocks.ts): one open knock per
- *     key and 3 an address a day.
+ *   - 3 knocks (asking a community to let them in; Marty, 2026-10-01, from 1): `knockRefusal`, for a node that keeps
+ *     its members' knocks. G6 keeps none on the global node: the app knocks on the community itself (routes/knocks.ts),
+ *     which can't see how new the applicant's global account is. There the limits are the community's own
+ *     (engine/knocks.ts): one open knock per key and 3 an address a day.
  *
  * Over a limit: `ProbationLimitError`, which the routes answer 429 with a plain message naming the limit and when
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
@@ -44,7 +44,7 @@ export const PROBATION = {
     posts: 3,
     photos: 5,
     newDmRecipients: 10,
-    knocks: 1,
+    knocks: 3,
 } as const;
 
 export type ProbationLimit = 'posts' | 'photos' | 'new_dm_recipients' | 'knocks';
@@ -78,7 +78,12 @@ function joinedAtMs(pubkey: string): number | null {
     return Number.isFinite(ms) ? ms : null;
 }
 
-/** The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. */
+/**
+ * The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. A post hidden by
+ * reports stops counting until a moderator keeps it, so reports can hold a newcomer on probation; they can't push an
+ * established member back onto it, because reports from members with less than half their standing never hide their
+ * posts (engine/auto-moderation.ts).
+ */
 export function keptPostCount(pubkey: string): number {
     const row = db.prepare(
         `SELECT COUNT(*) AS c FROM posts
@@ -113,6 +118,8 @@ function inAbout(resetsAtMs: number, now: number): string {
     return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
 }
 
+const communities = (n: number) => (n === 1 ? '1 community' : `${n} communities`);
+
 const WHY = 'New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.';
 
 function refusal(limit: ProbationLimit, resetsAtMs: number, now: number): ProbationLimitError {
@@ -121,7 +128,7 @@ function refusal(limit: ProbationLimit, resetsAtMs: number, now: number): Probat
         posts: `While your account is new you can make ${PROBATION.posts} posts in any 24 hours. You can post again ${when}. ${WHY}`,
         photos: `While your account is new you can add ${PROBATION.photos} photos to posts in any 24 hours. You can add more ${when}. ${WHY}`,
         new_dm_recipients: `While your account is new you can message ${PROBATION.newDmRecipients} new people in any 24 hours. You can message someone new again ${when}. Replying to someone who wrote to you first is not limited. ${WHY}`,
-        knocks: `While your account is new you can ask ${PROBATION.knocks} community in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
+        knocks: `While your account is new you can ask ${communities(PROBATION.knocks)} in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
     }[limit];
     return new ProbationLimitError(limit, iso(resetsAtMs), message);
 }
@@ -197,7 +204,8 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
 function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; theirsFirst: string | null }> {
     const rows = db.prepare(
         `SELECT other.public_key AS other, c.created_by, c.created_at,
-                (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key) AS mine_first,
+                (SELECT MIN(t) FROM (SELECT m.timestamp AS t FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key
+                                     UNION ALL SELECT w.timestamp FROM withheld_lines w WHERE w.conversation_id = mine.conversation_id AND w.author_pubkey = mine.public_key)) AS mine_first,
                 (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = other.public_key) AS theirs_first,
                 EXISTS (SELECT 1 FROM marketplace_transactions t
                          WHERE (t.buyer_pubkey = mine.public_key AND t.seller_pubkey = other.public_key)
@@ -207,6 +215,17 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
            JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key
           WHERE mine.public_key = ?`
     ).all(pubkey) as { other: string; created_by: string | null; created_at: string | null; mine_first: string | null; theirs_first: string | null; traded: number }[];
+    // A conversation the member opened with someone who has blocked them (engine/withheld-lines.ts) is one they reached all
+    // the same, at its opening and at their first line in it: it counts as an opened one does, so their count moves as it does
+    // for any chat and shows nothing of the block (#1403 re-review).
+    const kept = db.prepare(
+        `SELECT c.other_pubkey AS other, c.created_at,
+                (SELECT MIN(w.timestamp) FROM withheld_lines w WHERE w.conversation_id = c.id AND w.author_pubkey = c.owner_pubkey) AS mine_first,
+                EXISTS (SELECT 1 FROM marketplace_transactions t
+                         WHERE (t.buyer_pubkey = c.owner_pubkey AND t.seller_pubkey = c.other_pubkey)
+                            OR (t.buyer_pubkey = c.other_pubkey AND t.seller_pubkey = c.owner_pubkey)) AS traded
+           FROM withheld_conversations c WHERE c.owner_pubkey = ?`
+    ).all(pubkey) as { other: string; created_at: string | null; mine_first: string | null; traded: number }[];
     const earliest = (a: string | null, b: string | null) => (!a ? b : !b ? a : a < b ? a : b);
     const byOther = new Map<string, { mineFirst: string | null; theirsFirst: string | null }>();
     for (const r of rows) {
@@ -215,6 +234,13 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
         byOther.set(r.other, {
             mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.created_by === pubkey ? opened : null)),
             theirsFirst: earliest(had?.theirsFirst ?? null, earliest(r.theirs_first, r.created_by === r.other ? opened : null)),
+        });
+    }
+    for (const r of kept) {
+        const had = byOther.get(r.other);
+        byOther.set(r.other, {
+            mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.traded ? null : r.created_at)),
+            theirsFirst: had?.theirsFirst ?? null,
         });
     }
     return byOther;

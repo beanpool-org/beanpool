@@ -23,8 +23,8 @@ holds a real member's copy until the reshare is done.
   restoring device's key, sign a ticket or the daily report, seal and open backups; and the ceremonies: genesis,
   unlock, reshare, taking a backup's state into a fresh vault. It listens on a Unix socket, and has no network.
 - **`vault-api`** (`src/api/`) is plain `node:http`: the routes, the SQLite database (`node:sqlite`, no native
-  module), holds, Expo pushes, rate limits, backups, `/v1/report`, and the hourly release check. It holds no key and
-  never sees a copy in the clear.
+  module), holds, Expo pushes, rate limits, backups (and their copy off the box), the alerts to the custodians,
+  `/v1/report`, and the hourly release check. It holds no key and never sees a copy in the clear.
 - **`vault-launcher`** (`src/launcher/`) is what systemd starts for the API. It runs the image's API, and hands over
   to a newer release's API without a restart or an unlock (below). It changes only with the image.
 - **`vault-install`** (`src/install/`) is root's step at the monthly restart: it installs a new image the API staged
@@ -65,6 +65,7 @@ keyholder's last start). Custodians keep their old shares until the vault has sw
 | `POST /v1/holds/approve`, `/cancel` | the member key | "Yes, it's me" (released now), or Stop (never released) |
 | `GET /v1/report` | nobody | signed daily totals, nothing per member (below) |
 | `POST /v1/unlock/*`, `/v1/reshare/*` | a custodian key | hello, genesis, share, restore-from-backup; pending, confirm, cancel (a genesis or reshare waiting); reshare |
+| `POST /v1/unlock/settings`, `/v1/unlock/backups` | a custodian key | the off-box store and alert channels (two custodians, below); the backups each store holds, by name |
 
 Requests are signed in BeanPool's request format 2 (`@beanpool/core` `request-signing.ts`) for the vault's own host
 name. The wire formats the phone shares (tickets, deposit boxes, releases) are `@beanpool/core` `vault-wire.ts`.
@@ -157,7 +158,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   one if it fails to boot three times. Anything else is refused, logged and removed. Root's step first stops the API
   (the machine restarts next anyway) and, once no process of the API's user runs, removes what that user left on the
   state partition: the releases it downloaded (the image's own API starts after the restart and downloads a release's
-  bundle again), anything in `backups/` that is not a backup, and anything in the inbox but a staged image's files.
+  bundle again), anything in `backups/` that is not a backup, anything in `settings/` but the custodians' settings file
+  (64 KiB at most), and anything in the inbox but a staged image's files.
   Backups follow the API's own rule (`backupsPastBudget`) against `backupMaxBytes` (1 GiB). Each backup costs its
   length or the blocks it holds, whichever is more, so blocks preallocated past its end count. None costing more than
   the budget stays, the newest included. Of the rest, the newest stays, then older ones while they fit together and
@@ -201,8 +203,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   smallest VPS has 25 GB; the boot test uses 12 GiB). The state partition is sized for the monthly restart's worst
   moment, measured on a build: a new image is 1.11 GiB (system partition 1 GiB, verity tree 64 MiB, UKI 49.5 MiB) and
   is there twice while root checks it (the API's inbox and root's copies, 2.22 GiB), beside the journal (at most
-  200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`, until the backup store's client exists: the oldest go
-  first, a backup past it is never written, and at the monthly restart root applies the same rule) and a
+  200 MiB), the local backups (at most 1 GiB, `backupMaxBytes`: the oldest go first, a backup past it is never
+  written, and at the monthly restart root applies the same rule; each is also copied off the box, below) and a
   few MiB of releases, certificates and state: about 3.7 GiB. On the booted test image the file system is 5.82 GiB,
   5.79 GiB of it free after a genesis: 2.1 GiB to spare. Root's install step checks the room for its copies before it
   makes them, and a staging or install that fails for room says so in `/v1/report` (`imageWaiting.error`,
@@ -219,8 +221,11 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   `etc/beanpool-vault/dnsmasq.conf`) has just returned for the allowed names (the providers' key endpoints, Expo push,
   GitHub (the release feed), Let's Encrypt); DNS from the resolver, only to Quad9; NTP from timesyncd, only to the
   pool's addresses; DHCP from networkd's client (UDP 67 and 547 are refused to every other user: checked in the test
-  image). Past those, only ICMP errors, echo replies and IPv6 neighbour discovery. The backup store is added with its
-  client.
+  image). Past those, only ICMP errors, echo replies and IPv6 neighbour discovery. The custodians' backup store,
+  webhook and mail server are none of BeanPool's: root's egress step (`beanpool-vault-egress.service`,
+  `src/egress/`) adds their DNS names, from the settings two custodians set (below), to the resolver's list, at boot
+  and whenever the settings change: the store and the webhook to the HTTPS sets (port 443 only), the mail server to the
+  mail sets (465 and 587, for the API alone). A name written as an address, or another port, is left out and said.
 - The kernel command line (fixed in the UKI) also carries `systemd.import_credentials=no`: nothing the host hands in
   through firmware (SMBIOS, fw_cfg) becomes a unit or a setting.
 - Memory hygiene: the keyholder runs with `LimitCORE=0` and `--disable-sigusr1` (it refuses to start without them),
@@ -309,16 +314,154 @@ planned, the rule stands: reinstall from the signed image first, then unlock.
 ## Monitoring (design §3)
 
 - `/v1/health` is public: `{state: open | locked, release, since}` (`locked` also while a restore from backup or the
-  data partition is still being opened). Global checks it every minute.
+  data partition is still being opened). Nothing in BeanPool checks it yet (global's minute check comes with V5);
+  `vault-custodian watch` (below) does, from any machine.
 - `/v1/report` (while open) is signed with the ticket key and holds nothing per member: counts, copies, re-wrap
-  progress, backups, pushes, memory hygiene, how many new custodians confirmed their share, and `api` (the running
-  bundle's hash), `update` (the image this API knows it booted, the release it runs, the newest, a waiting image and
-  whether it is staged or why not, anything refused and why, the last handover, and `lastInstall`: what root's install
-  step did at the last monthly restart, installed or why not, from the file it leaves in
-  `/var/lib/beanpool-vault/install-result.json`), `nextRestart`.
+  progress, backups (`backups`: the vault's own; `offsite`: the copy off the box, `{lastOkAt, lastName,
+  failuresInARow, error}`, or null with no store set), `alerts` (which channels are set, what is raised now, when a
+  message last got through, how many wait, each channel's last error, and the last day whose report was signed),
+  `settings` (the first 16 characters of the settings' hash, when two custodians agreed to them, whether a store and
+  which kinds of channel are set: never an address, a host, a bucket or a key), pushes, memory hygiene, how many new
+  custodians confirmed their share, and `api` (the running bundle's hash), `update` (the image this API knows it
+  booted, the release it runs, the newest, a waiting image and whether it is staged or why not, anything refused and
+  why, the last handover, and `lastInstall`: what root's install step did at the last monthly restart, installed or
+  why not, from the file it leaves in `/var/lib/beanpool-vault/install-result.json`), `nextRestart`.
+
+## Operator settings: where backups go, and where alerts go
+
+None is built in, and none is needed: without settings the vault keeps its backups on its own disk only, sends no
+alert, and its report says so. Nothing here depends on BeanPool's domain, servers or accounts: the store, the mail
+server and the webhook are the custodians' choice (`src/shared/settings.ts`):
+
+```json
+{
+  "v": 1,
+  "offsite": {
+    "kind": "s3",
+    "endpoint": "https://<account>.r2.cloudflarestorage.com",
+    "region": "auto",
+    "bucket": "beanpool-vault-backups",
+    "prefix": "vault/",
+    "accessKeyId": "...",
+    "secretAccessKey": "..."
+  },
+  "alerts": {
+    "email": {
+      "host": "smtp.example.org", "port": 465, "security": "tls",
+      "username": "vault@example.org", "password": "...",
+      "from": "vault@example.org", "to": ["custodian-a@example.org", "custodian-b@example.org"]
+    },
+    "webhook": { "url": "https://ntfy.sh/<a long random topic>", "format": "text" }
+  }
+}
+```
+
+- **`offsite`**: any S3-compatible object store (Cloudflare R2, Backblaze B2, Wasabi, Scaleway, OVH, Hetzner, AWS, or
+  one you run yourself: MinIO, Garage), path-style by default (`"pathStyle": false` puts the bucket in the host name).
+  Design §4 wants a second provider in another country than the vault's host. Give the key access to this one bucket
+  only. Don't turn on versioning or object lock that keeps deleted objects past 30 days (members are told a
+  Disconnect leaves the backups within 30 days), and don't add an expiry rule either: the vault removes its own copies
+  older than 30 days, and while it is locked it takes and removes none, so its newest backup survives a long outage.
+- **`alerts.email`**: an SMTP server over TLS: implicit on 465 (`"security": "tls"`) or STARTTLS on 587 (the default
+  for any other port; the vault refuses to go on if the server doesn't offer it). Its certificate is checked against
+  its name. Never in the clear.
+- **`alerts.webhook`**: each alert POSTed to an https URL: JSON `{text, content, subject, events}` (`text` for Slack,
+  `content` for Discord), or `"format": "text"` for ntfy (a push to a phone; self-hostable), with the subject as its
+  `Title`. A secret in the URL (a topic, a token) is as secret as the settings file.
+- Plain `http://` and SMTP without TLS are accepted only to the machine itself (a rehearsal).
+- On the image, only DNS names on port 443 (and 465 or 587 for mail) get through the firewall (root's egress step,
+  above).
+
+**Setting them.** Two custodians each send the same file; the second makes them take effect. Each custodian's newest
+counts, and a lone one waits an hour. On a fresh vault the custodians in force are the genesis keys built into the
+image: two of those set the settings before a restore (the cold path, below).
+
+```
+vault-custodian settings hash --file settings.json        # the hash the vault will answer and report (its first 16)
+vault-custodian settings send --url https://vault.beanpool.org --key a.json --file settings.json   # [checks], as unlock
+vault-custodian settings send --url https://vault.beanpool.org --key b.json --file settings.json   # now in force
+```
+
+The tool checks the release and host as before an unlock (the file carries secrets), then sends it; the answer and the
+report repeat only the hash. **What the vault keeps:** the file on its state partition
+(`/var/lib/beanpool-vault/settings/settings.json`, the API's alone, `0600`), readable while the vault is locked (the
+alerts need it then). **Its host can read it**, as it can read the vault's memory: the store key reaches only sealed
+backups, the mail password only that mailbox. To remove a part, two custodians send the file without it; `{"v": 1}`
+removes all.
+
+**When the store is changed or removed, empty the old bucket** (or give it a 30-day expiry rule). The vault prunes
+only the store in force, so the old bucket keeps its last backups for good, including copies members have since
+disconnected: the "within 30 days" promise no longer holds there. They stay sealed (`M` is needed), but delete them.
+
+## Backups off the box (design §4)
+
+Every hour, while open, the vault seals a backup (`src/shared/backup-format.ts`), writes it to its own store, and then
+copies the same file to the off-box store, outside the lock that deposits wait on. Copies there older than 30 days are
+removed, as at home. A copy that fails is counted (`offsite` in the report) and told (below); the next hour's backup is
+the next try. Every backup holds every deletion record of the last 30 days, so a gap off the box loses nothing a
+restore needs.
+
+**What a backup holds**, readable by no one without the master secret `M` (two custodians):
+- the database (copies, holds, deletion records), sealed under `K_backup`;
+- the deletion records again, sealed under `K_index` (so a restore applies newer backups' deletions);
+- in the clear: a header with the vault's id, the backup's name and time, the generation, and the keyholder's state
+  file (the custodians' public keys, the threshold, a check value of `M`, and the working keys sealed under `M`);
+- an Ed25519 signature by the ticket key over all of it.
+
+**What it never holds, or says to the store:** a callsign, an email, an IP address, a raw `sub`, a token, a push token
+in the clear, which communities a member belongs to, or anything about what a release handed out. The object is the
+backup's name under the prefix, with no metadata or tags of its own; its size tells the store roughly how many copies
+there are, a count the public report gives anyway. Requests to the store are signed with AWS Signature Version 4
+(`src/api/s3-store.ts`, checked against AWS's published examples), the payload's SHA-256 included.
+
+**Restoring on a new machine** (the cold path, design §4; rehearse it before launch, target 24 hours):
+
+1. Install the signed image on the new machine: a fresh vault, with no keys, no data and an empty local store.
+2. Two genesis custodians set the settings: `vault-custodian settings send …` twice, as above.
+3. `vault-custodian backups --url … --key …` lists what each store holds; pick the newest.
+4. `vault-custodian restore --url … --key … --backup bv-<time>.bin`: the vault fetches it (from its own store, or else
+   the off-box one) and takes the backup's keyholder state; it is locked.
+5. Two custodians unlock with their shares (`vault-custodian unlock …`). The vault finishes the restore before it
+   serves anything: it applies the deletion records of every newer backup in either store (an off-box store it can't
+   list makes it wait and try again, rather than bring back a copy its member deleted), holds every open restore a
+   fresh 24 hours and tells those members' devices again, then opens.
+
+`offsite.test.ts` does this end to end: a backup, the machine wiped, a new one restored from the off-box store alone,
+the database the same as at the backup in every byte but SQLite's write counter.
+
+## Alerts (design §3, §4)
+
+The API checks every minute and tells the settings' channels (`src/api/alerts.ts`):
+
+| alert | when | ends |
+|---|---|---|
+| `locked` | the keyholder locked or not answering, or a restore or the data partition not finished, for 5 minutes (not a fresh vault, which holds nothing) | when it opens |
+| `backup` | two backups in a row failed, or none for 2 h 10 min while open (counted from the reopening after a lock) | the next good one |
+| `offsite` | the same, for the copy off the box, when a store is set | the next good copy |
+| `report` | a finished day with no signed daily report two hours into the next (for a day the running API saw) | the next one signed |
+
+Each is told once when it starts, again every 24 hours while it lasts, and once when it ends; a channel that fails is
+tried again every five minutes with everything that waited, in one message. An alert names the condition, since when,
+a count and an error in a few words (`HTTP 403 AccessDenied`, `DATA: 554`): no member, key, sign-in, address or token,
+since the vault keeps none it could name. A restart of the API (a crash, a handover) starts its view afresh, so an
+alert can be told twice.
+
+**What the vault can't say about itself** (it is gone, or its report has stopped) needs a look from outside. Run the
+watcher on any other machine (a custodian's computer that is always on, a small server, a Raspberry Pi):
+
+```
+vault-custodian watch --url https://vault.beanpool.org --ticket-key <the ticket key the apps pin> --alerts alerts.json
+vault-custodian watch --url https://vault.beanpool.org --ticket-key <…> --once     # one look, exit 1 on a problem (cron)
+```
+
+`alerts.json` is the settings' `alerts` part, for the watcher's own channels. It tells them when the vault doesn't
+answer, or answers locked, for five minutes; when its report isn't signed by that ticket key or isn't from now (a
+replay); and what the vault's signed report raises (backups, the off-box copy, the daily report). It holds no key and
+sends the vault nothing but two GETs.
 
 ## Tests
 
 `pnpm --filter @beanpool/vault test`: vitest over real HTTP and real Unix sockets, with a stub JWKS, a stub Expo, a
-directory standing in for GitHub Releases, and an injected clock. No provider, host, feed or object store is
-contacted. `handover.test.ts` runs the bundled keyholder, launcher and API as processes.
+directory standing in for GitHub Releases, stand-ins on this machine for an S3-compatible store (which checks every
+request's signature), a mail server (STARTTLS and TLS, with a certificate openssl makes for the run) and a webhook,
+and an injected clock. No provider, host, feed, object store, mail server or webhook is contacted. `handover.test.ts` runs the bundled keyholder, launcher and API as processes.

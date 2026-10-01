@@ -23,8 +23,6 @@ export const PAGE_BYTES = 64 * 1024;
 export const PAGE_ROWS = 200;
 /** #1304's row cap, as its suite scales it (MAX_IMPORT_ROWS_PER_CATEGORY): no copy is left out or refused over it now. */
 export const CAP = 150;
-/** How long M keeps a copy no page was asked of (SYNC_COPY_IDLE_MS), scaled down from two minutes. */
-export const COPY_IDLE_MS = 3000;
 /** The wait after a refused force-resync or first copy (BACKUP_RESYNC_RETRY_MS), scaled down from an hour. */
 export const RETRY_MS = 3000;
 /** The tables hashed on both servers, row for row, to show S is M's, or unchanged. */
@@ -140,16 +138,23 @@ export async function until(what: string, cond: () => Promise<boolean> | boolean
 /**
  * The proxy S reaches M through: every request passed on, and each copy's pages recorded. `fault` changes the page `page`
  * of the next copy opened: held back (404), replayed from an earlier copy, changed by a byte, or (the last page) its counts
- * changed and signed again with M's key.
+ * changed and signed again with M's key; or (`hold`) S's request for it is held, unanswered, until `release`, and then
+ * answered as one to a main server that is down is (502), whatever M is by then.
  */
-type Fault = { kind: 'withhold' | 'replay' | 'tamper' | 'counts'; page: number } | null;
+type Fault = { kind: 'withhold' | 'replay' | 'tamper' | 'counts' | 'hold'; page: number } | null;
 export interface Proxy {
     url: string;
     setTarget: (base: string) => void;
     arm: (f: Fault) => void;
+    /** Requests a `hold` fault holds now. */
+    holding: () => number;
+    /** Every request held answered, as a main server that is down answers. */
+    release: () => void;
     /** Copies opened, whole or delta, and the pages served of each (by copy id: every page's text). */
     copies: Map<string, { since: string | null; pages: Map<number, string> }>;
     opened: string[];
+    /** Copies S asked M to close (DELETE), once M answered. */
+    closed: string[];
     statuses: number[];
     close: () => void;
 }
@@ -157,8 +162,10 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
     let base = target;
     let fault: Fault = null;
     let faultCopy: string | null = null;
+    const held: (() => void)[] = [];
     const copies = new Map<string, { since: string | null; pages: Map<number, string> }>();
     const opened: string[] = [];
+    const closed: string[] = [];
     const statuses: number[] = [];
     const resign = async (page: Record<string, unknown>): Promise<string> => {
         const key = privateKeyFromProtobuf(fs.readFileSync(mainKeyFile()));
@@ -176,6 +183,17 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
             let status = 502;
             let raw: Buffer = Buffer.alloc(0);
             const outHeaders: Record<string, string> = {};
+            const asked = /^\/api\/local\/admin\/sync-copy\/([^/]+)\/(\d+)$/.exec(new URL(req.url ?? '/', 'http://proxy').pathname);
+            if (fault?.kind === 'hold' && asked && req.method === 'GET' && decodeURIComponent(asked[1]) === faultCopy && Number(asked[2]) === fault.page) {
+                fault = null;
+                faultCopy = null;
+                await new Promise<void>((release) => held.push(release));
+                raw = Buffer.from(JSON.stringify({ error: 'the main server is not answering' }));
+                statuses.push(status);
+                res.writeHead(status, outHeaders);
+                res.end(raw);
+                return;
+            }
             try {
                 const up = await fetch(base + req.url, { method: req.method, headers, body: chunks.length > 0 ? Buffer.concat(chunks) : undefined });
                 status = up.status;
@@ -186,6 +204,8 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
                 raw = Buffer.from(JSON.stringify({ error: 'the main server is not answering' }));
             }
             const url = new URL(req.url ?? '/', 'http://proxy');
+            const closing = req.method === 'DELETE' && /^\/api\/local\/admin\/sync-copy\/([^/]+)$/.exec(url.pathname);
+            if (closing) closed.push(decodeURIComponent(closing[1]));
             const page = /^\/api\/local\/admin\/sync-copy(?:\/([^/]+)\/(\d+))?$/.exec(url.pathname);
             // Only a copy's pages are read as text (and may be changed); anything else goes on byte for byte.
             let body: string | Buffer = raw;
@@ -230,7 +250,9 @@ async function startProxy(target: string, mainKeyFile: () => string): Promise<Pr
         url: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
         setTarget: (b) => { base = b; },
         arm: (f) => { fault = f; faultCopy = null; },
-        copies, opened, statuses,
+        holding: () => held.length,
+        release: () => { for (const r of held.splice(0)) r(); },
+        copies, opened, closed, statuses,
         close: () => server.close(),
     };
 }
@@ -264,9 +286,10 @@ export function newPair(script: string): Pair {
         replicationToken: crypto.randomBytes(32).toString('hex'),
         envM: {
             ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', NODE_ENV: 'test',
+            // M keeps a copy no page was asked of for two minutes, as in production (SYNC_COPY_IDLE_MS): scaled to 3 s, a
+            // stager's start or a page's import under load took longer, and M closed the copy under S. A copy a standby left
+            // open is closed by the step that left it (closeLeftCopy).
             SYNC_PAGE_BYTES: String(PAGE_BYTES), SYNC_PAGE_ROWS: String(PAGE_ROWS),
-            // A copy a standby left unfinished (it was killed) closes after this, not two minutes (SYNC_COPY_IDLE_MS).
-            SYNC_COPY_IDLE_MS: String(COPY_IDLE_MS),
         },
         envS: {
             ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_ENV: 'test', BACKUP_RECONCILE_EVERY_MS: '86400000',
@@ -344,6 +367,16 @@ export function pairHelpers(now: () => { main: NodeProc; standby: NodeProc }) {
     };
     const wholeCopy = () => pullAndSwap(true);
     return { snapS, snapM, exactNow, pullAndSwap, wholeCopy };
+}
+
+/**
+ * The copy a standby left open on M, closed now, as M's idle close would two minutes on: S was killed in it, or its take-over
+ * stopped the pull, and sent no close. M serves one copy at a time, and the newest opened is the one it may still serve.
+ * Whether M was serving it.
+ */
+export async function closeLeftCopy(pair: Pair, main: NodeProc): Promise<boolean> {
+    const id = pair.proxy!.opened.at(-1);
+    return id ? main.send('close-copy', { id }) : false;
 }
 
 /** Every process stopped, each one's output written beside its data dir, and the count. */

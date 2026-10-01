@@ -22,6 +22,7 @@ import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
 import { ExampleListings } from '../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
+import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
@@ -232,13 +233,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         getNodeConfig().then(setNodeConfig).catch(console.error);
     }, []);
 
-    // Whether this node asks for example cards on a nearly empty Market, from the page's one shared read of
-    // /api/community/info (the lobby has already made it). Unknown, or a read that fails, draws none.
+    // Whether this node asks for example cards on a nearly empty Market, and whether its polls are labelled informal (the
+    // global community), from the page's one shared read of /api/community/info (the lobby has already made it).
+    // Unknown, or a read that fails, draws no examples and no label.
     const [examplesOn, setExamplesOn] = useState(false);
+    const [informalPolls, setInformalPolls] = useState(false);
     useEffect(() => {
         let cancelled = false;
         communityInfoOnce()
-            .then(info => { if (!cancelled) setExamplesOn(exampleListingsOn(info)); })
+            .then(info => { if (!cancelled) { setExamplesOn(exampleListingsOn(info)); setInformalPolls(pollsInformal(info)); } })
             .catch(() => {});
         return () => { cancelled = true; };
     }, []);
@@ -845,6 +848,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     : null}
                 onBack={() => setSelectedPost(null)}
                 onJoin={visitor.onJoin}
+                pollsInformal={informalPolls}
             />
         );
     }
@@ -901,6 +905,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             refresh();
                         }}
                         onOpenProfile={onOpenProfile}
+                        informal={informalPolls}
                     />
                 </div>
             );
@@ -2671,7 +2676,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     aria-label={`Open poll: ${post.title}`}
                                                     className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                                                    <PollCard post={post} visitor viewMode="list" />
+                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} />
                                                 </div>
                                             ) : (
                                                 <VisitorCard post={post} beans={visitor.beans} distanceKm={eventDistance(post)} onOpen={() => setSelectedPost(post)} />
@@ -2848,6 +2853,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
+                                                            informal={informalPolls}
                                                         />
                                                     </div>
                                                 );
@@ -2956,6 +2962,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                                 viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
+                                                                informal={informalPolls}
                                                             />
                                                         </div>
                                                     );

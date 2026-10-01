@@ -60,6 +60,7 @@ import {
     getAdminChallenge,
     verifyAndSolveChallenge,
     consumeHandshakeToken,
+    PHONE_HANDOFF_IDLE_TTL_MS,
     validateAdminSession,
     revokeAllMemberSessions,
     revokeAdminSession,
@@ -192,8 +193,10 @@ router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
 
 /**
  * POST /api/local/admin/auth/exchange
- * Exchanges single-use 60s handshake token for a browser session (2h idle / 12h hard).
+ * Exchanges single-use 60s handshake token for a browser session (15 min idle / 12h hard).
  * Single-use: burned immediately, replays rejected.
+ * Its one caller is /settings redeeming the phone app's "Manage" hand-off (#handoff=…, apps/manager/src/lib/key-session.ts),
+ * a page in the phone's in-app browser that App Lock can't always cover: so the short idle (PHONE_HANDOFF_IDLE_TTL_MS).
  */
 router.post('/api/local/admin/auth/exchange', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -204,7 +207,7 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
         return;
     }
 
-    const res = consumeHandshakeToken(token);
+    const res = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
     if (!res.ok) {
         ctx.status = 401;
         ctx.body = {

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Bean Pool",
+    "name": "BeanPool",
     "slug": "beanpool-pillar",
     "version": "1.2.56",
     "orientation": "default",
@@ -40,6 +40,10 @@
         "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
         "NSCameraUsageDescription": "BeanPool uses your camera to scan device pairing QR codes and community invites.",
         "NSFaceIDUsageDescription": "BeanPool asks for Face ID before sensitive steps, such as opening your community's admin settings or showing your recovery phrase.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        },
         "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "485XM2R33S"

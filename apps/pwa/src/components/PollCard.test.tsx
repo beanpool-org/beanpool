@@ -148,6 +148,24 @@ describe('PollCard (PWA)', () => {
         expect(optionButton).toHaveClass('focus-visible:ring-2');
     });
 
+    // On the global community anyone may join with a sign-in, so a poll's count can be tipped by one person with several
+    // accounts (FABLE-sec-global-abuse LOW-7): there the card says it decides nothing, to members and visitors alike.
+    describe('an informal poll on the global community', () => {
+        it('says it decides nothing, to a member and to a visitor', () => {
+            const member = render(<PollCard post={mockPost} identity={mockIdentity} informal />);
+            expect(screen.getByTestId('poll-informal-note')).toHaveTextContent('An informal poll; it decides nothing');
+            member.unmount();
+            render(<PollCard post={mockPost} visitor informal />);
+            expect(screen.getByTestId('poll-informal-note')).toHaveTextContent('An informal poll; it decides nothing');
+        });
+
+        it('says nothing of the kind on a local community', () => {
+            render(<PollCard post={mockPost} identity={mockIdentity} />);
+            expect(screen.queryByTestId('poll-informal-note')).toBeNull();
+            expect(screen.queryByText(/informal/i)).toBeNull();
+        });
+    });
+
     // In the Market grid a poll is given two columns (MarketplacePage), so it can afford two columns of answers
     // and full labels. Everywhere else — List View, the single-post view — it keeps the column it had.
     describe('answers in the Market grid', () => {

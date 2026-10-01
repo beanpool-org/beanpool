@@ -7,6 +7,7 @@ import {
 } from '@beanpool/core';
 import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
+import { forgetAllPulseTokens } from './pulse-token-store';
 import {
     CANONICAL_PROFILE_STORE_KEY, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY,
     PUSH_REGISTRATIONS_DUE_STORE_KEY,
@@ -429,8 +430,13 @@ interface WipeableStorage {
  * The account's block list and its own queue of offline reports stay too, under its own key (storage-keys.ts
  * `blockedUsersStoreKey`, `pendingAbuseReportsStoreKey`): restoring the same account here brings its blocks back, and
  * no other account reads them or sends those reports (Marty, 2026-09-27: the list is the account's).
+ *
+ * Not app storage, but the account's all the same: the TikTok and Instagram sign-ins its Pulse channels connected
+ * (pulse-token-store.ts), live platform tokens that outlived Sign Out and Replace, and that the next account on the
+ * phone read back for the same channel (FABLE-sec-native MEDIUM-2, 2026-10-01). They go first, and never hold the rest up.
  */
 export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
+    await forgetAllPulseTokens();
     await storage.removeItem('beanpool_anchor_url');
     await storage.removeItem('beanpool:identity');
     await storage.removeItem('beanpool_guest_nodes');
@@ -463,6 +469,9 @@ export async function removeStoredIdentity(): Promise<void> {
 
 export async function wipeIdentity(): Promise<void> {
     await removeStoredIdentity();
+    // The Pulse sign-ins on their own, before anything below can fail: wipeIdentityScopedStorage takes them again, and
+    // finds none.
+    await forgetAllPulseTokens();
 
     // A wiped device has no half-finished join wizard to resume.
     try {

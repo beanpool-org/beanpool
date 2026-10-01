@@ -9,7 +9,8 @@
  *      3 posts removed by a moderator mute nobody; /api/community/me says so
  *   2. global profile: /api/community/info reports all three true
  *   3. auto-hide: 3 reporters under 7 days old hide nothing; 2 reporters plus one of them twice hide nothing; 3
- *      distinct reporters of 7+ days hide it; a member report never hides anyone's posts. Hidden: absent from the
+ *      distinct, established reporters hide it (the ring rules are test-report-rings'); a member report never hides
+ *      anyone's posts. Hidden: absent from the
  *      listing, search, read by id, the map read (events and pins) and the activity feed for other members and
  *      strangers; its photos 404 unless the author or a moderator signs; a sync read gives others a removal; the
  *      author and moderators still see it, marked; only the author's socket gets the notice (reason "reports"), and an
@@ -25,7 +26,7 @@
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
  *      with no posts is on probation until it has 3; opening a conversation with an 11th new person → 429 even with
  *      no message, a first line to an 11th → 429, a reply to someone who wrote or opened first and a known contact
- *      → allowed, and the window rolls; /api/community/me reports it all; the knock limit says "in any 24 hours"
+ *      → allowed, and the window rolls; /api/community/me reports it all; the knock limit (3) says "in any 24 hours"
  *   5. auto-mute: 3 moderator removals in 30 days → posting, editing, starting and sending messages refused 403; still
  *      reads and edits the profile; the moderators' muted list names them; a moderator lifts it and both come back,
  *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute; the count reads its
@@ -209,8 +210,9 @@ async function main(): Promise<void> {
     modSession = keySession(mo);
     const viewer = member('Vic', 60);
     const stranger = null;
-    // Established reporters (8+ days), and new ones.
-    const R = [1, 2, 3, 4, 5, 6].map(i => member(`Rep${i}`, 8 + i));
+    // Established reporters (two months and more: each at least half as established as any author below, so they count
+    // towards a hide; engine/auto-moderation.ts), and new ones.
+    const R = [1, 2, 3, 4, 5, 6].map(i => member(`Rep${i}`, 60 + i));
     const N = [1, 2, 3].map(i => member(`New${i}`, 1));
 
     // ── 1. local profile ─────────────────────────────────────────────────────────────────────────
@@ -297,7 +299,7 @@ async function main(): Promise<void> {
     assert((await call('GET', null, photoUrl)).status === 200, 'before: its photo is served to anyone');
     for (const r of R.slice(0, 3)) await report(r, target, ava);
     for (const r of R.slice(0, 3)) await report(r, ev, ava);
-    assert(!!hiddenAt(target) && !!hiddenAt(ev), '3 distinct reporters of 7+ days hide the post, and the event');
+    assert(!!hiddenAt(target) && !!hiddenAt(ev), '3 distinct, established reporters hide the post, and the event');
     const row = db.prepare('SELECT active, status FROM posts WHERE id = ?').get(target) as any;
     assert(row.active === 1 && row.status === 'active', 'hidden is not removed: active and status are untouched');
 
@@ -345,7 +347,7 @@ async function main(): Promise<void> {
 
     // A hidden poll or event is not there for anyone but its author to vote in or RSVP to either: the answer would
     // hand the whole post back. Reporters of their own, so the ones above stay under the hourly report limit.
-    const S = [1, 2, 3].map(i => member(`Sam${i}`, 20));
+    const S = [1, 2, 3].map(i => member(`Sam${i}`, 60));
     const poll = createPost('poll', 'other', `Hidden poll ${word}`, `Which ${word}?`, 0, 'fixed', ava.pk, undefined, undefined, [], false, undefined, false,
         { pollOptions: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] })!.id;
     for (const r of S) await report(r, poll, ava);
@@ -404,7 +406,7 @@ async function main(): Promise<void> {
     assert(vicBack.status === 200 && vicLineBack.status === 201, `and its chat is open again to the people Going (${vicBack.status}, ${vicLineBack.status})`);
 
     // A hidden event's unread lines leave the unread badge with its chat: totalUnread counts only the chats listed.
-    const T = [1, 2, 3].map(i => member(`Tia${i}`, 20)); // reporters of their own, under the hourly report limit
+    const T = [1, 2, 3].map(i => member(`Tia${i}`, 60)); // reporters of their own, under the hourly report limit
     const meetup = createPost('event', 'other', 'Hidden meetup', 'Another event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
@@ -511,7 +513,7 @@ async function main(): Promise<void> {
     // counts towards the 3, so it would stop the hide as a dismissal does, and its reporter would hear nothing. A Pulse
     // removal takes nothing off a post, so it doesn't count as one. Taking the post down stays theirs to do (it only
     // counts against them), and another moderator can close the report.
-    const Q = [1, 2, 3].map(i => member(`Uma${i}`, 20)); // reporters of their own, under the hourly report limit
+    const Q = [1, 2, 3].map(i => member(`Uma${i}`, 60)); // reporters of their own, under the hourly report limit
     const openOn = (postId: string) => db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).all(postId) as { id: string }[];
     const reportStatus = (reportId: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(reportId) as any)?.status;
     for (const [whose, author] of [['their own post', mo], ['a post by an enterprise they keep', coop]] as const) {
@@ -628,8 +630,8 @@ async function main(): Promise<void> {
     const deeMe = await me(dee);
     assert(deeMe?.probation?.limits?.new_dm_recipients?.used === 10 && deeMe?.probation?.limits?.new_dm_recipients?.limit === 10,
         `/api/community/me: 10 of 10 new people (got ${JSON.stringify(deeMe?.probation?.limits?.new_dm_recipients)})`);
-    const knock = knockRefusal(dee.pk, [ago(HOUR)]);
-    assert(knock?.limit === 'knocks' && /ask 1 community in any 24 hours/.test(knock.message),
+    const knock = knockRefusal(dee.pk, [ago(HOUR), ago(2 * HOUR), ago(3 * HOUR)]);
+    assert(knock?.limit === 'knocks' && /ask 3 communities in any 24 hours/.test(knock.message),
         `the knock limit says "in any 24 hours" like the others: it is a rolling window, not a calendar day (${knock?.message})`);
     db.prepare('UPDATE messages SET timestamp = ? WHERE author_pubkey = ?').run(ago(25 * HOUR), dee.pk);
     db.prepare('UPDATE conversations SET created_at = ? WHERE created_by = ?').run(ago(25 * HOUR), dee.pk);
@@ -767,7 +769,7 @@ async function main(): Promise<void> {
 
     // 7a. Acting on a hidden post.
     console.log('\n── 7a. a deal on a hidden post ──');
-    const U = [1, 2, 3].map(i => member(`Una${i}`, 20)); // reporters of their own, under the hourly report limit
+    const U = [1, 2, 3].map(i => member(`Una${i}`, 60)); // reporters of their own, under the hourly report limit
     const hide = async (postId: string, author: Id) => { for (const r of U) await report(r, postId, author); };
     const [bob, cat, dan] = ['Bob', 'Cat', 'Dan'].map(name => member(name, 40));
     for (const m of [bob, cat, dan]) {

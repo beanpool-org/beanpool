@@ -542,6 +542,8 @@ CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 -- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
+-- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -861,13 +863,18 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- counting for its address's limit, with `join_hash` overwritten by a random 'released:' tombstone. A member
 -- the community removes, or one who deletes their account while suspended, keeps it used, so that account cannot
 -- come straight back in.
+-- `join_cohort` is a random label, the same for everyone who joined through the door from one address within 24 hours
+-- of each other (chained: it is copied from the earliest such join still in the window). Never the address, never a
+-- key. Only auto-hide reads it, so that such reporters count as one (engine/auto-moderation.ts). Replicated and
+-- bundled with the row; NULL for a join before it existed, and cleared when the member deletes their account.
 CREATE TABLE IF NOT EXISTS open_joins (
     member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
     provider TEXT NOT NULL,
     join_hash TEXT NOT NULL UNIQUE,
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     ip_hash TEXT,
-    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    join_cohort TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
@@ -1031,6 +1038,55 @@ CREATE TABLE IF NOT EXISTS push_notices (
 );
 CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
 CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);
+
+-- 14j. Withheld lines (engine/withheld-lines.ts). A direct message to someone who has blocked its sender is answered as
+-- sent and kept here for its sender alone, never in `messages`: the person who blocked them never gets it, then or after
+-- an unblock, and nothing that reads `messages` (the chats, unread counts, pushes, a standby's copy) can show it to them.
+-- A conversation such a sender opens with them, where the two have none, is kept here too, until either of them opens
+-- the real one or the sender writes in it after the block is lifted: then it becomes the real conversation, under the same
+-- id. Local to this server, never in a copy. Goes with its sender on a prune or a self-deletion; a re-key moves it.
+CREATE TABLE IF NOT EXISTS withheld_conversations (
+    id TEXT PRIMARY KEY,
+    owner_pubkey TEXT NOT NULL,
+    other_pubkey TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    owner_last_read_at TEXT,
+    CHECK (owner_pubkey != other_pubkey)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_withheld_conversations_pair ON withheld_conversations(owner_pubkey, other_pubkey);
+CREATE INDEX IF NOT EXISTS idx_withheld_conversations_other ON withheld_conversations(other_pubkey);
+CREATE TABLE IF NOT EXISTS withheld_lines (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    ciphertext TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'text',
+    metadata TEXT,
+    timestamp TEXT NOT NULL,
+    edited_at TEXT,
+    attachment_data TEXT,
+    attachment_nonce TEXT,
+    attachment_mime TEXT,
+    storage_key TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_conversation ON withheld_lines(conversation_id, author_pubkey, timestamp);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_author ON withheld_lines(author_pubkey);
+-- What a blocked member did to a line in `messages` that would show on the screen of someone who has blocked them: their
+-- reaction on a line of a DM with that person, or their edit of their own line in it. Kept for them alone and laid over
+-- their own reads of the line, never written into the line, so the person who blocked them never sees it, then or after
+-- an unblock. One row per line and author. Local, as the lines above are.
+CREATE TABLE IF NOT EXISTS withheld_overlays (
+    message_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    reaction TEXT,
+    ciphertext TEXT,
+    nonce TEXT,
+    edited_at TEXT,
+    changed_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, author_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

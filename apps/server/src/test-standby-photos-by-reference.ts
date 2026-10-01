@@ -42,9 +42,10 @@
  *     whole first copy, not once for each object (review of #1370, routes/backup.ts:1074). A wrong password is refused and
  *     pays its scrypt every time; changed on M, the old one is refused at once. (Before: a scrypt for every request.)
  * 10. A take-over confirmed while a delta fetches its objects, or a whole copy of one page does (M at its real page bounds),
- *     stops the fetch: no object request reaches the old main server after the confirm, with the restart switched off,
+ *     stops the fetch: no object request is sent to the old main server after the confirm, with the restart switched off,
  *     and nothing of the pull is imported (review of #1370, backup-puller.ts:872). (Before: every remaining object asked
- *     for; only a staged copy stopped.)
+ *     for; only a staged copy stopped.) The confirm comes while every request the fetch can have out is held at the proxy,
+ *     so none is on its way then.
  * 11. A take-over confirmed while a whole copy fetches its objects stops the fetch: no more than the requests already on their
  *     way reach the old main server (review 4148896584). The promoted server, on the copies by reference it had, opens every
  *     listing's photo with M's bytes.
@@ -90,6 +91,8 @@ const FETCHED_BEFORE_FAILING = 15;
 const ORPHAN_GRACE_MS = 60 * 60_000;
 /** Step 10's photos M gains while each standby's pull is fetching when its take-over is confirmed. */
 const TAKEOVER_EACH = 60;
+/** The object requests a pull has out at once (services/backup-puller.ts OBJECT_CONCURRENCY). */
+const OBJECT_CONCURRENCY = 8;
 /** Step 11's photos M gains while S's copy is fetching when the take-over is confirmed. */
 const TAKEOVER_PHOTOS = 200;
 /**
@@ -175,6 +178,9 @@ interface Proxy {
     objectGets: string[];
     /** Object requests as each reaches the proxy, whatever M answers. */
     objectAsks: number;
+    /** Object requests that reach the proxy are held, unanswered, until released (`held`). */
+    holdObjects: boolean;
+    held: (() => void)[];
     corrupt: number;
     gone: Set<string>;
     stripFormat: number;
@@ -187,7 +193,7 @@ interface Proxy {
 }
 async function startProxy(target: string): Promise<Proxy> {
     const px: Proxy = {
-        url: '', objectGets: [], objectAsks: 0, corrupt: 0, gone: new Set(), stripFormat: 0, failObjectsAfter: null, opened: [], pages: new Map(), statuses: [],
+        url: '', objectGets: [], objectAsks: 0, holdObjects: false, held: [], corrupt: 0, gone: new Set(), stripFormat: 0, failObjectsAfter: null, opened: [], pages: new Map(), statuses: [],
         close: () => {},
     };
     const server = http.createServer((req, res) => {
@@ -199,6 +205,7 @@ async function startProxy(target: string): Promise<Proxy> {
             const url = new URL(req.url ?? '/', 'http://proxy');
             const object = /^\/api\/local\/admin\/sync-object\/([^/]+)$/.exec(url.pathname)?.[1] ?? null;
             if (object) px.objectAsks++;
+            if (object && px.holdObjects) await new Promise<void>((release) => px.held.push(release));
             if (req.method === 'POST' && url.pathname === '/api/local/admin/sync-copy' && px.stripFormat > 0) {
                 px.stripFormat--;
                 delete headers['x-replica-format'];
@@ -434,7 +441,8 @@ async function main(): Promise<void> {
             const refsOpen = openFilesNamed(standby.proc.pid!, 'photo-references.jsonl');
             assert(w3more.every((p) => p.ok === false && /no longer on the main server/.test(p.error ?? '')) && refsOpen.length === 0,
                 `three staged copies that failed in their fetch leave no descriptor open on the references file each read from `
-                + `(${refsOpen.length} open${refsOpen.length ? `: ${refsOpen.slice(0, 3).join(' | ')}` : ''}; before: one more for each)`);
+                + `(${refsOpen.length} open${refsOpen.length ? `: ${refsOpen.slice(0, 3).join(' | ')}` : ''}; before: one more for each; `
+                + `${JSON.stringify(w3more.map((p) => p.error?.slice(0, 160) ?? null))})`);
             await main.send('sql', { sql: 'DELETE FROM post_photos WHERE order_num >= 10' });
             assert(d3.ok === false && w3b.ok === false && /no longer on the main server/.test(d3.error ?? '') && /no longer on the main server/.test(w3b.error ?? '')
                 && !st3.staging && JSON.stringify(before.tables) === JSON.stringify(after.tables) && rec3b.lastWhy === 'http-404',
@@ -711,12 +719,17 @@ async function main(): Promise<void> {
             await main.send('token-only', { on: true });
         });
 
-        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: nothing more reaches the old main server', async () => {
+        await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: no object request is sent to the old main server after it', async () => {
             const pw = { 'X-Admin-Password': PW_STANDBY };
             /**
              * M gains photos `node` lacks; `node` pulls at a pace (`whole`: the routine whole copy); once it has fetched 10 of
-             * their objects, its take-over is confirmed, with the restart switched off. The object requests that reach M
+             * their objects, its take-over is confirmed, with the restart switched off. The object requests sent to M
              * after the confirm, and how the pull ended.
+             *
+             * The confirm comes while every request the fetch can have out is held at the proxy, unanswered: nothing of it is
+             * on its way then, so a request the proxy counts after the confirm was sent after it. Counted as the confirm's answer
+             * came instead, a request already sent before it, that the proxy counted a moment later, was one "after" it (a
+             * loaded run of this suite: 1).
              */
             const takeOverDuring = async (node: NodeProc, whole: boolean, from: number) => {
                 const code = await takeoverCode();
@@ -727,10 +740,14 @@ async function main(): Promise<void> {
                 const g0 = gets();
                 const pulling = node.send('pull', whole ? { whole: true } : {});
                 const fetchedSome = await until('the standby to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
+                px.holdObjects = true;
+                const quiet = await until(`the standby's fetch to wait on its ${OBJECT_CONCURRENCY} requests, held`, () => px.held.length >= OBJECT_CONCURRENCY, 30_000);
+                const asksAtConfirm = px.objectAsks;
                 const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, pw);
                 const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
-                const asksAtConfirm = px.objectAsks;
-                require_(fetchedSome && confirmT.status === 200, `the take-over is confirmed mid-fetch (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
+                px.holdObjects = false;
+                for (const release of px.held.splice(0)) release();
+                require_(fetchedSome && quiet && confirmT.status === 200, `the take-over is confirmed mid-fetch (${confirmT.status} ${JSON.stringify(confirmT.body)?.slice(0, 160)})`);
                 const pull = await pulling;
                 await sleep(1500); // at the pull's pace, 15 more requests' time
                 const after = px.objectAsks - asksAtConfirm;
@@ -741,7 +758,7 @@ async function main(): Promise<void> {
             require_(!!standbyA && !!standbyB, 'steps 8 and 9 left two standbys holding copies of M');
             const d = await takeOverDuring(standbyA!, false, 100);
             assert(d.pull.ok === false && d.pull.mode === 'delta' && /take-over was confirmed/.test(d.pull.error ?? '') && d.after === 0 && d.rows === 0,
-                `a delta's fetch stops at the confirm: ${d.after} object request(s) reached the old main server after it, and none of its rows landed `
+                `a delta's fetch stops at the confirm: ${d.after} object request(s) were sent to the old main server after it, and none of its rows landed `
                 + `(${JSON.stringify({ ...d.pull, fetched: d.fetched, rows: d.rows })}; before: every remaining object the pull named, and the pull said nothing of the take-over)`);
             // M at its real page bounds: its whole copy is one page, imported over the copy the standby holds.
             await main.send('set-env', { vars: { SYNC_PAGE_BYTES: null, SYNC_PAGE_ROWS: null } });

@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { contentHash, renderWebsite, serializeGuide } from '../src/guide.mjs';
@@ -20,6 +21,14 @@ const GUIDE_JSON = `${PKG}/generated/guide.json`;
 const MANUAL_JSON = `${PKG}/generated/operators.json`;
 const WEBSITE = 'apps/website/guide';
 
+// `git commit`/`fetch`/`push` can start a detached `gc --auto`/maintenance that is still writing into .git/objects when the
+// test removes the folder (ENOTEMPTY). Switch it off for every git this file spawns, including the ones build.mjs runs.
+Object.assign(process.env, {
+    GIT_CONFIG_COUNT: '3',
+    GIT_CONFIG_KEY_0: 'gc.auto', GIT_CONFIG_VALUE_0: '0',
+    GIT_CONFIG_KEY_1: 'maintenance.auto', GIT_CONFIG_VALUE_1: 'false',
+    GIT_CONFIG_KEY_2: 'core.fsmonitor', GIT_CONFIG_VALUE_2: 'false',
+});
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const node = (cwd, script, ...args) => spawnSync(process.execPath, [script, ...args], { cwd, encoding: 'utf8' });
 const build = (cwd, ...args) => node(cwd, `${PKG}/scripts/build.mjs`, ...args);
@@ -65,7 +74,7 @@ function makeRepo() {
     git(work, 'commit', '-q', '-m', 'base');
     git(work, 'remote', 'add', 'origin', path.join(root, 'origin.git'));
     git(work, 'push', '-q', '-u', 'origin', 'main');
-    return { root, work, cleanup: () => fs.rmSync(root, { recursive: true, force: true }) };
+    return { root, work, cleanup: () => fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }) };
 }
 
 /** Add a paragraph to a page (a path under the guide package). */

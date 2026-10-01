@@ -65,6 +65,8 @@ export const MAX_SINGLE_PUT_BYTES = 5 * 1024 * 1024 * 1024 - 64 * 1024 * 1024;
 /** The most one ListObjectsV2 page or error body is read: a thousand keys of ours is well under 1 MB of XML. */
 const MAX_TEXT_BYTES = 8 * 1024 * 1024;
 const MAX_LIST_PAGES = 10_000;
+/** How long an upload waits for the store's "100 Continue" before it sends the body anyway. */
+const CONTINUE_WAIT_MS = 1_000;
 
 /** What went wrong, in words safe for a log and a screen: the store and the S3 code, never a credential or a body. */
 export class OffboxS3Error extends Error {
@@ -187,12 +189,33 @@ export class OffboxBucket {
             method, url, headers, payloadSha256: body ? body.sha256 : EMPTY_PAYLOAD_SHA256, region: this.region,
         }, creds);
         const sendHeaders: Record<string, string> = { ...signed.headers };
-        if (body) sendHeaders['content-length'] = String(body.bytes);
+        if (body) {
+            sendHeaders['content-length'] = String(body.bytes);
+            // Not signed (S3 does not ask for it to be): a hop may answer it on the store's behalf.
+            sendHeaders.expect = '100-continue';
+        }
         const lib = url.protocol === 'https:' ? https : http;
         return new Promise<Answer>((resolve, reject) => {
             let settled = false;
             const fail = (e: Error) => { if (!settled) { settled = true; reject(e); } };
+            let source: Readable | null = null;
+            let started = false;
+            let continueTimer: ReturnType<typeof setTimeout> | null = null;
+            // However the request ends — answered, refused before the body, reset, timed out — the file is closed with
+            // it. `pipe` never closes its source when the destination fails, and an open handle on a backup that is
+            // then deleted keeps its whole size on the disk until the process exits.
+            const closeSource = () => {
+                if (continueTimer) { clearTimeout(continueTimer); continueTimer = null; }
+                if (source && !source.destroyed) source.destroy();
+            };
             const req = lib.request(url, { method, headers: sendHeaders }, (res) => {
+                // An answer before the body went (a refusal to "Expect: 100-continue"): the body is never sent, and the
+                // request is closed once the answer has been read.
+                if (body && !started) {
+                    started = true;
+                    closeSource();
+                    res.on('close', () => req.destroy());
+                }
                 if (settled) { drain(res); return; }
                 settled = true;
                 // The idle deadline keeps running while the caller reads the body.
@@ -200,11 +223,24 @@ export class OffboxBucket {
                 resolve({ status: res.statusCode ?? 0, headers: res.headers, res });
             });
             req.setTimeout(this.tuning.idleMs, () => req.destroy(new Error(`nothing moved for ${this.tuning.idleMs} ms`)));
-            req.on('error', (e: NodeJS.ErrnoException) => fail(new Error(e?.code || e?.message || String(e))));
+            req.on('error', (e: NodeJS.ErrnoException) => { closeSource(); fail(new Error(e?.code || e?.message || String(e))); });
+            req.on('close', closeSource);
             if (!body) { req.end(); return; }
-            const source: Readable = fs.createReadStream(body.file);
-            source.on('error', (e) => { req.destroy(e); fail(new OffboxS3Error(`could not read the backup file: ${e.message}`)); });
-            source.pipe(req);
+            const file: Readable = fs.createReadStream(body.file);
+            source = file;
+            file.on('error', (e) => { req.destroy(e); fail(new OffboxS3Error(`could not read the backup file: ${e.message}`)); });
+            // The body waits for the store's go-ahead, so a store that refuses (a wrong key, no such bucket) says so
+            // before a byte is sent, rather than closing mid-body. A store that never answers 100 gets it anyway after a
+            // second, as HTTP/1.1 has a client do.
+            const send = () => {
+                if (started) return;
+                started = true;
+                if (continueTimer) { clearTimeout(continueTimer); continueTimer = null; }
+                file.pipe(req);
+            };
+            req.on('continue', send);
+            continueTimer = setTimeout(send, CONTINUE_WAIT_MS);
+            continueTimer.unref?.();
         });
     }
 

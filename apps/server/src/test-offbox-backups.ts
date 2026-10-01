@@ -26,7 +26,13 @@
  *     checked), restores it with the recovery code, and its database is the backup's, table by table.
  *  8. Owner only: an admin's and a moderator's key session are refused, in words, on every route, with nothing changed and
  *     no request to any store; no credential at all is 401.
- *  9. The operator manual's backups page quotes the server's own sentences, retention and schedule.
+ *  9. The operator manual's backups page quotes the server's own sentences, retention and schedule, and says that a
+ *     Change of place, like a Remove, leaves the old copies where they were (with a lifecycle rule as the safety net).
+ * 10. A failure leaves nothing behind (review of #1427): a store that refuses before the body, answers 503s, is not
+ *     there or goes quiet never keeps the backup file open (its disk freed), and a refusal is asked for before the body
+ *     is sent; a run whose backup can't be made leaves no staging copy; a download that breaks partway ENDS (changed
+ *     bytes, a store that drops the connection) instead of hanging; destinations past five are shown as unusable and
+ *     still pruned; a destination's name keeps every script.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-offbox-backups.ts
@@ -45,6 +51,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const IS_FRESH = process.argv[2] === '--fresh';
+type RunResultLike = { sent: string[]; failed: { id: string; error: string }[] };
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -256,9 +263,18 @@ async function main(): Promise<void> {
     Object.assign(process.env, envA);
     const leftover = path.join(dataDir!, '.offbox-0123456789ab.bpsealed');
     fs.writeFileSync(leftover, 'a locked backup a crash left half made');
+    // A run cut off while its backup was being made: the staging folder holds an UNLOCKED copy of the database.
+    const staging = path.join(dataDir!, '.backup-tmp-0123456789ab');
+    fs.mkdirSync(path.join(staging, 'stage'), { recursive: true });
+    fs.writeFileSync(path.join(staging, 'stage', 'state.db'), 'an unlocked copy of the database');
+    const notOurs0 = path.join(dataDir!, '.backup-tmp-notes.txt');
+    fs.writeFileSync(notOurs0, 'a file of another name');
     offbox.initOffboxBackups();
     offbox.stopOffboxBackups();
     assert(!fs.existsSync(leftover), '0. a file a cut-off run left in the data folder is removed at start');
+    assert(!fs.existsSync(staging), "0. …and so is the staging folder of a backup cut off while it was being made (an unlocked copy of the database)");
+    assert(fs.existsSync(notOurs0), '0. …and nothing of another name');
+    fs.rmSync(notOurs0);
 
     // ── 1. No recovery code: nothing goes off the box; retention still runs ─────────────────────────────────────────
     console.log('\n— 1. no recovery code —');
@@ -570,6 +586,181 @@ async function main(): Promise<void> {
         && manual.includes('this server has no recovery code…"'), '9. …and its words when nothing goes for want of a recovery code');
     assert(manual.includes(`never more`) && manual.includes(`${offbox.MAX_OFFBOX_RETENTION_DAYS} days`) && manual.includes(`${offbox.DEFAULT_OFFBOX_INTERVAL_HOURS} hours by default`),
         '9. …and the retention and schedule the server keeps');
+    assert(/\*\*Change\*\*[^\n]*(another|other) (bucket|folder|endpoint|place)[^\n]*stay/.test(manual) && /lifecycle rule/.test(manual),
+        '9. …and that a Change to another place, like a Remove, leaves the old copies there, with a lifecycle rule as the safety net');
+
+    // ── 10. A failure leaves nothing behind ──────────────────────────────────────────────────────────────────────────
+    console.log('\n— 10. failures leave nothing behind —');
+    const { OffboxBucket } = await import('./services/offbox-s3.js');
+    const net = await import('node:net');
+    // The descriptors this process holds open, by what they point at: how a file deleted but still open is seen.
+    const fdDir = fs.existsSync('/proc/self/fd') ? '/proc/self/fd' : '/dev/fd';
+    const openFds = (match: (st: fs.Stats) => boolean) => {
+        let n = 0;
+        for (const name of fs.readdirSync(fdDir)) {
+            const fd = Number(name);
+            if (!Number.isInteger(fd)) continue;
+            try { if (match(fs.fstatSync(fd))) n++; } catch { /* closed meanwhile */ }
+        }
+        return n;
+    };
+    const deletedButOpen = () => openFds((st) => st.isFile() && st.nlink === 0);
+    const settle = () => new Promise((r) => setTimeout(r, 300));
+    const closedPort = await new Promise<number>((resolve) => {
+        const srv = net.createServer();
+        srv.listen(0, '127.0.0.1', () => { const p = (srv.address() as any).port; srv.close(() => resolve(p)); });
+    });
+    const leftInData = () => fs.readdirSync(dataDir!).filter((f) => f.startsWith('.offbox-') || f.startsWith('.backup-tmp-'));
+
+    // a) The client on its own, with an 8 MB file: every way a PUT can fail closes the file.
+    const bigFile = path.join(work, 'big.bpsealed');
+    fs.writeFileSync(bigFile, crypto.randomBytes(8 * 1024 * 1024));
+    const bigSha = sha(fs.readFileSync(bigFile));
+    const bigIno = fs.statSync(bigFile).ino;
+    const onBig = () => openFds((st) => st.isFile() && st.ino === bigIno);
+    const credsB = { endpoint: storeB.endpoint, bucket: storeB.bucket, region: storeB.region, accessKeyId: storeB.accessKeyId, secretAccessKey: storeB.secretAccessKey };
+    const quick = { attempts: 3, backoffMs: 10, idleMs: 10_000 };
+    const tryPut = async (bucket: InstanceType<typeof OffboxBucket>, key: string) => {
+        try { await bucket.putFile(key, bigFile, bigSha); return null; } catch (e: any) { return e; }
+    };
+
+    await storeB.clearLog();
+    await storeB.fault({ method: 'PUT', status: 403, code: 'AccessDenied', early: true, count: 1 });
+    const e403 = await tryPut(new OffboxBucket(credsB, quick), 'early/refused.bpsealed');
+    await settle();
+    const log403 = await puts(storeB);
+    assert(onBig() === 0, `10. a store that refuses before reading the body and closes: the file is not left open (${onBig()} open)`);
+    assert(e403?.status === 403 && /refused these credentials/.test(e403?.message) && log403.length === 1 && log403[0].expectContinue === true,
+        `10. …it asks before sending the body, so the refusal is the store's own (not retried, not "no answer"): ${e403?.message} (${log403.length} PUT)`);
+
+    await storeB.clearLog();
+    await storeB.fault({ method: 'PUT', status: 503, early: true, count: 3 });
+    const e503 = await tryPut(new OffboxBucket(credsB, quick), 'early/busy.bpsealed');
+    await settle();
+    assert(/failed after 3 tries: HTTP 503/.test(e503?.message) && (await puts(storeB)).length === 3 && onBig() === 0,
+        `10. three early 503s: retried, then failed, and the file is not left open (${e503?.message}; ${onBig()} open)`);
+
+    const eGone = await tryPut(new OffboxBucket({ ...credsB, endpoint: `http://127.0.0.1:${closedPort}` }, quick), 'gone/x.bpsealed');
+    await settle();
+    assert(/no answer/.test(eGone?.message) && onBig() === 0, `10. a store that is not there: the file is not left open (${eGone?.message}; ${onBig()} open)`);
+
+    await storeB.fault({ method: 'PUT', delayMs: 3_000, count: 2 });
+    const eIdle = await tryPut(new OffboxBucket(credsB, { attempts: 2, backoffMs: 10, idleMs: 300 }), 'quiet/x.bpsealed');
+    await settle();
+    assert(/no answer/.test(eIdle?.message) && onBig() === 0, `10. a store that goes quiet (the idle limit ends it): the file is not left open (${eIdle?.message}; ${onBig()} open)`);
+    await storeB.clearFaults();
+
+    // b) Scheduled runs to a destination that is down: no deleted backup stays open, and the data folder stays clean.
+    const dead = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, name: 'Down store', endpoint: `http://127.0.0.1:${closedPort}`, prefix: '' } });
+    const idDead = dead.json?.status?.destinations?.find((d: any) => d.name === 'Down store')?.id;
+    assert(dead.status === 200 && typeof idDead === 'string', '10. (a destination on a port nothing listens on)');
+    const openBefore = deletedButOpen();
+    const deadRuns: RunResultLike[] = [];
+    for (let i = 0; i < 3; i++) deadRuns.push(await offbox.runOffboxBackups({ force: true }));
+    await settle();
+    const openAfter = deletedButOpen();
+    assert(deadRuns.every((r) => r.failed.some((f) => f.id === idDead) && r.sent.includes('env-1')),
+        `10. three runs: each fails the down destination and still sends to the other (${JSON.stringify(deadRuns.map((r) => r.failed.map((f) => f.id)))})`);
+    assert(openAfter <= openBefore, `10. …and no deleted backup is held open after them: their disk is free (${openBefore} before, ${openAfter} after)`);
+    assert(leftInData().length === 0, `10. …and nothing of theirs is left in the data folder (${leftInData().join(', ')})`);
+    await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: idDead });
+
+    // c) A run whose backup can't be made (tar fails): no staging copy and no file left behind.
+    const fakeBin = path.join(work, 'fake-bin');
+    fs.mkdirSync(fakeBin);
+    fs.writeFileSync(path.join(fakeBin, 'tar'), '#!/bin/sh\necho "tar: injected by the test" >&2\nexit 2\n', { mode: 0o755 });
+    const realPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}${path.delimiter}${realPath}`;
+    let rTar: RunResultLike;
+    try {
+        rTar = await offbox.runOffboxBackups({ force: true });
+    } finally {
+        process.env.PATH = realPath;
+    }
+    assert(rTar.failed.some((f) => f.id === 'env-1' && /could not be made/.test(f.error)) && leftInData().length === 0,
+        `10. a backup that can't be made fails the run in words and leaves no staging copy behind (${JSON.stringify(rTar.failed)}; left: ${leftInData().join(', ')})`);
+    const rBack = await offbox.runOffboxBackups({ force: true });
+    assert(rBack.sent.includes('env-1'), '10. (and the next run works again)');
+
+    // d) A download that breaks partway ends, rather than leaving Settings waiting forever.
+    const THREE_MB = 3 * 1024 * 1024;
+    const download = async (key: string, len: number) => {
+        try {
+            const res = await fetch(`${base}/api/local/admin/offbox-backups/download?destination=env-1&key=${encodeURIComponent(key)}`,
+                { headers: asOwner, signal: AbortSignal.timeout(15_000) });
+            const got = Buffer.from(await res.arrayBuffer());
+            return { ended: true, whole: res.status === 200 && got.length === len, how: `${res.status}, ${got.length} bytes` };
+        } catch (e: any) {
+            const hung = e?.name === 'TimeoutError' || e?.name === 'AbortError';
+            return { ended: !hung, whole: false, how: hung ? 'no end after 15 s' : `broken off (${e?.cause?.code || e?.message})` };
+        }
+    };
+    const changed = crypto.randomBytes(THREE_MB);
+    const changedKey = `${folderA}${nameAt(Date.now() + 120_000)}`;
+    await storeA.seed(changedKey, changed, undefined, undefined, sha(crypto.randomBytes(16)));
+    const dChanged = await download(changedKey, THREE_MB);
+    assert(dChanged.ended && !dChanged.whole, `10. a 3 MB file the store gives back changed: the download ENDS short (${dChanged.how})`);
+    const halfKey = `${folderA}${nameAt(Date.now() + 180_000)}`;
+    const halfBytes = crypto.randomBytes(THREE_MB);
+    await storeA.seed(halfKey, halfBytes, undefined, undefined, sha(halfBytes));
+    await storeA.fault({ method: 'GET', prefix: `/${storeA.bucket}/${halfKey}`, cutAfter: THREE_MB / 2, count: 1 });
+    const dHalf = await download(halfKey, THREE_MB);
+    assert(dHalf.ended && !dHalf.whole, `10. a store that drops the connection halfway: the download ENDS short (${dHalf.how})`);
+    const dWhole = await download(halfKey, THREE_MB);
+    assert(dWhole.ended && dWhole.whole, `10. (the same file, asked again, comes whole: ${dWhole.how})`);
+    await storeA.remove(changedKey);
+    await storeA.remove(halfKey);
+
+    // e) More than five destinations: the extras are shown as unusable, sent nothing, and still pruned.
+    const envOne = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('BACKUP_OFFBOX_1_')));
+    for (const k of Object.keys(envOne)) delete process.env[k];
+    const many: string[] = [];
+    for (let i = 1; i <= 5; i++) {
+        const r = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, name: `Store ${i}`, prefix: `many/${i}` } });
+        const idI = r.json?.status?.destinations?.find((d: any) => d.name === `Store ${i}`)?.id;
+        if (r.status !== 200 || !idI) throw new Error(`setup: Store ${i} not added (${r.status} ${JSON.stringify(r.json)})`);
+        many.push(idI);
+    }
+    const now10 = Date.now();
+    const oldKey = (i: number) => `many/${i}/${community}/${nameAt(now10 - 40 * DAY)}`;
+    for (let i = 1; i <= 5; i++) await storeB.seed(oldKey(i), Buffer.from(`old ${i}`), undefined, now10 - 40 * DAY);
+    // Two from .env as well: seven in all.
+    Object.assign(process.env, envOne);
+    Object.assign(process.env, {
+        BACKUP_OFFBOX_2_NAME: 'Env two', BACKUP_OFFBOX_2_ENDPOINT: storeA.endpoint, BACKUP_OFFBOX_2_BUCKET: storeA.bucket,
+        BACKUP_OFFBOX_2_REGION: storeA.region, BACKUP_OFFBOX_2_PREFIX: 'second', BACKUP_OFFBOX_2_ACCESS_KEY_ID: storeA.accessKeyId,
+        BACKUP_OFFBOX_2_SECRET_ACCESS_KEY: storeA.secretAccessKey,
+    });
+    const st10 = await status();
+    const byId = (id: string) => st10.destinations.find((d: any) => d.id === id);
+    const extras = [many[3], many[4]].map(byId);
+    assert(st10.destinations.length === 7 && ['env-1', 'env-2', many[0], many[1], many[2]].every((id) => byId(id)?.health !== 'broken')
+        && extras.every((d: any) => d?.health === 'broken' && d.problems.some((p: string) => /more than 5 destinations/.test(p))),
+        `10. seven destinations: the two past five are listed as unusable, in words (${st10.destinations.map((d: any) => `${d.name}: ${d.health}`).join(', ')})`);
+    const h10 = await health();
+    assert(['Store 4', 'Store 5'].every((n) => h10.problems.some((p: string) => p.includes(n) && /more than 5/.test(p))), "10. …and the owner's health says so");
+    await storeB.clearLog();
+    await offbox.runOffboxBackups({ force: true });
+    const putsB = (await puts(storeB)).map((e) => e.path);
+    const leftB = await objects(storeB);
+    assert(!putsB.some((p) => p.includes('/many/4/') || p.includes('/many/5/')) && putsB.some((p) => p.includes('/many/1/')),
+        `10. …they are sent nothing (${putsB.length} PUTs)`);
+    assert([1, 2, 3, 4, 5].every((i) => !leftB.includes(oldKey(i))), `10. …and still pruned: the 40-day-old backups went from all five folders (${leftB.filter((k) => k.startsWith('many/')).length} left under many/)`);
+    const sixth = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, name: 'Store 6', prefix: 'many/6' } });
+    assert(sixth.status === 400 && /At most 5/.test(sixth.json?.error), `10. …and an eighth is refused (${sixth.json?.error})`);
+    for (const id of many) await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: id });
+    for (const k of Object.keys(process.env)) if (k.startsWith('BACKUP_OFFBOX_2_')) delete process.env[k];
+
+    // f) A name in any script is kept as typed; only control and formatting characters go.
+    const NAMES = { name: 'name', endpoint: 'endpoint', bucket: 'bucket', region: 'region', prefix: 'folder', accessKeyId: 'key id', secretAccessKey: 'secret' };
+    const named = (name: string) => {
+        const c = offbox.checkDestination({ ...B, name }, NAMES);
+        return c.ok ? c.value.name : `(refused: ${c.problems.join('; ')})`;
+    };
+    assert(named('Sauvegarde été — Ελλάδα 東京') === 'Sauvegarde été — Ελλάδα 東京', `10. a name in any script is kept (${named('Sauvegarde été — Ελλάδα 東京')})`);
+    assert(named('Bad\u0007 name‮​\n') === 'Bad name', `10. …control and formatting characters are not (${JSON.stringify(named('Bad\u0007 name‮​\n'))})`);
+    const long = named('🌱'.repeat(45));
+    assert(Array.from(long).length === 40 && !/[\uD800-\uDFFF]/.test(long.replace(/🌱/g, '')), '10. …and a long one is cut at 40 characters, never through one');
 
     await storeA.stop();
     await storeB.stop();

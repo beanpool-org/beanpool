@@ -1,7 +1,7 @@
 ---
 slug: backups-and-replicas
 title: Backups and replicas
-summary: What to back up, the backups Settings makes (locked once you make a recovery code), sending locked backups off the server to storage you choose, owners' 12 words and phones, restoring, running a second server as a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.
+summary: What to back up, locked backups, sending them off the server to storage you choose, owners' 12 words and phones, restoring, running a standby, taking over on it with the recovery code or an owner's phone, and what happens if the old server comes back.
 related: updates-and-health, troubleshooting, what-the-server-sees, first-time-setup
 ---
 
@@ -112,6 +112,7 @@ Any storage that speaks S3: Cloudflare R2, Backblaze B2, Wasabi, AWS S3, Scalewa
 - Make a bucket for these backups alone.
 - Make a key that may read, write, list and delete in that bucket and nothing else.
 - Turn off versioning on the bucket, or add a rule that removes old versions within 30 days. With versioning on, a backup the server deletes stays behind as an old version.
+- Add a lifecycle rule that deletes files older than 30 days, if the storage has them (R2, B2, Wasabi, AWS and MinIO do). The server deletes old backups itself, but only while it runs and only where a destination points now; the rule keeps the 30-day promise after a **Change**, a **Remove**, or once the server is gone for good.
 - Note its endpoint: the storage's S3 address without the bucket in it, starting https://. For R2, https://ACCOUNT-ID.r2.cloudflarestorage.com.
 
 Two destinations at two different companies are safer than one: an account closed, a bill unpaid or an outage then costs one copy, not both.
@@ -120,9 +121,9 @@ Two destinations at two different companies are safer than one: an account close
 
 In Settings: **Appliance & Data**, **Backups & Restore**, **Backups off the server**, **Add a destination**. Fill in a name of your choosing, the endpoint, the bucket, the region ("auto" for R2, your storage's region elsewhere), a folder if you want one, the access key id and the secret access key, and press **Add**. The first backup goes there within a few minutes. Only an owner sees this card or changes it (anyone with the admin password counts as one); an admin is told "Only an owner of this node can see or change where its backups go off the box".
 
-Settings keeps a destination in data/offbox-backups.json, which only the server's own user can read. It is never in the database, so never in a snapshot, a backup or a standby's copy, and the log never shows a key. The card shows the key id shortened and never shows the secret again. To change a destination press **Change**: leave the key id and the secret empty to keep them, or type new ones. **Remove** stops sending there; what that destination already holds stays there, so delete it yourself within 30 days.
+Settings keeps a destination in data/offbox-backups.json, which only the server's own user can read. It is never in the database, so never in a snapshot, a backup or a standby's copy, and the log never shows a key. The card shows the key id shortened and never shows the secret again. To change a destination press **Change**: leave the key id and the secret empty to keep them, or type new ones. **Remove** stops sending there; what that destination already holds stays there, so delete it yourself within 30 days. A **Change** to another endpoint, bucket or folder is the same for the old place: the backups already sent there stay, the server no longer looks there, and the card says so; delete them yourself within 30 days.
 
-Or in the server's .env, for up to two destinations (Settings takes more, five in all): BACKUP_OFFBOX_1_ENDPOINT, BACKUP_OFFBOX_1_BUCKET, BACKUP_OFFBOX_1_REGION, BACKUP_OFFBOX_1_ACCESS_KEY_ID and BACKUP_OFFBOX_1_SECRET_ACCESS_KEY, with BACKUP_OFFBOX_1_PREFIX (a folder) and BACKUP_OFFBOX_1_NAME if you want them, and the same with BACKUP_OFFBOX_2_ for a second; then docker compose up -d. The card marks these "set in .env"; they change only there. A destination with a setting missing or wrong shows "Can't be used" and names the setting, never what it holds.
+Or in the server's .env, for up to two destinations (Settings takes more, five in all): BACKUP_OFFBOX_1_ENDPOINT, BACKUP_OFFBOX_1_BUCKET, BACKUP_OFFBOX_1_REGION, BACKUP_OFFBOX_1_ACCESS_KEY_ID and BACKUP_OFFBOX_1_SECRET_ACCESS_KEY, with BACKUP_OFFBOX_1_PREFIX (a folder) and BACKUP_OFFBOX_1_NAME if you want them, and the same with BACKUP_OFFBOX_2_ for a second; then docker compose up -d. The card marks these "set in .env"; they change only there. A destination with a setting missing or wrong shows "Can't be used" and names the setting, never what it holds. Five in all is the most, .env's first: one past that shows "Can't be used" too, gets no new backups, and its old ones are still removed on time.
 
 ### When, and when it fails
 

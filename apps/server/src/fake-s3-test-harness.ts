@@ -88,9 +88,10 @@ function verify(req, body) {
     return null;
 }
 
-function takeFault(method, path) {
+function takeFault(method, path, early) {
     for (const f of faults) {
         if (f.count <= 0) continue;
+        if (!!f.early !== early) continue;
         if (f.method && f.method !== method) continue;
         if (f.prefix && !path.startsWith(f.prefix)) continue;
         f.count--;
@@ -99,19 +100,40 @@ function takeFault(method, path) {
     return null;
 }
 
-const server = http.createServer((req, res) => {
+// A request that asked "Expect: 100-continue" comes here first (Node otherwise answers 100 by itself): it gets its 100,
+// or an early fault's answer instead, before a byte of its body is sent.
+function serve(req, res, askedFirst) {
+    const u = new URL(req.url, 'http://x');
+    const early = takeFault(req.method, u.pathname, true);
+    if (early) {
+        // A store that answers before reading the body, and closes the connection.
+        log.push({ method: req.method, path: u.pathname, query: u.search, authOk: false, status: early.network ? -1 : early.status,
+            error: null, expectContinue: askedFirst });
+        if (early.network) { req.socket.destroy(); return; }
+        res.writeHead(early.status, { 'content-type': 'application/xml', connection: 'close' });
+        res.end(errorXml(early.code || 'InternalError', 'injected by the test, before the body'), () => req.socket.destroy());
+        return;
+    }
+    if (askedFirst) res.writeContinue();
     const chunks = [];
     req.on('data', c => chunks.push(c));
-    req.on('end', () => handle(req, res, Buffer.concat(chunks)));
-});
+    req.on('end', () => handle(req, res, Buffer.concat(chunks), askedFirst));
+}
+const server = http.createServer((req, res) => serve(req, res, false));
+server.on('checkContinue', (req, res) => serve(req, res, true));
 
-function handle(req, res, body) {
+function handle(req, res, body, askedFirst) {
     const u = new URL(req.url, 'http://x');
-    const entry = { method: req.method, path: u.pathname, query: u.search, authOk: false, status: 0, error: null };
+    const entry = { method: req.method, path: u.pathname, query: u.search, authOk: false, status: 0, error: null, expectContinue: !!askedFirst };
     log.push(entry);
     const answer = (status, headers, payload) => {
         entry.status = status;
         res.writeHead(status, headers || {});
+        if (fault && fault.cutAfter && req.method === 'GET' && Buffer.isBuffer(payload) && payload.length > fault.cutAfter) {
+            // The headers and part of the body, then the connection drops: a store that goes away mid-download.
+            res.write(payload.subarray(0, fault.cutAfter), () => setTimeout(() => req.socket.destroy(), 50));
+            return;
+        }
         if (fault && fault.slowBodyMs && req.method !== 'HEAD') {
             // The headers now, the body later: a bucket that answers at once and then trickles.
             res.flushHeaders();
@@ -120,7 +142,7 @@ function handle(req, res, body) {
         }
         res.end(req.method === 'HEAD' ? undefined : payload);
     };
-    const fault = takeFault(req.method, u.pathname);
+    const fault = takeFault(req.method, u.pathname, false);
     const go = () => {
         if (fault && fault.network) { entry.status = -1; req.socket.destroy(); return; }
         if (fault && fault.status) { return answer(fault.status, { 'content-type': 'application/xml' }, errorXml(fault.code || 'InternalError', 'injected by the test')); }
@@ -208,6 +230,8 @@ export interface FakeS3LogEntry {
     status: number;
     /** Why the signature was refused, when it was. */
     error: string | null;
+    /** The request asked "Expect: 100-continue": its body waited for the store's go-ahead. */
+    expectContinue: boolean;
 }
 
 export interface FakeS3Fault {
@@ -224,6 +248,10 @@ export interface FakeS3Fault {
     delayMs?: number;
     /** Send the headers at once and the body this much later. */
     slowBodyMs?: number;
+    /** Answer before reading the request's body (with `status`, or `network` for no answer), then close the connection. */
+    early?: boolean;
+    /** A GET: send the headers (the whole length) and this many bytes of the body, then drop the connection. */
+    cutAfter?: number;
     /** How many matching requests this applies to. */
     count: number;
 }

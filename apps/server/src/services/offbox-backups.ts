@@ -165,7 +165,7 @@ export function checkDestination(input: DestinationInput, names: Record<keyof De
     const region = str(input.region);
     const accessKeyId = str(input.accessKeyId);
     const secretAccessKey = typeof input.secretAccessKey === 'string' ? input.secretAccessKey : '';
-    const name = str(input.name).replace(/[^\x20-\x7E]/g, '').slice(0, 40);
+    const name = nameOf(input.name);
     if (!endpointRaw) missing.push(names.endpoint);
     if (!bucket) missing.push(names.bucket);
     if (!region) missing.push(names.region);
@@ -195,6 +195,16 @@ export function checkDestination(input: DestinationInput, names: Record<keyof De
     if (prefix === null) problems.push(`${names.prefix} is not a folder name (letters, digits and ! _ . * ' ( ) -, separated by /)`);
     if (problems.length) return { ok: false, problems };
     return { ok: true, value: { name: name || `${bucket} at ${new URL(endpoint).host}`, endpoint, bucket, region, prefix: prefix!, accessKeyId, secretAccessKey } };
+}
+
+/**
+ * A destination's name as typed, in any script: only control and formatting characters (a newline, a right-to-left
+ * override, a zero-width space) go, which is what keeps it safe in a log line and on a screen. Spaces are tidied, and it
+ * is cut at 40 characters, never through one.
+ */
+function nameOf(raw: unknown): string {
+    const s = typeof raw === 'string' ? raw.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, '').replace(/\s+/g, ' ').trim() : '';
+    return Array.from(s).slice(0, 40).join('').trim();
 }
 
 const SETTINGS_NAMES: Record<keyof DestinationInput, string> = {
@@ -235,9 +245,18 @@ export interface OffboxSettings {
     intervalFrom: 'settings' | 'env' | 'default';
     retentionDays: number;
     retentionFrom: 'settings' | 'env' | 'default';
+    /** The ones backups go to: the first {@link MAX_OFFBOX_DESTINATIONS} usable ones, .env's first. */
     destinations: OffboxDestination[];
+    /**
+     * Usable ones past {@link MAX_OFFBOX_DESTINATIONS}: sent nothing, and listed in `broken` so the owner sees why, but
+     * still pruned — the backups already there keep the 30-day promise.
+     */
+    overflow: OffboxDestination[];
     broken: BrokenDestination[];
 }
+
+export const TOO_MANY_DESTINATIONS = `more than ${MAX_OFFBOX_DESTINATIONS} destinations: this one gets no new backups, and its old `
+    + `ones are still removed on time. Remove one, here or in .env, to use it`;
 
 /** Everything configured, from Settings and .env. A setting from Settings wins over .env; .env over the default. */
 export function readOffboxSettings(env: NodeJS.ProcessEnv = process.env): OffboxSettings {
@@ -275,9 +294,14 @@ export function readOffboxSettings(env: NodeJS.ProcessEnv = process.env): Offbox
         if (!id) continue;
         const checked = checkDestination(d as DestinationInput, SETTINGS_NAMES);
         if (checked.ok) destinations.push({ id, source: 'settings', ...checked.value });
-        else broken.push({ id, name: typeof d.name === 'string' && d.name ? d.name.slice(0, 40) : id, source: 'settings', problems: checked.problems });
+        else broken.push({ id, name: nameOf(d.name) || id, source: 'settings', problems: checked.problems });
     }
-    return { intervalHours, intervalFrom, retentionDays, retentionFrom, destinations: destinations.slice(0, MAX_OFFBOX_DESTINATIONS), broken };
+    const overflow = destinations.slice(MAX_OFFBOX_DESTINATIONS);
+    for (const d of overflow) broken.push({ id: d.id, name: d.name, source: d.source, problems: [TOO_MANY_DESTINATIONS] });
+    return {
+        intervalHours, intervalFrom, retentionDays, retentionFrom,
+        destinations: destinations.slice(0, MAX_OFFBOX_DESTINATIONS), overflow, broken,
+    };
 }
 
 export type SettingsUpdate = {
@@ -333,7 +357,8 @@ export function updateOffboxSettings(update: SettingsUpdate): { ok: true } | { o
         }
         const checked = checkDestination(merged, SETTINGS_NAMES);
         if (!checked.ok) return { ok: false, error: `This destination can't be used: ${checked.problems.join('; ')}` };
-        if (!existing && readOffboxSettings().destinations.length >= MAX_OFFBOX_DESTINATIONS) {
+        const configured = readOffboxSettings();
+        if (!existing && configured.destinations.length + configured.overflow.length >= MAX_OFFBOX_DESTINATIONS) {
             return { ok: false, error: `At most ${MAX_OFFBOX_DESTINATIONS} destinations` };
         }
         const value = { id: existing?.id ?? `d-${crypto.randomBytes(6).toString('hex')}`, ...checked.value };
@@ -561,7 +586,7 @@ async function runInner(opts: { force: boolean; now: number }): Promise<RunResul
     const stand = standing(settings);
     // A standby, and a replaced main server, leave the stores alone altogether; a server with no destination has
     // nothing to do, and writes nothing (this runs every five minutes on every server).
-    if (!stand.sends && (stand.why === 'standby' || stand.why === 'replaced' || settings.destinations.length === 0)) {
+    if (!stand.sends && (stand.why === 'standby' || stand.why === 'replaced' || settings.destinations.length + settings.overflow.length === 0)) {
         result.skipped = stand.why;
         return result;
     }
@@ -631,7 +656,7 @@ async function runInner(opts: { force: boolean; now: number }): Promise<RunResul
     // nothing may be sent, because the promise to a deleted member does not wait for a recovery code.
     let pruned = false;
     if (community) {
-        for (const d of settings.destinations) {
+        for (const d of [...settings.destinations, ...settings.overflow]) {
             const st = destState(state, d);
             if (!opts.force && !result.sent.includes(d.id) && st.lastPruneAt !== null && opts.now - st.lastPruneAt < PRUNE_EVERY_MS) continue;
             result.pruned += await prune(d, st, settings.retentionDays, community, opts.now);
@@ -669,15 +694,26 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 let firstTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Remove the files a run that was cut off (a crash, a restart mid-upload) left in the data folder: each is a locked
- * backup in the making, and nothing else would ever remove it. Only at start, when no run can be using one.
+ * Remove what a run that was cut off (a crash, a deploy, an OOM kill, a restart mid-upload) left in the data folder,
+ * which nothing else would ever remove:
+ *  - `.offbox-<hex>.bpsealed`, a locked backup on its way out;
+ *  - `.backup-tmp-<hex>/`, a backup's staging folder (services/sealed-backup.ts). It holds an UNLOCKED copy of the
+ *    database, and a member who deletes their account afterwards would stay in it for good. A run that FAILS removes its
+ *    own (createSealedBackup and {@link sealedBackupFile} clean up on any error); this is for one that was killed.
+ * Only at start (boot step 2.62, before the HTTPS server), when no backup or download can be using either.
  */
 function removeLeftovers(): void {
-    try {
-        for (const f of fs.readdirSync(dataDir())) {
-            if (/^\.offbox-[0-9a-f]{12}\.bpsealed$/.test(f)) fs.rmSync(path.join(dataDir(), f), { force: true });
+    let names: string[];
+    try { names = fs.readdirSync(dataDir()); } catch { return; /* no data folder yet */ }
+    for (const f of names) {
+        if (!/^\.offbox-[0-9a-f]{12}\.bpsealed$/.test(f) && !/^\.backup-tmp-[0-9a-f]{12}$/.test(f)) continue;
+        try {
+            fs.rmSync(path.join(dataDir(), f), { recursive: true, force: true });
+            logger.info('SYS', `[Off-box] Removed ${f}, left by a backup that was cut off`);
+        } catch (e) {
+            logger.warn('SYS', `[Off-box] Could not remove ${f}, left by a backup that was cut off: ${(e as Error)?.message || e}`);
         }
-    } catch { /* no data folder yet */ }
+    }
 }
 
 /** Start the checks: the first a couple of minutes after boot, then every five minutes. Every role: each tick reads it. */
@@ -771,10 +807,13 @@ export function getOffboxStatus(now = Date.now()): OffboxStatus {
         };
     });
     for (const b of settings.broken) {
+        // One past five is still pruned: its errors at that show like any other's.
+        const over = settings.overflow.find((d) => d.id === b.id);
+        const ost = over && state.destinations[b.id]?.where === whereOf(over) ? state.destinations[b.id] : null;
         destinations.push({
             id: b.id, name: b.name, source: b.source, endpoint: null, bucket: null, region: null, prefix: null, accessKeyId: null,
             secretSet: false, problems: b.problems, health: 'broken', lastSuccessAt: null, lastSuccessBytes: null, lastAttemptAt: null,
-            lastError: null, failures: 0, nextAttemptAt: null, lastPruneAt: null, lastPruneError: null,
+            lastError: null, failures: 0, nextAttemptAt: null, lastPruneAt: ost?.lastPruneAt ?? null, lastPruneError: ost?.lastPruneError ?? null,
         });
     }
     return {

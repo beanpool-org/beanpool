@@ -130,9 +130,19 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
                 else cb(null, held ?? undefined);
             },
         });
-        opened.stream.on('error', (e) => check.destroy(e));
-        check.on('error', (e) => console.warn(`[Off-box] Download of ${opened!.file} ended early: ${e.message}`));
-        ctx.body = opened.stream.pipe(check);
+        const res = ctx.res;
+        const store = opened.stream;
+        store.on('error', (e) => check.destroy(e));
+        check.on('error', (e) => {
+            console.warn(`[Off-box] Download of ${opened!.file} ended early: ${e.message}`);
+            // Once the first bytes have gone, Koa can no longer answer with an error, and `pipe` never ends its
+            // destination when its source fails: the browser would wait for the rest of Content-Length for ever. So the
+            // connection is cut, and the download fails where the owner can see it. Before then, Koa answers a 500.
+            if (res.headersSent) res.destroy();
+        });
+        // The owner went away (or the download failed): stop reading from the store.
+        check.on('close', () => { if (!store.destroyed) store.destroy(); });
+        ctx.body = store.pipe(check);
     });
 
     return router;

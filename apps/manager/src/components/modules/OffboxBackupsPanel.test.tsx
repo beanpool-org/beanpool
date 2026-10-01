@@ -119,6 +119,36 @@ describe('OffboxBackupsPanel', () => {
         expect(posted[1].destination).toMatchObject({ id: 'd-aabbccddee', name: 'Backblaze EU', accessKeyId: '', secretAccessKey: '' });
     });
 
+    it('a Change that points a destination somewhere else says the old copies stay there, and how to have them go', async () => {
+        let current = status({ destinations: [dest({ id: 'd-aabbccddee', name: 'B2', source: 'settings', prefix: 'old-folder/' })] });
+        vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+            const body = init?.body ? JSON.parse(String(init.body)) : null;
+            if (String(url).includes('/offbox-backups/settings')) {
+                const d = body.destination;
+                current = status({ destinations: [dest({ id: d.id, name: d.name, source: 'settings', prefix: d.prefix ? `${d.prefix.replace(/\/+$/, '')}/` : '' })] });
+                return json({ success: true, status: current });
+            }
+            return json(current);
+        }));
+        const user = userEvent.setup();
+        render(<OffboxBackupsPanel activeNode={node} />);
+        // A rename only: no warning.
+        await user.click(await screen.findByRole('button', { name: 'Change' }));
+        await user.type(within(screen.getByTestId('offbox-form')).getByLabelText('Name'), ' EU');
+        await user.click(within(screen.getByTestId('offbox-form')).getByRole('button', { name: 'Save' }));
+        expect(await screen.findByText('Destination saved.')).toBeInTheDocument();
+        // Another folder: the old copies stay where they are, and the card says so.
+        await user.click(screen.getByRole('button', { name: 'Change' }));
+        const folder = within(screen.getByTestId('offbox-form')).getByLabelText(/Folder/);
+        await user.clear(folder);
+        await user.type(folder, 'new-folder');
+        await user.click(within(screen.getByTestId('offbox-form')).getByRole('button', { name: 'Save' }));
+        const said = await screen.findByText(/stay there/);
+        expect(said).toHaveTextContent('old-folder/');
+        expect(said).toHaveTextContent(/no longer removes them/);
+        expect(said).toHaveTextContent(/lifecycle rule/);
+    });
+
     it('says a server older than off-box backups needs an update, rather than breaking', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'Not Found' }, false, 404)));
         const { unmount } = render(<OffboxBackupsPanel activeNode={node} />);

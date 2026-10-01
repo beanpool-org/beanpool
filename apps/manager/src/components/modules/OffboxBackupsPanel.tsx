@@ -38,6 +38,13 @@ function when(t: number | null): string {
     return new Date(t).toLocaleString();
 }
 
+/** Where a destination points, as the card shows it: bucket, store and folder. */
+function placeOf(d: OffboxDestinationStatus): string {
+    let host = d.endpoint ?? '';
+    try { host = new URL(host).host; } catch { /* shown as given */ }
+    return `bucket ${d.bucket ?? ''} at ${host}${d.prefix ? `, folder ${d.prefix}` : ''}`;
+}
+
 function size(bytes: number | null): string {
     if (bytes === null) return '';
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -82,13 +89,14 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
         return () => clearTimeout(t);
     }, [status, load]);
 
-    const save = async (update: Parameters<typeof saveOffboxSettings>[1], done: string) => {
+    const save = async (update: Parameters<typeof saveOffboxSettings>[1], done: string | ((saved: OffboxStatus) => string)) => {
         setSaving(true);
         setMessage(null);
         try {
             const res = await saveOffboxSettings(activeNode.url, update, ...creds());
-            setStatus(checked(res.status));
-            setMessage({ text: done, isError: false });
+            const saved = checked(res.status);
+            setStatus(saved);
+            setMessage({ text: typeof done === 'string' ? done : done(saved), isError: false });
             return true;
         } catch (e: unknown) {
             setMessage({ text: e instanceof Error ? e.message : String(e), isError: true });
@@ -101,11 +109,28 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
     const submitForm = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form) return;
-        if (await save({ destination: form }, form.id ? 'Destination saved.' : 'Destination added. The first backup goes there within a few minutes.')) setForm(null);
+        if (!form.id) {
+            if (await save({ destination: form }, 'Destination added. The first backup goes there within a few minutes.')) setForm(null);
+            return;
+        }
+        // The server looks after the backups only where a destination points now. A change of endpoint, bucket or folder
+        // leaves the ones already sent where they were, and nobody removes them on time unless the owner does.
+        const before = status?.destinations.find((d) => d.id === form.id) ?? null;
+        const saidMoved = (saved: OffboxStatus) => {
+            const after = saved.destinations.find((d) => d.id === form.id);
+            if (!before || !after || (before.endpoint === after.endpoint && before.bucket === after.bucket && before.prefix === after.prefix)) {
+                return 'Destination saved.';
+            }
+            return `Destination saved. The backups already sent to its old place (${placeOf(before)}) stay there, and this server `
+                + `no longer removes them after ${saved.retentionDays} days: delete them in that store, or give that bucket a `
+                + `lifecycle rule that deletes files older than ${saved.maxRetentionDays} days.`;
+        };
+        if (await save({ destination: form }, saidMoved)) setForm(null);
     };
 
     const remove = async (d: OffboxDestinationStatus) => {
-        if (!confirm(`Stop sending backups to "${d.name}"? The backups already there stay there: delete them in that store if you want them gone.`)) return;
+        if (!confirm(`Stop sending backups to "${d.name}"? The backups already there stay there, and this server no longer removes them: `
+            + 'delete them in that store, or give the bucket a lifecycle rule that deletes old files.')) return;
         await save({ removeId: d.id }, 'Destination removed. What it holds stays there.');
     };
 

@@ -134,6 +134,8 @@ async function main() {
     assert(local.decisions && !global.decisions, 'formal Decisions: on for a local community, off on the lobby (anyone may join it)');
     assert(local.invites === true && global.invites === false,
         'invites: on for a local community, off on the lobby, whose open door is the only way in (Marty, 2026-10-01)');
+    assert(local.announceJoins === true && global.announceJoins === false,
+        'member_joined to every member socket: a local community, as before; on the lobby only to the joiner (test-global-server-limits)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 

@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import { HelpLink } from '../manual/Manual';
-import { loginToNode, resolveNodeApiUrl, buildAdminHeaders } from '../../lib/node-client';
-import type { KeySession } from '../../lib/key-session';
+import { resolveNodeApiUrl } from '../../lib/node-client';
+import { signInWithPassword, type KeySession } from '../../lib/key-session';
 import { PhoneSignIn } from './PhoneSignIn';
 
 interface AdminLoginCardProps {
     nodeUrl: string;
-    onAuthenticated: (password: string, sessionToken?: string) => void;
+    /**
+     * Signed in with the password. The node has set the httpOnly session cookie; this is its CSRF token. The password
+     * itself is not handed on: nothing on this page keeps it (lib/key-session.ts, signInWithPassword).
+     */
+    onPasswordSession: (csrfToken: string) => void;
     /** Offers "Sign in with your phone" (a QR for the BeanPool app) when given. Single-node /settings only. */
     onKeySession?: (session: KeySession, csrfToken: string) => void;
 }
 
-export function AdminLoginCard({ nodeUrl, onAuthenticated, onKeySession }: AdminLoginCardProps) {
+export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: AdminLoginCardProps) {
     const [mode, setMode] = useState<'password' | 'phone'>('password');
     const [password, setPassword] = useState('');
     const [totpCode, setTotpCode] = useState('');
@@ -31,34 +35,14 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated, onKeySession }: Admin
         setError(null);
 
         try {
-            // First attempt verify-password or login
-            const verifyEndpoint = resolveNodeApiUrl(nodeUrl, '/api/local/verify-password');
-            const headers: Record<string, string> = {
-                'Content-Type': 'application/json',
-                'X-Admin-Password': password,
-            };
-            if (totpCode.trim()) {
-                headers['X-Admin-TOTP'] = totpCode.trim();
-            }
-            let res = await fetch(verifyEndpoint, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ password, totpCode: totpCode.trim() || undefined }),
-            });
+            // Exchanged once for the node's httpOnly session cookie: the password goes no further than this request.
+            const res = await signInWithPassword(
+                resolveNodeApiUrl(nodeUrl, '/api/local/admin/auth/password'),
+                password,
+                totpCode.trim() || undefined,
+            );
 
-            if (res.status === 404) {
-                // Fallback to /api/verify-password if /api/local prefix is not present
-                const fallbackEndpoint = resolveNodeApiUrl(nodeUrl, '/api/verify-password');
-                res = await fetch(fallbackEndpoint, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({ password, totpCode: totpCode.trim() || undefined }),
-                });
-            }
-
-            const body = await res.json().catch(() => ({}));
-
-            if (res.status === 401 && body?.totpRequired && !showTotpField) {
+            if (!res.ok && res.totpRequired && !showTotpField) {
                 // 2FA is required on this node — show TOTP input
                 setShowTotpField(true);
                 setError('2FA is enabled. Please enter your 6-digit TOTP code.');
@@ -67,17 +51,12 @@ export function AdminLoginCard({ nodeUrl, onAuthenticated, onKeySession }: Admin
             }
 
             if (!res.ok) {
-                throw new Error(body?.error || `Authentication failed (${res.status})`);
+                throw new Error(res.error);
             }
 
-            const sessionToken = body?.sessionToken || body?.tfaSessionToken;
-            sessionStorage.setItem('bp-admin-token', password);
-            if (sessionToken) {
-                sessionStorage.setItem('bp_tfa_session_local-node', sessionToken);
-                sessionStorage.setItem('bp-2fa-session', sessionToken);
-            }
-
-            onAuthenticated(password, sessionToken);
+            setPassword('');
+            setTotpCode('');
+            onPasswordSession(res.csrfToken);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Authentication failed';
             setError(msg);

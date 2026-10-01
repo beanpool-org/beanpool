@@ -335,9 +335,10 @@ export async function loginToNode(
 }
 
 /**
- * CSRF token for a key sign-in (lib/key-session.ts). The key session rides in an httpOnly cookie that the
- * browser attaches by itself, so the node refuses cookie-authenticated changes without this header. Held in
- * memory only; a reload fetches a new one. Null under password sign-in, which sends no header at all.
+ * CSRF token for the session cookie (lib/key-session.ts): a key sign-in's, or the password sign-in's. The session
+ * rides in an httpOnly cookie that the browser attaches by itself, so the node refuses cookie-authenticated changes
+ * without this header, and takes it only from the session it was issued to. Held in memory only; a reload fetches a
+ * new one. Null in fleet mode, whose profiles send their password in a header instead.
  */
 let keySessionCsrfToken: string | null = null;
 
@@ -363,40 +364,24 @@ export function isTotpRequired(responseBody: unknown): boolean {
 }
 
 /**
- * 2FA session token storage — sessionStorage so it lives for the browser
- * session (survives page reloads within the same tab) but is cleared when
- * the tab closes, unlike localStorage which persists to disk indefinitely.
- *
- * This is a security tradeoff: the token is a TOTP bypass, so keeping it
- * off disk limits the XSS exposure window to the current session only.
+ * 2FA session tokens of the fleet manager's password profiles, held in this page's memory only. They used to be in
+ * sessionStorage, which on a node is the members' web app's origin too: a script there could take one with the
+ * password and skip 2FA (Fable's web review, M1). A reload asks for a code again. Single-node Settings needs none:
+ * its session is the node's httpOnly cookie, which a code opened once.
  */
-const TFA_SESSION_KEY_PREFIX = 'bp_tfa_session_';
+const tfaSessionTokens = new Map<string, string>();
 
 export function getTfaSessionToken(profileId: string): string | undefined {
-    try {
-        return sessionStorage.getItem(TFA_SESSION_KEY_PREFIX + profileId) || undefined;
-    } catch { return undefined; }
+    return tfaSessionTokens.get(profileId);
 }
 
 export function setTfaSessionToken(profileId: string, token: string | undefined): void {
-    try {
-        if (token) {
-            sessionStorage.setItem(TFA_SESSION_KEY_PREFIX + profileId, token);
-        } else {
-            sessionStorage.removeItem(TFA_SESSION_KEY_PREFIX + profileId);
-        }
-    } catch { /* sessionStorage unavailable */ }
+    if (token) tfaSessionTokens.set(profileId, token);
+    else tfaSessionTokens.delete(profileId);
 }
 
 export function clearAllTfaSessionTokens(): void {
-    try {
-        for (let i = sessionStorage.length - 1; i >= 0; i--) {
-            const key = sessionStorage.key(i);
-            if (key?.startsWith(TFA_SESSION_KEY_PREFIX)) {
-                sessionStorage.removeItem(key);
-            }
-        }
-    } catch { /* sessionStorage unavailable */ }
+    tfaSessionTokens.clear();
 }
 
 // ======================== END 2FA HELPERS ========================

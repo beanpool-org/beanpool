@@ -78,6 +78,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
+import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
@@ -414,6 +415,8 @@ router.post('/api/local/change-password', async (ctx) => {
     // The first boot's made-up password, if it was never changed before, no longer works. Only now the new one is on
     // disk: until then the file holds the password that works.
     removeFirstPasswordFile('The admin password was changed');
+    // Every Settings sign-in made with the old password ends on its next request; the one that changed it carries on.
+    restampPasswordSession(ctx);
     ctx.body = { success: true };
 });
 

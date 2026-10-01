@@ -3,7 +3,8 @@ import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { confirmShare, custodianKey, genesis, type CallOptions, type CustodianKey } from '../custodian/lib.js';
+import { confirmShare, custodianKey, genesis, sendSettings, type CallOptions, type CustodianKey } from '../custodian/lib.js';
+import { EGRESS_CONF } from '../egress/egress.js';
 import type { CustodianShare } from '../shared/ceremony.js';
 import { API_BUNDLE_ASSET, LocalDirectoryFeed, MANIFEST_ASSET, ROOT_ASSET, SIGNATURES_ASSET, UKI_ASSET, VERITY_ASSET } from '../shared/release-feed.js';
 import {
@@ -51,6 +52,7 @@ const IDENTITY_FILE = '/run/beanpool-vault-image.json';
 const SEEDS_FILE = '/etc/beanpool-vault-test/custodians.json';
 const API_BUNDLE = '/usr/lib/beanpool-vault/vault-api.mjs';
 const DATA_MOUNT = '/var/lib/beanpool-vault/data';
+const SETTINGS_FILE = '/var/lib/beanpool-vault/settings/settings.json';
 const WORK = '/run/beanpool-vault-test';
 /** The API's release feed in the test image (make.mjs writes its api.json): on the state partition, readable by it. */
 const FEED = '/var/lib/beanpool-vault-test/feed';
@@ -205,6 +207,34 @@ async function main(): Promise<void> {
     const update = (JSON.parse(text) as { update?: { image?: string | null; error?: string | null } }).update;
     check('/v1/report names the booted image: the API knows it', update?.image === image.imageHash, `update.image ${update?.image ?? 'missing'}; ${update?.error ?? ''}`);
 
+    // The custodians' settings (an off-box store, a webhook, a mail server: none reachable from here) reach root's
+    // egress step: the path unit fires on the API's write, root writes their names (and no secret) for the resolver,
+    // which restarts and runs, and the firewall has the mail sets the names go into.
+    const dnsStarted = () => sh('systemctl', ['show', '-p', 'ActiveEnterTimestampMonotonic', '--value', 'beanpool-vault-dns.service']).out;
+    const dnsBefore = dnsStarted();
+    const settings = {
+        v: 1,
+        offsite: { kind: 's3', endpoint: 'https://store.example.org', bucket: 'vault-test', accessKeyId: 'AK-TEST', secretAccessKey: 'SK-TEST-SECRET' },
+        alerts: {
+            webhook: { url: 'https://hooks.example.org/topic-secret' },
+            email: { host: 'smtp.example.org', port: 465, username: 'u', password: 'PW-TEST-SECRET', from: 'vault@example.org', to: ['c@example.org'] },
+        },
+    };
+    const sent = [await sendSettings(BASE, custodians[0], settings, opts), await sendSettings(BASE, custodians[1], settings, opts)];
+    check('two custodians set the settings', sent[1].body.state === 'in_force', JSON.stringify(sent.map(s => s.body)).slice(0, 300));
+    const settingsStat = sh('stat', ['-c', '%U %a', SETTINGS_FILE]).out;
+    check('the settings file is the API\'s alone', settingsStat === 'vault-api 600', settingsStat);
+    const egress = await until(async () => {
+        const t = readFileSync(EGRESS_CONF, 'utf8');
+        return t.includes('nftset=/hooks.example.org/store.example.org/4#inet#vault#egress4,6#inet#vault#egress6') && t.includes('nftset=/smtp.example.org/4#inet#vault#smtp4,6#inet#vault#smtp6') && t;
+    }, 60);
+    check('root\'s egress step writes their names for the resolver (the path unit fired)', !!egress.value,
+        `after ${egress.after} s: ${readFileSync(EGRESS_CONF, 'utf8').replace(/\s+/g, ' ').slice(0, 300)}`);
+    check('and no secret, path or address goes there', !/SECRET|topic-secret|c@example\.org|vault-test\//.test(readFileSync(EGRESS_CONF, 'utf8')));
+    const dnsAgain = await until(async () => dnsStarted() !== dnsBefore && sh('systemctl', ['is-active', 'beanpool-vault-dns.service']).out === 'active', 60);
+    check('the resolver restarted to read them, and runs', !!dnsAgain.value, `${dnsBefore} -> ${dnsStarted()}; ${sh('systemctl', ['is-active', 'beanpool-vault-dns.service']).out}`);
+    check('the firewall has the mail sets', sh('nft', ['list', 'set', 'inet', 'vault', 'smtp4']).status === 0 && sh('nft', ['list', 'set', 'inet', 'vault', 'smtp6']).status === 0);
+
     // BLOCKING 2: as the API's user, stage a boot file and partitions no release signs (as the review did), then run
     // the monthly restart's install step (without its reboot). Nothing may be installed.
     const fake = stagedNames('9.9.9', sha256Hex('not a root hash') + sha256Hex('nor this'));
@@ -333,7 +363,7 @@ async function main(): Promise<void> {
     const keptSize = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '--keep-size', '-o', '0', '-l', String(1100 << 20), keepSizeFile]);
     const fill = varSpace().avail - (12 << 20);
     const filled = sh('setpriv', ['--reuid=vault-api', '--regid=vault-api-socket', '--init-groups', 'fallocate', '-l', String(fill), path.join(RELEASES, 'junk')]);
-    asApi(`const fs = require('fs'), [b, s, r] = process.argv.slice(1);
+    asApi(`const fs = require('fs'), [b, s, r, t] = process.argv.slice(1);
         fs.writeFileSync(b + '/junk', 'x');
         fs.writeFileSync(b + '/bv-20260102T000000Z.bin', '');
         fs.truncateSync(b + '/bv-20260102T000000Z.bin', 1073741825);
@@ -341,7 +371,9 @@ async function main(): Promise<void> {
         fs.mkdirSync(s + '/beanpool-vault_9.9.9.efi');
         fs.writeFileSync(s + '/beanpool-vault_9.9.9.efi/x', 'x');
         fs.mkdirSync(r, { recursive: true });
-        for (const f of ['restore-pending.bin', 'restore-pending.bin.part', 'junk']) fs.writeFileSync(r + '/' + f, 'x');`, BACKUPS, IMAGE_INBOX, RESTORE);
+        for (const f of ['restore-pending.bin', 'restore-pending.bin.part', 'junk']) fs.writeFileSync(r + '/' + f, 'x');
+        fs.writeFileSync(t + '/settings.json.4242.part', 'x');
+        fs.mkdirSync(t + '/junk');`, BACKUPS, IMAGE_INBOX, RESTORE, path.dirname(SETTINGS_FILE));
     writeFileSync(MARKER, '{}', { mode: 0o600 });
     check('the API\'s user fills the state partition', filled.status === 0 && varSpace().avail < (16 << 20), `${filled.out}; ${(varSpace().avail / (1 << 20)).toFixed(1)} MiB free for the vault's users`);
     renameSync(path.join(pending, 'vault-v0.0.3'), path.join(FEED, 'vault-v0.0.3'));
@@ -365,6 +397,8 @@ async function main(): Promise<void> {
     const restoreKept = readdirSync(RESTORE).sort().join(' ');
     check('while the keyholder marks a restore from backup pending, root keeps its file and partial file, and nothing else in restore/',
         restoreKept === 'restore-pending.bin restore-pending.bin.part', restoreKept);
+    const settingsKept = readdirSync(path.dirname(SETTINGS_FILE)).sort().join(' ');
+    check('root keeps the custodians\' settings file, and nothing else in settings/', settingsKept === 'settings.json' && /in settings that/.test(cleanup), `${settingsKept}; ${cleanup}`);
     rmSync(MARKER);
     const tidied = sh('/opt/node/bin/node', ['/usr/lib/beanpool-vault/vault-install.mjs']);
     check('with no marker, root empties restore/', readdirSync(RESTORE).length === 0,

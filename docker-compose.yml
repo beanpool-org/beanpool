@@ -64,6 +64,15 @@ services:
       - MIN_APP_VERSION_FROM=${MIN_APP_VERSION_FROM:-}
       - MIN_APP_VERSION_FROM_IOS=${MIN_APP_VERSION_FROM_IOS:-}
       - MIN_APP_VERSION_FROM_ANDROID=${MIN_APP_VERSION_FROM_ANDROID:-}
+      # The live-updates socket caps (apps/server/src/ws-limits.ts). EMPTY = the profile's: a local community 2,000 on
+      # the node, 1,000 of them strangers', 64 an address, 8 strangers an address, 8 a member; the global node 5,000,
+      # 1,500, 1,000, 8 and 4, for its 1 GB server. A whole number scales one with the server (WS_MAX_SOCKETS=20000 on
+      # 4 GB); anything else is ignored and the boot log says so. The listeners' connection cap follows.
+      - WS_MAX_SOCKETS=${WS_MAX_SOCKETS:-}
+      - WS_MAX_STRANGER_SOCKETS=${WS_MAX_STRANGER_SOCKETS:-}
+      - WS_MAX_SOCKETS_PER_ADDRESS=${WS_MAX_SOCKETS_PER_ADDRESS:-}
+      - WS_MAX_STRANGER_SOCKETS_PER_ADDRESS=${WS_MAX_STRANGER_SOCKETS_PER_ADDRESS:-}
+      - WS_MAX_SOCKETS_PER_MEMBER=${WS_MAX_SOCKETS_PER_MEMBER:-}
       # The server asks GitHub (api.github.com) for the newest BeanPool release 30 s after it starts and every 6 hours,
       # so Settings can say whether an update is out. EMPTY = it does, as it always has. `true` = it never asks on its
       # own: nothing else depends on it, and Settings' "check now" button still asks when an owner or admin presses it.

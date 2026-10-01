@@ -542,6 +542,8 @@ CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 -- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
+-- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
@@ -861,13 +863,18 @@ CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases
 -- counting for its address's limit, with `join_hash` overwritten by a random 'released:' tombstone. A member
 -- the community removes, or one who deletes their account while suspended, keeps it used, so that account cannot
 -- come straight back in.
+-- `join_cohort` is a random label, the same for everyone who joined through the door from one address within 24 hours
+-- of each other (chained: it is copied from the earliest such join still in the window). Never the address, never a
+-- key. Only auto-hide reads it, so that such reporters count as one (engine/auto-moderation.ts). Replicated and
+-- bundled with the row; NULL for a join before it existed, and cleared when the member deletes their account.
 CREATE TABLE IF NOT EXISTS open_joins (
     member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
     provider TEXT NOT NULL,
     join_hash TEXT NOT NULL UNIQUE,
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     ip_hash TEXT,
-    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    join_cohort TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
@@ -1080,6 +1087,13 @@ CREATE TABLE IF NOT EXISTS withheld_overlays (
     PRIMARY KEY (message_id, author_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
+-- The note on Beans a member sent to someone who has blocked them (engine/withheld-notes.ts): the Beans move as any send's,
+-- the ledger row stores no note (`transactions.memo` = ''), and the note is kept here, for its sender alone, laid over
+-- their own reads of the row. One row per ledger row. Local, as the lines above are: never in a copy.
+CREATE TABLE IF NOT EXISTS withheld_notes (
+    transaction_id TEXT PRIMARY KEY,
+    memo TEXT NOT NULL
+);
 
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (

@@ -69,7 +69,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
-import { startKeySession, endKeySession, sectionTargetFor, isModeratorSession, type KeySession } from './lib/key-session';
+import { startKeySession, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
@@ -91,14 +91,11 @@ function isAuthFailure(message: string): boolean {
 }
 
 /**
- * A short digest of a stored password, used only to tell whether the credential we are
- * blocked on is still the one sitting in the profile.
+ * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
+ * whether the credential we are blocked on is still the one in the profile.
  *
- * Not a security boundary: the password itself already lives in localStorage, and this
- * never leaves the tab. It exists so the block lifts by itself the moment the value
- * changes — however it changed, whether through the edit modal, an imported profile
- * list, or someone editing localStorage by hand — without keeping a second copy of the
- * secret around to do it.
+ * Not a security boundary: it never leaves the tab. It exists so the block lifts by itself the moment the value
+ * changes — through the edit modal, say — without keeping a second copy of the secret around to do it.
  *
  * Being 32-bit it can in principle collide, which would leave the poll switched off for
  * one node after a password change. The length prefix narrows it further, the odds are
@@ -175,13 +172,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     });
     const [navSubTab, setNavSubTab] = useState<string | undefined>(undefined);
 
-    const [adminToken, setAdminToken] = useState<string | null>(() => {
-        try {
-            return sessionStorage.getItem('bp-admin-token');
-        } catch {
-            return null;
-        }
-    });
+    /**
+     * Signed in with the node's admin password (single-node /settings). The password was exchanged once for the node's
+     * httpOnly session cookie (lib/key-session.ts, signInWithPassword) and is not kept anywhere on this page: the
+     * members' web app shares this origin, so anything kept in its storage is one script away (Fable's web review, M1).
+     */
+    const [passwordSession, setPasswordSession] = useState<boolean>(false);
+    // What older builds stored on this origin (the password, its 2FA session) goes on the first load of this one.
+    useEffect(() => { forgetStoredAdminSecrets(); }, []);
 
     /**
      * Signed in with a member key via the app's one-time link (lib/key-session.ts) rather than the
@@ -228,22 +226,16 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
     const rawActiveNode = profiles.find((p) => p.id === activeProfileId) || profiles[0];
 
+    // Single-node: no password on the profile. Every request rides the session cookie, with its CSRF token
+    // (node-client.ts buildAdminHeaders), whichever way the operator signed in.
     const activeNode: NodeProfile = !isFleetMode
         ? {
             id: 'local-node',
             name: rawActiveNode?.name || 'Local Sovereign Node',
             url: singleNodeOrigin,
-            adminPassword: adminToken || rawActiveNode?.adminPassword || undefined,
             isPrimary: true,
         }
         : rawActiveNode;
-
-    if (!isFleetMode && activeNode && adminToken) {
-        activeNode.adminPassword = adminToken;
-        if (profiles[0] && profiles[0].id === 'local-node' && !profiles[0].adminPassword) {
-            profiles[0].adminPassword = adminToken;
-        }
-    }
 
     const [auditState, setAuditState] = useState<{
         running: boolean;
@@ -254,7 +246,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (!activeNode) return;
         setAuditState((prev) => ({ ...prev, running: true }));
         try {
-            const pwd = activeNode.adminPassword || adminToken || undefined;
+            const pwd = activeNode.adminPassword;
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/ledger-audit');
             const res = await fetch(url, {
                 method: 'POST',
@@ -285,7 +277,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const handleDownloadBackup = async () => {
         if (!activeNode) return;
         try {
-            const pwd = activeNode.adminPassword || adminToken || undefined;
+            const pwd = activeNode.adminPassword;
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup');
             const headers = buildAdminHeaders(pwd, getTfaSessionToken(activeNode.id));
             headers['Content-Type'] = 'application/json';
@@ -318,25 +310,30 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         }
     };
 
+    /** Back to the sign-in card, locally: the session is already over, or is being ended by the caller. */
+    const dropSession = () => {
+        setKeySessionCsrfToken(null);
+        setKeySessionCsrf(null);
+        setKeySession(null);
+        setPasswordSession(false);
+    };
+
     const handleLogout = () => {
-        if (keySession) {
-            void endKeySession(keySessionCsrf);
-            setKeySessionCsrfToken(null);
-            setKeySessionCsrf(null);
-            setKeySession(null);
-        }
-        try {
-            sessionStorage.removeItem('bp-admin-token');
-            sessionStorage.removeItem('bp-2fa-session');
-            sessionStorage.removeItem('bp_tfa_session_local-node');
-        } catch {}
-        if (!isFleetMode && activeNode) {
-            delete activeNode.adminPassword;
-        }
-        if (!isFleetMode && profiles[0] && profiles[0].id === 'local-node') {
-            delete profiles[0].adminPassword;
-        }
-        setAdminToken(null);
+        if (keySession || passwordSession) void endKeySession(keySessionCsrf);
+        forgetStoredAdminSecrets();
+        dropSession();
+    };
+
+    /**
+     * The node says this browser's session is over (a 401 with `sessionExpired`): it ran out (2 h idle, 12 h at most),
+     * the node restarted, the password or its 2FA was changed elsewhere, or break-glass mode came on. Single-node only:
+     * show the sign-in card again, saying why, rather than a dashboard of errors.
+     */
+    const sessionEndedRef = useRef<(why?: string) => void>(() => {});
+    sessionEndedRef.current = (why?: string) => {
+        if (isFleetMode || (!keySession && !passwordSession)) return;
+        dropSession();
+        setKeySessionNotice(`You were signed out${why ? ` (${why})` : ''}. Sign in again.`);
     };
 
     const [diag, setDiag] = useState<DiagnosticsResponse | null>(null);
@@ -757,6 +754,10 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 if (diagRes.status === 401) {
                     let body: Record<string, unknown> | null = null;
                     try { body = await diagRes.json(); } catch {}
+                    if (body?.sessionExpired && !isFleetMode) {
+                        sessionEndedRef.current(typeof body.error === 'string' ? body.error : undefined);
+                        return;
+                    }
                     if (body?.totpRequired) {
                         // Node requires 2FA and we don't have a valid session token.
                         // If we already have a stored session token, it may have expired —
@@ -965,10 +966,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 setActiveTab(target.tab);
                 setNavSubTab(target.subTab);
             }
-            if (res.kind === 'session') {
+            if (res.kind === 'session' || res.kind === 'password') {
                 setKeySessionCsrfToken(res.csrfToken);
                 setKeySessionCsrf(res.csrfToken);
-                setKeySession(res.session);
+                if (res.kind === 'session') setKeySession(res.session);
+                else setPasswordSession(true);
                 // The first automatic poll ran before the cookie existed and was refused; clear that
                 // block so polling resumes, then fetch everything with the session.
                 authBlockedRef.current = {};
@@ -1144,7 +1146,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [menuOpen, setMenuOpen] = useState(false);
     const currentSubTab = navSubTab ?? defaultSubTab(activeTab);
     useSettingsHistory({
-        enabled: !isFleetMode && Boolean(adminToken || keySession),
+        enabled: !isFleetMode && Boolean(passwordSession || keySession),
         tab: activeTab,
         sub: currentSubTab,
         onRestore: (entry) => {
@@ -1177,7 +1179,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setMenuOpen(false);
     };
 
-    if (!isFleetMode && !adminToken && !keySession && !keySessionChecked) {
+    if (!isFleetMode && !passwordSession && !keySession && !keySessionChecked) {
         return (
             <div className="min-h-screen bg-nature-950 text-nature-300 flex items-center justify-center font-sans" role="status">
                 Signing in…
@@ -1185,7 +1187,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         );
     }
 
-    if (!isFleetMode && !adminToken && !keySession) {
+    if (!isFleetMode && !passwordSession && !keySession) {
         return (
             <div className="bp-settings">
             {keySessionNotice && (
@@ -1195,14 +1197,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             )}
             <AdminLoginCard
                 nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
-                onAuthenticated={(pwd, sessionToken) => {
-                    setAdminToken(pwd);
-                    if (activeNode) {
-                        activeNode.adminPassword = pwd;
-                    }
-                    if (sessionToken) {
-                        setTfaSessionToken(activeNode?.id || 'local-node', sessionToken);
-                    }
+                onPasswordSession={(csrfToken) => {
+                    // Signed in with the password: the node's session cookie, as a key sign-in gets.
+                    setKeySessionNotice(null);
+                    setKeySessionCsrfToken(csrfToken);
+                    setKeySessionCsrf(csrfToken);
+                    setPasswordSession(true);
+                    authBlockedRef.current = {};
                     setRefreshToken((n) => n + 1);
                 }}
                 onKeySession={(session, csrfToken) => {

@@ -914,25 +914,30 @@ export function WebJoin({
      * (two-doors design §3.4). Kept as the pending join, as the sign-in's key is: a reload carries on with it, and going
      * back past the name lets it go (startOver). Only where the 12-words door is open; elsewhere the key is made at Next.
      */
-    const makingKey = useRef(false);
+    // The key being made, so a Next tapped meanwhile carries on with it rather than making a second (chooseName).
+    const makingKey = useRef<Promise<PendingJoin | null> | null>(null);
     useEffect(() => {
         if (!wordsOpen || screen.name !== 'name' || pending || makingKey.current) return;
-        makingKey.current = true;
-        (async () => {
+        const making = (async (): Promise<PendingJoin | null> => {
             try {
                 const held = await accountHeldElsewhere(null);
-                if (held) return await showTaken(held, null, false);
+                if (held) {
+                    await showTaken(held, null, false);
+                    return null;
+                }
                 const identity = await generateIdentity('');
                 const now = Date.now();
-                await keep({ identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false });
+                return await keep({ identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false });
             } catch (e) {
-                if (e instanceof PendingJoinHeldError) return settleSent(e.held);
-                // Made at Next instead (chooseName), as on a node without the 12-words door.
-                console.error('[WebJoin] could not make a key for the 12 words yet:', e);
+                if (e instanceof PendingJoinHeldError) await settleSent(e.held);
+                // Otherwise made at Next instead (chooseName), as on a node without the 12-words door.
+                else console.error('[WebJoin] could not make a key for the 12 words yet:', e);
+                return null;
             } finally {
-                makingKey.current = false;
+                makingKey.current = null;
             }
         })();
+        makingKey.current = making;
     }, [wordsOpen, screen.name, pending, keep, showTaken, settleSent]);
 
     // The pending key's 12-words work: started on the name and sign-in screens, kept for that key, let go with it.
@@ -1039,15 +1044,17 @@ export function WebJoin({
         setBusy(true);
         setNotice(null);
         try {
+            // The 12-words door's key, still being made as the name screen opened: this name goes with that key.
+            const base = pending ?? (makingKey.current ? await makingKey.current : null);
             // Another tab saved an account here since this page opened: no key is made for a second one.
-            const held = await accountHeldElsewhere(pending);
-            if (held) return await showTaken(held, pending, false);
+            const held = await accountHeldElsewhere(base);
+            if (held) return await showTaken(held, base, false);
             const now = Date.now();
             // Going back to change the name keeps the key already made: one person, one key.
-            const identity = pending ? { ...pending.identity, callsign: trimmed } : await generateIdentity(trimmed);
+            const identity = base ? { ...base.identity, callsign: trimmed } : await generateIdentity(trimmed);
             // A key made as the name screen opened (the 12-words door) gets its clock from now, as a key made here would.
-            const next: PendingJoin = pending
-                ? { ...pending, identity, expiresAt: Math.max(pending.expiresAt, now + PENDING_JOIN_TTL_MS) }
+            const next: PendingJoin = base
+                ? { ...base, identity, expiresAt: Math.max(base.expiresAt, now + PENDING_JOIN_TTL_MS) }
                 : { identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false };
             await keep(next);
             setScreen({ name: 'providers' });

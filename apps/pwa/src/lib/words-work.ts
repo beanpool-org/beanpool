@@ -139,38 +139,43 @@ export class WordsWork {
         const ready: Ready = { challenge: w.challenge, counters, expiresAt: w.expiresAt, level: w.level };
         this.ready = ready;
         this.set({ status: 'ready', level: w.level });
-        if (this.renewals < MAX_QUIET_RENEWALS) {
+        // Replaced quietly before it runs out, while nobody has taken it. A node that gives challenges shorter-lived
+        // than the margin gets none replaced: the join then makes new work when it is sent.
+        const renewIn = w.expiresAt - RENEW_MARGIN_MS - this.now();
+        if (this.renewals < MAX_QUIET_RENEWALS && renewIn > 0) {
             this.timer = setTimeout(() => {
                 this.timer = null;
                 this.renewals++;
                 this.start();
-            }, Math.max(0, w.expiresAt - RENEW_MARGIN_MS - this.now()));
+            }, renewIn);
         }
         return { ok: true, work: { challenge: ready.challenge, counters: ready.counters } };
     }
 
+    /** Hand over `ready`: the node spends a challenge once, so the next join asks for new work. */
+    private use(ready: Ready): WordsWorkTake {
+        if (this.ready === ready) this.ready = null;
+        this.clearTimer();
+        this.renewals = 0;
+        this.set({ status: 'idle' });
+        return { ok: true, work: { challenge: ready.challenge, counters: ready.counters } };
+    }
+
     /**
-     * The work for a join, used up by taking it (the node spends a challenge once): a fresh solution, or the one being
-     * made, waited for. A solution too close to its end is made again first. The next join asks for new work.
+     * The work for a join, used up by taking it: a fresh solution, or the one being made, waited for. One too close to
+     * its end to reach the node in time is made again first; one just made is taken as it is.
      */
     async take(): Promise<WordsWorkTake> {
-        for (let attempt = 0; attempt < 3; attempt++) {
-            if (this.disposed) return this.stopped();
-            const ready = this.ready;
-            if (ready && this.fresh(ready, SEND_MARGIN_MS)) {
-                this.ready = null;
-                this.clearTimer();
-                this.renewals = 0;
-                this.set({ status: 'idle' });
-                return { ok: true, work: { challenge: ready.challenge, counters: ready.counters } };
-            }
-            if (ready) this.ready = null; // too close to its end to send
-            if (!this.job) this.start();
-            const out = await this.job;
-            if (!out) return this.stopped();
-            if (!out.ok) return out;
-        }
-        return this.stopped();
+        if (this.disposed) return this.stopped();
+        const ready = this.ready;
+        if (ready && this.fresh(ready, SEND_MARGIN_MS)) return this.use(ready);
+        if (ready) this.ready = null; // too close to its end to send
+        if (!this.job) this.start();
+        const out = await this.job;
+        if (!out || this.disposed) return this.stopped();
+        if (!out.ok) return out;
+        const made = this.ready as Ready | null;
+        return made && made.challenge === out.work.challenge ? this.use(made) : out;
     }
 
     /** Stop: a solve under way is cancelled, and nothing more is asked. */

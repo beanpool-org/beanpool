@@ -61,6 +61,11 @@ services:
       - IMAGE_S3_REGION=${IMAGE_S3_REGION:-}
       - IMAGE_S3_ACCESS_KEY_ID=${IMAGE_S3_ACCESS_KEY_ID:-}
       - IMAGE_S3_SECRET_ACCESS_KEY=${IMAGE_S3_SECRET_ACCESS_KEY:-}
+      # The Expo access token this server's push notifications go with (Authorization: Bearer). EMPTY = pushes go
+      # without one, as they always have. Once BeanPool's Expo project asks for it, a phone's push token alone can no
+      # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.
+      # See apps/server/src/config/expo-access-token.ts.
+      - EXPO_ACCESS_TOKEN=${EXPO_ACCESS_TOKEN:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is

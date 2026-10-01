@@ -42,6 +42,7 @@ import { logger } from '../logger.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
 import { clientLimiterKey } from '../client-ip.js';
@@ -823,6 +824,9 @@ const getDiagnosticsHandler = async (ctx: any) => {
             // text only — no request body, no parameter, no key — and already redacted on the way in.
             // Zeroes on a node that has had none, which is every healthy node.
             unhandledRejections: getUnhandledRejectionSummary(),
+            // Whether this server's pushes go with an Expo access token (config/expo-access-token.ts): 'set', 'not set',
+            // or 'unusable' (set, but nothing a header can carry). Never the token.
+            pushAccessToken: expoAccessTokenStatus(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,

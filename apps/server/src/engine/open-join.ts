@@ -1,10 +1,17 @@
-// The open door (global profile, design §2.2): join with a one-time sign-in instead of an invite.
+// The open door (global profile, design §2.2): join with a one-time sign-in, or with 12 words alone (the two-doors
+// design §2, scratch/global-node/DESIGN-global-two-doors-fable.md), instead of an invite.
 //
-// The route (routes/open-join.ts) checks the request and verifies the sign-in; this file owns what the node
-// keeps: the `open_joins` row that makes one sign-in account one identity here, the per-address sign-up limit,
-// and the one call that registers a member with no invite. Nothing else in the codebase registers a member with
-// `invite_code` NULL: the invite-only refusal in `registerMemberInternal` (both `inviteCode` and `invitedBy`
-// null) is untouched, and this path passes it only because it names the door, `invited_by = 'open:<provider>'`.
+// The route (routes/open-join.ts) checks the request, the door work and the sign-in; this file owns what the node
+// keeps: the `open_joins` row that makes one sign-in account one identity here (or says the member came in by 12
+// words), the per-address ceilings at the moment of the write (engine/door-signal.ts), and the one call that registers
+// a member with no invite. Nothing else in the codebase registers a member with `invite_code` NULL: the invite-only
+// refusal in `registerMemberInternal` (both `inviteCode` and `invitedBy` null) is untouched, and this path passes it
+// only because it names the door, `invited_by = 'open:<provider>'`, or `open:words` for the 12-words door.
+//
+// A 12-words member's row: `provider = 'words'`, `join_hash = 'words:<random>'` (unique, and matching no sign-in: a real
+// hash is base64url, with no ':'), `joined_at`, `ip_hash`. No sign-in stands behind it, so it needs no door key, and the
+// door key's checks never count it (services/open-join-key.ts). Adding a sign-in later (`linkOpenJoin`) rewrites that
+// row to the provider's, as a sign-in member's would read; `invited_by` keeps saying how they joined.
 //
 // What is kept about the sign-in account, and what is not:
 //   - `join_hash`: HMAC-SHA-256, keyed by a random secret kept in a FILE beside this node's database,
@@ -14,9 +21,12 @@
 //     against these rows (report C12). The database records only WHICH key made them (`openJoinKeyId`), so a server
 //     without that key refuses a join with a sign-in rather than let an account already here join twice.
 //   - `ip_hash`: the same key, its own domain tag, over the limiter's view of the address (an IPv6 client by its
-//     /64, client-ip.ts). Only the limiter reads it, and only for a day, so it is cleared once a day old: kept
-//     beside a member's key for longer it would be that member's address to anyone holding the database and the
-//     key, because the IPv4 space is small enough to try in full.
+//     /64, client-ip.ts). Only the door's signal reads it (engine/door-signal.ts), and only for a day, so it is cleared
+//     once a day old: kept beside a member's key for longer it would be that member's address to anyone holding the
+//     database and the key, because the IPv4 space is small enough to try in full. One exception, design §2.4: a member
+//     the community removed within a day of joining keeps theirs for 7 days from the join (`ip_kept_until`,
+//     door-signal.ts noteRemovedNewcomer), so their network asks the most work meanwhile. Still within the 7 days the
+//     privacy policy allows any address, and never for a member who deleted their own account.
 //
 // What travels, so a server that takes over still knows who joined (`readOpenJoinRecord`, `writeOpenJoinRecord`):
 //   - Every replication payload to a standby carries the rows changed since its last copy (`SyncPayload.openJoins`,
@@ -31,8 +41,8 @@
 //     last copy may have missed. A sealed backup carries the same bundle, and its restore installs the key too.
 //   - A file or plain backup is the database: the rows, never the key. A server restored from one keeps the door shut
 //     until the key is back (services/open-join-key.ts).
-//   - Never `ip_hash`: it is the limiter's for a day and nobody else's, so after a failover the sign-up limits
-//     start again.
+//   - Never `ip_hash`, nor `ip_kept_until`: they are the door's signal's and nobody else's, so after a failover the
+//     levels and ceilings start again.
 // A merge keeps, per member, whichever row is newer, and writes only rows whose member is in this database: a row
 // for a member this server does not have would lock that sign-in account out of an identity that no longer exists
 // here, when joining again gives it back one.
@@ -43,16 +53,22 @@ import { alreadyJoined, type Member, type SyncOpenJoin } from '@beanpool/engine'
 import { registerMemberInternal } from './members.js';
 import { isSsoProvider, type SsoProvider } from '../sso.js';
 import { openJoinAddressKey, openJoinKey } from '../services/open-join-key.js';
-
-/** Sign-ups through the open door per address (design §2.5). Sliding windows over `open_joins`. */
-export const OPEN_JOIN_LIMITS = { perHour: 5, perDay: 20 } as const;
+import { doorCeilingReached, WORDS_PROVIDER, type DoorCeiling } from './door-signal.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
+/** How a member came in through the open door: a sign-in provider, or the 12-words door. */
+export type OpenJoinProvider = SsoProvider | typeof WORDS_PROVIDER;
+
 /** `invited_by` for a member who came in through the open door. The only writer of this prefix is this file. */
-export function openJoinInvitedBy(provider: SsoProvider): string {
+export function openJoinInvitedBy(provider: OpenJoinProvider): string {
     return `open:${provider}`;
+}
+
+/** The `join_hash` of a 12-words join: random, so it matches no sign-in and no other row. */
+export function wordsJoinHash(): string {
+    return `words:${crypto.randomBytes(16).toString('hex')}`;
 }
 
 function keyedHash(key: Buffer, domain: string, parts: string[]): string {
@@ -96,11 +112,14 @@ export function writeAddressHash(limiterKey: string): string {
 /**
  * Clear the address from rows older than a day, the door's and the knocks' (engine/knocks.ts), and the record of where
  * the writes a day cap by address bounds came from (db/writes-by-address.ts): past the longest window, no limiter reads
- * them again. Neither of the first two stamps `updated_at` for it: the hash never travels, and the third is local.
+ * them again. A removed newcomer's row keeps its hash until `ip_kept_until` (7 days from the join, door-signal.ts).
+ * Neither of the first two stamps `updated_at` for it: the hash never travels, and the third is local.
  */
 export function forgetOldJoinAddresses(now = Date.now()): number {
     const dayAgo = new Date(now - DAY_MS).toISOString();
-    return db.prepare('UPDATE open_joins SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND joined_at < ?').run(dayAgo).changes
+    return db.prepare(`UPDATE open_joins SET ip_hash = NULL, ip_kept_until = NULL
+                       WHERE ip_hash IS NOT NULL AND joined_at < ? AND (ip_kept_until IS NULL OR ip_kept_until <= ?)`)
+        .run(dayAgo, new Date(now).toISOString()).changes
         + db.prepare('UPDATE join_requests SET ip_hash = NULL WHERE ip_hash IS NOT NULL AND created_at < ?').run(dayAgo).changes
         + db.prepare('DELETE FROM writes_by_address WHERE made_at < ?').run(dayAgo).changes;
 }
@@ -119,19 +138,6 @@ export function startForgettingJoinAddresses(everyMs = 60_000): void {
         try { forgetOldJoinAddresses(); } catch (e) { console.warn('[OpenJoin] could not clear old join addresses:', (e as Error)?.message || e); }
     }, everyMs);
     addressSweep.unref?.();
-}
-
-/** Which window, if any, an address has used up. The day first: when both are, it is the one to wait out. */
-export function openJoinLimitReached(ipHash: string, now = Date.now()): 'hour' | 'day' | null {
-    const row = db.prepare(`
-        SELECT COUNT(*) AS day,
-               COALESCE(SUM(CASE WHEN joined_at >= ? THEN 1 ELSE 0 END), 0) AS hour
-        FROM open_joins
-        WHERE ip_hash = ? AND joined_at >= ?
-    `).get(new Date(now - HOUR_MS).toISOString(), ipHash, new Date(now - DAY_MS).toISOString()) as { day: number; hour: number };
-    if (row.day >= OPEN_JOIN_LIMITS.perDay) return 'day';
-    if (row.hour >= OPEN_JOIN_LIMITS.perHour) return 'hour';
-    return null;
 }
 
 /**
@@ -162,17 +168,18 @@ export interface OpenJoinInput {
     /** The key that signed the request, never a body field. Checked and written in lower case, as the member table keeps keys. */
     publicKey: string;
     callsign: string;
-    /** The provider whose token VERIFIED, not the one the request named. */
-    provider: SsoProvider;
+    /** The provider whose token VERIFIED, not the one the request named; or `words` for the 12-words door. */
+    provider: OpenJoinProvider;
+    /** `openJoinHash` of the verified sign-in, or `wordsJoinHash()`. */
     joinHash: string;
     ipHash: string;
 }
 
-export type OpenJoinRefusal = 'already_member' | 'key_invalidated' | 'already_joined' | 'removed' | 'rate_limited';
+export type OpenJoinRefusal = 'already_member' | 'key_invalidated' | 'already_joined' | 'removed' | 'network_busy';
 
 export type OpenJoinOutcome =
     | { ok: true; member: Member }
-    | { ok: false; reason: OpenJoinRefusal; window?: 'hour' | 'day' };
+    | { ok: false; reason: OpenJoinRefusal; ceiling?: DoorCeiling };
 
 /**
  * Register a member through the open door, and record the sign-in account that let them in.
@@ -197,8 +204,8 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
         const taken = openJoinTaken(joinHash);
         if (taken === 'removed') return { ok: false, reason: 'removed' };
         if (taken) return { ok: false, reason: 'already_joined' };
-        const window = openJoinLimitReached(ipHash);
-        if (window) return { ok: false, reason: 'rate_limited', window };
+        const ceiling = doorCeilingReached(provider === WORDS_PROVIDER ? 'words' : 'sign-in', ipHash);
+        if (ceiling) return { ok: false, reason: 'network_busy', ceiling };
 
         const member = registerMemberInternal(
             (event) => afterTransactionCommit(() => broadcast(event)),
@@ -215,6 +222,36 @@ export function registerOpenJoin(broadcast: (event: any) => void, input: OpenJoi
             .run(publicKey, provider, joinHash, now, ipHash, now);
         return { ok: true, member };
     })();
+}
+
+export type OpenJoinLinkRefusal = 'not_words_member' | 'already_linked' | 'already_joined' | 'removed';
+
+/**
+ * A 12-words member adds a sign-in (design §2.5): their `open_joins` row becomes that sign-in account's, in one
+ * transaction with the checks that decide, after the sign-in was verified. Refused when the sign-in account is already
+ * someone's here (`already_joined`), or was a member the community removed (`removed`: a removed person can't lift a
+ * new account with their old sign-in), and when this member came in some other way (`not_words_member`: no row, an
+ * invite) or already has one (`already_linked`). `joined_at` stays: probation counts from the original join.
+ */
+export function linkOpenJoin(input: { publicKey: string; provider: SsoProvider; joinHash: string }): { ok: true } | { ok: false; reason: OpenJoinLinkRefusal } {
+    const publicKey = input.publicKey.toLowerCase();
+    return db.transaction((): { ok: true } | { ok: false; reason: OpenJoinLinkRefusal } => {
+        const row = db.prepare('SELECT provider FROM open_joins WHERE member_pubkey = ?').get(publicKey) as { provider: string } | undefined;
+        if (!row) return { ok: false, reason: 'not_words_member' };
+        if (row.provider !== WORDS_PROVIDER) return { ok: false, reason: 'already_linked' };
+        const taken = openJoinTaken(input.joinHash);
+        if (taken === 'removed') return { ok: false, reason: 'removed' };
+        if (taken) return { ok: false, reason: 'already_joined' };
+        db.prepare('UPDATE open_joins SET provider = ?, join_hash = ?, updated_at = ? WHERE member_pubkey = ? AND provider = ?')
+            .run(input.provider, input.joinHash, new Date().toISOString(), publicKey, WORDS_PROVIDER);
+        return { ok: true };
+    })();
+}
+
+/** How a member came in through the open door (a sign-in's provider, or `words` until they add one), or null for no row. */
+export function openJoinProviderOf(publicKey: string): string | null {
+    const row = db.prepare('SELECT provider FROM open_joins WHERE member_pubkey = ?').get(publicKey) as { provider: string } | undefined;
+    return row?.provider ?? null;
 }
 
 /**
@@ -278,7 +315,7 @@ const isText = (v: unknown, max: number): v is string => typeof v === 'string' &
  * never share one: a row here with the same hash under another key is the one a re-key has since moved, so when
  * the incoming row is newer it goes, and when it is older the incoming row is the stale one. A row naming a provider
  * that is not a sign-in here (GitHub, which no longer is one: engine/github-sign-in-removal.ts) is not stored, so no
- * copy of an older server's record brings one back.
+ * copy of an older server's record brings one back. A 12-words member's row (`words`) is stored like any other.
  */
 export function writeOpenJoinRecord(joins: unknown): OpenJoinMerge {
     const merge: OpenJoinMerge = { written: 0, kept: 0, skipped: 0, invalid: 0 };
@@ -294,7 +331,8 @@ export function writeOpenJoinRecord(joins: unknown): OpenJoinMerge {
     db.transaction(() => {
         for (const raw of Array.isArray(joins) ? joins : []) {
             const r = raw as Partial<SyncOpenJoin> | null;
-            if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !isSsoProvider(r.provider) || !isText(r.joinHash, 128)
+            if (!r || !isText(r.memberPubkey, 128) || !isText(r.provider, 32) || !(isSsoProvider(r.provider) || r.provider === WORDS_PROVIDER)
+                || !isText(r.joinHash, 128)
                 || !isText(r.joinedAt, 40) || !isText(r.updatedAt, 40)) {
                 merge.invalid++;
                 continue;

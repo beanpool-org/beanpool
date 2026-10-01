@@ -34,6 +34,7 @@ import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
+import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
 import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
@@ -7132,6 +7133,9 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
         setUserStatusRow(publicKey, 'pruned');
+        // Removed within a day of joining through the open door: their network asks the most door work for 7 days from
+        // the join (engine/door-signal.ts). Local, and nothing happens for anyone else.
+        noteRemovedNewcomer(publicKey);
         // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
         db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
         // Every post that could come back (PRUNE_CLOSES_POSTS_IN): a paused one too, or its author could put it back up

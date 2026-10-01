@@ -60,7 +60,9 @@ export interface ProfileSwitches {
     /** Anyone may join through `POST /api/join` with a verified sign-in instead of an invite. Off: that route and
      *  every other door route are 404 (routes/open-join.ts). Never on where the ledger has moved. */
     openJoin: boolean;
-    /** The open door needs an SSO sign-in (D1 = a, Marty 2026-09-24). Means nothing while `openJoin` is off. */
+    /** The open door needs a sign-in (Google, Apple, Facebook). Off: the 12-words door is open beside the sign-in one, and
+     *  anyone may join with a name and a little door work, no provider (routes/open-join.ts `door: 'words'`; the two-doors
+     *  design §2, which made D1 "sign-in optional", 2026-10-01). Means nothing while `openJoin` is off. */
     ssoRequiredForJoin: boolean;
     /** Beans move: member-to-member sends and credit. Off: the money entry points refuse, and posts carry no price. */
     beans: boolean;
@@ -153,7 +155,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
     },
     global: {
         openJoin: true,
-        ssoRequiredForJoin: true,
+        // Two doors side by side, 12 words first (the two-doors design §2, 2026-10-01): a sign-in is optional.
+        ssoRequiredForJoin: false,
         beans: false,
         escrow: false,
         enterprises: false,
@@ -185,9 +188,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
  * profile nor an override changes it. The PR that builds a switch deletes its line here, with its tests.
  */
 const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
-    // G2 built the door with a sign-in (routes/open-join.ts). A door WITHOUT one (D1 b: no provider, a stricter
-    // probation) is not built, so an override asking for it is reported at boot and changes nothing.
-    ssoRequiredForJoin: true,
+    // Every switch is built. (The last, ssoRequiredForJoin, came with the 12-words door, 2026-10-01.)
 };
 
 /** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
@@ -222,6 +223,9 @@ export interface NodeFeatures {
      *  QR, no ticket, only the community's plain link to share. An app that finds no `invites` (a server from before
      *  it) treats it as on: every such server takes them. */
     invites: boolean;
+    /** The open door takes a join with 12 words alone, beside the sign-in (`openJoin` on, `ssoRequiredForJoin` off). An
+     *  app that finds no `wordsDoor` (a server from before it) offers the sign-in only. */
+    wordsDoor: boolean;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -337,6 +341,7 @@ export function getNodeFeatures(): NodeFeatures {
         exampleListings: s.exampleListings,
         decisions: s.decisions,
         invites: s.invites,
+        wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
     };
 }
 
@@ -458,11 +463,17 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
 
 /** Invites off, to a member who would make one and to someone holding a code: what to do instead. */
 export const INVITES_OFF_MESSAGE = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+/** The same, where the 12-words door is open beside the sign-in (`wordsDoor`). */
+export const INVITES_OFF_WORDS_MESSAGE = 'This community doesn’t use invites: anyone joins it in the BeanPool app, with 12 secret words or a sign-in. To bring someone here, share its link.';
 /** The same, where the open door is shut too: nobody new can join here at all, and saying "sign in" would be false. */
 export const INVITES_OFF_DOOR_SHUT_MESSAGE = 'This community doesn’t use invites, and it isn’t taking new members right now.';
 
 export function featureOffMessage(feature: ProfileSwitch): string {
-    if (feature === 'invites') return getProfileSwitches().openJoin ? INVITES_OFF_MESSAGE : INVITES_OFF_DOOR_SHUT_MESSAGE;
+    if (feature === 'invites') {
+        const s = getProfileSwitches();
+        if (!s.openJoin) return INVITES_OFF_DOOR_SHUT_MESSAGE;
+        return s.ssoRequiredForJoin ? INVITES_OFF_MESSAGE : INVITES_OFF_WORDS_MESSAGE;
+    }
     return FEATURE_OFF_MESSAGES[feature] ?? `${feature} is switched off on this node.`;
 }
 
@@ -627,7 +638,7 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (pinned.length) {
         console.log(`🧭 Not built yet, so these overrides do nothing for now: ${pinned.map((k) => `${k}=${overrides[k]}`).join(', ')}.`);
     }
-    if (profile === 'global') console.log(pinnedLine(profile));
+    if (profile === 'global' && Object.keys(NOT_BUILT_YET).length > 0) console.log(pinnedLine(profile));
 
     const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
     const off = MONEY_SWITCHES.filter((k) => !configured[k]);
@@ -645,7 +656,8 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     }
     if (configured.openJoin) {
         if (history) loudly(doorShutMessage(history));
-        else console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+        else if (configured.ssoRequiredForJoin) console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+        else console.log('🚪 The open door is open: anyone may join here with 12 secret words or a sign-in instead of an invite. It shuts for good if Beans ever move here.');
     }
     if (!configured.invites) {
         if (configured.openJoin && !history) {

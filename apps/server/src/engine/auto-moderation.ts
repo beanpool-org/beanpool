@@ -15,6 +15,11 @@
  * this post: a dismissed report ('reviewed') means "looked at, and kept", so after a moderator keeps a post only
  * NEW reporters can hide it again. A report of a member, a Pulse item or an enterprise never hides anything.
  *
+ * ONE such report is enough for a post by a member who came in with 12 words and is still on probation
+ * (engine/probation.ts isWordsNewcomer; the two-doors design §2.3): their account cost nothing to make, so what protects
+ * the lobby is how cheaply a real member clears their spam. A sign-in member's post still needs 3, and so does theirs
+ * once probation ends or they add a sign-in.
+ *
  * A moderator undoes it by restoring the post (`restoreHiddenPost`: every open report on it is dismissed, its
  * reporters are told it was kept), or by dismissing reports one at a time until what hid it no longer adds up
  * (`recheckHiddenPost`). Removing it works as it always has.
@@ -33,6 +38,7 @@
  */
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
+import { isWordsNewcomer } from './probation.js';
 import { bumpActivityVersion, bumpMembersVersion, bumpPostsVersion } from './versions.js';
 import {
     notifyPostHidden, notifyPostBack, notifyMuted, notifyUnmuted, notifyReportDismissed, mutedBody,
@@ -41,7 +47,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const AUTO_HIDE = { reporters: 3, reporterMinAgeDays: 7 } as const;
+export const AUTO_HIDE = { reporters: 3, wordsNewcomerReporters: 1, reporterMinAgeDays: 7 } as const;
 export const AUTO_MUTE = { removals: 3, windowDays: 30 } as const;
 /** Muted until a moderator lifts it. */
 export const MUTED_UNTIL_LIFTED = '9999-12-31T23:59:59.999Z';
@@ -92,6 +98,11 @@ export function qualifyingReporters(postId: string): string[] {
     return [...out];
 }
 
+/** How many qualifying reporters hide a post by this author now (the header): 1 for a 12-words newcomer, else 3. */
+export function reportersToHide(authorPubkey: string | null, now: number = Date.now()): number {
+    return authorPubkey && isWordsNewcomer(authorPubkey, now) ? AUTO_HIDE.wordsNewcomerReporters : AUTO_HIDE.reporters;
+}
+
 /** Hidden or visible again: every copy anyone holds has to change, and the feed's post_created lines follow it. */
 function announceVisibilityChange(cb: ModerationNoticeCallbacks, postId: string): void {
     bumpPostsVersion();
@@ -110,7 +121,7 @@ export function evaluateAutoHide(cb: ModerationNoticeCallbacks, postId: string |
     const post = postRow(postId);
     if (!post || post.hidden_by_reports_at || post.active !== 1 || post.status === 'cancelled') return false;
     const reporters = qualifyingReporters(postId);
-    if (reporters.length < AUTO_HIDE.reporters) return false;
+    if (reporters.length < reportersToHide(post.author_pubkey, now)) return false;
     const at = iso(now);
     const res = db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL')
         .run(at, at, postId);
@@ -173,7 +184,7 @@ export function recheckHiddenPost(cb: ModerationNoticeCallbacks, postId: string 
     if (!postId) return false;
     const post = postRow(postId);
     if (!post?.hidden_by_reports_at) return false;
-    if (qualifyingReporters(postId).length >= AUTO_HIDE.reporters) return false;
+    if (qualifyingReporters(postId).length >= reportersToHide(post.author_pubkey, now)) return false;
     return unhide(cb, post, now);
 }
 

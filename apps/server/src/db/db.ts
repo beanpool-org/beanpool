@@ -657,6 +657,8 @@ export function initSchema() {
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
     try { db.prepare(`ALTER TABLE open_joins ADD COLUMN updated_at TEXT`).run(); } catch { }
+    // A removed newcomer's address hash kept 7 days (engine/door-signal.ts noteRemovedNewcomer). Local, never copied.
+    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN ip_kept_until TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.

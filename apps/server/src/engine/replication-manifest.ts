@@ -313,7 +313,10 @@ export const TABLES: Record<string, TableEntry> = {
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
         columns: cols('member_pubkey provider join_hash joined_at updated_at'),
-        except: { ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' } },
+        except: {
+            ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' },
+            ip_kept_until: { reason: "how long a removed newcomer's address hash is kept here; the hash is never sent (engine/door-signal.ts)" },
+        },
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',

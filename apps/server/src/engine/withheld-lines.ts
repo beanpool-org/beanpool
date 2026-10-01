@@ -102,7 +102,8 @@ export function dropWithheldConversation(id: string): void {
 
 /** A withheld conversation as GET /api/messages/:id answers a conversation (engine getConversation), for its owner. */
 export function withheldConversationView(c: WithheldConversation) {
-    const participants = [c.owner_pubkey, c.other_pubkey];
+    // By key, as a real conversation's rows come (conversation_participants has no ORDER BY, SQLite answers in key order).
+    const participants = [c.owner_pubkey, c.other_pubkey].sort();
     return {
         id: c.id, type: 'dm' as const, postId: null, postTitle: null, postStatus: 'active', name: null,
         createdBy: c.owner_pubkey, createdAt: c.created_at, participants,
@@ -348,7 +349,7 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
         return {
             id: c.id, type: 'dm', postId: null, postTitle: null, postStatus: 'active', postPhoto: null,
             lastMsgType: null, lastSysType: null, name: null, createdBy: c.owner_pubkey, createdAt: c.created_at,
-            participants: [c.owner_pubkey, c.other_pubkey],
+            participants: [c.owner_pubkey, c.other_pubkey].sort(),
             peerCallsign: p?.callsign ?? undefined, peerAvatar: p ? avatarUrlFor(p.public_key, p.avatar_url) : null,
             peerLastReadAt: null, myLastReadAt: c.owner_last_read_at ?? null,
         } as unknown as T;

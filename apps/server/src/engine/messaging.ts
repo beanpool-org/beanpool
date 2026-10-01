@@ -43,6 +43,11 @@ type RegisterVisitorFn = (pubkey: string) => void;
 export interface MessagingCallbacks {
     broadcast: BroadcastFn;
     dispatchPushNotification: PushFn;
+    /**
+     * The same work as dispatchPushNotification, stopping before the notices are kept and anything goes to the push service.
+     * For a line withheld from its recipient (engine/withheld-lines.ts), so it costs what a stored one does (#1403 re-review).
+     */
+    rehearsePushNotification?: PushFn;
     registerVisitor?: RegisterVisitorFn;
 }
 
@@ -283,7 +288,8 @@ export function createConversation(
     const other = participants.find(p => p !== createdBy);
     if (!opts.asNode && other && hasBlocked(other, createdBy)) {
         const { conversation: kept, created } = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
-        const conv: Conversation = { id: kept.id, type, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants };
+        // A conversation already opened lists its two as a real one does, by key; a new one as the opener named them.
+        const conv: Conversation = { id: kept.id, type, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants: created ? participants : [...participants].sort() };
         if (created) cb.broadcast({ type: 'conversation_created', conversation: conv }, [createdBy]);
         return conv;
     }
@@ -503,6 +509,24 @@ export function sendMessage(
         };
         storeWithheldLine(withheld, attachment);
         cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: withheld, participants: participantKeys }, [authorPubkey]);
+        // The work a stored line's push does after its answer (the recipient's preferences, tokens, badge count over all
+        // their chats, the signed notice), done all the same and dropped before it is kept or sent: the load on the node
+        // after the answer is then the same either way, so the sender's next request can't tell (#1403 re-review).
+        const withheldConvId = effectiveConvId;
+        setImmediate(() => {
+            try {
+                const senderName = (getMember(db, authorPubkey) as any)?.callsign || 'A member';
+                cb.rehearsePushNotification?.(
+                    unmutedRecipients(withheldConvId, participantKeys),
+                    authorPubkey,
+                    '💬 New Message',
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: withheldConvId },
+                    'chat',
+                    'chat.message'
+                );
+            } catch { /* nothing was owed */ }
+        });
         return withheld;
     }
     // A withheld conversation its owner writes in once the block is lifted becomes the real one; the line goes there.
@@ -690,7 +714,7 @@ function eventParticipants(conversationId: string, author: string): string[] {
     const real = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as { public_key: string }[];
     if (real.length > 0) return real.map(p => p.public_key);
     const kept = withheldConversationOwnedBy(conversationId, author);
-    return kept ? [kept.owner_pubkey, kept.other_pubkey] : [author];
+    return kept ? [kept.owner_pubkey, kept.other_pubkey].sort() : [author];
 }
 
 /**

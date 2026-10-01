@@ -27,7 +27,8 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-delete process.env.NODE_PROFILE;
+// The other child run (BLOCKS_GLOBAL_NODE) is the global profile, where probation is on.
+if (process.env.BLOCKS_GLOBAL_NODE) process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;
 delete process.env.ENFORCE_WS_AUTH;
 // The child run (BLOCKS_OPEN_NODE) is a node with read auth off: a second account is not needed there to tell a withheld
 // conversation from a real one, an unsigned read does.
@@ -205,6 +206,28 @@ async function main(): Promise<void> {
 
     // ── 2. a blocked member opens a DM ──────────────────────────────────────────────────────────
     console.log('── 2. a blocked member opens a DM ──');
+    if (process.env.BLOCKS_GLOBAL_NODE) {
+        // Probation counts a conversation opened with someone who has blocked the opener as it counts any (#1403 re-review):
+        // Bo, new here, opens one with Ann (who blocked him) and one with Cy, and his own count moves by one each.
+        const used = async () => (await call('GET', bo, '/api/community/me')).body?.probation?.limits?.new_dm_recipients?.used;
+        const me = await call('GET', bo, '/api/community/me');
+        assert(me.status === 200 && me.body?.probation?.onProbation === true, `Bo is on probation (${show(me)})`);
+        const before = await used();
+        const toAnn = await call('POST', bo, '/api/messages/conversation', { type: 'dm', participants: [bo.pk, ann.pk], createdBy: bo.pk });
+        const afterAnn = await used();
+        const annSend = await call('POST', bo, '/api/messages/send', dm(toAnn.body?.conversation?.id, bo));
+        const afterAnnLine = await used();
+        const toCy = await call('POST', bo, '/api/messages/conversation', { type: 'dm', participants: [bo.pk, cy.pk], createdBy: bo.pk });
+        const afterCy = await used();
+        assert(toAnn.status === 200 && annSend.status === 200 && toCy.status === 200 && afterAnn === before + 1 && afterAnnLine === before + 1 && afterCy === before + 2,
+            `his count moves by one for the chat with Ann, as it does for Cy's (${before} -> ${afterAnn} -> ${afterAnnLine} -> ${afterCy})`);
+        const rem = (await call('GET', bo, '/api/community/me')).body?.probation?.limits?.new_dm_recipients?.remaining;
+        assert(rem === 10 - afterCy, `and what is left is what the count says (${rem})`);
+        for (const sk of [annSock, boSock, deeSock]) sk.ws.close();
+        console.log(`\n${passed}/${run} checks passed.`);
+        if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
+        return;
+    }
     const bc = await call('POST', bo, '/api/messages/conversation', { type: 'dm', participants: [bo.pk, ann.pk], createdBy: bo.pk });
     const boConv: string = bc.body?.conversation?.id;
     assert(bc.status === 200 && bc.body?.success === true && !!boConv && keysOf(bc.body) === keysOf(cc.body)
@@ -622,13 +645,71 @@ async function main(): Promise<void> {
     assert(cyGroupLine.status === 201 && !!groupAnswered && !!annPushed && groupAnswered.seq < annPushed.seq,
         `Cy's group line is answered before Ann's push goes (answer #${groupAnswered?.seq}, push #${annPushed?.seq})`);
 
+    // ── 13. a withheld conversation lists its two people in a real one's order ───────────────────
+    // #1403 re-review, NON-BLOCKING: a real conversation's participants and read cursors come in key order; this one put its
+    // owner first, so for about half of all pairs the order alone told a scripted sender. Hi's key sorts after Ann's.
+    console.log('── 13. participants in a real conversation\'s order ──');
+    let hi = member('Hi0');
+    for (let i = 1; hi.pk < ann.pk && i < 40; i++) hi = member(`Hi${i}`);
+    await call('POST', ann, '/api/blocks', { targetPubkey: hi.pk });
+    const hc = await call('POST', hi, '/api/messages/conversation', { type: 'dm', participants: [hi.pk, ann.pk], createdBy: hi.pk });
+    const hiConv: string = hc.body?.conversation?.id;
+    const hiRead = await call('GET', hi, `/api/messages/${hiConv}`);
+    const hiList = (await listOf(hi))?.conversations?.find((c: any) => c.id === hiConv);
+    const sorted = (keys: string[]) => JSON.stringify(keys) === JSON.stringify([...keys].sort());
+    const realRead = await call('GET', cy, `/api/messages/${cc.body?.conversation?.id}`);
+    assert(hi.pk > ann.pk && sorted(realRead.body?.conversation?.participants ?? []) && sorted(hiRead.body?.conversation?.participants ?? [])
+        && sorted(hiRead.body?.conversation?.readCursors?.map((r: any) => r.publicKey) ?? []) && sorted(hiList?.participants ?? []),
+        `Hi, whose key sorts after Ann's, reads the two in key order, as a real chat gives them (${JSON.stringify(hiRead.body?.conversation?.participants?.map((k: string) => k.slice(0, 4)))})`);
+    const hiAgain = await call('POST', hi, '/api/messages/conversation', { type: 'dm', participants: [hi.pk, ann.pk], createdBy: hi.pk });
+    assert(sorted(hiAgain.body?.conversation?.participants ?? []), 'and asked for again, the same');
+    const hiSend = await call('POST', hi, '/api/messages/send', dm(hiConv, hi));
+    await sleep(100);
+    assert(hiSend.status === 200, 'Hi sends into it');
+
+    // ── 14. a withheld line does the work a stored one's push does ──────────────────────────────
+    // #1403 re-review, NON-BLOCKING: the push's work (preferences, tokens, badge count, the signed notice) runs on the event loop
+    // after a stored line's answer and a withheld line had none of it, so a request of the sender's own right after the answer
+    // was slower for a stored one. A withheld line now does the same work and drops it before it is kept or sent. Counted here
+    // by the statements prepared: the recipient's tokens and preferences are read for both, and nothing goes to Expo for one.
+    console.log('── 14. the same work after the answer ──');
+    const watched = /push_tokens|member_preferences|chat_mutes/;
+    let counted = 0;
+    const realPrepare = (db as any).prepare;
+    (db as any).prepare = function (this: any, sql: string) { if (watched.test(sql)) counted++; return realPrepare.call(this, sql); };
+    const cyAnn = await call('POST', cy, '/api/messages/conversation', { type: 'dm', participants: [cy.pk, ann.pk], createdBy: cy.pk });
+    await call('POST', cy, '/api/messages/send', dm(cyAnn.body?.conversation?.id, cy));
+    await sleep(150);
+    counted = 0;
+    const toExpoBefore = pushesTo(ann).length;
+    const stored = await call('POST', cy, '/api/messages/send', dm(cyAnn.body?.conversation?.id, cy));
+    await sleep(150);
+    const storedCount = counted;
+    const storedPushed = pushesTo(ann).length - toExpoBefore;
+    counted = 0;
+    const held = await call('POST', hi, '/api/messages/send', dm(hiConv, hi));
+    await sleep(150);
+    const heldCount = counted;
+    const heldPushed = pushesTo(ann).length - toExpoBefore - storedPushed;
+    (db as any).prepare = realPrepare;
+    assert(stored.status === 200 && held.status === 200 && storedCount > 0 && heldCount === storedCount && storedPushed === 1 && heldPushed === 0,
+        `the recipient's tokens and preferences are read for a withheld line as for a stored one (${heldCount} vs ${storedCount} statements), and only the stored one is sent (${heldPushed} vs ${storedPushed})`);
+
     for (const s of [annSock, boSock, deeSock]) s.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Blocks on messaging checks PASSED.');
 
-    // The same on a node with read auth off, in a fresh process and data dir.
-    if (!process.env.BLOCKS_OPEN_NODE) {
+    // The same on a node with read auth off, and the probation count on the global profile, each in a fresh process and data dir.
+    if (!process.env.BLOCKS_OPEN_NODE && !process.env.BLOCKS_GLOBAL_NODE) {
+        console.log('\nAgain on the global profile (probation on)...\n');
+        const gDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-blocks-global-'));
+        const gChild = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
+            env: { ...process.env, BLOCKS_GLOBAL_NODE: '1', NODE_PROFILE: 'global', BEANPOOL_DATA_DIR: gDir },
+            stdio: 'inherit',
+        });
+        fs.rmSync(gDir, { recursive: true, force: true });
+        if (gChild.status !== 0) throw new Error(`the global-profile run failed (exit ${gChild.status})`);
         console.log('\nAgain with ENFORCE_READ_AUTH=false...\n');
         const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beanpool-blocks-open-'));
         const child = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {

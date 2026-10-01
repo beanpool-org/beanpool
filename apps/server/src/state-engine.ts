@@ -5733,6 +5733,8 @@ function getMessagingCb() {
     return {
         broadcast,
         dispatchPushNotification,
+        rehearsePushNotification: (t: string[], a: string, ti: string, b: string, d: Record<string, any>, c: PushCategory, k: PushNoticeKind) =>
+            dispatchPushNotification(t, a, ti, b, d, c, k, true),
         registerVisitor
     };
 }
@@ -8487,6 +8489,12 @@ export function dispatchPushNotification(
     data: Record<string, any>,
     categoryId: PushCategory,
     kind: PushNoticeKind,
+    /**
+     * Do every step of the work but the last two: the notices are not kept and nothing goes to Expo. A line that is
+     * withheld from its recipient (engine/withheld-lines.ts) takes the load a stored line's push does, so the sender's next
+     * request can't tell the two apart (#1403 re-review).
+     */
+    rehearsal = false,
 ): number {
     if (getNodeRole() === 'backup') return 0;
     // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
@@ -8570,6 +8578,7 @@ export function dispatchPushNotification(
     }
 
     if (allMessages.length === 0) return 0;
+    if (rehearsal) return 0;
     keepPushNotices(notices);
 
     // Batch send to Expo (max 100 per request)

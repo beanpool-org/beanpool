@@ -48,7 +48,7 @@ import { registerPushTokenWithCommunity } from '../push-registrations';
 import { readPushPins } from '../push-pins';
 import {
     checkWhileOpen, droppedNoticeCounts, followTap, FORGED_NOTICE_LINE, LOCAL_NOTICE_DATA, noticeRoute,
-    onNoticeWarning, takeNoticeWarning, UNSIGNED_NOTICE_WORDS, type IncomingNotice, type NoticeRoute,
+    onNoticeWarning, takeNoticeWarning, UNSIGNED_NOTICE_WORDS, VAULT_NOTICE_WORDS, type IncomingNotice, type NoticeRoute,
 } from '../push-notice-check';
 import {
     PUSH_NOTICE_WARNING_INSET, PUSH_NOTICE_WARNING_OK, PUSH_NOTICE_WARNING_TEXT_ON, PUSH_NOTICE_WARNING_TOUCH_TARGETS,
@@ -442,9 +442,35 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
 
         mem.async.set(vaultPushTokenStoreKey(kim.publicKey), PHONE_TOKEN);
         const again = push({ type: 'vault-hold' }, { title: 'Someone is getting back into your BeanPool account', body: '…' });
-        expect(await open(again)).toEqual({ kind: 'show' });
+        expect(await open(again)).toEqual({ kind: 'replace', ...VAULT_NOTICE_WORDS['vault-hold'], data: { ...LOCAL_NOTICE_DATA, type: 'vault-hold' } });
         expect(await tap(again)).toEqual({ kind: 'settings' });
         expect(navigated).toEqual(['/(tabs)/settings']);
+    });
+
+    it('the key vault\'s notice (not signed yet) never shows its own words: only its type\'s fixed ones, and its copy opens Settings', async () => {
+        mem.async.set(vaultPushTokenStoreKey(kim.publicKey), PHONE_TOKEN);
+        const hostile = { title: 'Your account is locked', body: 'Reply with your 12 words to unlock it: https://evil.example' };
+        for (const type of ['vault-hold', 'vault-released', 'vault-replaced'] as const) {
+            const decision = await open(push({ type, screen: 'post', postId: POST_ID, url: 'https://evil.example' }, hostile));
+            expect(decision).toEqual({ kind: 'replace', ...VAULT_NOTICE_WORDS[type], data: { ...LOCAL_NOTICE_DATA, type } });
+            const { title, body } = decision as { title: string; body: string };
+            expect(`${title} ${body}`).not.toMatch(/locked|reply|evil|unlock/i);
+
+            // The app posts that as its own notice; a tap on it opens Settings, as a tap on the vault's push does.
+            navigated = [];
+            const own: IncomingNotice = { identifier: `local-${type}`, remote: false, title, body, data: (decision as { data: unknown }).data };
+            expect(await open(own)).toEqual({ kind: 'show' });
+            expect(await tap(own)).toEqual({ kind: 'settings' });
+            expect(navigated).toEqual(['/(tabs)/settings']);
+        }
+        expect(takeNoticeWarning()).toBe(false);
+    });
+
+    it('the vault\'s fixed words name no sign-in provider, ask for nothing, and send the member into BeanPool', () => {
+        for (const words of Object.values(VAULT_NOTICE_WORDS)) {
+            expect(`${words.title} ${words.body}`).not.toMatch(/google|apple|facebook|password|reply|https?:/i);
+            expect(words.body).toMatch(/BeanPool/);
+        }
     });
 
     it('the app\'s own notices open the app where it was, and never warn', async () => {

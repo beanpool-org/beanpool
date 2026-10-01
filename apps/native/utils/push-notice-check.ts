@@ -47,8 +47,9 @@
  * - A community the phone has forgotten has no pin: its signed notices do nothing, and a tap on one gets the warning.
  *
  * BeanPool's key vault sends its own notices (apps/vault api/push.ts, `data.type`), not yet signed. Each is honoured
- * only on a phone that gave the vault its push token for the account on it: shown as it came, and a tap opens Settings,
- * where the recovery banner reads what is really waiting from the vault. On any other phone it is an unsigned push.
+ * only on a phone that gave the vault its push token for the account on it: shown while open with its type's fixed
+ * words ({@link VAULT_NOTICE_WORDS}), never its own, and a tap (on it, or on the app's copy) opens Settings, where the
+ * recovery banner reads what is really waiting from the vault. On any other phone it is an unsigned push.
  *
  * The app's own notices (a push shown with fixed words in its place, and the sync's notices, sync-notices.ts) are told
  * apart by how they arrived: the phone's push service marks a push it delivered (trigger `push`), and nothing a sender
@@ -83,8 +84,27 @@ const LEDGER_KEEP_SECONDS = PUSH_NOTICE_LIFETIME_SECONDS + PUSH_NOTICE_CLOCK_SKE
 /** The most ids kept in each list; the oldest go first. More than the 100 a member's node keeps for 7 days. */
 const LEDGER_MAX = 500;
 
-/** The key vault's notices (apps/vault api/push.ts `PushKind`). */
-const VAULT_NOTICE_TYPES = new Set(['vault-hold', 'vault-released', 'vault-replaced']);
+/**
+ * The words the app shows, while open, for each of the key vault's notices (apps/vault api/push.ts `PushKind`), in
+ * place of the push's own: the vault's notices aren't signed yet, so their words could be anyone's. The vault's own
+ * sentences (`noticeFor`), less the sign-in provider's name, which only the vault knows.
+ */
+export const VAULT_NOTICE_WORDS = {
+    'vault-hold': {
+        title: 'Someone is getting back into your BeanPool account',
+        body: 'Someone is getting back into your BeanPool account on another device. Open BeanPool: tap "Yes, it\'s me" if it was you, or Stop if it wasn\'t.',
+    },
+    'vault-released': {
+        title: 'Your BeanPool account was restored',
+        body: "Your BeanPool account was just restored on another device. If that wasn't you, open BeanPool now.",
+    },
+    'vault-replaced': {
+        title: 'Sign-in recovery moved to another account',
+        body: 'Your sign-in now protects a different BeanPool account. This one has only its 12 words.',
+    },
+} as const;
+
+type VaultNoticeType = keyof typeof VAULT_NOTICE_WORDS;
 
 /**
  * A kind this build's table doesn't have, in the shape every kind in core's table takes (`chat.message`,
@@ -210,9 +230,10 @@ function isNewerFormat(data: unknown): boolean {
     return typeof bp === 'number' && Number.isSafeInteger(bp) && bp > PUSH_NOTICE_VERSION;
 }
 
-function isVaultNotice(data: unknown): boolean {
+/** The key vault's notice type a push (or the app's own copy of one) names, or null. */
+function vaultNoticeType(data: unknown): VaultNoticeType | null {
     const type = asObject(data)?.type;
-    return typeof type === 'string' && VAULT_NOTICE_TYPES.has(type);
+    return typeof type === 'string' && Object.prototype.hasOwnProperty.call(VAULT_NOTICE_WORDS, type) ? type as VaultNoticeType : null;
 }
 
 async function vaultHasToken(ctx: NoticeContext): Promise<boolean> {
@@ -365,8 +386,13 @@ export async function checkWhileOpen(n: IncomingNotice, ctx: NoticeContext): Pro
             // Signed by no community this phone pinned: from one it sent its token to but hasn't learnt the key of yet,
             // perhaps, so it goes as an unsigned push would below. Any other refusal is final.
             if (checked.reason !== 'other-community') return drop(checked.reason);
-        } else if (isVaultNotice(n.data) && await vaultHasToken(ctx)) {
-            return { kind: 'show' };
+        } else {
+            // The vault's notice, on a phone that gave the vault its token: its type's fixed words, never its own (it
+            // isn't signed yet), and a copy that names only its type, so a tap on it opens Settings (checkTap).
+            const type = vaultNoticeType(n.data);
+            if (type && await vaultHasToken(ctx)) {
+                return { kind: 'replace', ...VAULT_NOTICE_WORDS[type], data: { ...LOCAL_NOTICE_DATA, type } };
+            }
         }
         const pins = await readPushPins(ctx.storage);
         if (!notice && isNewerFormat(n.data)) {
@@ -414,9 +440,10 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
             // Signed by no community this phone pinned: as an unsigned push, below (checkWhileOpen). Any other is refused.
             if (checked.reason !== 'other-community') return refuse(checked.reason);
         }
-        // The app's own notices carry no target: it opens where it was.
-        if (!n.remote) return { kind: 'nothing', reason: 'local' };
-        if (!notice && isVaultNotice(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
+        // The app's own notices carry no target: it opens where it was. The copy it showed of the vault's notice opens
+        // Settings, as the vault's own push does; nothing from outside can post a notice of the app's own.
+        if (!n.remote) return vaultNoticeType(n.data) ? { kind: 'settings' } : { kind: 'nothing', reason: 'local' };
+        if (!notice && vaultNoticeType(n.data) && await vaultHasToken(ctx)) return { kind: 'settings' };
         const pins = await readPushPins(ctx.storage);
         if (!notice && isNewerFormat(n.data)) {
             // Nothing in it can be checked (see the header), so nothing is followed; and it may well be genuine, so no

@@ -34,6 +34,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import Koa from 'koa';
 import WebSocket from 'ws';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -101,12 +102,19 @@ async function main() {
     for (const id of [Ann, Buyer, Seller]) se.transfer('genesis', id.pubKeyHex, 300, 'seed', 'direct', true);
     const who = new Map([Ann, R1, R2, C, Buyer, Seller, Warden].map(id => [`ExponentPushToken[${id.callsign}]`, id.callsign]));
 
-    // Pushes, caught where they leave for Expo.
+    // Pushes, caught where they leave for Expo. A push shows only its kind's fixed words (push-notice-test-harness.ts):
+    // what each member is told, checked below, is its notice's details, and every one that left is held to the words.
     const realFetch = globalThis.fetch;
     const sent: any[] = [];
+    const notGeneric: any[] = [];
+    const kindsCaught = new Set<string>();
     (globalThis as any).fetch = async (url: any, init: any) => {
         if (String(url).includes('exp.host')) {
-            sent.push(...JSON.parse(init.body));
+            for (const m of JSON.parse(init.body)) {
+                kindsCaught.add(m?.data?.k);
+                if (!pushIsGeneric(m)) notGeneric.push(m);
+                sent.push(toldPush(db, m));
+            }
             return { ok: true, status: 200, json: async () => ({}) } as any;
         }
         return realFetch(url, init);
@@ -410,6 +418,9 @@ async function main() {
         const signers = ledger.entries.map(e => e.authSigner).filter(Boolean);
         assert(signers.every(v => !HEX_KEY.test(String(v))), `no signer in it is a 64-hex key (${JSON.stringify(signers)})`);
         assert(signers.includes('a community admin') && signers.includes('WardenAdmin'), 'it names them "a community admin" and by callsign');
+        assert(notGeneric.length === 0 && [...kindsCaught].sort().join() === 'community.notice,market.request,trade.update',
+            `every push showed only its kind's fixed words, "Your community has a notice for you." or a deal's, and carried no title, `
+            + `name, amount or id (kinds ${[...kindsCaught].sort().join()}; ${notGeneric.length} did not: ${JSON.stringify(notGeneric[0] ?? null)})`);
     } finally {
         (globalThis as any).fetch = realFetch;
         for (const s of all) s.ws.close();

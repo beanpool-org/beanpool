@@ -14,6 +14,10 @@ interface BulletinSectionProps {
     onSubTabChange?: (sub: 'announcements' | 'pulse') => void;
 }
 
+/** What the node accepts for an announcement (apps/server engine/push-notices.ts ANNOUNCEMENT_LIMITS): a longer one is refused. */
+const ANNOUNCEMENT_TITLE_MAX = 200;
+const ANNOUNCEMENT_BODY_MAX = 4000;
+
 interface PulseChannel {
     id: string;
     title?: string;
@@ -223,6 +227,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                 type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
+                                maxLength={ANNOUNCEMENT_TITLE_MAX}
                                 placeholder="e.g. Village Market Time Change"
                                 className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
                             />
@@ -275,8 +280,15 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
                                 placeholder="Write the announcement message details here..."
                                 rows={4}
                                 required
+                                maxLength={ANNOUNCEMENT_BODY_MAX}
                                 className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 resize-none"
                             />
+                            <p
+                                data-testid="announcement-count"
+                                className={`text-[11px] m-0 mt-1 text-right ${body.length >= ANNOUNCEMENT_BODY_MAX ? 'text-amber-300 font-bold' : 'text-nature-400'}`}
+                            >
+                                {body.length.toLocaleString('en-US')} / {ANNOUNCEMENT_BODY_MAX.toLocaleString('en-US')} characters
+                            </p>
                         </div>
 
                         <button

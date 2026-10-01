@@ -5,6 +5,7 @@
  *
  *   GET  /api/notices[?unseen=1]   → { notices: [{ id, title, body, severity, data, createdAt, seenAt }] }, oldest first
  *   POST /api/notices/seen  { ids } → { success: true, marked }
+ *   GET  /api/notices/push/:id     → { id, kind, title, body, data, sentAt }: one push's details (engine/push-notices.ts)
  *
  * ## Only ever the signer's own
  *
@@ -16,6 +17,13 @@
  * (passesReadGate), as /api/community/me does: a suspended member reads and marks their own, a visitor's row has none.
  * An id that is not the signer's marks nothing.
  *
+ * ## A push's details
+ *
+ * A push carries only its kind's fixed words and a signed notice id (@beanpool/core push-notice.ts); the app asks here,
+ * after a tap, for what the sender wrote and where the tap lands. The same gate as the read above: the signer only, so a
+ * notice id is answered to its recipient and to nobody else, who gets the same 404 as for an id that never existed or
+ * that this server has forgotten (after 7 days, or a member's newest 100). A standby holds none (they are not copied).
+ *
  * ## The main server only, for the mark
  *
  * A standby answers the read from its copy, but refuses the mark, 503 `standby`, and writes nothing: its copy follows
@@ -24,6 +32,8 @@
 import Router from '@koa/router';
 import { passesReadGate, getNodeRole } from '../state-engine.js';
 import { listKeptNotices, markKeptNoticesSeen, MARK_SEEN_MAX_IDS } from '../engine/kept-notices.js';
+import { readPushNotice } from '../engine/push-notices.js';
+import { isPushNoticeId } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 
 /** The verified member signing this request, or undefined once the refusal is written. */
@@ -51,6 +61,19 @@ export function createNoticeRoutes(_deps: RouteDeps): Router {
         const unseen = ctx.query.unseen === '1' || ctx.query.unseen === 'true';
         ctx.set('Cache-Control', 'private, no-store');
         ctx.body = { notices: listKeptNotices(actor, { unseenOnly: unseen }) };
+    });
+
+    router.get('/api/notices/push/:id', async (ctx) => {
+        const actor = member(ctx);
+        if (!actor) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        const notice = isPushNoticeId(ctx.params.id) ? readPushNotice(ctx.params.id, actor) : null;
+        if (!notice) {
+            ctx.status = 404;
+            ctx.body = { error: 'This server has no such notice for you. Notices are kept for 7 days.', code: 'no_notice' };
+            return;
+        }
+        ctx.body = notice;
     });
 
     router.post('/api/notices/seen', async (ctx) => {

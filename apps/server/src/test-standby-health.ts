@@ -55,6 +55,7 @@ import crypto from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -68,15 +69,22 @@ const HOUR = 60 * 60_000;
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
 /** No node reaches anything but this machine: a push is answered here and kept, anything else refused and counted. */
-function guardFetch(): { blocked: string[]; pushes: { to: string[]; title: string; body: string }[] } {
-    const seen = { blocked: [] as string[], pushes: [] as { to: string[]; title: string; body: string }[] };
+// A push as its owner is told it (push-notice-test-harness.ts): `title` and `body` are its notice's details on this node, and
+// `generic` says the lock screen showed only "Your community's standby server needs you." and the notice.
+type CaughtPush = { to: string[]; title: string; body: string; generic: boolean };
+
+function guardFetch(): { blocked: string[]; pushes: CaughtPush[] } {
+    const seen = { blocked: [] as string[], pushes: [] as CaughtPush[] };
     const real = globalThis.fetch;
     globalThis.fetch = (async (input: any, init?: any) => {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') {
-            const batch = JSON.parse(String(init?.body ?? '[]')) as { to: string; title: string; body: string }[];
-            seen.pushes.push({ to: batch.map((m) => m.to), title: batch[0]?.title ?? '', body: batch[0]?.body ?? '' });
+            const batch = JSON.parse(String(init?.body ?? '[]')) as any[];
+            // Kept at once; its details are read just after, by the time a check takes the push.
+            const push: CaughtPush = { to: batch.map((m) => m.to), title: '', body: '', generic: batch.every((m) => pushIsGeneric(m) && m.data.k === 'owner.standby') };
+            seen.pushes.push(push);
+            if (batch[0]) void import('./db/db.js').then(({ db }) => { const told = toldPush(db, batch[0]); push.title = told.title ?? ''; push.body = told.body ?? ''; });
             return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
         seen.blocked.push(url.hostname);
@@ -550,6 +558,7 @@ async function main(): Promise<void> {
         pushes = await pushesSoFar();
         assert(pushes.length === 1 && JSON.stringify(pushes[0].to) === JSON.stringify([OWNER_TOKEN]) && /standby/i.test(pushes[0].title),
             `one push, to the owner's phone only: not the admin's, the moderator's or a member's (${brief(pushes)})`);
+        assert(pushes[0]?.generic === true, `its lock screen shows only "Your community's standby server needs you.": the standby's problem is the notice's details`);
         queue = await main.send('queue');
         const item = queue.owner.items.find((i: any) => i.kind === 'standby');
         assert(item?.count === 1 && item.section === 'home' && item.settingsPath === '/settings#section=home',

@@ -126,7 +126,7 @@ async function main() {
     };
     const pushTo = async (who: string[]) => {
         sent.length = 0;
-        const n = se.dispatchPushNotification(who, actor, 'A test notice', 'A line of text', { screen: 'chat' }, 'chat');
+        const n = se.dispatchPushNotification(who, actor, 'A test notice', 'A line of text', { screen: 'chat' }, 'chat', 'chat.message');
         await flush();
         return n;
     };
@@ -184,8 +184,12 @@ async function main() {
         assert(sent.length === 1 && util.isDeepStrictEqual(Object.keys(sent[0].init.headers).sort(), ['Authorization', 'Content-Type'])
             && sent[0].init.headers['Content-Type'] === 'application/json',
             'beside the same Content-Type, and no other header');
-        assert(sent.length === 1 && sent[0].init.method === 'POST' && sent[0].init.body === plainBody
-            && sent[0].url === plain.url, 'the address, method and body are byte for byte the ones sent without a token');
+        // Each push is a new notice, with its own id, time and signature (@beanpool/core push-notice.ts): those three are
+        // the only bytes two pushes of the same thing may differ in, with or without a token.
+        const ownNoticeFields = (body: string) => JSON.stringify(JSON.parse(body).map((m: any) => ({ ...m, data: { ...m.data, i: null, t: null, s: null } })));
+        assert(sent.length === 1 && sent[0].init.method === 'POST' && ownNoticeFields(sent[0].init.body) === ownNoticeFields(plainBody)
+            && JSON.parse(sent[0].init.body)[0]?.data?.i !== JSON.parse(plainBody)[0]?.data?.i && sent[0].url === plain.url,
+            "the address, method and body are byte for byte the ones sent without a token, but for the notice's own id, time and signature");
 
         const nCrowd = await pushTo(crowd);
         assert(nCrowd === 120 && sent.length === 2, `120 messages go as two batches (${sent.length} request(s))`);

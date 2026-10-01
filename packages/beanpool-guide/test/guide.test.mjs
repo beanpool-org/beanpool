@@ -347,3 +347,27 @@ test('publishing raises a version by one exactly where the text or its schema ch
     assert.equal(nextPublished({ guide: null, manual: published.manual }, { guide: edited, manual: asPages(published.manual) }).guide.version, 1);
 });
 
+
+// The names list's trust model (scratch/global-node/DESIGN-names-list-trust-fable.md §9, matrix F6): its pages say exactly
+// the design's sentences, true under its proof, and none of the promises the earlier model made.
+test("the names list's pages say the design's sentences, and none of the old promises", () => {
+    const { guide, manual } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    const operators = words(manual.guides.find((g) => g.slug === 'running-a-known-community'));
+    const members = words(guide.guides.find((g) => g.slug === 'what-the-admins-can-see'));
+    for (const sentence of [
+        "Only your owners and admins can read the names, on their own phones. Each name is sealed on an admin's phone before it is sent. A backup, a snapshot, a standby's copy, a stolen database and BeanPool hold nothing readable.",
+        "Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when, but can't read a name without an admin checking the wrong phone in person.",
+        "When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on can be read with the keys the person had. What they already saw, they keep, as with a paper list.",
+        "When an admin loses their phone, tell another admin the same day: they tap Remove @X's old key. Until that is done, whoever has the phone can read what is written. The admin's new phone is checked in person once, and the keys are sent to it. Names written under a key that only the lost phone held can't be opened by anyone: the app counts them, and your paper copy is how they come back.",
+        "What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; and a PDF or a note an admin writes.",
+        // Decided with the design (§12 Q3): the 12 words alone don't make a lost phone safe.
+        "The 12 words alone aren't enough for an admin whose phone was lost",
+    ]) assert.ok(operators.includes(sentence), `running-a-known-community says: ${sentence.slice(0, 70)}…`);
+    assert.ok(members.includes("Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names."),
+        'what-the-admins-can-see says the members\' sentence');
+    for (const gone of [/remembers it/i, /first (use|time a phone opens)/i, /whoever (first )?shares/i, /carried over/i, /seals? (every entry|them) again/i, /sealed again under/i,
+        /any admin can (\*\*)?start a new key/i, /working with whoever runs/i, /removed admin working with/i]) {
+        assert.doesNotMatch(`${operators}\n${members}`, gone);
+    }
+});

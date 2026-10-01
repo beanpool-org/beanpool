@@ -12,6 +12,8 @@ enable run-lock.mount
 enable nftables.service
 enable caddy.service
 enable beanpool-vault-dns.service
+enable beanpool-vault-egress.service
+enable beanpool-vault-egress.path
 enable beanpool-vault-identity.service
 enable beanpool-vault-keyholder.service
 enable beanpool-vault-api.service

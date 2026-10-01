@@ -20,6 +20,7 @@ import {
 } from '@beanpool/engine';
 import { mainLedgerAtLastCopy, type MainLedgerRecord } from './sync.js';
 import { PLAIN_TABLES } from './replication-manifest.js';
+import { noteAsReadBy, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './withheld-notes.js';
 
 export type { ReplicaConsistency, AuditSyncPayload };
 
@@ -256,9 +257,12 @@ export function exportLedgerFor(publicKey: string): { balancesCsv: string; trans
     }
 
     let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
-    const txHistory = db.prepare("SELECT * FROM transactions WHERE from_pubkey = ? OR to_pubkey = ? ORDER BY timestamp ASC").all(publicKey, publicKey) as any[];
+    // Each note as this member reads it: their own withheld note as they wrote it, BLOCKED_BEANS_NOTE in place of one kept
+    // from them (engine/withheld-notes.ts).
+    const txHistory = db.prepare(`SELECT t.*, ${WITHHELD_NOTE_COLUMN} FROM transactions t ${WITHHELD_NOTE_JOIN}
+                                  WHERE t.from_pubkey = ? OR t.to_pubkey = ? ORDER BY t.timestamp ASC`).all(publicKey, publicKey) as any[];
     for (const tx of txHistory) {
-        const memoSafe = (tx.memo || '').replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
+        const memoSafe = noteAsReadBy(tx, publicKey).replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
         transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
     }
 

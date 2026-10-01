@@ -117,3 +117,47 @@ export function reconnectDelayMs(attempt: number, random: () => number = Math.ra
 export function reconnectSyncDelayMs(random: () => number = Math.random): number {
     return Math.floor(random() * RECONNECT_SYNC_SPREAD_MS);
 }
+
+// ===================== NO ROOM =====================
+
+/**
+ * The close code a node sends a socket it has no room for (one of its caps, apps/server/src/ws-limits.ts). A refused
+ * upgrade tells an app nothing (browsers and React Native hide its status), and the app came back within 30 s, so on a
+ * full node every refused phone tried about four times a minute. So a node that says so (the global profile) lets the
+ * socket in and closes it at once with this code and `retry=<seconds>` as the reason, and the app waits that long or
+ * more before trying again, reading everything over HTTP meanwhile.
+ */
+export const WS_NO_ROOM_CLOSE_CODE = 4429;
+/** What the node asks: 5 minutes. */
+export const WS_NO_ROOM_RETRY_SEC = 300;
+/** A node asking for less than this is asked for this: a wait a crowd can't turn back into a flood. */
+export const WS_NO_ROOM_MIN_SEC = 30;
+/** Each refusal in a row doubles the wait, up to 30 minutes (before the spread). */
+export const WS_NO_ROOM_CAP_MS = 30 * 60_000;
+
+/** The reason a node closes a socket with, for `retryAfterSec` (whole seconds). Well under a close reason's 123 bytes. */
+export function wsNoRoomReason(retryAfterSec: number): string {
+    return `retry=${Math.max(1, Math.round(retryAfterSec))}`;
+}
+
+/**
+ * The seconds a close asks the app to wait, when it is the node's "no room" close; null for any other close. A "no
+ * room" close whose reason can't be read asks for WS_NO_ROOM_RETRY_SEC.
+ */
+export function wsNoRoomRetrySec(code: unknown, reason: unknown): number | null {
+    if (code !== WS_NO_ROOM_CLOSE_CODE) return null;
+    const m = typeof reason === 'string' ? /^retry=(\d{1,6})$/.exec(reason) : null;
+    return m ? Number(m[1]) : WS_NO_ROOM_RETRY_SEC;
+}
+
+/**
+ * The wait before trying again after the `refusals`-th "no room" close in a row (1 for the first), when the node asked
+ * for `retryAfterSec`: that (at least WS_NO_ROOM_MIN_SEC), doubled for each refusal after the first, at most
+ * WS_NO_ROOM_CAP_MS, plus a random half of it again, so phones refused together do not all come back together.
+ */
+export function wsNoRoomDelayMs(refusals: number, retryAfterSec: number, random: () => number = Math.random): number {
+    const n = Number.isFinite(refusals) && refusals > 1 ? Math.floor(refusals) - 1 : 0;
+    const asked = Number.isFinite(retryAfterSec) ? Math.max(WS_NO_ROOM_MIN_SEC, retryAfterSec) : WS_NO_ROOM_RETRY_SEC;
+    const window = Math.min(WS_NO_ROOM_CAP_MS, asked * 1000 * 2 ** Math.min(n, 16));
+    return Math.floor(window + random() * window / 2);
+}

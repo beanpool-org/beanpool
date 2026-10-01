@@ -9,6 +9,8 @@ related: decisions, proposing-a-decision, events, rules
 
 A **Poll** asks what people think: "Market on Sunday or Saturday?". It changes nothing by itself. For something binding, propose a Decision.
 
+On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it with a sign-in, so one person with several accounts could tip the count, and there are no Decisions there.
+
 ## Starting a poll
 
 - Tap **+ ADD POST** on the Market tab or the Map.

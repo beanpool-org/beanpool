@@ -35,6 +35,8 @@ Whoever holds the database and that key can open a member's copy, though, with t
 
 On the global community, the server also keeps a scrambled reference to each Google or Apple account someone joined with, so that one account makes one member. It is scrambled with data/open-join.key, which is never in the database either. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk can't be used to find out which member signed in with a given account. Whoever holds the database and that key can: whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup.
 
+It also notes which members joined through the open door from the same internet connection within a day of each other: a random label they share, never the address. Only the hiding of reported posts reads it, so that their reports count as one (see Reports and takedowns). It is in the database, so anyone who can read the database can see who joined together, as people in one household or at one meetup often do. A standby copies it, and it goes when the member deletes their own account.
+
 GitHub is no longer a sign-in: a GitHub account's id is public, so anyone could look it up. At every start the server deletes any GitHub copy it still holds, the copies of those that a sign-in handed out, and any record of a GitHub join to the global community (see Backups and replicas).
 
 ## What someone who is not a member can read

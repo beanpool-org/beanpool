@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getBalance, getTransactions } from '../lib/api';
+import { getBlockedUsers } from '../lib/blocklist';
 
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn(() => () => {}),
@@ -11,6 +12,11 @@ vi.mock('../lib/sync', () => ({
 
 vi.mock('../components/CommonsInfoModal', () => ({
     CommonsInfoModal: () => null,
+}));
+
+vi.mock('../lib/blocklist', () => ({
+    getBlockedUsers: vi.fn(() => []),
+    onBlocklistUpdated: vi.fn(() => () => {}),
 }));
 
 vi.mock('../lib/api', () => ({
@@ -89,5 +95,49 @@ describe('LedgerPage at 320px with 1.3x text', () => {
             expect(tile).toHaveClass('min-w-0', 'px-1.5', 'sm:p-3');
         }
         expect(screen.getByText('PARTNERS')).not.toHaveClass('tracking-wider');
+    });
+});
+
+describe('a line of Beans from someone the member has blocked', () => {
+    const BO = 'b'.repeat(64);
+    const CY = 'c'.repeat(64);
+    const line = (id: string, from: string, to: string, memo: string) =>
+        ({ id, from, to, amount: 3, taxFee: 0, memo, timestamp: '2026-10-01T10:00:00.000Z' });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 5, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([BO]);
+    });
+
+    async function wallet() {
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getTransactions).toHaveBeenCalled());
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+    }
+
+    it('shows the neutral line in place of the note that came with the Beans', async () => {
+        vi.mocked(getTransactions).mockResolvedValue([line('t1', BO, identity.publicKey, 'meet me behind the shed')] as any);
+        await wallet();
+        expect(await screen.findByText('Beans from a member you blocked')).toHaveClass('italic');
+        expect(screen.queryByText(/behind the shed/)).not.toBeInTheDocument();
+    });
+
+    it('and as the community sends it, for a note it kept from them', async () => {
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+        vi.mocked(getTransactions).mockResolvedValue([line('t1', BO, identity.publicKey, 'Beans from a member you blocked')] as any);
+        await wallet();
+        expect(await screen.findByText('Beans from a member you blocked')).toHaveClass('italic');
+    });
+
+    it("shows anyone else's note, and the member's own to someone blocked", async () => {
+        vi.mocked(getTransactions).mockResolvedValue([
+            line('t1', CY, identity.publicKey, 'thanks for the eggs'),
+            line('t2', identity.publicKey, BO, 'for the bread'),
+        ] as any);
+        await wallet();
+        expect(await screen.findByText('thanks for the eggs')).toBeInTheDocument();
+        expect(screen.getByText('for the bread')).toBeInTheDocument();
+        expect(screen.queryByText('Beans from a member you blocked')).not.toBeInTheDocument();
     });
 });

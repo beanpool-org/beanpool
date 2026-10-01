@@ -117,6 +117,8 @@ export interface VaultUnderTest {
     /** With requireDataMount: where a restore from backup waits (the image: the state partition). */
     restoreDir: string;
     storeDir: string;
+    /** Where the operator settings are kept (shared/settings.ts), as on the image's state partition. */
+    settingsFile: string;
     socketPath: string;
     baseUrl: string;
     clock: Clock;
@@ -154,6 +156,8 @@ export async function startVault(opts: {
     requireDataMount?: boolean;
     /** What the API says of itself in `/v1/report` (its bundle, the release checks, the next restart). */
     about?: VaultApiOptions['about'];
+    /** TLS options for the mail server (a test CA). */
+    smtpTls?: VaultApiOptions['smtpTls'];
 } = {}): Promise<VaultUnderTest> {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'bv-'));
     const stateDir = path.join(dir, 'keyholder');
@@ -161,6 +165,7 @@ export async function startVault(opts: {
     const restoreDir = path.join(dir, 'restore');
     let dataMounted = false;
     const storeDir = opts.storeDir ?? path.join(dir, 'store');
+    const settingsFile = path.join(dir, 'settings', 'settings.json');
     const socketPath = path.join(dir, 'kh.sock');
     const clock = opts.clock ?? makeClock();
     const stub = opts.stub ?? new StubProviders();
@@ -179,6 +184,7 @@ export async function startVault(opts: {
     const makeApi = async () => {
         const api = createVaultApi({
             dataDir, keyholderSocket: socketPath, hosts: ['127.0.0.1'], store, fetch: stub.fetch, clock: clock.now, trustProxy: opts.trustProxy, about: opts.about,
+            settingsFile, smtpTls: opts.smtpTls,
             ...(opts.requireDataMount ? { requireDataMount: true, restoreDir, dataMounted: () => dataMounted, dataPollMs: 50 } : {}),
         });
         const port = await api.listen(0, '127.0.0.1');
@@ -186,7 +192,7 @@ export async function startVault(opts: {
     };
     const first = await makeApi();
     const v: VaultUnderTest = {
-        dir, stateDir, dataDir, restoreDir, storeDir, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
+        dir, stateDir, dataDir, restoreDir, storeDir, settingsFile, socketPath, baseUrl: first.baseUrl, clock, stub, api: first.api, custodians, release, feedDir,
         keyholder: () => kh,
         restartKeyholder: async () => {
             await server.close();

@@ -153,7 +153,8 @@ import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
 import {
     gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
-    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
+    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
+    type GatewayCharge,
 } from './gateway-rate-limit.js';
 import { wsLimits, wsHasRoom, admitWsSocket, admitLogSocket, frameAllowed } from './ws-limits.js';
 import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
@@ -162,7 +163,7 @@ import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -780,6 +781,33 @@ function refuseUpgrade(socket: Duplex, status: 401 | 429 | 503, retryAfterSec?: 
     socket.destroy();
 }
 
+/** How long a socket let in only to be told "no room" may take to answer the close before it is dropped. */
+const NO_ROOM_CLOSE_GRACE_MS = 5_000;
+
+/**
+ * A /ws socket over a cap (ws-limits.ts). Where the caps say `noRoomClose` (the global node) and its address has room
+ * for one more such answer this minute (gateway-rate-limit.ts gatewayNoRoomUpgrade, which gives back what the upgrade
+ * was charged), the upgrade completes and closes at once with the "no room" close and its wait, which the apps read
+ * (@beanpool/core wsNoRoomRetrySec): it is never added to the feed, holds no place, and is dropped if it doesn't answer
+ * the close. Otherwise (a client that did not send `nr=1`, or a node without the close) the old refusal: `status` before the upgrade, as charged.
+ */
+function refuseSocketForRoom(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer, client: string,
+    maxReqs: number, charges: ReadonlyArray<GatewayCharge | null>, status: 429 | 503, understandsNoRoom: boolean): void {
+    // Only a client that says it reads the close (`nr=1` on its connect URL) gets it: an app built before it resets its
+    // backoff and syncs on every socket that opens, so against the close it would retry every few seconds.
+    if (!understandsNoRoom || !wsLimits().noRoomClose || !gatewayNoRoomUpgrade(client, maxReqs, charges)) {
+        refuseUpgrade(socket, status, 30);
+        return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws: any) => {
+        const drop = setTimeout(() => { try { ws.terminate(); } catch { /* gone already */ } }, NO_ROOM_CLOSE_GRACE_MS);
+        drop.unref?.();
+        ws.on('close', () => clearTimeout(drop));
+        ws.on('error', () => { /* a client that vanished: the close above still ends it */ });
+        ws.close(WS_NO_ROOM_CLOSE_CODE, wsNoRoomReason(WS_NO_ROOM_RETRY_SEC));
+    });
+}
+
 /** Hold a socket's place (ws-limits.ts) until its raw socket closes, whichever way: a refused handshake or the end of a
  *  live socket. */
 function holdUntilClosed(socket: Duplex, release: () => void): void {
@@ -806,18 +834,20 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 
         if (pathname === '/ws') {
             // The node's room first, before a token is verified or anything is charged.
-            if (!wsHasRoom()) { refuseUpgrade(socket, 503, 30); return; }
+            if (!wsHasRoom()) { refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [], 503, parsedUrl.searchParams.get('nr') === '1'); return; }
             const claims = claimsWsSignature(parsedUrl.searchParams);
-            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false };
+            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false, charge: null };
             if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
             const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
+            let settled: GatewayCharge | null = null;
             if (limited) {
                 // A verified key is charged as HTTP charges it: its own bucket if it acts here, else the address's.
                 const verified = connect.kind === 'member' ? { key: connect.pubkey, acts: true }
                     : connect.kind === 'non_member' ? { key: connect.pubkey, acts: false } : null;
-                const wait = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
+                const { wait, charge } = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
                 if (wait) { refuseUpgrade(socket, 429, wait); return; }
+                settled = charge;
             }
             const refuse = WS_AUTH_MODE === 'strict'
                 ? connect.kind !== 'member'
@@ -830,7 +860,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // doorbells (or the open feed, where the operator chose it), is a stranger's, under the tighter caps.
             const place = admitWsSocket(client, connect.kind === 'member' ? { kind: 'keyed', key: connect.pubkey } : { kind: 'stranger' });
             if (!place.ok) {
-                refuseUpgrade(socket, place.status, 30);
+                refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [admitted.charge, settled], place.status, parsedUrl.searchParams.get('nr') === '1');
                 return;
             }
             holdUntilClosed(socket, place.release);

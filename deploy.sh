@@ -20,10 +20,12 @@ source "$SCRIPT_DIR/scripts/deploy-lib.sh"
 
 # The package is the files git tracks in this folder (below), so this folder must be the top of a git checkout. Checked
 # here, before the registry lookup and before any server is contacted.
-GIT_TOP=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel) || GIT_TOP=""
-if [ -z "$GIT_TOP" ] || [ "$(cd "$GIT_TOP" && pwd -P)" != "$(cd "$SCRIPT_DIR" && pwd -P)" ]; then
+# Ask git itself: --show-prefix is empty only at the top of a work tree (it is not fooled by a path typed in another letter case).
+if ! GIT_PREFIX=$(git -C "$SCRIPT_DIR" rev-parse --show-prefix 2>/dev/null) || [ -n "$GIT_PREFIX" ]; then
   echo "🛑 FATAL: $SCRIPT_DIR is not the top of a git checkout."
-  echo "   deploy.sh ships only the files git tracks there (git ls-files). Nothing was packaged and no server was contacted."
+  echo "   deploy.sh sends only the files git tracks, so run it from the top folder of a git clone of the repository."
+  echo "   A downloaded ZIP or release archive won't work, and a new file must be git added before it ships."
+  echo "   Nothing was packaged and no server was contacted."
   exit 1
 fi
 

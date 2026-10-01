@@ -126,6 +126,27 @@ assert "deploy.sh refuses it" "$([ "$RC" -ne 0 ] && echo refused || echo "ran, r
 assert "before packaging anything" "$(yn test -e "$OUTER/inner/.deploy-package.tar.gz")" "no"
 
 echo ""
+echo "--- a real checkout reached by a path in another letter case ---"
+# Only on a case-insensitive filesystem (APFS default): there the miscased path is the same folder.
+CASE="$SB/Casey"; stage "$CASE"; git_add "$CASE" deploy.sh scripts/deploy-lib.sh docker-compose.yml deploy-targets.conf
+if [ -d "$SB/CASEY" ]; then
+  deploy "$SB/CASEY"
+  assert "deploy.sh accepts the miscased path" "$RC" "0"
+  assert "and packages it" "$(yn test -e "$SB/CASEY/.deploy-package.tar.gz")" "yes"
+else
+  echo "(skipped: this filesystem is case-sensitive)"
+fi
+
+echo ""
+echo "--- a subfolder of a checkout, run from there ---"
+SUB="$SB/subcheck"; stage "$SUB"; git_add "$SUB" deploy.sh scripts/deploy-lib.sh docker-compose.yml deploy-targets.conf
+stage "$SUB/scripts/nested"
+deploy "$SUB/scripts/nested"
+assert "deploy.sh refuses it" "$([ "$RC" -ne 0 ] && echo refused || echo "ran, rc=$RC")" "refused"
+assert "and says to use a git clone" "$(grep -c 'top folder of a git clone' "$OUT")" "1"
+assert "before packaging anything" "$(yn test -e "$SUB/scripts/nested/.deploy-package.tar.gz")" "no"
+
+echo ""
 echo "--- nothing was contacted ---"
 assert "no ssh, scp, curl or docker call in any run" "$(wc -l < "$CALLS" | tr -d ' ')" "0"
 [ -s "$CALLS" ] && sed 's/^/   | /' "$CALLS"

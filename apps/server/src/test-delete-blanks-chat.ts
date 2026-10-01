@@ -16,8 +16,11 @@
  *     her photos' rows and stored objects are gone, Bo's photo and every line of Bo's and Cy's are exactly as they were.
  *     The WAL is empty, and neither state.db nor state.db-wal holds a byte of her words, her DM ciphertext or her photo.
  *  4. Bo's phone syncs as the app does (the conversation list, then each conversation): exactly her lines come back
- *     changed, each a tombstone the app's merge takes; the group, event and enterprise chats read "This message was
- *     deleted" for her lines; her photo is gone from the attachment route, Bo's is not.
+ *     changed, each a tombstone the app's merge takes; her DM lines older than the newest 50 come back in no page, and
+ *     the conversation list names her as deleted (`deletedAccounts`), so the app blanks them itself
+ *     (apps/native/utils/db.ts blankLinesOfDeletedAccounts); it names nobody else, never a member the community removed
+ *     (Dee) and nobody to a member in no chat with her (Gwen). The group, event and enterprise chats read "This message
+ *     was deleted" for her lines; her photo is gone from the attachment route, Bo's is not.
  *  5. S's next pull (a delta) makes its lines M's: the tombstones, never her words.
  *  6. A new standby S2 copies M afterwards: its rows are M's, and its files hold none of her words.
  *  7. Cy deletes his account while a reader holds M's WAL (a copy being served to a standby): the delete answers at once,
@@ -154,6 +157,16 @@ async function child(): Promise<void> {
                 boSecrets: [bt.ciphertext, bcap.ciphertext],
             };
         },
+        /** Dee, in a DM with Bo, removed by the community (adminPruneUser): her lines stay, and she is no deleted account. */
+        'removed-member': async (a: { dee: string; bo: string }) => {
+            const se = await import('./state-engine.js');
+            const { sendMessage } = await import('./engine/messaging.js');
+            const dm = se.createConversation('dm', [a.dee, a.bo], a.dee)!;
+            const t = lockedDm(24);
+            sendMessage(quiet, dm.id, a.dee, t.ciphertext, t.nonce);
+            se.adminPruneUser(a.dee, 'owner:password');
+            return { dmId: dm.id, status: se.getMember(a.dee)?.status ?? null };
+        },
         /** After Bo's phone synced once: Bo writes 55 more DM lines, then Rhea one. Her first DM lines are now older than the newest 50. */
         'dm-more': async (a: { rhea: string; bo: string; dmId: string }) => {
             const { sendMessage } = await import('./engine/messaging.js');
@@ -280,7 +293,7 @@ function leaks(text: string): string[] {
  * Bo's phone's message sync, as utils/db.ts syncMessages makes it: the conversation list, then each conversation's lines with
  * NO `limit`, so the server's default applies (the newest 50). Never add a limit here: the app sends none.
  */
-async function phoneSync(base: string, who: Id): Promise<{ byId: Map<string, any>; text: string; convs: string[] }> {
+async function phoneSync(base: string, who: Id): Promise<{ byId: Map<string, any>; text: string; convs: string[]; deleted: unknown }> {
     const list = await api(base, 'GET', `/api/messages/conversations/${who.pk}`, who);
     require_(list.status === 200 && Array.isArray(list.body?.conversations), `${who.name}'s phone lists its conversations (${brief(list)})`);
     const byId = new Map<string, any>();
@@ -293,7 +306,7 @@ async function phoneSync(base: string, who: Id): Promise<{ byId: Map<string, any
         text += r.text;
         for (const m of r.body.messages ?? []) byId.set(m.id, m);
     }
-    return { byId, text, convs };
+    return { byId, text, convs, deleted: list.body.deletedAccounts };
 }
 
 /** What the phone's diffChangedMessages takes from a sync: a new line, new metadata, a newer edit, or a new tombstone. */
@@ -331,19 +344,24 @@ async function main(): Promise<void> {
     const rhea = newId('Rhea');
     const bo = newId('Bo');
     const cy = newId('Cy');
+    const dee = newId('Dee');
 
     try {
         // ── 1. M ──
         console.log('\n— 1. the main server: Rhea writes in every kind of chat —');
         const main = await spawnNode(SCRIPT, dir('main'), { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', WAL_TRUNCATE_RETRY_MS: '150' });
         nodes.push(main);
-        await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy']] });
+        await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy'], [dee.pk, 'Dee']] });
         const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS, cyWords: CY_WORDS });
+        const removedDee = await main.send('removed-member', { dee: dee.pk, bo: bo.pk });
+        require_(removedDee.status === 'pruned', `the community removed Dee, who was in a DM with Bo (${JSON.stringify(removedDee)})`);
         const m = `https://localhost:${await main.send('serve')}`;
         // Bo's phone syncs once now, holding her DM lines. Then 55 more DM lines land, so her first ones are older than the newest 50.
         const phoneBefore = await phoneSync(m, bo);
         require_(phoneBefore.byId.has(fx.rheaLines[6]) && phoneBefore.byId.has(fx.rheaLines[0]),
             `Bo's phone holds her DM and group lines (${phoneBefore.byId.size} lines in ${phoneBefore.convs.length} conversations)`);
+        assert(Array.isArray(phoneBefore.deleted) && phoneBefore.deleted.length === 0 && phoneBefore.convs.includes(removedDee.dmId),
+            `before she deletes, Bo's conversation list names nobody as deleted, not Dee, whom the community removed (${JSON.stringify(phoneBefore.deleted)})`);
         const more = await main.send('dm-more', { rhea: rhea.pk, bo: bo.pk, dmId: fx.dmId });
         fx.rheaLines.push(more.rheaNewest);
         fx.othersLines.push(...more.boIds);
@@ -429,11 +447,17 @@ async function main(): Promise<void> {
         const phoneAfter = await phoneSync(m, bo);
         const rewritten = [...phoneAfter.byId.values()].filter((msg) => phoneBefore.byId.has(msg.id) && phoneWouldRewrite(phoneBefore.byId.get(msg.id), msg)).map((msg) => msg.id as string);
         // The app sends no `limit`, so a sync carries only the newest 50 lines of each conversation. Her lines older than
-        // that stay on the phone as they were: the page says so. What the sync does carry is checked here.
+        // that come back in no page: the conversation list names her instead, and the app blanks every line of hers it holds
+        // (apps/native/utils/db.ts blankLinesOfDeletedAccounts, utils/__tests__/deleted-account-lines.test.ts).
         const olderDm = fx.rheaLines.slice(6, 9);
         const newestDm = more.rheaNewest as string;
         assert(olderDm.every((id: string) => phoneBefore.byId.has(id) && !phoneAfter.byId.has(id)),
-            'her three first DM lines are on Bo\'s phone from before, and the sync no longer reaches them (older than the newest 50: they stay on the phone)');
+            'her three first DM lines are on Bo\'s phone from before, and the sync no longer reaches them (older than the newest 50)');
+        assert(JSON.stringify(phoneAfter.deleted) === JSON.stringify([rhea.pk]),
+            `so Bo's conversation list names her as deleted, and nobody else: not Dee, whom the community removed (${JSON.stringify(phoneAfter.deleted)})`);
+        const gwenList = await api(m, 'GET', `/api/messages/conversations/${gwen.pk}`, gwen);
+        assert(gwenList.status === 200 && Array.isArray(gwenList.body?.deletedAccounts) && gwenList.body.deletedAccounts.length === 0,
+            `and Gwen, in no chat with her, is told of nobody (${brief(gwenList)})`);
         const herOnPhone = fx.rheaLines.filter((id: string) => phoneAfter.byId.has(id));
         assert(herOnPhone.includes(newestDm) && herOnPhone.every((id: string) => rewritten.includes(id) || !phoneBefore.byId.has(id)),
             `her newest DM line, and every line of hers the sync does carry, comes as her tombstone (${herOnPhone.length} of hers; rewritten ${rewritten.length})`);
@@ -506,6 +530,9 @@ async function main(): Promise<void> {
         assert(took < 2_000, `the delete answers at once, never waiting out the 5-second busy timeout for the reader (${took} ms)`);
         const cyRow = (await main.send('messages')).rows.find((r: MsgRow) => r.id === fx.cyLine);
         assert(cyRow?.type === 'removed' && meta(cyRow.metadata).accountDeleted === true, 'his line is his own tombstone');
+        const boList = await api(m, 'GET', `/api/messages/conversations/${bo.pk}`, bo);
+        assert(JSON.stringify(boList.body?.deletedAccounts) === JSON.stringify([cy.pk, rhea.pk].sort()),
+            `and Bo's conversation list names him too, from the group chat they share (no DM) (${JSON.stringify(boList.body?.deletedAccounts)})`);
         const held = await main.send('files', { needles: [b64(CY_WORDS)] });
         assert(held.walBytes > 0, `while the reader holds it, the WAL cannot be emptied (${held.walBytes} bytes)`);
         await main.send('release-reader');

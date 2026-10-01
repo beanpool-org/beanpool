@@ -95,3 +95,40 @@ export function mergeIncomingMessage(local: LocalMessageRow | null | undefined, 
     }
     return keep;
 }
+
+/**
+ * The author of a line the node blanked because they deleted their account (apps/server/src/engine/message-tombstone.ts
+ * blankMessagesOf: their own tombstone, `accountDeleted`), or null. One such line in any sync answer means every line
+ * of theirs on this phone goes too (utils/db.ts blankLinesOfDeletedAccounts). Only ever the line's own author, so a line
+ * dressed up as one can only blank its own sender's lines.
+ */
+export function accountDeletedAuthor(m: IncomingMessage | null | undefined): string | null {
+    if (!m || !isRemovedPayload(m)) return null;
+    const author = m.authorPubkey ?? m.author_pubkey;
+    if (typeof author !== 'string' || !author) return null;
+    const meta = parseMeta(m.metadata);
+    return meta?.accountDeleted === true && meta.removedBy === author ? author : null;
+}
+
+/** A row on this phone that may still hold what its author wrote: anything but a tombstone the node wrote in plain text. */
+export function stillHoldsWords(row: { type: string | null; nonce: string | null }): boolean {
+    return !(row.type === 'removed' && typeof row.nonce === 'string' && row.nonce.startsWith('plaintext'));
+}
+
+/**
+ * The metadata a line of a deleted account takes on this phone: the node's own shape (message-tombstone.ts tombstoneRow),
+ * so the bubble reads as their own delete in every kind of chat (chat-actions.ts tombstoneText), and nothing hung off it
+ * stays: no reactions, mentions or reply link.
+ */
+export function accountDeletedMetadata(raw: string | null | undefined, authorPubkey: string, removedAt: string): string {
+    let meta = parseMeta(raw);
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+    delete meta.mentions;
+    delete meta.reactions;
+    delete meta.replyToId;
+    meta.removed = true;
+    meta.removedBy = authorPubkey;
+    meta.removedAt = removedAt;
+    meta.accountDeleted = true;
+    return JSON.stringify(meta);
+}

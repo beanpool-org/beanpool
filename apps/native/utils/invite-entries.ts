@@ -30,11 +30,23 @@ export function invitesOffRefusal(status: number, body: unknown): string | null 
 }
 
 /**
- * Said to a guest (a phone with an account elsewhere that added this community) on a node that takes no invites: there
- * is no code to enter here. Joining it from an account you already have isn't in the app yet (guide: Joining a
- * community), so no promise of a way in.
+ * Said to a guest (a phone with an account elsewhere that added this community) of the global community once it has said
+ * its door is open: the way in is the door, with the account on this phone (app/join-global.tsx), under this button.
  */
-export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes. Joining it from an account you already have isn’t possible in the app yet.';
+export const GUEST_DOOR_TEXT = 'You are visiting as a guest. Join as the account on this phone: sign in once and choose your name. Your key and your 12 words stay the same, and nothing changes in your other communities.';
+export const GUEST_DOOR_BUTTON = '🌍 Join with a sign-in';
+
+/**
+ * Said to a guest on a node that takes no invites where no door is offered: a node other than the global community (the
+ * door is the global community's alone), or the global community before it has said, this app start, that its door is
+ * open. There is no code to enter here, so no form, and no promise of a way in that isn't there.
+ */
+export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes, and it isn’t taking new members from the app.';
+/** The same at the global community before it has answered, where a connection fault is a real cause. */
+export function guestNoInvitesText(guestAtGlobalWaiting: boolean): string {
+    return guestAtGlobalWaiting ? GUEST_AT_GLOBAL_WAITING_TEXT : GUEST_NO_INVITES_TEXT;
+}
+export const GUEST_AT_GLOBAL_WAITING_TEXT = 'This community doesn’t use invite codes, and it isn’t open to new members from the app right now. Check your connection and try again later.';
 
 // ── Who may invite (the door) ────────────────────────────────────────────────────────────────────
 

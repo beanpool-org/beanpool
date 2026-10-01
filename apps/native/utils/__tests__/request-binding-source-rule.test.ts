@@ -233,6 +233,8 @@ describe('the phone\'s community address is written only after the plain-address
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {
         'app/welcome.tsx finishGlobalJoin': 'GLOBAL_NODE_URL',
+        // The same door from an account the phone already has, once it is in (join-global.tsx).
+        'utils/global-join-existing.ts enterGlobalCommunity': 'GLOBAL_NODE_URL',
     };
 
     it('finds the writes it is meant to police', () => {

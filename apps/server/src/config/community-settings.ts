@@ -34,7 +34,7 @@ import { db } from '../db/db.js';
 import { logger } from '../logger.js';
 import { getLocalConfig, updateLocalConfig, DEFAULT_THRESHOLDS, type LocalConfig, type GatewayConfig } from './local-config.js';
 import { getNodeConfig, updateNodeConfig, type NodeConfig } from '../state-engine.js';
-import { isAutoSnapshotInterval, restartScheduler } from '../services/snapshot-scheduler.js';
+import { isAutoSnapshotInterval, restartScheduler, MAX_SNAPSHOTS_KEPT } from '../services/snapshot-scheduler.js';
 import type { SyncCommunitySettings } from '@beanpool/engine';
 
 export type { SyncCommunitySettings };
@@ -175,7 +175,8 @@ const snapshotSchedule: Check<string> = (v) => {
     let s: unknown;
     try { s = JSON.parse(v); } catch { return BAD; }
     if (!isObject(s) || typeof s.enabled !== 'boolean' || !isAutoSnapshotInterval(s.intervalHours) || !finite(s.keep) || s.keep < 1) return BAD;
-    return JSON.stringify({ enabled: s.enabled, intervalHours: s.intervalHours, keep: Math.round(s.keep) });
+    // A main server from before the cap may keep more: its record is taken, keeping at most MAX_SNAPSHOTS_KEPT.
+    return JSON.stringify({ enabled: s.enabled, intervalHours: s.intervalHours, keep: Math.min(MAX_SNAPSHOTS_KEPT, Math.round(s.keep)) });
 };
 
 const radius: Check<{ lat: number; lng: number; radiusKm: number }> = (v) => {

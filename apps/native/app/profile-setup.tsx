@@ -33,8 +33,11 @@ export default function ProfileSetupScreen() {
     // When launched as the wizard-on-join, `redirect` says where to land after
     // finishing (or cancelling) — the member has already joined, so there's no
     // sensible screen to router.back() to. Absent (Settings / gate launches) we
-    // just pop back to wherever we came from.
-    const params = useLocalSearchParams<{ redirect?: string }>();
+    // just pop back to wherever we came from. `name`: the name the global community's door has just checked and
+    // joined with (app/join-global.tsx), so the steps start from it rather than from the phone's own, and at the photo:
+    // the name step has just been done there.
+    const params = useLocalSearchParams<{ redirect?: string; name?: string }>();
+    const joinedAs = typeof params.name === 'string' && params.name.trim().length >= 2 ? params.name.trim() : null;
     const leaveWizard = () => {
         if (params.redirect) router.replace(params.redirect as any);
         else router.back();
@@ -43,7 +46,7 @@ export default function ProfileSetupScreen() {
     const [step, setStep] = useState<Step>('name');
     // The guide step: on a community with Beans off (the worldwide one) it says so, in place of the cards about Beans.
     const nodeProfile = useNodeProfile();
-    const [callsign, setCallsign] = useState(identity?.callsign ?? '');
+    const [callsign, setCallsign] = useState(joinedAs ?? identity?.callsign ?? '');
     // Three separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
     //                     may publish;
@@ -84,7 +87,7 @@ export default function ProfileSetupScreen() {
             setCanonicalAvatar(canonical ?? null);
             const haveAvatar = Boolean(row || canonical);
             const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
-            if (nameOk && !haveAvatar) setStep('avatar');
+            if (joinedAs || (nameOk && !haveAvatar)) setStep('avatar');
         })();
         return () => { cancelled = true; };
     }, [identity]);

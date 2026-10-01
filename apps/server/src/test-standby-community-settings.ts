@@ -36,8 +36,8 @@
  *  8. The directory publisher on the promoted server sends the community's name, area and contact email, and not its
  *     phone, member count or health, which the community had not published (S's own choice to publish its phone does
  *     not carry over to the community's phone); nothing of S's own name or contacts.
- *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed before the take-over
- *     resumes), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
+ *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed once the take-over
+ *     has resumed; a standby arms none), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
  *     community-settings step and finished at the next start (resumeTakeoverAtBoot), with no restart after: the promoted
  *     server's snapshot timer runs on M's schedule, not S3's (before, it kept S3's until it next restarted, while the
  *     Backup tab showed M's).
@@ -559,7 +559,8 @@ async function main(): Promise<void> {
         const takesSchedule = await standby.send('record-takes-snapshot-interval', { values: [1, 24, 596, 0, -1, 0.5, 597, 24 * 30, 24 * 366, '12'] });
         assert(j(takesSchedule) === j([true, true, true, false, false, false, false, false, false, false]),
             `a kept record takes the snapshot intervals the route does, and none the scheduler's timer can't hold (${j(takesSchedule)})`);
-        const armed = await standby.send('snapshot-timer-from-rows', {
+        // On M: a standby arms no snapshot timer at all (services/snapshot-scheduler.ts, data-at-rest report F3).
+        const armed = await main.send('snapshot-timer-from-rows', {
             rows: [{ enabled: true, intervalHours: 24 * 30, keep: 7 }, { enabled: true, intervalHours: 0.3, keep: 7 }].map((r) => JSON.stringify(r)),
         });
         assert(armed.length === 2 && armed.every((ms: number) => ms >= 3_600_000 && ms <= 2 ** 31 - 1),
@@ -642,7 +643,7 @@ async function main(): Promise<void> {
         console.log('\n— 9 (while the main server is up): a standby with its own snapshots off copies it —');
         fs.mkdirSync(dir('standby3'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby3'), 'genesis.json'));
-        // Booted as index.ts boots: the snapshot scheduler armed from the schedule row, then the take-over resumed. Its
+        // Booted as index.ts boots: the take-over resumed, then the snapshot scheduler armed for the role. Its
         // take-over is killed the moment the step before community-settings is recorded, as a power cut would.
         const s3Env = env(PW_STANDBY3, 'backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
         let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
@@ -655,7 +656,7 @@ async function main(): Promise<void> {
         const s3Kept = JSON.parse((await standby3.send('settings')).kept?.record?.nodeConfig?.autosnapshot_config ?? '{}');
         const s3Timer = await standby3.send('snapshot-timer');
         assert(s3Timer === null && s3Kept.enabled === true && s3Kept.intervalHours === 6,
-            `while a standby, S3 takes no snapshots, its own choice, and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
+            `while a standby, S3 takes no snapshots (none does, and its own are off), and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
         refused.push(...(await standby3.send('fetches')).blocked);
 
         // ── 6. The take-over ──

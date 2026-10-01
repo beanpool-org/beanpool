@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 89,
-  "hash": "9bf41ec5cc907526718d692bdb0dab2058bc80f87b55408ce48bee844ae141b0",
+  "version": 90,
+  "hash": "952b370a0b7b1b69e69ac33f77964d372a82f067c163c193e2080af21057a6d5",
   "sections": [
     {
       "id": "setup",
@@ -897,7 +897,7 @@
     {
       "slug": "members-and-invites",
       "title": "Members and invites",
-      "summary": "How people join, the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.",
+      "summary": "How people join, who may invite (any member, or only admins), the invites you can make, where people stop in the join flow, and what each button on a member does, from Freeze to Offboard.",
       "section": "people",
       "related": [
         "roles",
@@ -917,7 +917,7 @@
         },
         {
           "type": "p",
-          "text": "Any member can make invites from their app, and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows."
+          "text": "Any member can make invites from their app, unless you choose that only admins do (see Who may invite, below), and most people will join that way. Each new member is recorded under the person who invited them, which is what the invite tree in Settings shows."
         },
         {
           "type": "p",
@@ -933,6 +933,53 @@
         },
         {
           "type": "h2",
+          "text": "Who may invite"
+        },
+        {
+          "type": "p",
+          "text": "Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** says who can bring people into the community: make an invite, or answer someone who asks to join. Pick one and tap **Save who may invite**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invite: any member invites.** Every community starts this way. Any member can make an invite in the app or the web app, and answer a request to join.",
+            "**Known: only admins invite.** Only owners and admins can make invites and answer requests to join. A member's **Invites** shows **Bring someone here** instead of the invite maker (the invite tree and the codes they made earlier stay), says that only the admins invite people here and to ask one, and offers the community's link where it takes requests to join. Members don't see the requests, and the server refuses a member who tries anyway. It is a role, not a trust badge."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Before you switch to Known, give at least one person the owner or admin role (People & Safety). Until someone holds it, the card warns you: nobody can answer a request to join, or make an invite in the app. You can still save it."
+        },
+        {
+          "type": "p",
+          "text": "Only an owner can change it, signed in with the admin password or their own key. An admin sees the setting, and that it is an owner's to change. The server's log says who changed it."
+        },
+        {
+          "type": "p",
+          "text": "When you switch to Known:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Invite codes already made**, by anyone, still work until they expire, 30 days after they were made. The server made them under the old rule, and knows when.",
+            "**A paper ticket** (a long code starting BP-) **that a member made** on their phone no longer lets anyone in, whatever date it carries: the server first sees a ticket when someone joins with it, so it can't tell when it was really made. The join screen tells the person to ask an admin for a fresh invite. A ticket an owner or admin made still works. Switch back to Invite and a member's unused ticket works again.",
+            "**Requests to join already waiting** stay waiting, for an admin to answer."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Switching back to Invite works straight away too: every member can invite again."
+        },
+        {
+          "type": "p",
+          "text": "A standby server keeps the setting from the main server, and so does a standby that takes over. A backup carries it."
+        },
+        {
+          "type": "p",
+          "text": "A community with Beans can't open its door to anyone with a sign-in: strangers would hold credit from their first day, so the server refuses it. On the global community, which has no Beans, the door is open and nobody invites; Settings shows **Open** there, with nothing to choose."
+        },
+        {
+          "type": "h2",
           "text": "Invites from Settings"
         },
         {
@@ -942,7 +989,7 @@
         {
           "type": "ul",
           "items": [
-            "Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button. A moderator cannot.",
+            "Any owner or admin can make them, signed in either way: with the admin password (plus the two-factor code, if it's on), or from the app's Manage button, whoever may invite. A moderator cannot.",
             "If the server refuses, Settings shows its reason and no code. Every code you see was issued by the server. On the global community it always refuses: \"This community doesn’t use invites\".",
             "In the community's invite tree, every invite made in Settings comes from the first member, Admin. The server also records which owner or admin made it (or \"the admin password\"), in its security log."
           ]
@@ -1043,7 +1090,7 @@
             "A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as \"Deleted post\".",
             "A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.",
             "The trust score shown on a member's page is not calculated yet. Do not act on it.",
-            "Suspended members can still make invites from their app.",
+            "Suspended members can still make invites from their app, where any member invites.",
             "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
             "Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can take down a listing of their own, from before visitors were stopped from posting. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans."
           ]
@@ -1197,7 +1244,7 @@
         },
         {
           "type": "p",
-          "text": "An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. It is not kept anywhere, so someone who has notifications off will not see it later. Keep it short and use it rarely."
+          "text": "An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. The notification itself says only \"Your community has a notice for you.\": your words never pass through the phone companies' servers or show on a lock screen. It is not kept anywhere members can find it later, so someone who has notifications off will not see it. An announcement can be at most 4,000 characters, and a headline at most 200: the form shows a count, and a longer one is refused rather than cut. Keep it short and use it rarely."
         },
         {
           "type": "img",
@@ -1351,7 +1398,7 @@
         },
         {
           "type": "p",
-          "text": "The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:"
+          "text": "The chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words. The notification itself says only that there is news on one of your trades:"
         },
         {
           "type": "ul",
@@ -2713,7 +2760,7 @@
           "items": [
             "The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).",
             "GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.",
-            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.",
+            "Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words (\"You have a new message.\", \"Your community has a notice for you.\"), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to.",
             "Members' Pulse channels are fetched from the sites they link to.",
             "With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare."
           ]

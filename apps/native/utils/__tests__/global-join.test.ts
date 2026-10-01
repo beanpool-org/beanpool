@@ -202,6 +202,13 @@ describe('each answer from the door, and where it takes the member', () => {
         expect(screen(429, {}, null).a).toMatchObject({ kind: 'rate_limited', retryAfterSeconds: null });
     });
 
+    it('403 account_closed: its own answer, closed with no Try again, in plain words', () => {
+        const closed = screen(403, { code: 'account_closed', error: "This key's account in this community was closed, so the community no longer accepts it." });
+        expect(closed).toMatchObject({ kind: 'account_closed', next: 'closed' });
+        expect(doorMessage(closed.a as any)).toBe("This account's place in the global community was closed, so it can't join again.");
+        expect(doorMessage(closed.a as any)).not.toMatch(/taking new members|invite/);
+    });
+
     it('403 (and the 404 a shut door answers): closed, and invites are the way in', () => {
         const forbidden = screen(403, { error: 'Forbidden' });
         expect(forbidden).toMatchObject({ kind: 'door_closed', next: 'closed' });

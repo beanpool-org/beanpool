@@ -95,7 +95,9 @@ async function main() {
     const OLD_RK = 'RK-1A2B-3C4D';
     const OLD_RK_LOWER = 'rk-9f8e-7d6c';
     const OLD_INV = 'INV-ABCD-EFGH';
-    const at = '2026-09-01T00:00:00.000Z';
+    // Two days ago, relative to now: the log keeps no line past 30 days (logger.ts LOG_KEEP_DAYS), so a fixed date would
+    // one day be pruned at boot before the scrub could be seen.
+    const at = new Date(Date.now() - 2 * 24 * 60 * 60_000).toISOString();
     const plant = db.prepare('INSERT INTO system_logs (timestamp, level, category, message, metadata) VALUES (?, ?, ?, ?, ?)');
     const planted = {
         rekeyAudit: plant.run(at, 'INFO', 'AUTH', 'Re-enrolment code issued for member Bob (abcdef1234...) by operator owner:password',

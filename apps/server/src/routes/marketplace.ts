@@ -154,7 +154,13 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // Post photos are immutable per (id, order_num): getPosts versions the URL with the photo's
     // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
-    ctx.set('Cache-Control', hidden ? 'private, no-store' : 'public, max-age=31536000, immutable');
+    //
+    // Only a photo anyone may see goes to shared caches as well (Cloudflare in front of a tunnel, a proxy). A keyed one is
+    // members' (engine/photo-keys.ts), and its key is what can be taken back: a new secret, the listing made private, a
+    // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
+    // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
+    // the bytes a URL is answered with differ by who asks only for a hidden listing's, which no cache keeps.
+    ctx.set('Cache-Control', hidden ? 'private, no-store' : keyed ? 'private, max-age=31536000, immutable' : 'public, max-age=31536000, immutable');
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;
@@ -200,6 +206,8 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
         ctx.body = { error: 'Attachment not found' };
         return;
     }
+    // A message's photo, as ciphertext: no cache keeps it, so a "delete for everyone" leaves no copy on the way.
+    ctx.set('Cache-Control', 'private, no-store');
     ctx.body = { data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 

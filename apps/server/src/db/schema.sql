@@ -358,6 +358,8 @@ CREATE TABLE IF NOT EXISTS post_photos (
 CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
 -- A listing photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
 CREATE INDEX IF NOT EXISTS idx_post_photos_sha256 ON post_photos(sha256) WHERE sha256 IS NOT NULL;
+-- Whether a row still names an object, asked before every delete of one (storage/image-columns.ts storageKeyStillReferenced).
+CREATE INDEX IF NOT EXISTS idx_post_photos_storage_key ON post_photos(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
 
 -- Encrypted message attachments (lazy-loaded; the node only ever holds ciphertext).
 -- data = base64 AEAD ciphertext of the image; nonce = its x25519-xc20p-v2 nonce.
@@ -372,6 +374,7 @@ CREATE TABLE IF NOT EXISTS message_attachments (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     storage_key TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_message_attachments_storage_key ON message_attachments(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
 
 -- 5. Marketplace Transactions
 CREATE TABLE IF NOT EXISTS marketplace_transactions (

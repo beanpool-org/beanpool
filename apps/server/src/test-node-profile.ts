@@ -73,11 +73,12 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
 // G4 built distance search: every profile answers it (test-distance-search). G6 built knocks: on for a local
 // community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
-// cards on a nearly empty Market: global only (drawn by the apps, nothing stored). The PR that builds one of these
-// changes its line here, with the test that proves it.
+// cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
+// off on the lobby, whose door is the only way in (test-invites-off). The PR that builds one of these changes its line
+// here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false },
 };
 
 async function main() {
@@ -131,6 +132,8 @@ async function main() {
     assert(local.exampleListings === false && global.exampleListings === true,
         'example cards on a nearly empty Market: global only (Marty, 2026-09-27)');
     assert(local.decisions && !global.decisions, 'formal Decisions: on for a local community, off on the lobby (anyone may join it)');
+    assert(local.invites === true && global.invites === false,
+        'invites: on for a local community, off on the lobby, whose open door is the only way in (Marty, 2026-10-01)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 
@@ -219,6 +222,15 @@ async function main() {
         '/api/community/info says a community that opted out takes no knocks');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.knocks`);
     assert(getProfileSwitches().knocks === true && (await getInfo()).body.features.knocks === true, 'and without it, a local community takes knocks (D4)');
+    setOverride('invites', 'false');
+    const noInvites = (await getInfo()).body.features;
+    assert(getConfiguredSwitches().invites === false && getProfileSwitches().invites === false && noInvites.invites === false,
+        'local + nodeProfile.invites=false: invites are built, so the switch the code reads and /api/community/info follow the override');
+    assert(getConfiguredSwitches().knocks === true && getProfileSwitches().knocks === false && noInvites.knocks === false,
+        'and a knock is answered with an invite, so the node takes no knocks either, though their own switch is on');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.invites`);
+    assert(getProfileSwitches().invites === true && getProfileSwitches().knocks === true && (await getInfo()).body.features.invites === true,
+        'and without it, a local community takes invites and knocks again');
     assert(getProfileSwitches().distanceSortDefault === false, 'local: a post listing with a point keeps today\'s order by default');
     setOverride('distanceSortDefault', 'true');
     assert(getProfileSwitches().distanceSortDefault === true,
@@ -263,9 +275,15 @@ async function main() {
         `the boot log says which overrides ask for something this build does not have yet, and knocks (built in G6) is not one (${notBuilt})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
+    // A knock is answered with an invite, so on global, whose invites are off, the operator's knocks=true alone leaves knocks
+    // off (a member answering one would mint an invite nothing here takes). With invites turned on as well, it reaches the API.
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: false }),
+        'global + knocks=true while invites are off: /api/community/info still says knocks false (and probation off)');
+    setOverride('invites', 'true');
     // Probation (G3) and knocks (G6) are built, so the operator's nodeProfile.probation=false and knocks=true reach the API.
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: true }),
-        'global with overrides: /api/community/info reports what this build does, the built overrides (probation off, knocks on) included');
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: true, invites: true }),
+        'global with overrides: /api/community/info reports what this build does, the built overrides (probation off, knocks on, invites on) included');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.invites`);
     assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
         'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
     assert(getProfileSwitches().distanceSortDefault === true, 'global: nearest first by default, no longer pinned off (G4)');

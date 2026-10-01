@@ -50,7 +50,7 @@ export function writeMessageTombstone(messageId: string, row: any, removedBy: st
         // reads the row, so the object being a moment behind can never make a removed photo servable.
         const key = (db.prepare('SELECT storage_key FROM message_attachments WHERE message_id = ?').get(messageId) as any)?.storage_key as string | undefined;
         db.prepare('DELETE FROM message_attachments WHERE message_id = ?').run(messageId);
-        if (key) afterTransactionCommit(() => deleteStoredObjects([key]));
+        if (key) afterTransactionCommit(() => deleteStoredObjects(db, [key]));
     })();
 
     return { ciphertext, metadata, removedAt };

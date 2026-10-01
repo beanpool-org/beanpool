@@ -405,7 +405,11 @@ export function sendMessage(
         // The ciphertext goes to the image store and the row keeps the nonce, the mime and a key
         // (storage design §7). The node has never held the key that would decrypt either half, so nothing
         // about what it can read changes; only where the 8 MB of it lives.
-        const cols = storeAttachmentColumns(getImageStore(), attachmentKey(msg.id), attachment.data);
+        // An id no key is built from (storage/image-store.ts idSegment refuses one, never strips it) keeps the
+        // ciphertext in the row, as a store that refuses it does: a failure here never fails the message.
+        let key: string | null = null;
+        try { key = attachmentKey(msg.id); } catch { /* kept in the row */ }
+        const cols = key ? storeAttachmentColumns(getImageStore(), key, attachment.data) : { data: attachment.data, storage_key: null };
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
             .run(msg.id, cols.data, attachment.nonce, attachment.mime || 'image/jpeg', cols.storage_key);
     }
@@ -847,7 +851,7 @@ export function removeOldChatGroups(): number {
                 'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id = ?)'
             ).all(id) as any[]).map(r => r.storage_key as string);
             db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)').run(id);
-            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomedObjects));
             db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
             deletePlainRows('chat_mutes', 'conversation_id = ?', id);

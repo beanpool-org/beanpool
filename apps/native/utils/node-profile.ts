@@ -36,11 +36,13 @@ export interface NodeFeatures {
     exampleListings?: boolean;
     /** Members propose and vote on formal Decisions here. Off on the worldwide community (Marty, 2026-09-27). */
     decisions?: boolean;
+    /** Members make invites here, and an invite joins someone. Off on the worldwide community (Marty, 2026-10-01). */
+    invites?: boolean;
 }
 
 const FEATURE_KEYS: ReadonlyArray<keyof NodeFeatures> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
-    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions',
+    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites',
 ];
 
 export interface NodeProfile {
@@ -209,4 +211,14 @@ export function beansOn(features: NodeFeatures | null | undefined): boolean {
  */
 export function decisionsOn(features: NodeFeatures | null | undefined): boolean {
     return features?.decisions !== false;
+}
+
+/**
+ * Whether this node's members make invites (a code, a QR, an offline ticket). Only a node that says outright it
+ * doesn't makes none: the worldwide community, whose open door is the only way in (one sign-in, one member), and which
+ * refuses every invite. Unknown counts as yes, as every node before the switch took them. Joining ANOTHER community
+ * with its own invite (a knock answered there) is that community's, and is not this.
+ */
+export function invitesOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.invites !== false;
 }

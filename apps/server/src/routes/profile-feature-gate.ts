@@ -1,5 +1,7 @@
 /**
- * The routes a node profile switch turns off (config/node-profile.ts): 404 `feature_off`, before any handler runs.
+ * The routes a node profile switch turns off (config/node-profile.ts): 404 `feature_off`, before any handler runs. It
+ * runs after the signature middleware, so a signed request a key may not make at all (a replaced key, a closed
+ * account) is refused for that first; the two invite redeems and the admin surface skip that middleware and meet this.
  *
  * One table rather than a check in each handler, so a route added under one of these prefixes is off with its
  * feature without anyone remembering to say so. Reads stay 404 too: the apps treat a failed treasury or crowdfund
@@ -79,10 +81,22 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
     },
     // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
     // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
-    // Settings shows beside the switch that turns them back on.
+    // Settings shows beside the switch that turns them back on. A knock is answered with an invite, so where invites
+    // are off (the global node) the answer is theirs, which says how to join instead.
     {
-        needs: ['knocks'],
+        needs: ['invites', 'knocks'],
         paths: [/^\/api\/join\/knocks?(\/|$)/],
+    },
+    // Invites (engine/invites.ts): making one (a member's code, an owner's or admin's seed invite) and joining with one
+    // (a code, an offline ticket, and the pre-flight that checks either). Off on the global node, where the open door is
+    // the only way in. The engine refuses underneath. A member's own invites and the invite tree still read: they make
+    // nobody a member.
+    {
+        needs: ['invites'],
+        paths: [
+            /^\/api\/invite\/(generate|redeem|redeem-offline|check)\/?$/,
+            /^\/api\/admin\/seed-invite\/?$/,
+        ],
     },
     // Formal Decisions: proposing and voting (every write under /api/commons/decisions, so a write route added there
     // later is off with them), and an admin cutting short a removal's grace window, which carries out a vote. Reads of

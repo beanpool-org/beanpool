@@ -47,7 +47,6 @@ class FakeServer {
 function trace(server: FakeServer, me: Admin, pin: NamesTrustPin | null, generation = server.current()) {
     return traceNamesTrust({ communityId: COMMUNITY, me, pin, records: server.records(), myKeys: server.myKeys(me.publicKey), generation });
 }
-const pinOf = (...keys: Admin[]): NamesTrustPin => ({ v: 1, communityId: COMMUNITY, trusted: keys.map((k) => k.publicKey) });
 
 describe('a signed wrap', () => {
     it('verifies for its signer over the community, generation, holder, wrap and drops, and for nothing changed', () => {

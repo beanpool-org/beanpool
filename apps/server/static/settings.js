@@ -1,3 +1,4 @@
+        /* global window, document, navigator, console, fetch, alert, confirm, prompt, atob, Blob, URL, WebSocket, localStorage, sessionStorage, setTimeout, clearTimeout, setInterval, clearInterval, L -- a classic script in the browser; L is unpkg's Leaflet */
         const esc = s => String(s||'').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 
         const API = '/api/local';

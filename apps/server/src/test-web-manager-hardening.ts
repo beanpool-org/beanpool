@@ -175,7 +175,7 @@ async function main(): Promise<void> {
         assert(!!a.sessionId && !a.text.includes(a.sessionId), "nor the session's id: it is in the httpOnly cookie only");
         assert(a.headers.get('x-admin-2fa-session') === null && !('tfaSessionToken' in (a.body || {})), 'and no 2FA session is handed out');
         assert((a.headers.get('cache-control') || '').includes('no-store'), 'the answer is not stored');
-        const csrfA: string = a.body.csrfToken;
+        const csrfA: string = a.body?.csrfToken ?? '';
 
         const who = await call('GET', '/api/local/admin/auth/session', { headers: asCookie(a.sessionId) });
         assert(who.body?.authenticated === true && who.body?.isPasswordSession === true && who.body?.isKeySession === false

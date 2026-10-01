@@ -15,7 +15,8 @@
  *   5. after the unblock nothing old arrives: the blocker's list, lines and badge are as they were; a line sent after it
  *      arrives alone, with a push, in the conversation the sender opened while blocked (the same id)
  *   6. a group @mention by a blocked member pushes the blocker nothing (an ordinary line neither); another member's does
- *   7. a deal request from a blocked member waits with no push; anyone else's pushes
+ *   7. a deal request from a blocked member waits with no push; anyone else's pushes. Nor do a 1-step accept of the
+ *      blocker's Offer and the buyer's cancel (the trade itself unchanged), nor the request's expiry
  *   8. a listing addressed to the blocker is refused as one to someone who isn't here
  *   9. a member of another community, relayed by a peer, is withheld as a member here is
  *  10. a standby's copy carries no withheld line or conversation; a prune takes the member's own
@@ -38,7 +39,7 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, createGroup, joinGroup, createPost, requestPost,
-    createConversation, sendMessage, transfer, getAdminPubkey,
+    createConversation, sendMessage, transfer, getAdminPubkey, runMarketplaceHygiene,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
@@ -58,6 +59,7 @@ function attempt<T>(fn: () => T): T | undefined {
     try { return fn(); } catch (e: any) { console.error(`  (threw: ${e?.message})`); return undefined; }
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const DAY = 86_400_000;
 
 let BASE = '';
 
@@ -399,7 +401,7 @@ async function main(): Promise<void> {
     // ── 7. a deal request ───────────────────────────────────────────────────────────────────────
     console.log('── 7. a deal request ──');
     // A Need asks its author to have listed an Offer first, and the Beans to pay for it.
-    attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', 1, 'fixed', ann.pk));
+    const jars = attempt(() => createPost('offer', 'goods', 'Spare jars', 'A box of them', 1, 'fixed', ann.pk));
     attempt(() => transfer('genesis', ann.pk, 10, 'Seed grant', 'direct', true));
     const need = attempt(() => createPost('need', 'goods', 'A lift to town', 'Thursday morning', 1, 'fixed', ann.pk));
     pushes.length = 0;
@@ -409,6 +411,46 @@ async function main(): Promise<void> {
     const cyReq = attempt(() => requestPost(need!.id, cy.pk));
     await sleep(50);
     assert(!!cyReq && pushesTo(ann).length === 1, `Cy's pushes her (${pushesTo(ann).length})`);
+
+    // A 1-step accept of her Offer and the buyer's own cancel, over and over, would push her at will (#1403 review,
+    // NON-BLOCKING): from Bo they push her nothing. The trade itself is as it was: the Beans go into escrow and come back,
+    // and the deal's SYSTEM lines are written in their chat as for anyone. Cy, whom she never blocked, is the control.
+    for (const who of [bo, cy]) {
+        attempt(() => createPost('offer', 'goods', `${who.name}'s spare seeds`, 'A packet', 1, 'fixed', who.pk));
+        attempt(() => transfer('genesis', who.pk, 5, 'Seed grant', 'direct', true));
+    }
+    const balanceOf = (id: Id) => (db.prepare('SELECT balance FROM accounts WHERE public_key = ?').get(id.pk) as any)?.balance;
+    const systemLinesWith = (id: Id) => (db.prepare(`SELECT COUNT(*) AS n FROM messages m
+        JOIN conversation_participants a ON a.conversation_id = m.conversation_id AND a.public_key = ?
+        JOIN conversation_participants b ON b.conversation_id = m.conversation_id AND b.public_key = ?
+        WHERE m.type = 'system'`).get(ann.pk, id.pk) as any)?.n ?? 0;
+    const acceptAndCancel = async (who: Id) => {
+        const bal = balanceOf(who), lines = systemLinesWith(who);
+        pushes.length = 0;
+        const acc = await call('POST', who, '/api/marketplace/posts/accept', { postId: jars?.id, buyerPublicKey: who.pk });
+        const held = balanceOf(who);
+        const can = await call('POST', who, '/api/marketplace/transactions/cancel', { transactionId: acc.body?.transaction?.id, cancellerPublicKey: who.pk });
+        await sleep(50);
+        return { acc, can, bal, held, after: balanceOf(who), lines: systemLinesWith(who) - lines, kinds: pushesTo(ann).map(p => p.data?.k) };
+    };
+    const boDeal = await acceptAndCancel(bo);
+    const cyDeal = await acceptAndCancel(cy);
+    assert(boDeal.acc.status === 200 && boDeal.can.status === 200 && boDeal.held === boDeal.bal - 1 && boDeal.after === boDeal.bal && boDeal.lines === 2,
+        `Bo's accept and cancel go through as anyone's: escrowed, refunded, two SYSTEM lines (${show(boDeal.acc)}; ${boDeal.bal}→${boDeal.held}→${boDeal.after}; ${boDeal.lines})`);
+    assert(boDeal.kinds.length === 0, `and push Ann nothing (${JSON.stringify(boDeal.kinds)})`);
+    assert(cyDeal.acc.status === 200 && cyDeal.can.status === 200 && cyDeal.lines === 2
+        && JSON.stringify(cyDeal.kinds) === JSON.stringify(['market.request', 'trade.update']),
+        `Cy's push her as they did (${JSON.stringify(cyDeal.kinds)})`);
+    // A request left unanswered expires after 7 days: Bo's tells Ann nothing, as his request didn't; Bo hears of his own.
+    const eightDaysAgo = new Date(Date.now() - 8 * DAY).toISOString();
+    db.prepare('UPDATE marketplace_transactions SET created_at = ? WHERE id IN (?, ?)').run(eightDaysAgo, boReq?.id, cyReq?.id);
+    pushes.length = 0;
+    runMarketplaceHygiene();
+    await sleep(50);
+    const expired = db.prepare("SELECT COUNT(*) AS n FROM marketplace_transactions WHERE id IN (?, ?) AND status = 'cancelled'").get(boReq?.id, cyReq?.id) as any;
+    assert(expired?.n === 2 && pushesTo(ann).length === 1 && pushesTo(ann)[0]?.data?.k === 'market.listing'
+        && pushesTo(bo).length === 1 && pushesTo(cy).length === 1,
+        `both requests expire; only Cy's tells Ann, and each requester hears of their own (${expired?.n}; Ann ${pushesTo(ann).length}, Bo ${pushesTo(bo).length}, Cy ${pushesTo(cy).length})`);
 
     // ── 8. a listing addressed to her ───────────────────────────────────────────────────────────
     console.log('── 8. a listing addressed to her ──');
@@ -445,7 +487,6 @@ async function main(): Promise<void> {
     // an @mention), and no other: the node's notices and the group's rules push as they did. The real dispatcher, Expo
     // stubbed.
     console.log("── 11. pushes that aren't a blocked member's words ──");
-    const DAY = 86_400_000;
     const silence = (pub: string) => {
         const then = new Date(Date.now() - 31 * DAY).toISOString();
         db.prepare('UPDATE members SET last_active_at = ?, joined_at = ? WHERE public_key = ?').run(then, then, pub);

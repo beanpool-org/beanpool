@@ -48,7 +48,7 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, type PushNoticeRow } from './engine/push-notices.js';
-import { dropBlocksOf, blockersOf } from './engine/member-blocks.js';
+import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
@@ -973,7 +973,9 @@ export function runMarketplaceHygiene(): void {
         if (requesterPubkey) {
             dispatchPushNotification([requesterPubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.answer');
         }
-        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey) {
+        // Not to an author who has blocked the requester: their request came with no push (engine/escrow.ts requestPost),
+        // and its expiry would be one a week later (#1403 review).
+        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey && !(requesterPubkey && hasBlocked(post.author_pubkey, requesterPubkey))) {
             dispatchPushNotification([post.author_pubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.listing');
         }
     }

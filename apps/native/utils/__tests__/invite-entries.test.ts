@@ -17,7 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { invitesOn, readNodeProfile } from '../node-profile';
-import { communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK } from '../invite-entries';
+import { communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT } from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
 const GLOBAL = readNodeProfile({
@@ -116,5 +116,28 @@ describe('People → Invites goes through the helpers (source check)', () => {
         const handler = src.slice(src.indexOf('const handleGenerate'), src.indexOf('const shareInvite'));
         expect(handler).toContain('invitesOffRefusal(res.status');
         expect(handler.indexOf('invitesOffRefusal(')).toBeLessThan(handler.indexOf('makeOfflineTicket('));
+    });
+
+    it('a guest where no invites are made: no invite-code form, the sentence instead; invites on is unchanged', () => {
+        expect(src).toMatch(/const guestNoInvites = isGuest && !makesInvites;/);
+        expect(src).toContain('GUEST_NO_INVITES_TEXT');
+        expect(GUEST_NO_INVITES_TEXT).toMatch(/doesn’t use invite codes/);
+        expect(GUEST_NO_INVITES_TEXT).toMatch(/isn’t possible in the app yet/);
+        // The whole redeem section (heading, field, button) sits inside the guard.
+        const start = src.indexOf('{!guestNoInvites && (');
+        const end = src.indexOf('{isGuest && (', start);
+        expect(start).toBeGreaterThan(0);
+        const form = src.slice(start, end);
+        for (const part of ['REDEEM INVITE SECTION', 'placeholder="Invite URL or token"', 'onPress={handleRedeem}', 'Complete Registration']) {
+            expect(count(part) >= 1).toBe(true);
+            expect(form).toContain(part);
+        }
+        expect(src.indexOf('Complete Registration')).toBeGreaterThan(start);
+        // The old copy stays for a guest where invites are on.
+        expect(src).toContain('You cannot generate invites or participate in community trade until you register your identity.');
+        // The no-invite branch is told apart by makesInvites, not by anything else (an old node that says nothing counts as on).
+        expect(invitesOn(undefined)).toBe(true);
+        expect(invitesOn(GLOBAL)).toBe(false);
+        expect(invitesOn(LOCAL)).toBe(true);
     });
 });

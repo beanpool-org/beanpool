@@ -23,3 +23,10 @@ export function invitesOffRefusal(status: number, body: unknown): string | null 
     if (status !== 404 || !b || typeof b !== 'object' || b.code !== 'feature_off') return null;
     return typeof b.error === 'string' && b.error.trim() ? b.error : INVITES_OFF_FALLBACK;
 }
+
+/**
+ * Said to a guest (a phone with an account elsewhere that added this community) on a node that takes no invites: there
+ * is no code to enter here. Joining it from an account you already have isn't in the app yet (guide: Joining a
+ * community), so no promise of a way in.
+ */
+export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes. Joining it from an account you already have isn’t possible in the app yet.';

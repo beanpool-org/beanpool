@@ -21,7 +21,7 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import { GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -189,6 +189,8 @@ export default function PeopleScreen() {
     // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
     // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
     const makesInvites = invitesOn(nodeProfile?.features);
+    // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
+    const guestNoInvites = isGuest && !makesInvites;
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -897,7 +899,9 @@ export default function PeopleScreen() {
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
-                                You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.
+                                {guestNoInvites
+                                    ? GUEST_NO_INVITES_TEXT
+                                    : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
                         </View>
                     ) : (
@@ -993,6 +997,8 @@ export default function PeopleScreen() {
                         </>
                     )}
 
+                    {!guestNoInvites && (
+                    <>
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 32 }} />
 
                     {/* REDEEM INVITE SECTION */}
@@ -1040,6 +1046,8 @@ export default function PeopleScreen() {
                             </Text>
                         </Pressable>
                     </View>
+                    </>
+                    )}
 
                     {isGuest && (
                         <View style={{ marginTop: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300, marginBottom: 32 }}>

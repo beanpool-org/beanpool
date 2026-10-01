@@ -18,7 +18,7 @@ import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
-import { installPushTokenSealAtBoot, lockPushToken, openPushToken, pushTokenId } from './services/push-token-seal.js';
+import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -8273,14 +8273,15 @@ export function removePushToken(publicKey: string, token?: string): boolean {
 
 /**
  * A member's phones, each token opened for sending to it now (services/push-token-seal.ts): what the caller holds in
- * memory, never stores. A row this server's key doesn't open is left out (its boot removes such rows).
+ * memory, never stores. A row this server's key doesn't open is left out (its boot removes such rows). `open`: a send to
+ * many members passes one opener, so the key file is read once.
  */
-export function getPushTokens(publicKey: string): { tokenId: string; token: string; platform: string }[] {
+export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTokenOpener()): { tokenId: string; token: string; platform: string }[] {
     const rows = db.prepare(`SELECT token_id, token_box, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as
         { token_id: string; token_box: string; platform: string }[];
     const phones: { tokenId: string; token: string; platform: string }[] = [];
     for (const r of rows) {
-        const token = openPushToken(publicKey, r.token_id, r.token_box);
+        const token = open(publicKey, r.token_id, r.token_box);
         if (token !== null) phones.push({ tokenId: r.token_id, token, platform: r.platform });
     }
     return phones;
@@ -8500,6 +8501,8 @@ export function dispatchPushNotification(
     // is here only for the ticket's check, in memory, while this send lasts.
     const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    // The key read once for the whole send (an announcement reaches every member's phones).
+    const open = pushTokenOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -8509,7 +8512,7 @@ export function dispatchPushNotification(
             continue;
         }
 
-        const tokens = getPushTokens(pk);
+        const tokens = getPushTokens(pk, open);
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.

@@ -132,17 +132,29 @@ export function lockPushToken(publicKey: string, token: string): { tokenId: stri
     return { tokenId, tokenBox: boxUnder(keys, publicKey, tokenId, token) };
 }
 
+/** Opens a row's token: {@link openPushToken}'s answer, under the key it was made with. */
+export type PushTokenOpener = (publicKey: string, tokenId: unknown, tokenBox: unknown) => string | null;
+
+/**
+ * An opener with this server's key as it is now, read once: for a send to many phones, which would otherwise read the
+ * key file for each. With no key (or one that can't be read) it opens nothing. Never throws.
+ */
+export function pushTokenOpener(): PushTokenOpener {
+    let keys: Keys | null = null;
+    try {
+        keys = liveKeys();
+    } catch {
+        keys = null;
+    }
+    return (publicKey, tokenId, tokenBox) => (keys ? openUnder(keys, publicKey, tokenId, tokenBox) : null);
+}
+
 /**
  * The token a row holds, for sending to it now: null when this server's key doesn't open the row (locked with a key it
  * doesn't have, or altered) or it has no key. Never throws. Nothing keeps what it returns.
  */
 export function openPushToken(publicKey: string, tokenId: unknown, tokenBox: unknown): string | null {
-    try {
-        const keys = liveKeys();
-        return keys ? openUnder(keys, publicKey, tokenId, tokenBox) : null;
-    } catch {
-        return null;
-    }
+    return pushTokenOpener()(publicKey, tokenId, tokenBox);
 }
 
 /**

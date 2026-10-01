@@ -514,7 +514,6 @@ function indexOldConversationIds(): void {
     }
 }
 
-// Function to initialize schema
 /** Where movePlainPushTablesAside puts a push_tokens from before, tokens in the clear, until the boot locks or drops its rows. */
 export const PLAIN_PUSH_TOKENS = 'push_tokens_plain';
 /** And its leave statements, which named each token in the clear too. */
@@ -551,6 +550,7 @@ function movePlainPushTablesAside(): void {
     console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
 }
 
+// Function to initialize schema
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {

@@ -148,14 +148,14 @@ async function shot(page, name) {
 }
 
 /** The lobby to the two doors, with `name`. */
-async function toTheDoors(page, origin, name) {
+async function toTheDoors(page, origin, name, { words = true } = {}) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     await scaleText(page);
     await page.getByTestId('lobby-join').click({ timeout: 30_000 });
     await page.getByTestId('join-new').click();
     await page.getByTestId('join-callsign').fill(name);
     await page.getByTestId('join-name-next').click();
-    await page.getByTestId('door-words').waitFor({ timeout: 20_000 });
+    if (words) await page.getByTestId('door-words').waitFor({ timeout: 20_000 });
     await page.getByTestId('join-provider-google').waitFor({ timeout: 20_000 });
     await scaleText(page);
 }
@@ -233,10 +233,11 @@ async function signInAskedForWork(browser, origin, node, seen) {
     const { context, page } = await openPage(browser, origin, seen);
     try {
         seen.nextSub = 'google-sub-sol';
-        await toTheDoors(page, origin, 'Sol');
+        await toTheDoors(page, origin, 'Sol', { words: false });
         await page.getByTestId('join-provider-google').click();
-        await page.getByText(/Choose your look/).waitFor({ timeout: 60_000 });
-        if (await page.getByTestId('join-notice').count()) throw new Failure(`a notice was shown: ${await page.getByTestId('join-notice').innerText()}`);
+        // In, or a refusal said: whichever comes first.
+        await page.getByText(/Choose your look/).or(page.getByTestId('join-notice')).first().waitFor({ timeout: 60_000 });
+        if (await page.getByTestId('join-notice').count()) throw new Failure(`the page said: "${await page.getByTestId('join-notice').innerText()}"`);
         const joins = seen.answers.filter((a) => a.path === '/api/join');
         const works = seen.door.filter((d) => d.path === '/api/join/work' && d.body?.door === 'sign-in');
         if (joins.length !== 2 || joins[0].code !== 'work_required' || joins[1].status !== 200) throw new Failure(`the joins were answered ${JSON.stringify(joins)}`);

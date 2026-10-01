@@ -186,6 +186,27 @@ describe('the two doors', () => {
         expect(node.calls.filter((c) => c.path.startsWith('/api/members/callsign-available/Bea'))).toHaveLength(1);
     });
 
+    it('a reload mid-work carries on with the same key: its work is asked for again, and the join goes with that key', async () => {
+        const node = stubNode();
+        const held = heldSolver(true);
+        renderJoin({ wordsDoor: true, solveWork: held.solver });
+        fireEvent.change(await toNameScreen(), { target: { value: 'Bea' } });
+        await waitFor(() => expect(node.works()).toHaveLength(1));
+        const key = (await loadPendingJoin())!.identity.publicKey;
+        // The page goes away with the work half done (a reload, a closed tab), and opens again.
+        cleanup();
+        const { onJoined } = renderJoin({ wordsDoor: true, solveWork: heldSolver().solver });
+        const field = await screen.findByTestId('join-callsign');
+        await waitFor(() => expect(node.works()).toHaveLength(2));
+        expect(node.works()[1].headers['X-Public-Key']).toBe(key);
+        fireEvent.change(field, { target: { value: 'Bea' } });
+        fireEvent.click(screen.getByTestId('join-name-next'));
+        fireEvent.click(await screen.findByTestId('join-words'));
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        expect(onJoined.mock.calls[0][0].identity.publicKey).toBe(key);
+        expect(node.joins()[0].body.work.challenge).toBe(node.issued[1]);
+    });
+
     it('12 words first, then the sign-ins, each a full-width choice with its one line', async () => {
         stubNode();
         renderJoin({ wordsDoor: true, solveWork: heldSolver().solver });

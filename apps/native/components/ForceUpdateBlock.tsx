@@ -3,6 +3,7 @@ import { AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView,
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 import appConfig from '../app.json';
 import { useIdentity } from '../app/IdentityContext';
@@ -100,6 +101,7 @@ function WordsWindow({ children, onClose, background }: { children: ReactNode; o
 
 export default function ForceUpdateBlock() {
     const { colors } = useTheme();
+    const insets = useSafeAreaInsets();
     const { identity, setIdentity } = useIdentity();
     const { recheck } = useNodeStatus();
     const [block, setBlock] = useState<{ version: string } | null>(null);
@@ -302,8 +304,22 @@ export default function ForceUpdateBlock() {
             </WordsOutsideScreens>
         </View>
     );
+    /**
+     * Every page's scroll view, framed inside the status bar, the navigation bar and any cutout. The block and its words
+     * window are edge-to-edge (an Android Modal is drawn from the top of the display since Expo 55, and iOS's
+     * FullWindowOverlay covers the whole window), so with padding alone a page taller than the screen put its card under
+     * the status bar, and scrolled text ran under the clock. Framing the scroll view rather than padding its content keeps
+     * both clear: the page's own background fills the bars, and nothing scrolls under them. The insets come from the root
+     * SafeAreaProvider, as for the app's other full-screen Modals (EventDetail, CreateGroupModal).
+     */
+    const scrollFrame = {
+        marginTop: insets.top,
+        marginBottom: insets.bottom,
+        marginLeft: insets.left,
+        marginRight: insets.right,
+    };
     const pageScroll = (children: ReactNode) => (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <ScrollView style={scrollFrame} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <View style={card}>{children}</View>
         </ScrollView>
     );
@@ -316,7 +332,7 @@ export default function ForceUpdateBlock() {
      * (react-native-keyboard-controller's ModalAttachedWatcher holds the dialog's one dismiss listener).
      */
     const typingPageScroll = (children: ReactNode) => (
-        <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={16}>
+        <KeyboardAwareScrollView style={scrollFrame} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={16}>
             <View style={card}>{children}</View>
         </KeyboardAwareScrollView>
     );
@@ -426,7 +442,7 @@ export default function ForceUpdateBlock() {
     }
 
     const main = (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView style={scrollFrame} contentContainerStyle={styles.scroll}>
             <View style={card}>
                 <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
                 <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
@@ -546,9 +562,13 @@ export default function ForceUpdateBlock() {
     );
 }
 
+/** Space around each page's card, inside the safe area. */
+const PAGE_PADDING = 16;
+
 const styles = StyleSheet.create({
     fill: { ...StyleSheet.absoluteFillObject },
-    scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+    /** Inside scrollFrame, which keeps it clear of the bars. */
+    scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: PAGE_PADDING },
     card: { width: '100%', maxWidth: 360, borderRadius: 20, borderWidth: 1, paddingVertical: 28, paddingHorizontal: 20, alignItems: 'center' },
     icon: { fontSize: 40, marginBottom: 12 },
     title: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 },

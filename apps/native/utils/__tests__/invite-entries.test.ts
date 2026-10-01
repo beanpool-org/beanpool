@@ -17,7 +17,10 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) },
 }));
 import { invitesOn, readNodeProfile } from '../node-profile';
-import { communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT } from '../invite-entries';
+import {
+    communityLinkMessage, invitesOffRefusal, INVITES_OFF_FALLBACK, GUEST_NO_INVITES_TEXT, onlyAdminsInvite, mayInviteHere,
+    mayMakeOfflineTicket, OFFLINE_ADMINS_ONLY_TEXT, adminsOnlyText, adminsOnlyRefusal, ADMINS_ONLY_FALLBACK,
+} from '../invite-entries';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
 const GLOBAL = readNodeProfile({
@@ -139,5 +142,139 @@ describe('People → Invites goes through the helpers (source check)', () => {
         expect(invitesOn(undefined)).toBe(true);
         expect(invitesOn(GLOBAL)).toBe(false);
         expect(invitesOn(LOCAL)).toBe(true);
+    });
+});
+
+// ── Who may invite (the door) ──────────────────────────────────────────────────────────────────────────────────────────
+// Community modes slice 1 (apps/server config/door.ts): a community may choose that only its owners and admins invite.
+// /api/community/info says so as `features.door` ('members' | 'admins', 'open' on the worldwide community).
+
+const ADMINS_DOOR = readNodeProfile({ profile: 'local', features: { beans: true, knocks: true, invites: true, door: 'admins' } })!.features;
+const ADMINS_DOOR_NO_KNOCKS = readNodeProfile({ profile: 'local', features: { beans: true, knocks: false, invites: true, door: 'admins' } })!.features;
+const MEMBERS_DOOR = readNodeProfile({ profile: 'local', features: { beans: true, knocks: true, invites: true, door: 'members' } })!.features;
+
+describe('the door, as the phone reads it', () => {
+    it('keeps a door the node names, and only one of the three', () => {
+        expect(ADMINS_DOOR.door).toBe('admins');
+        expect(MEMBERS_DOOR.door).toBe('members');
+        expect(readNodeProfile({ profile: 'global', features: { invites: false, door: 'open' } })!.features.door).toBe('open');
+        expect(readNodeProfile({ profile: 'local', features: { door: 'everyone' } })!.features.door).toBeUndefined();
+        expect(readNodeProfile({ profile: 'local', features: { door: true } })!.features.door).toBeUndefined();
+        expect(OLD.door).toBeUndefined();
+    });
+
+    it('only a node that says `admins` keeps invites to its admins', () => {
+        expect(onlyAdminsInvite(ADMINS_DOOR)).toBe(true);
+        for (const f of [MEMBERS_DOOR, LOCAL, OLD, GLOBAL, {}, null, undefined]) expect(onlyAdminsInvite(f)).toBe(false);
+    });
+});
+
+describe('mayInviteHere: whether this member makes invites here', () => {
+    it('any member, on a members door or a node too old to say: exactly as before', () => {
+        for (const role of [null, 'moderator', 'admin', 'owner', undefined] as const) {
+            expect(mayInviteHere(MEMBERS_DOOR, role)).toBe(true);
+            expect(mayInviteHere(LOCAL, role)).toBe(true);
+            expect(mayInviteHere(OLD, role)).toBe(true);
+        }
+    });
+
+    it('where only admins invite: an owner or admin, never a member or a moderator', () => {
+        expect(mayInviteHere(ADMINS_DOOR, 'owner')).toBe(true);
+        expect(mayInviteHere(ADMINS_DOOR, 'admin')).toBe(true);
+        expect(mayInviteHere(ADMINS_DOOR, 'moderator')).toBe(false);
+        expect(mayInviteHere(ADMINS_DOOR, null)).toBe(false);
+    });
+
+    it("a role the node hasn't said yet counts as before: the node decides, and says why", () => {
+        expect(mayInviteHere(ADMINS_DOOR, undefined)).toBe(true);
+    });
+
+    it('no invites at all where the node takes none, whoever asks', () => {
+        for (const role of [null, 'admin', 'owner', undefined] as const) expect(mayInviteHere(GLOBAL, role)).toBe(false);
+    });
+});
+
+describe('an offline ticket where only admins invite', () => {
+    it('only from a member the node has said is an owner or admin: a role not heard is no answer', () => {
+        expect(mayMakeOfflineTicket(ADMINS_DOOR, 'owner')).toBe(true);
+        expect(mayMakeOfflineTicket(ADMINS_DOOR, 'admin')).toBe(true);
+        for (const role of [null, 'moderator', undefined] as const) expect(mayMakeOfflineTicket(ADMINS_DOOR, role)).toBe(false);
+    });
+
+    it('on a members door, or a node too old to say, as before; never where the node takes no invites', () => {
+        for (const role of [null, 'moderator', 'admin', undefined] as const) {
+            expect(mayMakeOfflineTicket(MEMBERS_DOOR, role)).toBe(true);
+            expect(mayMakeOfflineTicket(OLD, role)).toBe(true);
+            expect(mayMakeOfflineTicket(GLOBAL, role)).toBe(false);
+        }
+        expect(OFFLINE_ADMINS_ONLY_TEXT).toMatch(/only its admins invite/);
+    });
+});
+
+describe('what a member who may not invite is told', () => {
+    it('plain words, no tier, and a way forward', () => {
+        for (const knocks of [true, false]) {
+            const text = adminsOnlyText(knocks);
+            expect(text).toMatch(/only its admins invite people/);
+            expect(text).toMatch(/ask an admin/i);
+            expect(text).not.toMatch(/tier|Steward|Elder|Resident|Newcomer|badge|locked/i);
+        }
+        expect(adminsOnlyText(true)).toMatch(/ask to join/);
+        expect(adminsOnlyText(false)).not.toMatch(/ask to join|Share/);
+    });
+
+    it("a generate the node refuses for it (403 admins_only) gives the node's words, so no offline ticket is made", () => {
+        const words = 'In this community only its admins invite people. Ask an admin to bring them in.';
+        expect(adminsOnlyRefusal(403, { error: words, code: 'admins_only' })).toBe(words);
+        expect(adminsOnlyRefusal(403, { code: 'admins_only' })).toBe(ADMINS_ONLY_FALLBACK);
+        expect(adminsOnlyRefusal(403, { code: 'admins_only', error: ' ' })).toBe(ADMINS_ONLY_FALLBACK);
+        expect(adminsOnlyRefusal(403, { error: 'Only registered members can generate invites' })).toBeNull();
+        expect(adminsOnlyRefusal(404, { code: 'feature_off' })).toBeNull();
+        expect(adminsOnlyRefusal(200, { success: true })).toBeNull();
+        expect(adminsOnlyRefusal(403, null)).toBeNull();
+    });
+});
+
+describe('People → Invites where only admins invite (source check)', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../..', 'app/(tabs)/people.tsx'), 'utf-8');
+    const gate = src.indexOf(') : !mayInvite ? (');
+    const otherwise = src.indexOf(') : (', gate);
+    const redeemSection = src.indexOf('REDEEM INVITE SECTION');
+    const adminsOnly = src.slice(gate, otherwise);
+    const makes = src.slice(otherwise, redeemSection);
+    const found = () => {
+        expect(src.indexOf('{!makesInvites ? (')).toBeGreaterThan(0);
+        expect(gate).toBeGreaterThan(src.indexOf('{!makesInvites ? ('));
+        expect(otherwise).toBeGreaterThan(gate);
+        expect(redeemSection).toBeGreaterThan(otherwise);
+    };
+
+    it("reads the door and the member's role through the helpers", () => {
+        expect(src).toMatch(/const doorAdminsOnly = onlyAdminsInvite\(nodeProfile\?\.features\);/);
+        expect(src).toMatch(/const mayInvite = mayInviteHere\(nodeProfile\?\.features, inviteRole\);/);
+        // The role is the node's answer, asked only where only admins invite.
+        expect(src).toMatch(/if \(!doorAdminsOnly \|\| !identity \|\| !anchorUrl \|\| isGuest\) return;/);
+        expect(src).toContain('askNodeRole(anchorUrl, identity)');
+        found();
+    });
+
+    it('a member who may not invite gets the plain words and no way to make an invite', () => {
+        found();
+        expect(adminsOnly).toContain('adminsOnlyText(takesKnocks)');
+        for (const entry of ['📤 Invite Someone', 'onPress={handleGenerate}', '<QRCode', '📤 Share Invite', 'shareInvite(']) {
+            expect(adminsOnly).not.toContain(entry);
+            expect(makes).toContain(entry);
+        }
+        // The link only where someone can use it to ask to join.
+        expect(adminsOnly).toMatch(/\{takesKnocks && \([\s\S]*onPress=\{shareCommunityLink\}/);
+    });
+
+    it("a generate refused as admins_only, or offline with no answer on the role, makes no offline ticket", () => {
+        const handler = src.slice(src.indexOf('const handleGenerate'), src.indexOf('const shareInvite'));
+        const ticket = handler.indexOf('makeOfflineTicket(');
+        expect(handler).toContain('adminsOnlyRefusal(res.status, body)');
+        expect(handler.indexOf('adminsOnlyRefusal(')).toBeLessThan(ticket);
+        expect(handler).toContain('mayMakeOfflineTicket(nodeProfile?.features, inviteRole)');
+        expect(handler.indexOf('mayMakeOfflineTicket(')).toBeLessThan(ticket);
     });
 });

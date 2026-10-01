@@ -48,8 +48,11 @@ export async function fetchMyNodeRole(nodeUrl: string, identity: BeanPoolIdentit
 
 const NO_ROLE: MyNodeRole = { role: null, communityName: null };
 
-/** As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". */
-async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
+/**
+ * As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". People →
+ * Invites asks it where only admins invite (invite-entries.ts mayInviteHere), so "not heard" stays "not heard".
+ */
+export async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
     try {
         const url = `${base(nodeUrl)}/api/node-admin/me`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);

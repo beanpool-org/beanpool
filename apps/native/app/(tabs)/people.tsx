@@ -21,7 +21,11 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import {
+    GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere, mayMakeOfflineTicket,
+    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
+} from '../../utils/invite-entries';
+import { askNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -191,6 +195,19 @@ export default function PeopleScreen() {
     const makesInvites = invitesOn(nodeProfile?.features);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
+    // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
+    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
+    const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        setInviteRole(undefined);
+        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
+        let alive = true;
+        askNodeRole(anchorUrl, identity).then(r => { if (alive && r) setInviteRole(r.role); });
+        return () => { alive = false; };
+    }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
+    const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -403,14 +420,29 @@ export default function PeopleScreen() {
                 } else {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
                     // make no offline ticket, which it would refuse just the same.
-                    const refusal = invitesOffRefusal(res.status, await res.json().catch(() => null));
+                    const body = await res.json().catch(() => null);
+                    const refusal = invitesOffRefusal(res.status, body);
                     if (refusal) {
                         Alert.alert('No invites here', refusal);
+                        return;
+                    }
+                    // Only admins invite here (this phone hadn't heard it yet, or the member's role changed): the node's
+                    // words, and no offline ticket, which it would refuse at the join.
+                    const adminsOnly = adminsOnlyRefusal(res.status, body);
+                    if (adminsOnly) {
+                        setInviteRole(null);
+                        Alert.alert('Only admins invite here', adminsOnly);
                         return;
                     }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
+            if (!mayMakeOfflineTicket(nodeProfile?.features, inviteRole)) {
+                Alert.alert('Only admins invite here', OFFLINE_ADMINS_ONLY_TEXT);
+                return;
             }
 
             // Offline Fallback
@@ -925,6 +957,24 @@ export default function PeopleScreen() {
                                     >
                                         <Text style={styles.btnGenerateText}>📤 Share the link</Text>
                                     </Pressable>
+                                </>
+                            ) : !mayInvite ? (
+                                // Only its admins invite here, and this member is no owner or admin: no code, QR or offline
+                                // ticket. Where the community takes requests to join, its link lets someone ask, for an admin to answer.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>{adminsOnlyText(takesKnocks)}</Text>
+                                    {takesKnocks && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Share this community's link"
+                                            style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                            onPress={shareCommunityLink}
+                                            disabled={!anchorUrl}
+                                        >
+                                            <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                        </Pressable>
+                                    )}
                                 </>
                             ) : (
                             <>

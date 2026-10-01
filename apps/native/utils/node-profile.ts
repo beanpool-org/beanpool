@@ -38,9 +38,18 @@ export interface NodeFeatures {
     decisions?: boolean;
     /** Members make invites here, and an invite joins someone. Off on the worldwide community (Marty, 2026-10-01). */
     invites?: boolean;
+    /**
+     * Who may invite here (the door, apps/server config/door.ts): `members` (any member, every community until now),
+     * `admins` (only its owners and admins, the community's choice) or `open` (the worldwide community: anyone joins with
+     * a sign-in, and nobody makes invites). A node from before the door says nothing: any member, as before.
+     */
+    door?: NodeDoor;
 }
 
-const FEATURE_KEYS: ReadonlyArray<keyof NodeFeatures> = [
+export type NodeDoor = 'open' | 'members' | 'admins';
+const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
+
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites',
 ];
@@ -75,6 +84,7 @@ export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProf
         for (const key of FEATURE_KEYS) {
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
+        if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
     }
     return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString() };
 }

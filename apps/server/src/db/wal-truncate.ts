@@ -22,17 +22,20 @@ let retry: NodeJS.Timeout | null = null;
 let triesLeft = 0;
 let pendingWhy = '';
 
-/** One truncating checkpoint that never waits. True when it emptied the WAL. */
+/** One truncating checkpoint that never waits. True when it emptied the WAL. Never throws. */
 function truncateNow(): boolean {
-    const prior = db.pragma('busy_timeout', { simple: true }) as number;
-    db.pragma('busy_timeout = 0');
+    let prior: number | null = null;
     try {
+        prior = db.pragma('busy_timeout', { simple: true }) as number;
+        db.pragma('busy_timeout = 0');
         const [cp] = db.pragma('wal_checkpoint(TRUNCATE)') as { busy: number; log: number; checkpointed: number }[];
         return !!cp && cp.busy === 0;
     } catch {
         return false;
     } finally {
-        db.pragma(`busy_timeout = ${prior}`);
+        if (prior !== null) {
+            try { db.pragma(`busy_timeout = ${prior}`); } catch { /* the connection closed under it */ }
+        }
     }
 }
 
@@ -40,6 +43,8 @@ function scheduleRetry(): void {
     if (retry) return;
     retry = setTimeout(() => {
         retry = null;
+        // A restore closed the connection (routes/backup.ts): the server starts again on the restored file.
+        if (!db.open) return;
         if (truncateNow()) return;
         if (--triesLeft > 0) scheduleRetry();
         else console.warn(`[DB] The WAL is still held by a reader an hour after ${pendingWhy}; the next checkpoint writes over what it keeps.`);

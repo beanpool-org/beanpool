@@ -87,7 +87,7 @@ Home shows how many times the web app was opened on your server each day for the
 
 - The BeanPool directory, every 12 hours: your community's name, web address, area and member count, and its contact email and phone only if you turned each on (see Address, identity and peers). The directory is public. Under Node Identity you can switch off the area, the member count and the health report, or stop sending updates (the directory then keeps the last entry it received until BeanPool removes it).
 - GitHub, every 6 hours, to ask for the newest version; and the app stores' pages, to learn the newest app versions.
-- Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. The title and text of each notification pass through them.
+- Push notifications go through Expo, the service the phone app uses, on their way to Apple and Google. Each one says only what kind of news it is, in fixed words ("You have a new message.", "Your community has a notice for you."), with a random notice number and your server's signature: no name, amount, listing title or announcement passes through them. What the notice was about stays on your server for 7 days, for the member it was sent to.
 - Members' Pulse channels are fetched from the sites they link to.
 - With a .beanpool.org tunnel, members' traffic passes through Cloudflare, as it does for any site that uses Cloudflare.
 

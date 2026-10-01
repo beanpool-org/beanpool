@@ -206,7 +206,7 @@ async function child(): Promise<void> {
                 .map((r) => r.public_key);
             const counts: Record<string, number> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Parity', 'A push of each category', {}, category);
+                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Parity', 'A push of each category', {}, category, 'community.notice');
             }
             return counts;
         },

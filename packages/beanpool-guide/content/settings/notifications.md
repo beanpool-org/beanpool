@@ -17,6 +17,19 @@ Changes save by themselves. They are kept by your community's server, so they fo
 
 Alerts about someone trying to recover your account always come through. You cannot turn those off.
 
+## What an alert says
+
+An alert on your phone says only what kind of news it is, for example:
+
+- "You have a new message."
+- "There is news on one of your trades."
+- "An event you're going to starts soon."
+- "Your community has a notice for you."
+
+It never says who it is from, which listing, how many beans, or what your community's announcement says. Alerts pass through Apple's, Google's and Expo's servers on their way to your phone, and anyone can read a lock screen, so the rest stays with your community. Open BeanPool to see it.
+
+BeanPool never asks for your 12 words or a password in an alert.
+
 ## Event reminders
 
 Under the switches, **Event reminders** sets how long before an event you are **Going** to or **Interested** in starts you are told. Tick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before — you can tick more than one — or tick **Off** for none at all.

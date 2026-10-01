@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
+import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -186,6 +186,7 @@ type PushFn = (
     body: string,
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
+    kind: PushNoticeKind,
 ) => void;
 
 export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
@@ -237,6 +238,7 @@ function notifyEventChange(
             eventPushBody(kind, eventTitle),
             { screen: 'post', postId },
             EVENT_PUSH_CATEGORY,
+            'event.update',
         );
     } catch (e) {
         console.warn('[Events] change notification not sent:', e);

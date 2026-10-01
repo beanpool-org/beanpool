@@ -20,10 +20,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from './crypto';
 import { loadIdentity } from './identity';
-import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
+import { plainOriginOf, shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from './node-url';
 import { loadSavedRequestSigning } from './nodes';
 
 let installed = false;
+
+/**
+ * Whether a request to `url` goes to this phone's community at `anchorUrl`: the same origin, scheme, host and port
+ * (node-url.ts `plainOriginOf`). A string prefix said yes to `https://a.org.evil.example` and `https://a.organic.example`
+ * for the community `https://a.org`, and those got the member's key and a signature (multi-community review F4). An
+ * address that isn't plain but starts with the community's still counts, so that the signer refuses it as before: on iOS
+ * it reaches another host than the one it names, so it fails rather than going out unsigned.
+ */
+export function isAnchorRequest(url: string, anchorUrl: string): boolean {
+    const anchor = plainOriginOf(anchorUrl);
+    if (!anchor) return false;
+    const origin = plainOriginOf(url);
+    return origin ? origin === anchor : url.startsWith(anchorUrl);
+}
 
 /** Read a header value from either a plain object or a Headers instance. */
 function hasHeader(headers: any, name: string): boolean {
@@ -66,7 +80,7 @@ export function installNodeRequestSigning(): void {
             if (url && method === 'GET') {
                 const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
                 // Only sign requests to our own node, and never double-sign.
-                if (anchorUrl && url.startsWith(anchorUrl) && !hasHeader(init?.headers, 'X-Signature')) {
+                if (anchorUrl && isAnchorRequest(url, anchorUrl) && !hasHeader(init?.headers, 'X-Signature')) {
                     const identity = await loadIdentity();
                     if (identity?.privateKey && identity?.publicKey) {
                         // Signed over the URL fetched: its host (request binding) and its path, which is the

@@ -55,7 +55,7 @@ import { fetchGlobalHome } from '../community-directory';
 import { fetchNodeProfile } from '../node-profile';
 import { requestSettingsLink } from '../node-admin';
 import { buildSigninRequest } from '../settings-signin';
-import { installNodeRequestSigning } from '../node-request-signing';
+import { installNodeRequestSigning, isAnchorRequest } from '../node-request-signing';
 import { addSavedNode, getSavedNodes, recordRequestSigning } from '../nodes';
 import { knownRequestSigning, rememberRequestSigning } from '../request-signing-version';
 import { signAdminChallenge, signPairing, makeOfflineTicket } from '../member-statements';
@@ -199,6 +199,76 @@ describe('the phone learns which format each community reads', () => {
         expect(new URLSearchParams(await buildSignedWsParams('wss://new.neg.test/ws', identity.privateKey, PUB)).get('v')).toBe('2');
     });
 
+});
+
+describe('a community that has said 2 never gets the old format again (multi-community review F2)', () => {
+    // Until the switch every community still takes the old format, which names no community: a hostile node that
+    // stopped saying 2 would get a ledger transfer signed in it, and could replay it at every other community where the
+    // key is a member for five minutes. Once a host has said 2, the phone never signs the old format for it again.
+    const BODY = JSON.stringify({ from: PUB, to: 'b'.repeat(64), amount: 20, memo: 'veg box' });
+
+    it('an info answer without requestSigning after one with 2: still format 2, for requests, sockets and the saved entry', async () => {
+        await addSavedNode('https://ratchet.neg.test');
+        await nodeSays('https://ratchet.neg.test', 2);
+        await nodeSays('https://ratchet.neg.test');
+        await nodeSays('https://ratchet.neg.test', 1);
+
+        const h = await buildSignedHeaders('POST', 'https://ratchet.neg.test/api/ledger/transfer', BODY, identity.privateKey, PUB);
+        expect(h['X-Signed-For']).toBe('ratchet.neg.test');
+        const c = { url: 'https://ratchet.neg.test/api/ledger/transfer', method: 'POST', headers: h, body: BODY };
+        expect(boundFor('ratchet.neg.test', c, '/api/ledger/transfer')).toBe(true);
+        // Not good at any other community, and not the old unbound text any community would take until the switch.
+        expect(boundFor('mullum.beanpool.org', c, '/api/ledger/transfer')).toBe(false);
+        const unbound = unboundRequestText({ method: 'POST', path: '/api/ledger/transfer', timestamp: h['X-Timestamp'], nonce: h['X-Nonce'], body: BODY });
+        expect(signedByMia(h['X-Signature'], utf8Bytes(unbound))).toBe(false);
+
+        expect(new URLSearchParams(await buildSignedWsParams('wss://ratchet.neg.test/ws', identity.privateKey, PUB)).get('v')).toBe('2');
+        expect(knownRequestSigning('https://ratchet.neg.test')).toBe(2);
+        expect((await getSavedNodes()).find(n => n.url === 'https://ratchet.neg.test')?.requestSigning).toBe(2);
+    });
+
+    it('so do the Manage sign-in, pairing and the offline ticket', async () => {
+        await nodeSays('https://ratchet2.neg.test', 2);
+        await nodeSays('https://ratchet2.neg.test');
+        const ID = '9f'.repeat(32);
+        const admin = await signAdminChallenge('https://ratchet2.neg.test', { challengeId: ID, challenge: `beanpool-admin-auth:${ID}:${Date.now()}` }, identity.privateKey);
+        expect(admin).toMatchObject({ signedFor: 'ratchet2.neg.test' });
+        expect(await signPairing('https://ratchet2.neg.test', 'approve', '0123456789abcdef'.repeat(4), 'K7F3QX', identity.privateKey))
+            .toMatchObject({ signedFor: 'ratchet2.neg.test' });
+    });
+
+    it('a node that never said 2 still gets the old format: only a host that spoke 2 is held to it', async () => {
+        await nodeSays('https://never2.neg.test');
+        expect((await buildSignedHeaders('GET', 'https://never2.neg.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBeUndefined();
+        // And it moves up the moment it does.
+        await nodeSays('https://never2.neg.test', 2);
+        await nodeSays('https://never2.neg.test');
+        expect((await buildSignedHeaders('GET', 'https://never2.neg.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('never2.neg.test');
+    });
+});
+
+describe('the read-signing wrapper signs only for its own community: the same origin, not a string prefix (multi-community review F4)', () => {
+    it('isAnchorRequest: the community\'s own origin, however spelled; a look-alike host, another port or scheme is not it', () => {
+        const ANCHOR = 'https://a.org';
+        for (const url of ['https://a.org', 'https://a.org/', 'https://a.org/api/x?y=1', 'https://A.ORG/api/x', 'https://a.org:443/api/x', 'https://a.org//api/x']) {
+            expect(isAnchorRequest(url, ANCHOR), url).toBe(true);
+            expect(isAnchorRequest(url, `${ANCHOR}/`), `${url} for ${ANCHOR}/`).toBe(true);
+        }
+        for (const url of [
+            'https://a.org.evil.example/api/x', 'https://a.organic.example/api/x', 'https://a.org-evil.example/api/x',
+            'https://a.org:8443/api/x', 'http://a.org/api/x', 'https://b.org/api/x', 'https://evil.example/https://a.org/api/x',
+        ]) {
+            expect(isAnchorRequest(url, ANCHOR), url).toBe(false);
+        }
+        // Another port is its own community; its own origin with that port is.
+        expect(isAnchorRequest('https://a.org:8443/api/x', 'https://a.org:8443')).toBe(true);
+        expect(isAnchorRequest('https://a.org/api/x', 'https://a.org:8443')).toBe(false);
+        // An address that names one host and reaches another still counts, so the signer refuses it (below), as before.
+        expect(isAnchorRequest('https://a.org\\@evil.example/api/x', ANCHOR)).toBe(true);
+        // No community, or one that isn't a plain address: nothing is its.
+        expect(isAnchorRequest('https://a.org/api/x', '')).toBe(false);
+        expect(isAnchorRequest('https://a.org/api/x', 'https://a.org\\@evil.example')).toBe(false);
+    });
 });
 
 describe('the Manage button never signs text a node chose', () => {
@@ -462,6 +532,48 @@ describe('what an app can be made to sign', () => {
 // Last: it resets the module registry to play the next app start, so it must not run before a test that imports
 // a module fresh.
 describe('the phone remembers across app starts', () => {
+    it('the wrapper sends a look-alike host neither the key nor a signature, and its own community both (F4)', async () => {
+        vi.resetModules();
+        const { installNodeRequestSigning: install } = await import('../node-request-signing');
+        mem.set('beanpool_anchor_url', 'https://a4.test');
+        who.identity = identity;
+        install();
+        for (const url of ['https://a4.test.evil.example/api/community/me', 'https://a4.testing.example/api/x', 'https://a4.test:8443/api/x']) {
+            await fetch(url);
+        }
+        await fetch('https://a4.test/api/community/me');
+        expect(calls).toHaveLength(4);
+        for (const c of calls.slice(0, 3)) {
+            expect(c.headers['X-Public-Key'], c.url).toBeUndefined();
+            expect(c.headers['X-Signature'], c.url).toBeUndefined();
+        }
+        expect(calls[3].headers['X-Public-Key']).toBe(PUB);
+        expect(boundFor('a4.test', calls[3], '/api/community/me')).toBe(true);
+        // An address that names the community and reaches another is refused, never sent unsigned (#1224).
+        await expect(fetch('https://a4.test\\@evil.test/api/x')).rejects.toBeInstanceOf((await import('../node-url')).UnsafeNodeAddressError);
+        expect(calls).toHaveLength(4);
+    });
+
+    it('a stored 2 holds on the next run, whatever the node answers first: before its stored answer loads, or after (F2)', async () => {
+        await addSavedNode('https://keep3.test');
+        await nodeSays('https://keep3.test', 2);
+        expect((await getSavedNodes()).find(n => n.url === 'https://keep3.test')?.requestSigning).toBe(2);
+
+        // The next run: an answer without the field arrives before the saved answers have loaded.
+        vi.resetModules();
+        const version = await import('../request-signing-version');
+        const nodes = await import('../nodes');
+        await nodes.recordRequestSigning('https://keep3.test', { name: 'A community', profile: 'local' });
+        await nodes.loadSavedRequestSigning();
+        const crypto = await import('../crypto');
+        expect((await crypto.buildSignedHeaders('GET', 'https://keep3.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('keep3.test');
+        // And after: the same.
+        await nodes.recordRequestSigning('https://keep3.test', { name: 'A community', profile: 'local' });
+        expect(version.knownRequestSigning('https://keep3.test')).toBe(2);
+        expect((await crypto.buildSignedHeaders('GET', 'https://keep3.test/api/x', '', identity.privateKey, PUB))['X-Signed-For']).toBe('keep3.test');
+        expect((await nodes.getSavedNodes()).find(n => n.url === 'https://keep3.test')?.requestSigning).toBe(2);
+    });
+
     it('what a node said is kept on its saved entry, and read back on the next run', async () => {
         await addSavedNode('https://keep.test');
         await addSavedNode('https://keep2.test');

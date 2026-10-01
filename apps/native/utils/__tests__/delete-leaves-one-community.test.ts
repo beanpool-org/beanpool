@@ -86,6 +86,11 @@ function nodes(probe: Record<string, Probe>, purge: Purge = 'ok'): Sent[] {
             const a = probe[community];
             if (!a) throw new Error(`No membership question expected at ${community}`);
             if (a === 'down') throw new TypeError('Network request failed');
+            // A community answers the probe only to the key it asks about, signed for it (multi-community review F3).
+            const asked = u.pathname.split('/').pop()!;
+            if (!boundSignatureValid(sent[sent.length - 1], asked)) {
+                return new Response('{"error":"Sign the membership probe with the key it asks about"}', { status: 401 });
+            }
             if (a === 'silent') {
                 return new Promise<Response>((_resolve, reject) => {
                     init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
@@ -455,6 +460,8 @@ describe('which communities are asked', () => {
         // Byron is only a guest marker: never asked.
         expect(probes(sent)).toEqual([BELLINGEN]);
         expect(sent[0].url).toBe(`${BELLINGEN}/api/community/membership/${kim.publicKey}`);
+        // Signed by the key it asks about, for Bellingen's host: the only probe a community answers.
+        expect(boundSignatureValid(sent[0], kim.publicKey)).toBe(true);
     });
 
     it('a saved list that can\'t be read is no plan: nothing is deleted', async () => {

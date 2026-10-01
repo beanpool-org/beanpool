@@ -49,7 +49,8 @@ import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
-import { dropBlocksOf } from './engine/member-blocks.js';
+import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
+import { dropWithheldOf } from './engine/withheld-lines.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
@@ -974,7 +975,9 @@ export function runMarketplaceHygiene(): void {
         if (requesterPubkey) {
             dispatchPushNotification([requesterPubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.answer');
         }
-        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey) {
+        // Not to an author who has blocked the requester: their request came with no push (engine/escrow.ts requestPost),
+        // and its expiry would be one a week later (#1403 review).
+        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey && !(requesterPubkey && hasBlocked(post.author_pubkey, requesterPubkey))) {
             dispatchPushNotification([post.author_pubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.listing');
         }
     }
@@ -5731,12 +5734,14 @@ function getMessagingCb() {
     return {
         broadcast,
         dispatchPushNotification,
+        rehearsePushNotification: (t: string[], a: string, ti: string, b: string, d: Record<string, any>, c: PushCategory, k: PushNoticeKind) =>
+            dispatchPushNotification(t, a, ti, b, d, c, k, true),
         registerVisitor
     };
 }
 
-export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void, opts: { asNode?: boolean } = {}): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite, opts);
 }
 
 export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
@@ -7164,6 +7169,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
+        // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
+        dropWithheldOf(publicKey);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7334,6 +7341,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
+        // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
+        dropWithheldOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
@@ -7477,7 +7486,8 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
-    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
+    // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
+    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
     // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
     // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
     if (conv) {
@@ -8455,6 +8465,9 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 /** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
 export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
 
+/** The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). */
+const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention']);
+
 /**
  * Generic push notification dispatcher with category-based preference gating,
  * app icon badge counts, and Android channelId routing.
@@ -8480,10 +8493,22 @@ export function dispatchPushNotification(
     data: Record<string, any>,
     categoryId: PushCategory,
     kind: PushNoticeKind,
+    /**
+     * Do every step of the work but the last two: the notices are not kept and nothing goes to Expo. A line that is
+     * withheld from its recipient (engine/withheld-lines.ts) takes the load a stored line's push does, so the sender's next
+     * request can't tell the two apart (#1403 re-review).
+     */
+    rehearsal = false,
 ): number {
     if (getNodeRole() === 'backup') return 0;
-    // Filter out the actor and SYSTEM from targets
-    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
+    // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
+    // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
+    // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
+    // (engine/messaging.ts sendMessage), so `chat.message` here is someone else's or the node's own (the admin page's
+    // message, under the operator's key), and a vote to replace a convenor (`group.lead`), a trade's, a recovery's and
+    // every other notice still go, whoever caused them (#1403 review).
+    const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
+    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
     if (recipients.length === 0) return 0;
 
     const prefKey = `notify_${categoryId}`;
@@ -8557,6 +8582,7 @@ export function dispatchPushNotification(
     }
 
     if (allMessages.length === 0) return 0;
+    if (rehearsal) return 0;
     keepPushNotices(notices);
 
     // Batch send to Expo (max 100 per request)

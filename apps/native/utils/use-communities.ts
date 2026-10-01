@@ -8,6 +8,7 @@ import { assertPlainNodeAddress } from './node-url';
 import { getLastSyncTime } from '../services/pillar-sync';
 import { communityName, realName } from './community-name';
 import { fetchMembership } from './membership-probe';
+import { communitySwitched } from './community-switch';
 
 // The communities this phone knows, for the BeanPool sheet: which one is in use, whether each answers and
 // whether the member belongs to it, and switching between them. It used to live in the header's own modal;
@@ -95,6 +96,9 @@ export function useCommunities() {
             await closeDB();
             await AsyncStorage.setItem('beanpool_anchor_url', url);
             await initDB();
+            // The full-screen "Update required" was the community left's; the one now in use is asked at once, so
+            // switching back to a community whose floor stops this app puts it up again (utils/community-switch.ts).
+            communitySwitched();
             // Back to the bottom of the stack, then bounce the whole app through Welcome for the new community.
             if (router.canDismiss()) router.dismissAll();
             router.replace('/welcome');

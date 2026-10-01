@@ -228,6 +228,7 @@ describe('every screen that draws the words blocks capture with them', () => {
         ["node-mismatch's delete", 'app/node-mismatch.tsx', 'words.map((w, i) => ('],
         ['Add your 12 words (typed)', 'components/AddWordsForm.tsx', 'boxes.map('],
         ['Check your 12 words (typed)', 'app/owner-words-check.tsx', '<TextInput'],
+        ['"Update required": the 12 words', 'components/ForceUpdateBlock.tsx', 'words.map((w, i) => ('],
     ];
     it.each(screens)('%s: drawn inside the block', (_name, file, anchor) => {
         expect(drawnInsideBlock(read(file), anchor)).toBe(true);
@@ -246,11 +247,20 @@ describe('every screen that draws the words blocks capture with them', () => {
     });
 
     it('no screen reads the words for display without blocking capture: each file that shows them holds it', () => {
-        for (const file of ['app/welcome.tsx', 'app/(tabs)/settings.tsx', 'app/node-mismatch.tsx']) {
+        for (const file of ['app/welcome.tsx', 'app/(tabs)/settings.tsx', 'app/node-mismatch.tsx', 'components/ForceUpdateBlock.tsx']) {
             const src = read(file);
             expect(src.includes('readWordsBehindLock(')).toBe(true);
             expect(src).toContain('<NoScreenCapture>');
         }
+    });
+
+    it('drawn above the screens ("Update required"): held while mounted, and on Android in a window opened after the block', () => {
+        const ws = read('components/WordsOnScreen.tsx');
+        expect(ws).toMatch(/return useContext\(OutsideScreens\)\s*\? <HeldWhileMounted/);
+        const block = read('components/ForceUpdateBlock.tsx');
+        expect(block).toMatch(/<WordsOutsideScreens>\s*<NoScreenCapture>\s*\{Platform\.OS === 'android'\s*\? <Modal visible/);
+        // The grid holds it itself too, so it can never be drawn outside one.
+        expect(block).toMatch(/<WordsOutsideScreens>\s*<NoScreenCapture>\s*\{words\.map\(\(w, i\) => \(/);
     });
 
     it('the screen that sends the words to a computer draws none (pair-device), so it has nothing to block', () => {

@@ -8,8 +8,10 @@ import { loadScreenCapture } from './screen-capture-module';
  * Every screen that draws the words, or the boxes a member types them into, draws them inside
  * components/WordsOnScreen.tsx `NoScreenCapture`: Safety Backup's words (welcome.tsx), "Replace this phone's
  * account?"'s outgoing words, Recover with 12 Words, Settings' Account Protection and View Recovery Phrase, "Add your
- * 12 words" (AddWordsForm), the owners' "Check your 12 words" (owner-words-check.tsx) and node-mismatch's delete.
- * __tests__/words-on-screen.test.ts lists every one.
+ * 12 words" (AddWordsForm), the owners' "Check your 12 words" (owner-words-check.tsx), node-mismatch's delete, and the
+ * full-screen "Update required" (ForceUpdateBlock.tsx: above the screens, so held while mounted, and on Android in a
+ * window opened after the block, since a Modal takes the flag only as it opens). __tests__/words-on-screen.test.ts lists
+ * every one.
  *
  * The block comes first and goes last. `NoScreenCapture` draws the words only once the library has answered the block
  * (`answered` below: on both platforms the block is in place on the main thread before that answer), so not even the

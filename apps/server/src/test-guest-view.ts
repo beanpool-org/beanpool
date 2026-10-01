@@ -1217,6 +1217,7 @@ async function main(): Promise<void> {
             'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',
             'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
+            'GET /api/local/admin/app-versions',
             'POST /api/local/admin/auth/break-glass-mode',
             'GET /api/local/admin/auth/break-glass-status', 'POST /api/local/admin/auth/break-glass/enrol',
             'GET /api/local/admin/auth/break-glass/status', 'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',

@@ -166,6 +166,7 @@ import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } 
 import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
+import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -1611,6 +1612,15 @@ export async function startHttpsServer(port: number): Promise<number> {
         await next();
     }
     app.use(requireSignature);
+
+    // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
+    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything. An app below
+    // the community's floor keeps working with the server; only the app itself stops, at a safe moment.
+    app.use(async (ctx, next) => {
+        const actor = ctx.state.actor as string | undefined;
+        if (actor) noteAppVersion(actor, ctx.get(APP_VERSION_HEADER), k => isNodeMember(k) || isLiveVisitor(k));
+        await next();
+    });
 
     // The gateway limiter's member bucket: charged only once the signature above has been verified. Then the key's
     // day budget for writes (W-main), whether or not the minute throttle is on: an enterprise's own and the signer's

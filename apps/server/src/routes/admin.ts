@@ -44,6 +44,8 @@ import { getFunnel, clampDays } from '../engine/funnel.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
+import { getAppVersionCounts } from '../app-version-counts.js';
+import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
@@ -1008,6 +1010,29 @@ router.get('/api/local/admin/web-visits', async (ctx) => {
     const days = clampVisitDays(ctx.query?.days ?? 30);
     ctx.set('Cache-Control', 'no-store');
     ctx.body = { days, retentionDays: VISIT_RETENTION_DAYS, series: getWebVisits(days) };
+});
+
+/**
+ * The phone app's versions in this community and each platform's floor, for the manager's "App versions" card: whom a
+ * raised floor would stop, before it is raised. Counts only (app-version-counts.ts: members seen in the last 30 days, or
+ * since the server started), never who. Each platform's floor as set, its store's build, whether the floor is enforced
+ * or held for the store, its grace date and whether it stops apps yet (app-store-versions.ts). Read-only, owners and
+ * admins (a moderator's session reaches reports only, admin-auth.ts).
+ */
+router.get('/api/local/admin/app-versions', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const now = new Date();
+    const counts = getAppVersionCounts(now.getTime());
+    const platforms = Object.fromEntries(APP_PLATFORMS.map(p => [p, { ...getPlatformFloorDetail(p, now), versions: counts.platforms[p] }]));
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = {
+        since: counts.since,
+        windowDays: counts.windowDays,
+        minAppVersion: getMinAppVersion(),
+        minAppVersionFrom: getMinAppVersionFrom(),
+        storeCheckedAt: getAppStoreVersions().checkedAt,
+        platforms,
+    };
 });
 
 

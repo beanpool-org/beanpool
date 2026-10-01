@@ -12,7 +12,7 @@ import { loadIdentity, type BeanPoolIdentity } from './lib/identity';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -24,7 +24,7 @@ import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
-import { normaliseVersion, isVersionOlder } from './lib/app-version';
+import { webAppBehindServer } from './lib/app-version';
 import { retryPendingReports, startBlocklist } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
@@ -218,7 +218,10 @@ export function App() {
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
     // The node's own version, once health has answered; the baked-in bundle version until then.
     const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
-    const isVersionOutdated = !!(communityHealth?.minAppVersion && isVersionOlder(__APP_VERSION__, communityHealth.minAppVersion));
+    // A page left open across this server's upgrade: a reload loads the new one (lib/app-version.ts webAppBehindServer). Not
+    // the phone app's floor, which no reload could meet: the web app is this server's own copy, and has no block.
+    const serverVersionAhead = webAppBehindServer(__APP_VERSION__, communityHealth,
+        !!getNodeApiUrl() && getNodeApiUrl() !== (typeof window !== 'undefined' ? window.location.origin : ''));
 
     const toggleCommunityStatus = () => {
         if (showCommunityStatus) {
@@ -653,8 +656,8 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-                {/* Minimum Version Gate Banner (Non-dismissible) */}
-                {isVersionOutdated && (
+                {/* This page is older than the server it came from: Refresh loads the server's own (non-dismissible) */}
+                {serverVersionAhead && (
                     <div
                         role="alert"
                         aria-live="assertive"
@@ -663,9 +666,9 @@ export function App() {
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
-                                <span className="font-bold">App update required: </span>
+                                <span className="font-bold">BeanPool has been updated: </span>
                                 <span className="text-amber-100 text-xs sm:text-sm">
-                                    Your app version ({__APP_VERSION__}) is too old for this community (minimum required: v{normaliseVersion(communityHealth?.minAppVersion)}). Please refresh or reinstall to update.
+                                    this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
                                 </span>
                             </div>
                         </div>

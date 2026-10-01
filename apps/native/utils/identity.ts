@@ -13,6 +13,7 @@ import {
     PUSH_REGISTRATIONS_DUE_STORE_KEY,
 } from './storage-keys';
 import { Platform } from 'react-native';
+import { communitySwitched } from './community-switch';
 
 const isWeb = Platform.OS === 'web';
 const onIPhone = Platform.OS === 'ios';
@@ -438,6 +439,8 @@ interface WipeableStorage {
 export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
     await forgetAllPulseTokens();
     await storage.removeItem('beanpool_anchor_url');
+    // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
+    communitySwitched();
     await storage.removeItem('beanpool:identity');
     await storage.removeItem('beanpool_guest_nodes');
     await storage.removeItem(KNOCKS_STORE_KEY);

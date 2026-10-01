@@ -38,6 +38,9 @@ import { setAppCovered, setAppLocked, setAppLockLaunchDecided, setAppUnlockActio
 import { AppLockSurface, installLockCovers } from '../components/AppLock';
 import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { appVersionHeaderValue } from '../utils/force-update';
+import ForceUpdateBlock from '../components/ForceUpdateBlock';
+import { communitySwitched } from '../utils/community-switch';
 import { fetchMembership } from '../utils/membership-probe';
 import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
 import { isUnlockLink } from '../utils/takeover-unlock';
@@ -53,7 +56,9 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Forward-compatible read signing (SRV-2/SRV-4): sign GET requests to the anchor
 // node so read-auth can be enforced server-side later without another app-store
 // release. Installed at module load, before any component renders or fetches.
-installNodeRequestSigning();
+// Every request to the anchor also names this build (X-BeanPool-App), so the community
+// can count who runs what before it raises its floor (utils/force-update.ts).
+installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
 
 // Cap OS font scaling app-wide so enlarged system fonts (common on low-end
 // devices in our target markets) can't shatter row layouts.
@@ -359,6 +364,8 @@ function RootLayoutNav() {
                                     closeDB()
                                         .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
                                         .then(() => initDB())
+                                        // The update screen's block was the community left's (utils/community-switch.ts).
+                                        .then(() => { communitySwitched(); })
                                         .then(async () => {
                                             if (!isComponentMounted.current) return;
                                             
@@ -448,6 +455,8 @@ function RootLayoutNav() {
                                                         try {
                                                             await clearDB();
                                                             await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                            // No community on the phone: the update screen's block comes down.
+                                                            communitySwitched();
                                                             const { removeSavedNode } = await import('../utils/nodes');
                                                             await removeSavedNode(targetOrigin);
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
@@ -872,6 +881,12 @@ export default function RootLayout() {
                     <IdentityProvider>
                         <NodeStatusProvider>
                             <RootLayoutNav />
+                            {/* "Update required", over everything and outside the sign-in: only at a safe moment (a
+                                cold start, back after 5 minutes away, a switch of community), never mid-use
+                                (utils/force-update.ts). Inside the identity for the member's 12 words and leaving the
+                                community, which it does itself; inside the node status only to re-check the community
+                                it switches TO. It shows with or without an account. */}
+                            <ForceUpdateBlock />
                         </NodeStatusProvider>
                     </IdentityProvider>
                 </ThemeProvider>

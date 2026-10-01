@@ -84,7 +84,6 @@ import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
-import { checkDmLineVectors } from '@beanpool/core/dm-line-vectors';
 import { toEd25519Pkcs8 } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 
@@ -367,7 +366,9 @@ describe('the phone and the web app read each other', () => {
         return line;
     };
 
-    it('both seal and open the frozen vectors byte for byte', () => {
+    it('both seal and open the frozen vectors byte for byte', async () => {
+        // Imported here, not at the top: the rest of this file runs against a checkout that predates the vectors.
+        const { checkDmLineVectors } = await import('@beanpool/core/dm-line-vectors');
         checkDmLineVectors(phoneCrypto);
         checkDmLineVectors(webCrypto);
     });

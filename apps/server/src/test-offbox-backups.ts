@@ -25,6 +25,7 @@
  *     checked), restores it with the recovery code, and its database is the backup's, table by table.
  *  8. Owner only: an admin's and a moderator's key session are refused, in words, on every route, with nothing changed and
  *     no request to any store; no credential at all is 401.
+ *  9. The operator manual's backups page quotes the server's own sentences, retention and schedule.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-offbox-backups.ts
@@ -545,6 +546,15 @@ async function main(): Promise<void> {
     const removed = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { removeId: idB });
     assert(removed.status === 200 && !removed.json.status.destinations.some((d: any) => d.id === idB) && (await objects(storeB)).length > 0,
         '8. an owner removes a destination; what it holds stays there');
+
+    // ── 9. The operator manual quotes what the server says ────────────────────────────────────────────────────────────
+    console.log('\n— 9. the manual —');
+    const manual = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../packages/beanpool-guide/operators/server/backups-and-replicas.md'), 'utf8');
+    assert(manual.includes(`"${OFFBOX_OWNER_ONLY}"`), "9. the manual quotes the server's refusal to anyone but an owner");
+    assert(manual.includes(`"${offbox.NOT_LOCKED_OFFBOX_MESSAGE.slice(0, offbox.NOT_LOCKED_OFFBOX_MESSAGE.indexOf(':') + 1)}`)
+        && manual.includes('this server has no recovery code…"'), '9. …and its words when nothing goes for want of a recovery code');
+    assert(manual.includes(`never more`) && manual.includes(`${offbox.MAX_OFFBOX_RETENTION_DAYS} days`) && manual.includes(`${offbox.DEFAULT_OFFBOX_INTERVAL_HOURS} hours by default`),
+        '9. …and the retention and schedule the server keeps');
 
     await storeA.stop();
     await storeB.stop();

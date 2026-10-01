@@ -55,6 +55,7 @@ Your community's server deletes all of the above at once. It also takes your nam
 - **A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.
 - **Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.
 - **Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.
+- **Backups kept elsewhere.** If your community's server sends its backups to storage somewhere else, each one made before you deleted keeps your account as it was until the server deletes it there: after 30 days at most. These backups are locked: only the people your community trusts with its recovery code, and its owners, can open them.
 - **A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.
 - **The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.
 - **Your trades** stay in the ledger, under "Deleted Member", so everyone's beans still add up.

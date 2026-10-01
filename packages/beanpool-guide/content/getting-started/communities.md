@@ -22,7 +22,7 @@ Your key, your 12 words and your name come with you. Your posts, chats and trade
 
 The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it only when the global community is open.
 
-- Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, open **Invites** and tap **Join with a sign-in**.
+- Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.
 - Sign in once with Google, Apple (on an iPhone) or Facebook. The app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
 - Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
 - Then choose your photo for the global community, as for any new community.

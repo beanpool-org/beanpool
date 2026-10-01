@@ -14,6 +14,7 @@ import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityStatus } from '../utils/use-communities';
 import { doorOfferedToAccount, isGlobalCommunity, type GlobalStanding } from '../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../utils/use-account-closed';
 import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE } from '@beanpool/core';
@@ -122,7 +123,7 @@ export default function BeanPoolSheet() {
     const globalRow = communities.rows.find(r => isGlobalCommunity(r.url));
     const globalStanding: GlobalStanding = !globalRow ? 'none'
         : globalRow.status === 'guest' ? 'guest' : globalRow.status === 'online' ? 'member' : 'unknown';
-    const offerGlobal = doorOfferedToAccount({ doorOpen, hasAccount: !!identity, standing: globalStanding });
+    const offerGlobal = doorOfferedToAccount({ doorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 

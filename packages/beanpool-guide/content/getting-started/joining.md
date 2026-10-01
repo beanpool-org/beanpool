@@ -39,7 +39,7 @@ You can join in the phone app or in a web browser. In a browser, open global.bea
 
 The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see "Getting your account back". After joining you don't sign in to open the app: your account is the key on your phone, like any other.
 
-**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, open **Invites** and tap **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
+**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
 
 ## The four steps
 

@@ -63,6 +63,7 @@ import { beansOn } from '../../utils/node-profile';
 import { NodeAdminEntry } from '../../components/NodeAdminEntry';
 import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from '../../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 
 
@@ -996,7 +997,7 @@ export default function SettingsScreen() {
     // community by hand: once the global community has said its door is open, unless the phone is a member there.
     const [globalStanding, setGlobalStanding] = useState<GlobalStanding>('unknown');
     const globalDoorOpen = useGlobalDoorOpen(mode === 'advanced' && !!identity);
-    const offerGlobal = doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: globalStanding });
+    const offerGlobal = doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
 
     React.useEffect(() => {
         if (mode === 'advanced') {

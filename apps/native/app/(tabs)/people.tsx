@@ -21,9 +21,10 @@ import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { invitesOn } from '../../utils/node-profile';
-import { GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, GUEST_NO_INVITES_TEXT, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
+import { GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal } from '../../utils/invite-entries';
 import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
@@ -198,7 +199,8 @@ export default function PeopleScreen() {
     // anywhere else never asks it.
     const guestAtGlobal = guestNoInvites && isGlobalCommunity(anchorUrl);
     const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
-    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest' });
+    const accountClosed = useAccountClosedAtGlobal(identity?.publicKey);
+    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed });
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -910,7 +912,7 @@ export default function PeopleScreen() {
                                 {guestDoor
                                     ? GUEST_DOOR_TEXT
                                     : guestNoInvites
-                                    ? GUEST_NO_INVITES_TEXT
+                                    ? guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)
                                     : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
                             {guestDoor && (

@@ -72,7 +72,7 @@ import { addSavedNode, clearGuestNode, getSavedNodes, isGuestNode, markGuestNode
 import { askGlobalDoorOffer, forgetGlobalDoorOffer } from '../global-door-offer';
 import { checkNameAtDoor, nextStepFor, signInAtDoor, submitJoin, type DoorAnswer, type DoorSignIn } from '../global-join';
 import {
-    ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, doorOfferedToAccount, finishJoinFromAccount,
+    ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, doorOfferedToAccount, finishJoinFromAccount, rememberAccountClosed, accountClosedAtGlobal,
     globalStandingOnPhone, isGlobalCommunity, type EnterDeps,
 } from '../global-join-existing';
 import { boundSignatureValid } from './server-signature-check';
@@ -313,6 +313,30 @@ describe('through the door with the key on the phone', () => {
         expect(mem.async.get(ANCHOR)).toBe(GLOBAL);
         expect(await isGuestNode(GLOBAL)).toBe(true);
         expect(deps.closeDB).not.toHaveBeenCalled();
+        await accountUntouched();
+    });
+
+    it('global answers account_closed: told so with no Try again, remembered for this key, and the door is no longer offered', async () => {
+        await seedPhone();
+        globalAnswers({
+            join: () => ({ status: 403, body: { code: 'account_closed', error: "This key's account in this community was closed, so the community no longer accepts it." } }),
+        });
+        const { answer } = await joinAsTheAccount();
+        expect(answer.kind).toBe('account_closed');
+        expect(nextStepFor(answer)).toBe('closed');
+        if (answer.kind === 'joined') throw new Error('expected a refusal');
+        expect(accountDoorMessage(answer)).toBe("This account's place in the global community was closed, so it can't join again.");
+
+        const input = { doorOpen: true, hasAccount: true, standing: 'none' as const };
+        expect(doorOfferedToAccount(input)).toBe(true);
+        expect(await accountClosedAtGlobal(account.publicKey)).toBe(false);
+        await rememberAccountClosed(account.publicKey);
+        await rememberAccountClosed(account.publicKey);
+        expect(await accountClosedAtGlobal(account.publicKey)).toBe(true);
+        expect(await accountClosedAtGlobal('another-key')).toBe(false);
+        expect(JSON.parse(mem.async.get('beanpool_global_account_closed')!)).toHaveLength(1);
+        expect(doorOfferedToAccount({ ...input, accountClosed: true })).toBe(false);
+        expect(doorOfferedToAccount({ ...input, standing: 'guest', accountClosed: true })).toBe(false);
         await accountUntouched();
     });
 

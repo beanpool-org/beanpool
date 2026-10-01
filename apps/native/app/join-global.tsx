@@ -13,7 +13,7 @@ import {
     MAX_JOIN_NAME, checkNameAtDoor, doorWaysOut, nameCheckMessage, nextStepFor, signInAtDoor, submitJoin,
     type DoorAnswer, type DoorPhase, type DoorSignIn, type JoinKey,
 } from '../utils/global-join';
-import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, finishJoinFromAccount } from '../utils/global-join-existing';
+import { ACCOUNT_DOOR_MESSAGES, accountDoorMessage, accountKeyForDoor, finishJoinFromAccount, rememberAccountClosed } from '../utils/global-join-existing';
 import { HOME_REDIRECT } from '../utils/join-another-community';
 import { signInCopiesAt } from '../utils/vault-config';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
@@ -215,6 +215,7 @@ export default function JoinGlobalScreen() {
             }], { cancelable: false });
             return;
         }
+        if (answer.kind === 'account_closed') await rememberAccountClosed(account.identity.publicKey);
         const next = nextStepFor(answer);
         if (next === 'retry') {
             setError(accountDoorMessage(answer));

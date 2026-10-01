@@ -70,10 +70,11 @@ export type GlobalStanding = 'none' | 'guest' | 'member' | 'unknown';
  * door is open (utils/global-door-offer.ts, the check that shows "Explore BeanPool worldwide"), and only to a phone
  * with an account that isn't known to be a member there. Unknown standing offers nothing yet, so a member never sees
  * the offer flash up while the phone asks. A member the phone took for a guest who taps it anyway is told so by the
- * door (`already_member`), and simply lands in the global community.
+ * door (`already_member`), and simply lands in the global community. A key global has answered `account_closed` for
+ * ({@link rememberAccountClosed}) is never offered it again: the answer can't change from the phone.
  */
-export function doorOfferedToAccount(input: { doorOpen: boolean; hasAccount: boolean; standing: GlobalStanding }): boolean {
-    return input.doorOpen && input.hasAccount && (input.standing === 'none' || input.standing === 'guest');
+export function doorOfferedToAccount(input: { doorOpen: boolean; hasAccount: boolean; standing: GlobalStanding; accountClosed?: boolean }): boolean {
+    return input.doorOpen && input.hasAccount && !input.accountClosed && (input.standing === 'none' || input.standing === 'guest');
 }
 
 /**
@@ -89,6 +90,32 @@ export async function globalStandingOnPhone(): Promise<GlobalStanding> {
         return (await isGuestNode(GLOBAL_NODE_URL)) ? 'guest' : 'member';
     } catch {
         return 'unknown';
+    }
+}
+
+const CLOSED_KEYS = 'beanpool_global_account_closed';
+
+/** Remember, per node and key, that global answered `account_closed`, so the door is no longer offered to this key. */
+export async function rememberAccountClosed(publicKey: string): Promise<void> {
+    try {
+        const list = await closedList();
+        const entry = `${GLOBAL_NODE_URL}|${publicKey}`;
+        if (!list.includes(entry)) await AsyncStorage.setItem(CLOSED_KEYS, JSON.stringify([...list, entry]));
+    } catch { /* the door's own answer still says it */ }
+}
+
+/** Whether global has said `account_closed` for this key on this phone. A read that fails says no. */
+export async function accountClosedAtGlobal(publicKey: string | null | undefined): Promise<boolean> {
+    if (!publicKey) return false;
+    return (await closedList()).includes(`${GLOBAL_NODE_URL}|${publicKey}`);
+}
+
+async function closedList(): Promise<string[]> {
+    try {
+        const parsed = JSON.parse((await AsyncStorage.getItem(CLOSED_KEYS)) ?? '[]');
+        return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+        return [];
     }
 }
 

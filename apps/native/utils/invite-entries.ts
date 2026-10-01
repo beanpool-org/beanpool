@@ -36,4 +36,9 @@ export const GUEST_DOOR_BUTTON = '🌍 Join with a sign-in';
  * door is the global community's alone), or the global community before it has said, this app start, that its door is
  * open. There is no code to enter here, so no form, and no promise of a way in that isn't there.
  */
-export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes, and it isn’t open to new members from the app right now. Check your connection and try again later.';
+export const GUEST_NO_INVITES_TEXT = 'This community doesn’t use invite codes, and it isn’t taking new members from the app.';
+/** The same at the global community before it has answered, where a connection fault is a real cause. */
+export function guestNoInvitesText(guestAtGlobalWaiting: boolean): string {
+    return guestAtGlobalWaiting ? GUEST_AT_GLOBAL_WAITING_TEXT : GUEST_NO_INVITES_TEXT;
+}
+export const GUEST_AT_GLOBAL_WAITING_TEXT = 'This community doesn’t use invite codes, and it isn’t open to new members from the app right now. Check your connection and try again later.';

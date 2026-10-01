@@ -98,8 +98,10 @@ export function blankedWithAccount(metadata: string | null | undefined): boolean
  * DM whose other half went while theirs stayed would be the one place they had not left.
  *
  * Each line stays where it was, so a conversation still reads in order ("This message was deleted"), and each one's
- * updated_at moves (messages_touch_updated_at): a standby's next copy and a phone's next sync carry the tombstone, never
- * the words. Everyone else's lines are theirs and stay exactly as they are. A line already down keeps whoever took it
+ * updated_at moves (messages_touch_updated_at): a standby's next copy carries the tombstone, never the words. A phone's
+ * next sync carries it only for the newest 50 lines of a conversation: the app asks GET /api/messages/:id with no limit,
+ * so the other person's phone keeps any older DM line of theirs it already holds (the guide page says so). Group, event
+ * and enterprise chats are read live from the server and are all blanked. Everyone else's lines are theirs and stay exactly as they are. A line already down keeps whoever took it
  * down first, and loses a photo still hung off it. Returns how many lines it blanked.
  *
  * One transaction (the caller's, when there is one) and statements prepared once: a member with years of lines must not

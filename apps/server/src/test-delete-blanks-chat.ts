@@ -115,6 +115,15 @@ async function child(): Promise<void> {
             const evLine = postEventThreadMessage(quiet, ev.id, rhea, words.event);
             const boEv = postEventThreadMessage(quiet, ev.id, bo, 'I will bring the urn');
 
+            // Chats where her line is the LAST one, so the Talk list's preview is hers (nobody writes after her).
+            const bakery2 = se.createTreasury('Corner Shop', AVATAR, 0).publicKey;
+            se.adminAssignTreasuryOperator(bakery2, bo, 'admin');
+            const lastEnt = postEnterpriseThreadMessage(quiet, bakery2, rhea, words.enterprise);
+            const ev2 = se.createPost('event', 'community', 'Quiet tea', 'Bring a cup', 0, 'fixed', bo, -28.5, 153.5, [], false, undefined, false,
+                { eventStartAt: new Date(Date.now() + 48 * 3600_000).toISOString(), eventPlaceName: 'The hall' })!;
+            rsvpEvent(() => { }, ev2.id, rhea, 'going');
+            const lastEv = postEventThreadMessage(quiet, ev2.id, rhea, words.event);
+
             const dm = se.createConversation('dm', [rhea, bo], rhea)!;
             const t1 = lockedDm(48);
             const dmText = sendMessage(quiet, dm.id, rhea, t1.ciphertext, t1.nonce)!;
@@ -135,7 +144,8 @@ async function child(): Promise<void> {
 
             return {
                 groupId: group.id, bakery, eventId: ev.id, dmId: dm.id,
-                rheaLines: [g1.id, reply.id, reacted.id, repliedTo.id, ent.id, evLine.id, dmText.id, dmPhoto.id, dmOld.id],
+                rheaLines: [g1.id, reply.id, reacted.id, repliedTo.id, ent.id, evLine.id, dmText.id, dmPhoto.id, dmOld.id, lastEnt.id, lastEv.id],
+                lastEntId: bakery2, lastEvId: ev2.id,
                 rheaRemovedByConvenor: removed.id,
                 othersLines: [boLine.id, boReply.id, cyLine.id, boEnt.id, boEv.id, boDm.id, boPhoto.id],
                 rheaPhotos: [dmPhoto.id, dmOld.id], boPhoto: boPhoto.id, cyLine: cyLine.id,
@@ -143,6 +153,15 @@ async function child(): Promise<void> {
                 rheaSecrets: [t1.ciphertext, cap.ciphertext, photo.ciphertext, old.ciphertext, oldPhotoData],
                 boSecrets: [bt.ciphertext, bcap.ciphertext],
             };
+        },
+        /** After Bo's phone synced once: Bo writes 55 more DM lines, then Rhea one. Her first DM lines are now older than the newest 50. */
+        'dm-more': async (a: { rhea: string; bo: string; dmId: string }) => {
+            const { sendMessage } = await import('./engine/messaging.js');
+            const boIds: string[] = [];
+            for (let i = 0; i < 55; i++) { const t = lockedDm(24); boIds.push(sendMessage(quiet, a.dmId, a.bo, t.ciphertext, t.nonce)!.id); }
+            const t = lockedDm(48);
+            const rheaNewest = sendMessage(quiet, a.dmId, a.rhea, t.ciphertext, t.nonce)!;
+            return { boIds, rheaNewest: rheaNewest.id, secret: t.ciphertext };
         },
         'setup-standby': async (a: { primaryUrl: string; replicationToken: string; primaryPeerId: string }) => {
             const { addConnector } = await import('./connector-manager.js');
@@ -257,7 +276,10 @@ function leaks(text: string): string[] {
     return Object.values(WORDS).filter((w) => text.includes(w) || text.includes(b64(w)));
 }
 
-/** Bo's phone's message sync, as utils/db.ts syncMessages makes it: the conversation list, then each conversation's lines. */
+/**
+ * Bo's phone's message sync, as utils/db.ts syncMessages makes it: the conversation list, then each conversation's lines with
+ * NO `limit`, so the server's default applies (the newest 50). Never add a limit here: the app sends none.
+ */
 async function phoneSync(base: string, who: Id): Promise<{ byId: Map<string, any>; text: string; convs: string[] }> {
     const list = await api(base, 'GET', `/api/messages/conversations/${who.pk}`, who);
     require_(list.status === 200 && Array.isArray(list.body?.conversations), `${who.name}'s phone lists its conversations (${brief(list)})`);
@@ -265,7 +287,7 @@ async function phoneSync(base: string, who: Id): Promise<{ byId: Map<string, any
     let text = list.text;
     const convs: string[] = [];
     for (const c of list.body.conversations) {
-        const r = await api(base, 'GET', `/api/messages/${c.id}?limit=200`, who);
+        const r = await api(base, 'GET', `/api/messages/${c.id}`, who);
         if (r.status !== 200) continue;
         convs.push(c.id);
         text += r.text;
@@ -318,6 +340,14 @@ async function main(): Promise<void> {
         await main.send('setup-primary', { replicationToken, gwen: gwen.pk, members: [[rhea.pk, 'Rhea'], [bo.pk, 'Bo'], [cy.pk, 'Cy']] });
         const fx = await main.send('chat-fixture', { rhea: rhea.pk, bo: bo.pk, cy: cy.pk, words: WORDS, cyWords: CY_WORDS });
         const m = `https://localhost:${await main.send('serve')}`;
+        // Bo's phone syncs once now, holding her DM lines. Then 55 more DM lines land, so her first ones are older than the newest 50.
+        const phoneBefore = await phoneSync(m, bo);
+        require_(phoneBefore.byId.has(fx.rheaLines[6]) && phoneBefore.byId.has(fx.rheaLines[0]),
+            `Bo's phone holds her DM and group lines (${phoneBefore.byId.size} lines in ${phoneBefore.convs.length} conversations)`);
+        const more = await main.send('dm-more', { rhea: rhea.pk, bo: bo.pk, dmId: fx.dmId });
+        fx.rheaLines.push(more.rheaNewest);
+        fx.othersLines.push(...more.boIds);
+        fx.rheaSecrets.push(more.secret);
         const before = await main.send('messages');
         const rowBefore = new Map<string, MsgRow>(before.rows.map((r: MsgRow) => [r.id, r]));
         require_(fx.rheaLines.every((id: string) => rowBefore.get(id)?.type !== 'removed' && rowBefore.get(id)?.author_pubkey === rhea.pk),
@@ -333,9 +363,6 @@ async function main(): Promise<void> {
         const needles = [...Object.values(WORDS).map(b64), ...fx.rheaSecrets];
         const filesBefore = await main.send('files', { needles });
         require_(filesBefore.inDb.length + filesBefore.inWal.length > 0, `M's files hold her words before (${first([...filesBefore.inDb, ...filesBefore.inWal])})`);
-        const phoneBefore = await phoneSync(m, bo);
-        require_(phoneBefore.byId.has(fx.rheaLines[6]) && phoneBefore.byId.has(fx.rheaLines[0]),
-            `Bo's phone holds her DM and group lines (${phoneBefore.byId.size} lines in ${phoneBefore.convs.length} conversations)`);
         const groupBefore = await api(m, 'GET', `/api/groups/${fx.groupId}/chat?limit=100`, bo);
         const eventBefore = await api(m, 'GET', `/api/marketplace/posts/${fx.eventId}/chat?limit=100`, bo);
         const entBefore = await api(m, 'GET', `/api/enterprise/${fx.bakery}/thread?limit=100`, bo);
@@ -400,10 +427,16 @@ async function main(): Promise<void> {
         // ── 4. Bo's phone ──
         console.log('\n— 4. Bo\'s phone syncs —');
         const phoneAfter = await phoneSync(m, bo);
-        const rewritten = [...phoneAfter.byId.values()].filter((msg) => phoneWouldRewrite(phoneBefore.byId.get(msg.id), msg)).map((msg) => msg.id as string);
-        const herOnPhone = fx.rheaLines.filter((id: string) => phoneBefore.byId.has(id));
-        assert(herOnPhone.length >= 4 && herOnPhone.every((id: string) => rewritten.includes(id)),
-            `the sync brings every one of her lines the phone holds as changed (${herOnPhone.length} of hers; rewritten ${rewritten.length})`);
+        const rewritten = [...phoneAfter.byId.values()].filter((msg) => phoneBefore.byId.has(msg.id) && phoneWouldRewrite(phoneBefore.byId.get(msg.id), msg)).map((msg) => msg.id as string);
+        // The app sends no `limit`, so a sync carries only the newest 50 lines of each conversation. Her lines older than
+        // that stay on the phone as they were: the page says so. What the sync does carry is checked here.
+        const olderDm = fx.rheaLines.slice(6, 9);
+        const newestDm = more.rheaNewest as string;
+        assert(olderDm.every((id: string) => phoneBefore.byId.has(id) && !phoneAfter.byId.has(id)),
+            'her three first DM lines are on Bo\'s phone from before, and the sync no longer reaches them (older than the newest 50: they stay on the phone)');
+        const herOnPhone = fx.rheaLines.filter((id: string) => phoneAfter.byId.has(id));
+        assert(herOnPhone.includes(newestDm) && herOnPhone.every((id: string) => rewritten.includes(id) || !phoneBefore.byId.has(id)),
+            `her newest DM line, and every line of hers the sync does carry, comes as her tombstone (${herOnPhone.length} of hers; rewritten ${rewritten.length})`);
         assert(rewritten.every((id) => fx.rheaLines.includes(id)), `and nothing else: no line of Bo's or Cy's is rewritten (${first(rewritten.filter((id) => !fx.rheaLines.includes(id)))})`);
         assert(herOnPhone.every((id: string) => {
             const msg = phoneAfter.byId.get(id);
@@ -425,6 +458,11 @@ async function main(): Promise<void> {
             `each reads "${DELETED_TEXT}" there, not a host's or a keeper's removal (group ${shown(groupAfter, fx.rheaLines[0])}, event ${shown(eventAfter, fx.rheaLines[5])}, enterprise ${shown(entAfter, fx.rheaLines[4])})`);
         assert(shown(groupAfter, fx.othersLines[1]) === 'Can I have it Sunday?' && shown(eventAfter, fx.othersLines[4]) === 'I will bring the urn',
             'and Bo\'s lines read as he wrote them, his reply to her line too');
+        // The Talk list (GET /api/your-groups): her line is the LAST one in an event chat and in an enterprise chat.
+        const talk = await api(m, 'GET', '/api/your-groups', bo);
+        const talkOf = (id: string) => (talk.body?.items ?? []).find((i: any) => i.conversationId === id)?.lastMessage;
+        assert(talkOf(fx.lastEvId)?.text === DELETED_TEXT && talkOf(fx.lastEntId)?.text === DELETED_TEXT,
+            `the Talk list reads "${DELETED_TEXT}" for her last line in an event chat and in an enterprise chat, never the host's or a keeper's removal (event ${JSON.stringify(talkOf(fx.lastEvId)?.text)}, enterprise ${JSON.stringify(talkOf(fx.lastEntId)?.text)})`);
         const herPhoto = await api(m, 'GET', `/api/messages/${fx.rheaPhotos[0]}/attachment`, bo);
         const herOldPhoto = await api(m, 'GET', `/api/messages/${fx.rheaPhotos[1]}/attachment`, bo);
         const boPhoto = await api(m, 'GET', `/api/messages/${fx.boPhoto}/attachment`, bo);

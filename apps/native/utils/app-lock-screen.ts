@@ -20,6 +20,8 @@ export type AppLockScreen = 'none' | 'cover' | 'lock';
 let screen: AppLockScreen = 'none';
 const listeners = new Set<() => void>();
 let unlock: (() => void) | null = null;
+/** Whether app/_layout.tsx has decided the launch lock yet: until then the lock screen may be about to go up. */
+let launchDecided = false;
 
 function show(next: AppLockScreen): void {
     if (next === screen) return;
@@ -51,6 +53,41 @@ export function subscribeAppLockScreen(listener: () => void): () => void {
 
 export function useAppLockScreen(): AppLockScreen {
     return useSyncExternalStore(subscribeAppLockScreen, appLockScreen, appLockScreen);
+}
+
+/** Set by app/_layout.tsx once the launch lock has been decided (locked, unlocked, or App Lock off). */
+export function setAppLockLaunchDecided(): void {
+    if (launchDecided) return;
+    launchDecided = true;
+    listeners.forEach((l) => l());
+}
+
+/**
+ * Run `act` once, when the app itself shows: the launch lock decided, and neither the lock screen nor the cover up. At
+ * once if it shows now. Returns a cancel.
+ *
+ * For a one-time notice raised as an Alert (the vault's "Is this you?", "Account recovery reported" in app/_layout.tsx):
+ * an Alert can't be covered, and its buttons do nothing while the lock screen or cover shows (components/AppLock.tsx),
+ * so one raised behind the lock had its Review button do nothing and was never raised again in that run (deciding
+ * review of #1413, 2026-10-01). Marking the notice shown, and showing it, both wait for this.
+ */
+export function whenAppShows(act: () => void): () => void {
+    const shows = () => launchDecided && screen === 'none';
+    if (shows()) {
+        act();
+        return () => {};
+    }
+    let done = false;
+    const unsubscribe = subscribeAppLockScreen(() => {
+        if (done || !shows()) return;
+        done = true;
+        unsubscribe();
+        act();
+    });
+    return () => {
+        done = true;
+        unsubscribe();
+    };
 }
 
 /** What Unlock App does, wherever the lock screen is drawn: set by app/_layout.tsx. */

@@ -34,7 +34,7 @@ import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, Dar
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { appLockLocks } from '../utils/LocalAuth';
 import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
-import { setAppCovered, setAppLocked, setAppUnlockAction, useAppLockScreen } from '../utils/app-lock-screen';
+import { setAppCovered, setAppLocked, setAppLockLaunchDecided, setAppUnlockAction, useAppLockScreen, whenAppShows } from '../utils/app-lock-screen';
 import { AppLockSurface, installLockCovers } from '../components/AppLock';
 import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
@@ -147,6 +147,7 @@ function RootLayoutNav() {
     const isComponentMounted = useRef(true);
     const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
+    const recoveryPromptWait = useRef<(() => void) | null>(null); // it waits for the app to show (whenAppShows)
 
     // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
     // draws them inside itself, not only this layout.
@@ -210,6 +211,7 @@ function RootLayoutNav() {
                 }
             }
             setAppLockChecked(true);
+            setAppLockLaunchDecided();
         }
         checkAppLock();
     }, [identity]);
@@ -558,7 +560,11 @@ function RootLayoutNav() {
 
         // Reset the one-shot recovery prompt whenever we're no longer in a
         // 'recovering' state, so a future genuine recovery alert can prompt again.
-        if (recognition !== 'recovering') recoveryNavPrompted.current = false;
+        if (recognition !== 'recovering') {
+            recoveryNavPrompted.current = false;
+            recoveryPromptWait.current?.();
+            recoveryPromptWait.current = null;
+        }
 
         if (recognition === 'recovering') {
             // NAT-20: the node's `isRecovering` claim is UNSIGNED — a malicious node
@@ -567,16 +573,25 @@ function RootLayoutNav() {
             // never reaches here (they go to /welcome above), so this is really an
             // "someone is recovering your account" alert, not a recovery flow. So
             // confirm once instead of force-navigating.
-            if (root !== 'recover-identity' && !recoveryNavPrompted.current) {
-                recoveryNavPrompted.current = true;
-                Alert.alert(
-                    'Account recovery reported',
-                    'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
-                    [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
-                    ],
-                );
+            //
+            // Marked, and shown, only once the app itself shows (utils/app-lock-screen.ts `whenAppShows`): this is asked
+            // at launch and on return, as App Lock's lock screen goes up, and an Alert behind it has a Review that does
+            // nothing and would never come back this run.
+            if (root !== 'recover-identity' && !recoveryNavPrompted.current && !recoveryPromptWait.current) {
+                const cancel = whenAppShows(() => {
+                    recoveryPromptWait.current = null;
+                    if (!isComponentMounted.current) return;
+                    recoveryNavPrompted.current = true;
+                    Alert.alert(
+                        'Account recovery reported',
+                        'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
+                        ],
+                    );
+                });
+                recoveryPromptWait.current = recoveryNavPrompted.current ? null : cancel;
             }
             return;
         }
@@ -649,21 +664,27 @@ function RootLayoutNav() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         let current = true;
+        const waits = new Set<() => void>();
         const look = () => {
             vaultHoldsAtOpen(identity).then((holds) => {
-                // Marked only here, as the alert goes up: an answer for a layout that has gone keeps its hold's alert.
-                if (!current || takeHoldsToShow(holds).length === 0) return;
-                // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer one
-                // was cut mid-word (measured on the emulator). The body says what happened.
-                Alert.alert(
-                    'Is this you?',
-                    'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
-                    + 'you can let it through now. If not, stop it.',
-                    [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
-                    ],
-                );
+                if (!current || holds.length === 0) return;
+                // Marked only as the alert goes up, and that only once the app itself shows (utils/app-lock-screen.ts
+                // `whenAppShows`): an answer for a layout that has gone keeps its hold's alert, and one that arrives
+                // while App Lock's lock screen is up waits for the unlock, so its Review button works.
+                waits.add(whenAppShows(() => {
+                    if (!current || takeHoldsToShow(holds).length === 0) return;
+                    // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer
+                    // one was cut mid-word (measured on the emulator). The body says what happened.
+                    Alert.alert(
+                        'Is this you?',
+                        'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
+                        + 'you can let it through now. If not, stop it.',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
+                        ],
+                    );
+                }));
             }).catch(() => {});
         };
         look();
@@ -673,6 +694,7 @@ function RootLayoutNav() {
         return () => {
             current = false;
             sub.remove();
+            waits.forEach((cancel) => cancel());
         };
     }, [identity?.publicKey]);
 

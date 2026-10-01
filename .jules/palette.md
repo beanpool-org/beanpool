@@ -209,3 +209,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-27 - MemberGuide Keyboard Focus Ring Styling
 **Learning:** `MemberGuide.tsx` interactive row buttons, header back button, section navigation button, video link, and search input wrapper lacked visible keyboard focus indicators (`focus-visible:ring-2` / `focus-within:ring-2`), making keyboard navigation focus states hard to discern for assistive technology users.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to buttons and video link, and `focus-within:ring-2 focus-within:ring-emerald-500` to the search input label wrapper.
+
+## 2026-10-02 - EventChat Composer & Send Button Focus Rings
+**Learning:** `EventChat.tsx` chat composer textarea and Send action button lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500` to the textarea composer and `focus-visible:ring-offset-1` to the Send button in `EventChat.tsx`.

@@ -27,6 +27,8 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_ROLE;
 delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
+const ADMIN_PW = 'PushNoticesAdmin123!';
+process.env.ADMIN_PASSWORD = ADMIN_PW; // the announcement route is the operator's
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -83,6 +85,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
+    if (route.startsWith('/api/local/admin/')) headers['X-Admin-Password'] = ADMIN_PW;
     const res = await fetch(`${BASE}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
     let parsed: any = text;
@@ -104,6 +107,8 @@ async function main() {
     // Absent on a tree without them: the checks that need them fail, and the rest still run.
     const notices: any = await import('./engine/push-notices.js').catch(() => null);
 
+    const { initAdminPassword } = await import('./config/local-config.js');
+    initAdminPassword();
     await initTls();
     se.initStateEngine();
     // The node key (data/libp2p_key): what signs the notices.
@@ -290,6 +295,20 @@ async function main() {
             && mine.body?.title === 'Hall meeting moved' && mine.body?.body === 'Riverbend Growers meet at 9pm, bring the cash box'
             && mine.body?.sentAt === annNotice.data.t,
             `the recipient reads the details: the announcement's own words (${mine.status} ${JSON.stringify(mine.body)})`);
+        // An announcement is never cut: 4,000 characters are read whole, and 4,001 is refused at the route with nothing sent.
+        const long4000 = 'Long announcement. '.repeat(300).slice(0, 4000);
+        const sentLong = await caught(async () => { await call('POST', null, '/api/local/admin/announcements', { title: 'Four thousand', body: long4000, severity: 'info' }); });
+        const longToAnn = sentLong.find(m => toWhom.get(m.to) === ann);
+        const longRead = longToAnn ? await call('GET', ann, `/api/notices/push/${longToAnn.data.i}`) : null;
+        assert(long4000.length === 4000 && sentLong.length >= 4 && longRead?.status === 200 && longRead.body?.body === long4000 && longRead.body?.title === 'Four thousand',
+            `a 4,000-character announcement sent through the route is read whole from its notice (${sentLong.length} phones, ${longRead?.status}, ${String(longRead?.body?.body ?? '').length} characters)`);
+        let tooLong: Res | null = null;
+        const sentTooLong = await caught(async () => { tooLong = await call('POST', null, '/api/local/admin/announcements', { title: 'Too long', body: long4000 + 'x', severity: 'info' }); });
+        assert((tooLong as Res | null)?.status === 400 && /4,000/.test(String((tooLong as Res | null)?.body?.error)) && sentTooLong.length === 0,
+            `4,001 characters is refused at the route with a 400 that names the limit, and nothing is sent (${(tooLong as Res | null)?.status} ${JSON.stringify((tooLong as Res | null)?.body)}, ${sentTooLong.length} pushes)`);
+        let titleLong: Res | null = null;
+        const sentTitleLong = await caught(async () => { titleLong = await call('POST', null, '/api/local/admin/announcements', { title: 't'.repeat(201), body: 'short', severity: 'info' }); });
+        assert((titleLong as Res | null)?.status === 400 && sentTitleLong.length === 0, `a title over 200 characters is refused the same way (${(titleLong as Res | null)?.status}, ${sentTitleLong.length} pushes)`);
         const askedDetails = await call('GET', ann, `/api/notices/push/${askedAnn[0]?.data?.i}`);
         assert(askedDetails.status === 200 && askedDetails.body?.data?.postId === listing.id && /BobSecretname/.test(askedDetails.body?.body ?? ''),
             `and, for an answer to her listing, who answered and where a tap lands (${JSON.stringify(askedDetails.body)})`);
@@ -311,7 +330,14 @@ async function main() {
         attempt(() => db.prepare('UPDATE push_notices SET sent_at = ? WHERE id = ?').run(nowS - PUSH_NOTICE_LIFETIME_SECONDS - 60, bobNotice.data.i));
         const stale = await call('GET', bob, `/api/notices/push/${bobNotice.data.i}`);
         assert(stale.status === 404, `a notice older than 7 days is not answered, whenever the tidy last ran (${stale.status})`);
-        se.runMarketplaceHygiene();
+        // An expired request tells its two people two different sentences: the requester's "requests", the author's "listings".
+        const expiredTxn = attempt(() => db.prepare("SELECT id FROM marketplace_transactions WHERE post_id = ? AND status = 'requested'").get(listing.id)) as any;
+        attempt(() => db.prepare("UPDATE marketplace_transactions SET created_at = datetime('now', '-30 days') WHERE id = ?").run(expiredTxn?.id));
+        const expiredPushes = await caught(() => se.runMarketplaceHygiene());
+        const expToAnn = expiredPushes.filter(m => toWhom.get(m.to) === ann), expToBob = expiredPushes.filter(m => toWhom.get(m.to) === bob);
+        assert(expiredTxn && expToAnn.length >= 1 && expToAnn.every(m => m.data.k === 'market.listing' && m.body === 'There is news on one of your listings.')
+            && expToBob.length >= 1 && expToBob.every(m => m.data.k === 'market.answer' && m.body === 'There is news on one of your requests.'),
+            `an expired request: the listing's author hears "news on one of your listings", the requester "news on one of your requests" (${expToAnn.map(m => m.body).join('|')} / ${expToBob.map(m => m.body).join('|')})`);
         const left = attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(bobNotice.data.i)) as any;
         const kept = attempt(() => db.prepare('SELECT COUNT(*) AS n FROM push_notices WHERE id = ?').get(annNotice.data.i)) as any;
         assert(left?.n === 0 && kept?.n === 1, `the hourly tidy deletes it, and keeps a newer one (${left?.n}, ${kept?.n})`);

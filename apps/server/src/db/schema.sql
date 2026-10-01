@@ -1025,7 +1025,7 @@ CREATE TABLE IF NOT EXISTS push_notices (
     recipient TEXT NOT NULL,
     kind TEXT NOT NULL CHECK (length(kind) BETWEEN 1 AND 40),
     title TEXT NOT NULL CHECK (length(title) <= 200),
-    body TEXT NOT NULL CHECK (length(body) <= 1000),
+    body TEXT NOT NULL CHECK (length(body) <= 4000),
     data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 1000),
     sent_at INTEGER NOT NULL
 );

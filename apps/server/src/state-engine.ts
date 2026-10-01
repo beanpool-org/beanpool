@@ -960,15 +960,16 @@ export function runMarketplaceHygiene(): void {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
         const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
-        dispatchPushNotification(
-            [requesterPubkey, post?.author_pubkey].filter(Boolean),
-            'SYSTEM',
-            '⌛ Request Expired',
-            `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`,
-            { screen: 'post', postId: row.post_id },
-            'marketplace',
-            'market.answer'
-        );
+        // Two people, two sentences: the requester made a request, the listing's author has a listing. (Both when they are
+        // one and the same member, as a request on their own listing can't be, but a bad row must not drop a push.)
+        const expiredBody = `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`;
+        const expiredData = { screen: 'post', postId: row.post_id };
+        if (requesterPubkey) {
+            dispatchPushNotification([requesterPubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.answer');
+        }
+        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey) {
+            dispatchPushNotification([post.author_pubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.listing');
+        }
     }
     if (stale.length > 0) console.log(`🧹 Expired ${stale.length} stale marketplace request(s)`);
 

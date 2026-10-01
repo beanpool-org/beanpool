@@ -9,7 +9,7 @@ These are under **Bulletin & News**.
 
 ## Announcements
 
-An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. The notification itself says only "Your community has a notice for you.": your words never pass through the phone companies' servers or show on a lock screen. It is not kept anywhere members can find it later, so someone who has notifications off will not see it. Keep it short and use it rarely.
+An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. The notification itself says only "Your community has a notice for you.": your words never pass through the phone companies' servers or show on a lock screen. It is not kept anywhere members can find it later, so someone who has notifications off will not see it. An announcement can be at most 4,000 characters, and a headline at most 200: the form shows a count, and a longer one is refused rather than cut. Keep it short and use it rarely.
 
 ![The Announcements screen in Settings](images/bulletin-announcements.webp)
 

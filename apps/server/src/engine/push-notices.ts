@@ -29,8 +29,15 @@ import { db } from '../db/db.js';
 import { readNodeIdentity } from '../services/takeover-envelope.js';
 
 export const PUSH_NOTICES = { perMember: 100 } as const;
-/** The longest title, body and data (its JSON) a notice's details may hold, in characters: the schema's CHECKs. */
-export const PUSH_NOTICE_DETAIL_LIMITS = { title: 200, body: 1000, data: 1000 } as const;
+/**
+ * The longest title, body and data (its JSON) a notice's details may hold, in characters: the schema's CHECKs.
+ * `noticeBody` is for `community.notice` rows (an operator's announcement, a moderation notice): their details are the only
+ * place a closed phone can read the words later, so they get the push's old ceiling and are never cut at 1,000. The
+ * announcement route refuses a longer text (ANNOUNCEMENT_LIMITS), so what the operator sends is what members can read.
+ */
+export const PUSH_NOTICE_DETAIL_LIMITS = { title: 200, body: 1000, noticeBody: 4000, data: 1000 } as const;
+/** What `POST /api/local/admin/announcements` accepts, in characters: the same as a notice's details can hold. */
+export const ANNOUNCEMENT_LIMITS = { title: PUSH_NOTICE_DETAIL_LIMITS.title, body: PUSH_NOTICE_DETAIL_LIMITS.noticeBody } as const;
 
 /** The DER header of a PKCS#8 Ed25519 private key; the 32-byte seed follows it. */
 const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
@@ -143,7 +150,7 @@ export function keepPushNotices(rows: readonly PushNoticeRow[]): void {
         const insert = db.prepare('INSERT OR IGNORE INTO push_notices (id, recipient, kind, title, body, data, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
         db.transaction(() => {
             for (const r of rows) {
-                insert.run(r.id, r.recipient, r.kind, clip(r.title, PUSH_NOTICE_DETAIL_LIMITS.title), clip(r.body, PUSH_NOTICE_DETAIL_LIMITS.body),
+                insert.run(r.id, r.recipient, r.kind, clip(r.title, PUSH_NOTICE_DETAIL_LIMITS.title), clip(r.body, r.kind === 'community.notice' ? PUSH_NOTICE_DETAIL_LIMITS.noticeBody : PUSH_NOTICE_DETAIL_LIMITS.body),
                     dataText(r.data), r.sentAt);
             }
         })();

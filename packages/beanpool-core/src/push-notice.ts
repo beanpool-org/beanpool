@@ -55,6 +55,7 @@ export const PUSH_NOTICE_KINDS = {
     'group.lead': { body: 'There is news about a group you lead.', tab: 'chats' },
     'market.request': { body: 'Someone answered one of your listings.', tab: 'market' },
     'market.answer': { body: 'There is news on one of your requests.', tab: 'market' },
+    'market.listing': { body: 'There is news on one of your listings.', tab: 'market' },
     'trade.update': { body: 'There is news on one of your trades.', tab: 'market' },
     'review.new': { body: 'You have a new review.', tab: 'market' },
     'event.reminder': { body: "An event you're going to starts soon.", tab: 'market' },

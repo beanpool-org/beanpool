@@ -78,6 +78,7 @@ import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdo
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
+import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -1237,6 +1238,18 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
 router.post('/api/local/admin/announcements', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { title, body, severity } = (ctx as any).requestBody || {};
+    // Members whose app was closed read the announcement from the notice's details, which hold this much: refuse a longer
+    // one rather than send it cut.
+    if (typeof body === 'string' && body.length > ANNOUNCEMENT_LIMITS.body) {
+        ctx.status = 400;
+        ctx.body = { error: `An announcement can be at most ${ANNOUNCEMENT_LIMITS.body.toLocaleString('en-US')} characters; this one is ${body.length.toLocaleString('en-US')}. Shorten it and send again.` };
+        return;
+    }
+    if (typeof title === 'string' && title.length > ANNOUNCEMENT_LIMITS.title) {
+        ctx.status = 400;
+        ctx.body = { error: `An announcement's title can be at most ${ANNOUNCEMENT_LIMITS.title} characters; this one is ${title.length}. Shorten it and send again.` };
+        return;
+    }
     adminBroadcastAnnouncement(title || 'System Announcement', body || '', severity || 'info');
     ctx.body = { success: true };
 });

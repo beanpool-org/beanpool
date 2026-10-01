@@ -302,13 +302,15 @@ export function createConversation(
 
     const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
     // A DM's existence says who is talking to whom: only its two participants hear of it.
-    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants);
+    // Its owner was told of it when they opened it: only the other, for whom it is new, hears of it now.
+    cb.broadcast({ type: 'conversation_created', conversation: conv }, kept ? participants.filter(p => p !== kept.owner_pubkey) : participants);
     return conv;
 }
 
 /**
  * A withheld conversation (engine/withheld-lines.ts) its owner writes in once the block is lifted: it becomes the real
- * conversation between the two, under its id, and both hear of it as of any new conversation. When the two have a real
+ * conversation between the two, under its id, and the other hears of it as of any new conversation (its owner had it
+ * already). When the two have a real
  * one already (only a conversation opened some other way than createConversation could be), the withheld one goes and
  * the line goes there. Returns the id the line is stored under.
  */
@@ -328,7 +330,8 @@ function promoteWithheldConversation(cb: MessagingCallbacks, kept: WithheldConve
         keepOwnersReadMarker(kept);
     })();
     const conv: Conversation = { id: kept.id, type: 'dm', name: null, createdBy: author, createdAt, participants };
-    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants);
+    // Its owner was told of it when they opened it: only the other, for whom it is new, hears of it now.
+    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants.filter(p => p !== kept.owner_pubkey));
     return kept.id;
 }
 

@@ -386,6 +386,7 @@ async function main(): Promise<void> {
     assert(!annList5?.conversations?.some((c: any) => c.id === boConv) && annList5?.totalUnread === annUnreadBefore
         && JSON.stringify(await linesOf(ann, deeConv)) === JSON.stringify(annLines4),
         "nothing old arrives: Ann's list, lines and badge are as they were");
+    const boCreatedBefore = boSock.events.filter(e => e.type === 'conversation_created' && e.conversation?.id === boConv).length;
     const b4 = await call('POST', bo, '/api/messages/send', dm(boConv, bo));
     const d3 = await call('POST', dee, '/api/messages/send', dm(deeConv, dee));
     await sleep(150);
@@ -393,6 +394,9 @@ async function main(): Promise<void> {
     assert(b4.status === 200 && annList6?.conversations?.some((c: any) => c.id === boConv),
         `Bo's next line opens the conversation for Ann, under the same id (${show(b4)})`);
     assert(JSON.stringify(await linesOf(ann, boConv)) === JSON.stringify([b4.body?.message?.id]), 'and it holds that line alone');
+    const boCreatedAfter = boSock.events.filter(e => e.type === 'conversation_created' && e.conversation?.id === boConv).length;
+    assert(boCreatedBefore === 1 && boCreatedAfter === 1 && annSock.events.some(e => e.type === 'conversation_created' && e.conversation?.id === boConv),
+        `Ann hears of it as a new conversation; Bo, who had it, hears of it no second time (${boCreatedBefore} → ${boCreatedAfter})`);
     assert(JSON.stringify(await linesOf(ann, deeConv)) === JSON.stringify([...annLines4, d3.body?.message?.id]), "Dee's next line follows her old ones, without the withheld one");
     const annRead5 = (await call('GET', ann, `/api/messages/${deeConv}`)).body?.messages ?? [];
     assert(annRead5.find((m: any) => m.id === firstLine)?.ciphertext === before4.ciphertext

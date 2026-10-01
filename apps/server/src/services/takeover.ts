@@ -750,7 +750,7 @@ async function newerTakeoverFor(bundle: TakeoverBundle, peerId: string, publicAd
 }
 
 function refuseNewerTakeover(n: NewerTakeover): never {
-    const when = n.statement.since ? ` on ${n.statement.since.slice(0, 16).replace('T', ' ')} UTC` : '';
+    const when = n.statement.since ? ` on ${n.statement.since.slice(0, 19).replace('T', ' ')} UTC` : '';
     const message = `Another server already took over this community with these keys${when}: ${n.where} answers as its main server `
         + `(identity epoch ${n.statement.epoch}; the keys this standby holds were locked at ${n.sealedEpoch}). Taking over here too would make `
         + "two main servers, with members' changes split between them, so this standby won't. If that server is the community's main "

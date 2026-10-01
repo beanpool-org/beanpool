@@ -372,9 +372,9 @@ export function firstTakeover(a: string | null, b: string | null): number {
     return (a ?? '') < (b ?? '') ? -1 : 1;
 }
 
-/** "2026-10-02 09:14 UTC", or "an unknown time". */
+/** "2026-10-02 09:14:05 UTC" (two take-overs can be a minute apart), or "an unknown time". */
 function when(since: string | null): string {
-    return since && Number.isFinite(Date.parse(since)) ? `${since.slice(0, 16).replace('T', ' ')} UTC` : 'an unknown time';
+    return since && Number.isFinite(Date.parse(since)) ? `${since.slice(0, 19).replace('T', ' ')} UTC` : 'an unknown time';
 }
 
 /** This server took over second, with the same keys as the server at its address: read-only from now on, remembered. */

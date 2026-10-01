@@ -15,6 +15,7 @@ import { readCommunitySettings } from '../config/community-settings.js';
 import { writeOpenJoinRecord } from './open-join.js';
 import { noteMainServerOpenJoinKeyId, recordedOpenJoinKeyId } from '../services/open-join-key.js';
 import { recoverySealEpoch } from '../services/recovery-seal-key.js';
+import { isLockedPushTombstone } from '../services/push-token-seal.js';
 import { deleteTombstonedCopies } from './recovery-shares.js';
 import { importedArea } from './member-area.js';
 import { importPlainTables, deletePlainRow, plainRowStamp } from './plain-tables.js';
@@ -89,8 +90,13 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     import drops a photo row that carries no bytes, so it is refused, loudly, rather than sent a copy without its photos.
  *     A copy made by format 7 holds the same rows, its photos stored from the bytes that came inline; its re-seed fetches
  *     no object this standby's store already holds.
+ *  9. Members' phones are locked (services/push-token-seal.ts, push design step 2): each push_tokens row is a token's id
+ *     and its box, never the token, and leave statements and tombstones name the id. A standby drops, at its boot, the
+ *     rows a copy made by format 8 or older gave it with tokens in the clear (it has no key to lock them), and its main
+ *     server's locked rows, stamped when that server locked them, may be behind this standby's cursor already: the re-seed
+ *     brings them all.
  */
-export const REPLICA_FORMAT = 8;
+export const REPLICA_FORMAT = 9;
 
 /** The format a standby must say it reads for its main server to send it a copy (routes/backup.ts sync-copy): photos by reference. */
 export const PHOTOS_BY_REFERENCE_FORMAT = 8;
@@ -1589,6 +1595,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             const putTouchTriggersBack = setTouchTriggersAside(standingCopy ? [...IMPORT_KEEPS_STAMPS, ...MEMBERS_KEEP_STAMPS] : IMPORT_KEEPS_STAMPS);
             const applyTombstones = (tombstones: NonNullable<SyncPayload['tombstones']>) => {
                 for (const ts of tombstones) {
+                    // A phone's deletion record from a main server older than its locked tokens names the token in the clear
+                    // (services/push-token-seal.ts): kept here, it would hold the token; applied, it matches no row.
+                    if (ts.tableName === 'push_tokens' && !isLockedPushTombstone(ts.rowKey)) continue;
                     const localTs = lookupLocalUpdatedAt(ts.tableName, ts.rowKey);
                     if (localTs && localTs > ts.deletedAt) {
                         conflictsSkipped++;

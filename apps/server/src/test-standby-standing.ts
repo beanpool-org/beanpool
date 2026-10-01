@@ -67,9 +67,10 @@ const PW_STANDBY = 'Standing-Standby-Pw-2208!';
 const AHEAD_MS = 3600_000;
 /**
  * The importer format a copy records (engine/sync.ts REPLICA_FORMAT): 4 was this suite's (G2), 5 in-flight money's (G3), 6
- * members' devices' (G4), 7 a whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4).
+ * members' devices' (G4), 7 a whole copy built from nothing in a staging database (P2), 8 listing photos by reference (P4),
+ * 9 members' phones locked.
  */
-const FORMAT = '8';
+const FORMAT = '9';
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 

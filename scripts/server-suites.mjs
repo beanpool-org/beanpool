@@ -241,6 +241,7 @@ export const SUITES = [
     'test-push-leave-statement',
     'test-push-access-token',
     'test-push-notices',
+    'test-push-tokens-at-rest',
     'test-settings',
     'test-srv20-ledger-reset',
     'test-harvester',

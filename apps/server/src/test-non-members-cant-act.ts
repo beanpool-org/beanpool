@@ -78,6 +78,7 @@ import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
@@ -305,7 +306,7 @@ async function main(): Promise<void> {
 
     // For the event edits (4109566615): Bob, who is going to Alice's events, has a phone to push to. Rekeyee convenes a
     // group with an event of Alice's that Bob is going to; Carol, a live member, convenes another (the control).
-    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'ExponentPushToken[bob-nm]', 'android')").run(bob.pubKeyHex);
+    putPushTokenRow(bob.pubKeyHex, 'ExponentPushToken[bob-nm]', 'android');
     const rekeyGroup = createGroup({ name: 'Swap shop NM', createdBy: rekeyee.pubKeyHex, joinPolicy: 'open' } as any);
     joinGroup(rekeyGroup.id, alice.pubKeyHex);
     joinGroup(rekeyGroup.id, bob.pubKeyHex);

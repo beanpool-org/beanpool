@@ -109,6 +109,7 @@ async function child(): Promise<void> {
             const { setReplicationToken } = await import('./config/local-config.js');
             const { makeRecoveryCode, flushTakeoverChecks } = await import('./services/takeover-envelope.js');
             const { db } = await import('./db/db.js');
+            const { putPushTokenRow } = await import('./services/push-token-seal.js');
             seedGenesisMember(a.gwen, 'Gwen');
             for (const [pk, callsign] of [[a.ann, 'Ann'], [a.bo, 'Bo'], [a.cy, 'Cy']]) {
                 db.prepare('INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code) VALUES (?, ?, ?, ?, ?)')
@@ -122,7 +123,7 @@ async function child(): Promise<void> {
             // Every one of them has a phone that registered with this server.
             for (const [pk, token] of [[a.gwen, 'ExponentPushToken[gwen-owner]'], [a.ann, 'ExponentPushToken[ann-admin]'],
                 [a.bo, 'ExponentPushToken[bo-moderator]'], [a.cy, 'ExponentPushToken[cy-member]']]) {
-                db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')").run(pk, token);
+                putPushTokenRow(pk, token, 'android');
             }
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();

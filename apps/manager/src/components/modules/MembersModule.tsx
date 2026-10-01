@@ -5,7 +5,7 @@ import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
-import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, type NodeTreasury } from '../../lib/node-client';
+import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, reportSubject, type NodeTreasury } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface MemberItem {
@@ -653,11 +653,8 @@ export function MembersModule({
                                         </span>
                                         <span className="font-mono text-amber-300">
                                             {(() => {
-                                                const target = typeof report.targetPubkey === 'string'
-                                                    ? report.targetPubkey
-                                                    : (typeof report.target_pubkey === 'string'
-                                                        ? report.target_pubkey
-                                                        : '');
+                                                // On a post, its author as the node read it from the post (reportSubject).
+                                                const target = reportSubject(report);
                                                 return `Target: ${target ? `${target.slice(0, 12)}...` : 'Unknown'}`;
                                             })()}
                                         </span>

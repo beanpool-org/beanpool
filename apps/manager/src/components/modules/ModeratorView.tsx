@@ -9,7 +9,7 @@ import {
     actionNodeReport,
     dismissNodeReport,
     fetchReports,
-    reportBurstSubject,
+    reportSubject,
     type ListedReport,
     type ReportStatusFilter,
 } from '../../lib/node-client';
@@ -198,7 +198,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
     onShowBurst?: (pubkey: string) => void;
 }) {
     // A report on a post opens its author's group, as the node read it from the post: never the key the reporter sent.
-    const burstSubject = reportBurstSubject(report);
+    const burstSubject = reportSubject(report);
     const [choosingReason, setChoosingReason] = useState(false);
     const [reason, setReason] = useState('');
     const [busy, setBusy] = useState<string | null>(null);

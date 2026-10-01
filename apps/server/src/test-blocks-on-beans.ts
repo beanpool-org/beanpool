@@ -17,7 +17,7 @@
  *  5. a standby's copy: the row comes over (its signed request re-checked) with no note, and on the standby's own server
  *     Ann's reads have no note; the copy carries no withheld note
  *  6. after the unblock nothing old arrives: the old send still shows the neutral line; a note sent after it arrives
- *  7. a prune takes Bo's withheld notes; Ann still never sees one
+ *  7. a prune takes Bo's withheld notes, and a self-deletion Eve's; Ann still never sees one
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-blocks-on-beans.ts
@@ -129,6 +129,10 @@ async function child(): Promise<void> {
             se.adminPruneUser(a.key, a.actor);
             return true;
         },
+        'delete-account': async (a: { key: string }) => {
+            const se = await import('./state-engine.js');
+            return se.purgeMemberSelf(a.key);
+        },
     });
 }
 
@@ -204,7 +208,7 @@ async function main(): Promise<void> {
     const socks: Sock[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const gwen = newId('Gwen');
-    const [ann, bo, cy, dee] = ['Ann', 'Bo', 'Cy', 'Dee'].map(newId);
+    const [ann, bo, cy, dee, eve] = ['Ann', 'Bo', 'Cy', 'Dee', 'Eve'].map(newId);
     const NOTE = `meet me behind the shed ${crypto.randomBytes(4).toString('hex')}`;
     const CY_NOTE = `thanks for the eggs ${crypto.randomBytes(4).toString('hex')}`;
     const LATER = `after the unblock ${crypto.randomBytes(4).toString('hex')}`;
@@ -214,7 +218,7 @@ async function main(): Promise<void> {
         const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary' });
         nodes.push(main);
         await main.send('setup-primary', {
-            replicationToken, genesis: gwen.pk, members: [ann, bo, cy, dee].map(m => [m.pk, m.name]), senders: [bo.pk, cy.pk], seller: dee.pk,
+            replicationToken, genesis: gwen.pk, members: [ann, bo, cy, dee, eve].map(m => [m.pk, m.name]), senders: [bo.pk, cy.pk, eve.pk], seller: dee.pk,
         });
         const base = `https://localhost:${await main.send('serve')}`;
         const annSock = await socket(base, ann);
@@ -350,6 +354,17 @@ async function main(): Promise<void> {
         assert(pruned.withheld === 0, `a prune takes his withheld notes (${pruned.withheld})`);
         const annPruned = await historyOf(ann);
         assert(annPruned.status === 200 && !annPruned.text.includes(NOTE) && !!rowIn(annPruned, boTx), 'Ann still has the Beans and never the note');
+        const EVE_NOTE = `from eve ${crypto.randomBytes(4).toString('hex')}`;
+        const blkEve = await signedCall(base, 'POST', '/api/blocks', ann, { targetPubkey: eve.pk });
+        const eveSend = await signedCall(base, 'POST', '/api/ledger/transfer', eve, { to: ann.pk, amount: 2, memo: EVE_NOTE });
+        const eveKept = await main.send('holding', { text: EVE_NOTE, recipient: ann.pk });
+        assert(blkEve.status === 200 && eveSend.status === 200 && eveKept.withheld === 1 && eveKept.memos === 0,
+            `Ann blocks Eve, and Eve's note is kept for Eve alone (${show(eveSend)})`);
+        const gone = await main.send('delete-account', { key: eve.pk });
+        const afterDelete = await main.send('holding', { text: EVE_NOTE, recipient: ann.pk });
+        const annEve = await historyOf(ann);
+        assert(gone?.ok === true && afterDelete.withheld === 0 && !!rowIn(annEve, eveSend.body?.transaction?.id) && !annEve.text.includes(EVE_NOTE),
+            `a self-deletion takes it too; Ann keeps the Beans and never sees the note (${JSON.stringify(gone)?.slice(0, 80)}, ${afterDelete.withheld})`);
         const audit = await main.send('ledger', { keys: [] });
         assert(audit.audit?.ok === true, `the ledger audit holds after it all (${JSON.stringify(audit.audit)})`);
     } finally {

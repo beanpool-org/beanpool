@@ -27,10 +27,9 @@ import { BLOCKED_BEANS_NOTE, isSyntheticAccount } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { hasBlocked } from './member-blocks.js';
 
-/** A person's key: not a system account, not an enterprise's treasury. */
-function isPerson(key: string): boolean {
-    if (!key || isSyntheticAccount(key)) return false;
-    return !(db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(key) as { is_treasury: number | null } | undefined)?.is_treasury;
+/** An enterprise's treasury: a member row, but no person. */
+function isTreasuryKey(key: string): boolean {
+    return !!(db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(key) as { is_treasury: number | null } | undefined)?.is_treasury;
 }
 
 /**
@@ -39,8 +38,9 @@ function isPerson(key: string): boolean {
  */
 export function withholdsNote(from: string, to: string, memo: string | null | undefined): boolean {
     if (typeof memo !== 'string' || memo.trim() === '') return false;
-    if (from === to || !isPerson(from) || !isPerson(to)) return false;
-    return hasBlocked(to, from);
+    if (!from || !to || from === to || isSyntheticAccount(from) || isSyntheticAccount(to)) return false;
+    // The block first: one lookup on its key, and false for nearly every send.
+    return hasBlocked(to, from) && !isTreasuryKey(from) && !isTreasuryKey(to);
 }
 
 /** The send's note, kept for its sender: in the send's own transaction, with the row that names them. */

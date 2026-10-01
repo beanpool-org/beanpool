@@ -17,7 +17,8 @@
  *  2. Vera's own id with another photo: refused before anything is stored, 400 with the "taken" error, and Vera's
  *     directory in the store holds her objects and no other.
  *  3. A row from before this change that names Vera's object (a post whose id the old key builder stripped to hers):
- *     its author's edit takes the photo off it, and Vera's object stays, because her row still names it.
+ *     its author's edit takes the photo off it, and Vera's object stays, because her row still names it; so it does when
+ *     the row names it in other capitals. Asking is an index lookup. An object no other row names still goes.
  *  4. Headers. A keyed photo: `private, max-age=31536000, immutable`. A board listing's photo where the listings are a
  *     public read: `public, max-age=31536000, immutable`, as before; a group's listing there is still `private`. A
  *     message's attachment: `private, no-store`.
@@ -205,6 +206,13 @@ async function main(): Promise<void> {
         const edit2 = await post('/api/marketplace/posts/update', { id: folded, authorPublicKey: mallory.pk, photos: [] }, mallory);
         const after2 = await veraIntact(v2);
         assert(edit2.status === 200 && after2.ok, `a row naming her key in other capitals leaves her photo too (${edit2.status}, photo ${after2.status})`);
+
+        // The question is asked before every delete of an object, so it is an index lookup, not a scan of every photo row.
+        for (const [table, index] of [['post_photos', 'idx_post_photos_storage_key'], ['message_attachments', 'idx_message_attachments_storage_key']]) {
+            const plan = (db.prepare(`EXPLAIN QUERY PLAN SELECT 1 FROM ${table} WHERE storage_key = ? COLLATE NOCASE LIMIT 1`).all(v.key) as { detail: string }[])
+                .map((r) => r.detail).join('; ');
+            assert(plan.includes(index), `whether a ${table} row names a key is answered from ${index} (${plan})`);
+        }
 
         // And the ordinary case is unchanged: a photo no other row names goes with the edit that drops it.
         const own = await listing(mallory, 'Crab apple jelly', [RED_PNG]);

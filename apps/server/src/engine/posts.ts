@@ -351,13 +351,13 @@ export function createPost(
     // escrow a chosen id named, and nothing should be able to again.
     //
     // It names the post's photos in the image store as well (storage/image-store.ts postPhotoKey: `posts/<id>/…`), and
-    // they are stored before the row is written. So it is a key segment as it stands, in lowercase as every id the node
-    // and the apps make is: one that only a strip, a cut or a disk that folds case could make another post's would put
-    // this post's photos under that post's keys, and its edit or delete would take that post's photos (review
-    // FABLE-sec-images, HIGH). And never a post's that is here already, whose photos the stores below would write over.
-    if (id !== undefined && id !== null && id !== '') {
-        if (typeof id !== 'string' || !isKeySafeId(id) || id !== id.toLowerCase()) throw new Error(POST_ID_SHAPE_ERROR);
-        if (idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw new Error(POST_ID_TAKEN_ERROR);
+    // they are stored before the row is written. So it is never a post's that is here already, whose photos those writes
+    // would land beside or over; and it is a key segment as it stands, in lowercase as every id the node and the apps
+    // make is. An id that a strip, a cut or a disk that folds case turned into another post's put its photos under that
+    // post's keys, and its edit or delete then took the other post's photos (review FABLE-sec-images, HIGH).
+    if (id) {
+        if (typeof id !== 'string' || idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw new Error(POST_ID_TAKEN_ERROR);
+        if (!isKeySafeId(id) || id !== id.toLowerCase()) throw new Error(POST_ID_SHAPE_ERROR);
     }
 
     const audienceScope: AudienceScope = (options?.audienceScope as AudienceScope) || 'public';

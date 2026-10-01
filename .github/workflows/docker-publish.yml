@@ -148,7 +148,7 @@ jobs:
                 - "4001:4001"
                 - "4002:4002"
               volumes:
-                - ./data:/app/data
+                - ./data:/data
           ```
 
           **Using Docker CLI:**

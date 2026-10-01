@@ -308,6 +308,7 @@ export const SUITES = [
     'test-decisions-grant-cap',
     'test-decisions-off',
     'test-invites-off',
+    'test-door-setting',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
     'test-process-handlers',

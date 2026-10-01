@@ -462,6 +462,8 @@ export interface SyncCommunitySettings {
         pricing_data_source?: string | null;
         pricing_show_seasonality?: string | null;
         autosnapshot_config?: string | null;
+        /** Who may invite: `admins`, or null for any member (apps/server config/door.ts). */
+        door?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

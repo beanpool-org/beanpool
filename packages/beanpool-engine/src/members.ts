@@ -116,7 +116,8 @@ export interface InviteTreeNode {
 
 export interface InviteCheckResult {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | TicketBindingRefusal['reason'];
+    /** `admins_only`: a ticket a member made, where only admins invite (the server's door, apps/server config/door.ts). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only' | TicketBindingRefusal['reason'];
     inviterCallsign?: string | null;
 }
 

@@ -4223,7 +4223,8 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }

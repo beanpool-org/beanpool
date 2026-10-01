@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
 export type { EscrowRefundShortfall };
@@ -19,6 +19,7 @@ import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
@@ -51,6 +52,7 @@ import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neu
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
+import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
 import { truncateWalAfterDelete } from './db/wal-truncate.js';
@@ -628,6 +630,10 @@ export function initStateEngine(): void {
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // Members' push tokens are locked with a key from the same file (services/push-token-seal.ts): a main server locks
+    // the rows stored in the clear before and checks every row opens; a standby drops those rows (it has no key). Never
+    // throws.
+    installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
     // The open door's key is a file too (services/open-join-key.ts): an old node_config row holding it moves out of the
     // database now, before any snapshot or copy is made, and a server that cannot check a sign-in says so. Never throws.
     installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
@@ -1361,6 +1367,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey : null;
+    // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
+    // own sockets only, which it still makes member sockets below. The versions above moved all the same.
+    const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1388,7 +1397,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
+        const joinersOwn = !!joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey);
+        if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
@@ -1397,6 +1407,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 ws._pendingMemberPubkey = null;
             }
         }
+        if (joinToJoinerOnly && !joinersOwn) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -2130,6 +2141,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
     const feeExempt = isFeeExempt || !isEscrow;
+    // A note to someone who has blocked its sender is kept for the sender alone, never in the row the recipient reads
+    // (engine/withheld-notes.ts). Decided here, before the transaction: it refuses nothing and moves nothing, and the
+    // Beans go as any send's.
+    const withheldNote = withholdsNote(from, to, memo);
 
     // ATOMICITY (money). Everything from the in-memory `ledger.transfer` through the last persisted row is
     // ONE unit. It used to be five autocommitted statements, and every gap between them was a way to destroy
@@ -2172,9 +2187,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // transaction's authorship is re-verifiable on import. NULL for
             // system/internal transfers (those become node-signed in a later step).
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                built.id, built.from, built.to, built.amount, built.taxFee, built.memo, built.timestamp,
+                built.id, built.from, built.to, built.amount, built.taxFee, withheldNote ? '' : built.memo, built.timestamp,
                 auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
             );
+            if (withheldNote) keepWithheldNote(built.id, built.memo);
         }
 
         // Sync ledger account balances to DB
@@ -2217,10 +2233,16 @@ export function transfer(from: string, to: string, amount: number, memo: string,
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
-    broadcast({
-        type: 'transaction',
-        txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
-    }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
+    const live = { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' };
+    // A2-20: a transfer is visible only to its two parties on the live feed. A withheld note goes to its sender's sockets
+    // alone; the recipient's hear the Beans with BLOCKED_BEANS_NOTE, as their history reads them.
+    if (withheldNote) {
+        broadcast({ type: 'transaction', txn: live }, [from]);
+        broadcast({ type: 'transaction', txn: { ...live, memo: BLOCKED_BEANS_NOTE } }, [to]);
+    } else {
+        broadcast({ type: 'transaction', txn: live }, [from, to]);
+    }
+    // The sender's own answer: their note as they wrote it (built.memo), in the shape any send's has.
     return txn;
 }
 
@@ -2607,14 +2629,19 @@ export function payFromCommons(
     return txn;
 }
 
+/**
+ * An account's history, or every account's. Read as the account named: a note withheld from someone who blocked its
+ * sender is its sender's to read, and its recipient reads BLOCKED_BEANS_NOTE (engine/withheld-notes.ts).
+ */
 export function getTransactions(publicKey?: string, limit = 50, offset = 0): Transaction[] {
     let rows;
     if (publicKey) {
-        rows = db.prepare(`SELECT * FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
+        rows = db.prepare(`SELECT t.*, ${WITHHELD_NOTE_COLUMN} FROM transactions t ${WITHHELD_NOTE_JOIN}
+                           WHERE t.from_pubkey=? OR t.to_pubkey=? ORDER BY t.timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
     } else {
         rows = db.prepare(`SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(limit, offset) as any[];
     }
-    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: r.memo, timestamp: r.timestamp }));
+    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: publicKey ? noteAsReadBy(r, publicKey) : r.memo, timestamp: r.timestamp }));
 }
 // ===================== MARKETPLACE =====================
 
@@ -7168,6 +7195,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropBlocksOf(publicKey);
         // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
         dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
+        dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and a wrap of its key they held is dropped (engine/names-list.ts).
         dropNamesListHoldOf(publicKey, 'removed');
     });
@@ -7342,6 +7371,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         dropBlocksOf(publicKey);
         // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
         dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
+        dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
         deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
         deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
@@ -8076,6 +8107,9 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
  * so many a day (KEY_PUSH_RULES, review 4126900225): past its day a new token is refused ('key_rate_limited'), and past
  * its live tokens the stalest goes. Registering an existing (key, token) again is never refused: it adds no row.
  * `address` null (this server's own code) counts toward the node's day only.
+ *
+ * The token is stored locked (services/push-token-seal.ts): the row is keyed by its id, and holds it only in a box this
+ * server's key opens. Without the key ('failed') nothing is stored.
  */
 export function registerPushToken(
     publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null, address: string | null = null,
@@ -8083,16 +8117,19 @@ export function registerPushToken(
     // A standby's tokens are its main server's (a plain table, design G4): the phone registers there.
     assertPlainTablesWritable();
     try {
+        const { tokenId, tokenBox } = lockPushToken(publicKey, token);
         return db.transaction((): PushRegistration => {
             if (registeredAt !== null) {
-                const left = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ? AND left_at >= ?
-                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, token, registeredAt, PUSH_LEAVE_REMEMBERED);
+                // A leave applied under a key since replaced (a carried one) names the token by the id it had then.
+                const leftStmt = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ? AND left_at >= ?
+                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`);
+                const left = [tokenId, ...retiredPushTokenIds(token)].some((id) => leftStmt.get(publicKey, id, registeredAt, PUSH_LEAVE_REMEMBERED));
                 if (left) {
                     console.log(`[Push] A registration for ${publicKey.slice(0, 8)} from before its leave statement arrived late; not registered`);
                     return 'left';
                 }
             }
-            const held = !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token = ?').get(publicKey, token);
+            const held = !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(publicKey, tokenId);
             if (!held) {
                 if (newTokensToday(publicKey) >= KEY_PUSH_RULES.newTokensPerDay) {
                     console.log(`[Push] A new token for ${publicKey.slice(0, 8)} is over its key's day; not registered`);
@@ -8106,14 +8143,15 @@ export function registerPushToken(
                     }
                 }
             }
-            db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT (public_key, token) DO UPDATE SET
+            // The same phone again keeps its box: it opens to this token, and a new one would only be churn.
+            db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, registered_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (public_key, token_id) DO UPDATE SET
                     platform = excluded.platform, created_at = excluded.created_at,
                     registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
                 WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
-                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
-            if (!held) dropStalestTokens(publicKey, token);
-            console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
+                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, tokenId, tokenBox, platform, registeredAt);
+            if (!held) dropStalestTokens(publicKey, tokenId);
+            console.log(`[Push] Registered a phone for ${publicKey.slice(0, 8)}`);
             return 'registered';
         })();
     } catch (e) {
@@ -8162,18 +8200,18 @@ export const KEY_PUSH_RULES = {
 /** A key's tokens registered in the last day and its tokens removed in the last day (KEY_PUSH_RULES.newTokensPerDay). */
 function newTokensToday(publicKey: string): number {
     const dayAgo = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`;
-    // A tombstone of push_tokens is keyed `<key>|<token>` (db.ts deletePlainRows): this key's are a range of the primary key.
+    // A tombstone of push_tokens is keyed `<key>|<token_id>` (db.ts deletePlainRows): this key's are a range of the primary key.
     return (db.prepare(`SELECT
             (SELECT COUNT(*) FROM push_tokens WHERE public_key = ? AND created_at > ${dayAgo})
           + (SELECT COUNT(*) FROM tombstones WHERE table_name = 'push_tokens' AND row_key >= ? AND row_key < ? AND deleted_at > ${dayAgo}) AS n`)
         .get(publicKey, `${publicKey}|`, `${publicKey}}`) as { n: number }).n;
 }
 
-/** Past KEY_PUSH_RULES.liveTokens, the key's stalest tokens go, never `kept` (the one just registered), each with a tombstone. */
+/** Past KEY_PUSH_RULES.liveTokens, the key's stalest tokens go, never `kept` (the id of the one just registered), each with a tombstone. */
 function dropStalestTokens(publicKey: string, kept: string): void {
-    const stale = db.prepare(`SELECT token FROM push_tokens WHERE public_key = ? AND token != ?
-        ORDER BY updated_at DESC, created_at DESC, token DESC LIMIT -1 OFFSET ?`).pluck().all(publicKey, kept, KEY_PUSH_RULES.liveTokens - 1) as string[];
-    for (const t of stale) deletePlainRows('push_tokens', 'public_key = ? AND token = ?', publicKey, t);
+    const stale = db.prepare(`SELECT token_id FROM push_tokens WHERE public_key = ? AND token_id != ?
+        ORDER BY updated_at DESC, created_at DESC, token_id DESC LIMIT -1 OFFSET ?`).pluck().all(publicKey, kept, KEY_PUSH_RULES.liveTokens - 1) as string[];
+    for (const t of stale) deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', publicKey, t);
     if (stale.length > 0) console.log(`[Push] ${publicKey.slice(0, 8)} holds more than ${KEY_PUSH_RULES.liveTokens} tokens: its ${stale.length} stalest removed`);
 }
 
@@ -8235,7 +8273,7 @@ const PUSH_LEAVE_REMEMBERED = '-1 day';
 
 /**
  * Clears the leaves applied longer ago than `?` (PUSH_LEAVE_REMEMBERED), on every leave applied, but for the key `?` and
- * token `?` being applied: that row's upsert moves its stamp instead. Keys with no row here can add leaves too, so this
+ * token id `?` being applied: that row's upsert moves its stamp instead. Keys with no row here can add leaves too, so this
  * reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
  *
  * No tombstones. A leave applied more than a day ago refuses nothing, and a standby deletes it by the same age rule
@@ -8245,7 +8283,7 @@ const PUSH_LEAVE_REMEMBERED = '-1 day';
  * (review 4126286269).
  */
 export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves
-    WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) AND NOT (public_key = ? AND token = ?)`;
+    WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) AND NOT (public_key = ? AND token_id = ?)`;
 
 /**
  * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
@@ -8258,12 +8296,15 @@ export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves
  * with no row here, past its address's day or the node's ('rate_limited', 'busy'; STRANGER_LEAVE_RULES), from `address`
  * (the request's, as the limiters key it; null, this server's own code, counts toward the node's day only). Refused, it
  * changes nothing. The same (key, token) again is never refused.
+ *
+ * The token is named here by its id only (services/push-token-seal.ts); throws without this server's key.
  */
 export function applyPushLeave(publicKey: string, token: string, leftAt: number, address: string | null = null): PushLeave {
     assertPlainTablesWritable();
+    const tokenId = pushTokenId(token);
     return db.transaction((): PushLeave => {
-        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED, publicKey, token);
-        if (!db.prepare('SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ?').get(publicKey, token)) {
+        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED, publicKey, tokenId);
+        if (!db.prepare('SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ?').get(publicKey, tokenId)) {
             const today = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE public_key = ?
                 AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, PUSH_LEAVE_REMEMBERED) as { n: number }).n;
             const refused = today >= KEY_PUSH_RULES.leavesPerDay ? 'key_rate_limited'
@@ -8275,11 +8316,11 @@ export function applyPushLeave(publicKey: string, token: string, leftAt: number,
             }
         }
         // The phone's row goes with a tombstone, so a standby's copy drops it too (plain tables, design G4).
-        const removed = deletePlainRows('push_tokens', 'public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)',
-            publicKey, token, leftAt);
-        db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)
-            ON CONFLICT (public_key, token) DO UPDATE SET
-                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, token, leftAt);
+        const removed = deletePlainRows('push_tokens', 'public_key = ? AND token_id = ? AND (registered_at IS NULL OR registered_at <= ?)',
+            publicKey, tokenId, leftAt);
+        db.prepare(`INSERT INTO push_token_leaves (public_key, token_id, left_at) VALUES (?, ?, ?)
+            ON CONFLICT (public_key, token_id) DO UPDATE SET
+                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, tokenId, leftAt);
         console.log(`[Push] Leave statement for ${publicKey.slice(0, 8)}: ${removed} registration(s) removed`);
         return removed;
     })();
@@ -8292,7 +8333,7 @@ export function removePushToken(publicKey: string, token?: string): boolean {
     assertPlainTablesWritable();
     try {
         if (token) {
-            deletePlainRows('push_tokens', 'public_key = ? AND token = ?', publicKey, token);
+            deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', publicKey, pushTokenId(token));
         } else {
             // Remove all tokens for this user (logout from all devices)
             deletePlainRows('push_tokens', 'public_key = ?', publicKey);
@@ -8305,8 +8346,20 @@ export function removePushToken(publicKey: string, token?: string): boolean {
     }
 }
 
-export function getPushTokens(publicKey: string): { token: string; platform: string }[] {
-    return (db.prepare(`SELECT token, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as any[]);
+/**
+ * A member's phones, each token opened for sending to it now (services/push-token-seal.ts): what the caller holds in
+ * memory, never stores. A row this server's key doesn't open is left out (its boot removes such rows). `open`: a send to
+ * many members passes one opener, so the key file is read once.
+ */
+export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTokenOpener()): { tokenId: string; token: string; platform: string }[] {
+    const rows = db.prepare(`SELECT token_id, token_box, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as
+        { token_id: string; token_box: string; platform: string }[];
+    const phones: { tokenId: string; token: string; platform: string }[] = [];
+    for (const r of rows) {
+        const token = open(publicKey, r.token_id, r.token_box);
+        if (token !== null) phones.push({ tokenId: r.token_id, token, platform: r.platform });
+    }
+    return phones;
 }
 
 // ===================== MEMBER PREFERENCES =====================
@@ -8534,9 +8587,12 @@ export function dispatchPushNotification(
     const words = pushNoticeWords(kind);
     const sentAt = Math.floor(Date.now() / 1000);
     const allMessages: any[] = [];
-    // Whose phone each message is for, by position: Expo answers with a ticket per message, in the order sent.
-    const phones: { publicKey: string; token: string }[] = [];
+    // Whose phone each message is for, by position: Expo answers with a ticket per message, in the order sent. The token
+    // is here only for the ticket's check, in memory, while this send lasts.
+    const phones: { publicKey: string; tokenId: string; token: string }[] = [];
     const notices: PushNoticeRow[] = [];
+    // The key read once for the whole send (an announcement reaches every member's phones).
+    const open = pushTokenOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
@@ -8546,7 +8602,7 @@ export function dispatchPushNotification(
             continue;
         }
 
-        const tokens = getPushTokens(pk);
+        const tokens = getPushTokens(pk, open);
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
@@ -8557,7 +8613,7 @@ export function dispatchPushNotification(
         const notice = newPushNotice(kind, pk, sentAt);
         notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
 
-        for (const { token, platform } of tokens) {
+        for (const { tokenId, token, platform } of tokens) {
             const msg: any = {
                 to: token,
                 sound: soundMap[categoryId] || 'default',
@@ -8579,7 +8635,7 @@ export function dispatchPushNotification(
             }
 
             allMessages.push(msg);
-            phones.push({ publicKey: pk, token });
+            phones.push({ publicKey: pk, tokenId, token });
         }
     }
 
@@ -8614,7 +8670,7 @@ export function dispatchPushNotification(
  * token, a rate limit, credentials) is logged once per code and counted for diagnostics (pushServiceRefusals). Never
  * logs a push token. Never throws.
  */
-async function readExpoAnswer(res: Response, phones: readonly { publicKey: string; token: string }[]): Promise<void> {
+async function readExpoAnswer(res: Response, phones: readonly { publicKey: string; tokenId: string; token: string }[]): Promise<void> {
     let answer: any;
     try {
         answer = await res.json();
@@ -8639,7 +8695,7 @@ async function readExpoAnswer(res: Response, phones: readonly { publicKey: strin
         const named = ticket?.details?.expoPushToken;
         if (typeof named === 'string' && named !== phone.token) continue;
         try {
-            gone += deletePlainRows('push_tokens', 'public_key = ? AND token = ?', phone.publicKey, phone.token);
+            gone += deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', phone.publicKey, phone.tokenId);
         } catch (e: any) {
             console.warn('[Push] Could not remove a phone Expo says is gone:', sanitizeMessage(String(e?.message ?? e)));
         }

@@ -15,12 +15,18 @@
  * This is every node's web app, not only the global node's: a host the web app starts loading has to be added here,
  * or every node blocks it.
  *
+ * The node's Settings (the manager, apps/manager, at /settings and /manager) runs under it too (Fable's web review,
+ * M2): it is the admin's page on the seed's origin, it needs no inline script and nothing from unpkg, and its one
+ * popup (the printable invite cards) is built without one. apps/manager/e2e/phone-width.mjs serves the built manager
+ * under this header and fails on any violation.
+ *
  * It is the default: every response outside /api and /ws starts with it (https-server.ts). A few pages keep the
- * header they had (DOCUMENT_CSP) because they run inline scripts: the node's Settings UI, the manager, the static
- * pages under /auth/, the install page an invite link opens at `/?invite=` (routes/invite-trampoline.ts) and the Apple
- * probe when it is on. Each gets it from the code that renders it (useDocumentPolicy) or, for a file in public/, from
- * the file the static server resolved (isDocumentPolicyFile); never from how the request's path is spelled, which
- * the static server reads differently (it decodes and then normalises, so `/a/..%2findex.html` is the web app).
+ * header they had (DOCUMENT_CSP) because they run inline scripts: the old static Settings page (settings.html, at
+ * /settings-legacy), the static pages under /auth/, the install page an invite link opens at `/?invite=`
+ * (routes/invite-trampoline.ts) and the Apple probe when it is on. Each gets it from the code that renders it
+ * (useDocumentPolicy) or, for a file in public/, from the file the static server resolved (isDocumentPolicyFile);
+ * never from how the request's path is spelled, which the static server reads differently (it decodes and then
+ * normalises, so `/a/..%2findex.html` is the web app).
  *
  * No imports, so the web app's check can load this file on its own.
  */
@@ -64,13 +70,12 @@ export function useDocumentPolicy(target: HeaderTarget): void {
 
 /**
  * Whether a file the static server resolved, by its path inside public/, is one of the pages that need DOCUMENT_CSP:
- * the Settings UI (settings/index.html, and the old settings.html), the manager (manager/index.html) and the sign-in
- * returns under auth/. Any other file, the web app's index.html above all, gets the app document's policy.
+ * the old static Settings page (settings.html) and the sign-in returns under auth/. Any other file gets the app
+ * document's policy: the web app's index.html above all, and the manager's (settings/index.html, manager/index.html).
  */
 export function isDocumentPolicyFile(relativePath: string): boolean {
     const file = relativePath.replace(/\\/g, '/').replace(/\.(br|gz)$/, '');
-    return file === 'settings.html' || file === 'settings/index.html' || file === 'manager/index.html'
-        || /^auth\/[^/]+\.html$/.test(file);
+    return file === 'settings.html' || /^auth\/[^/]+\.html$/.test(file);
 }
 
 /**

@@ -19,6 +19,7 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import { ledger } from './engine/ledger.js';
 import { initStateEngine, seedGenesisMember, generateInvite, redeemInvite, createPost, updateProfile, purgeMemberSelf, getBalance, getMember, isCallsignAvailable, getCommonsBalance, runLedgerAudit, transfer, payFromCommons } from './state-engine.js';
 import { initTls } from './services/tls.js';
@@ -79,7 +80,7 @@ async function runTests() {
     assert(Boolean(post && post.id), 'Alice created an offer post');
 
     // Add push token and friend
-    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, ?, ?)").run(alice.pubKeyHex, 'ExponentPushToken[alice123]', 'ios');
+    putPushTokenRow(alice.pubKeyHex, 'ExponentPushToken[alice123]', 'ios');
     db.prepare("INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)").run(alice.pubKeyHex, bob.pubKeyHex);
 
     // 1. Test Escrow Guard: simulate an active escrow deal

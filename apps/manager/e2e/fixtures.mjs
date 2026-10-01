@@ -381,6 +381,15 @@ const DIAGNOSTICS = {
     contactPhone: '+61 3 5472 1234',
     shutdownStatus: SHUTDOWN_STATUS,
     diskHealth: DISK_HEALTH,
+    // Long on purpose: the Home banner must wrap a store's own sentence at 320px.
+    offboxBackups: {
+        problems: [
+            'Off-box backup to "Riverbend Community Garden Backblaze B2 (Frankfurt)" failed 3 times in a row: bucket '
+                + '"riverbend-community-garden-nightly-sealed-backups" at s3.eu-central-003.backblazeb2.com: PUT '
+                + 'beanpool/a1b2c3d4e5f60718/beanpool-backup-2026-09-19T02-00-00.bpsealed failed after 3 tries: HTTP 503 SlowDown. '
+                + 'Last one that arrived: 2026-09-18 02:00 UTC. Next try: 2026-09-19 03:00 UTC.',
+        ],
+    },
 };
 
 const GATEWAY_CONFIG = {
@@ -776,6 +785,47 @@ const BACKUP_STATUS = {
     backupLock: { locked: true, codeId: 2, message: 'Backups are locked to recovery code #2 and 2 owners.' },
 };
 
+// Backups off the server (apps/server services/offbox-backups.ts): one from .env working, one from Settings failing with a
+// store's long sentence, one that can't be used. Long names and unbroken keys on purpose: all must wrap at 320px.
+const OFFBOX_STATUS = {
+    state: 'sending',
+    message: 'Locked backups go off the box every 24 hours to 2 destinations, each kept 30 days. Backups are locked to recovery code #2 and 2 owners.',
+    intervalHours: 24, intervalFrom: 'default', retentionDays: 30, retentionFrom: 'default', maxRetentionDays: 30, maxIntervalHours: 168,
+    running: false,
+    destinations: [
+        {
+            id: 'env-1', name: 'Cloudflare R2 (ENAM)', source: 'env', endpoint: 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com',
+            bucket: 'riverbend-community-garden-nightly-sealed-backups', region: 'auto', prefix: 'beanpool/riverbend/', accessKeyId: 'a1b2…9z',
+            secretSet: true, problems: [], health: 'ok', lastSuccessAt: Date.parse('2026-09-19T02:00:00.000Z'), lastSuccessBytes: 48_234_112,
+            lastAttemptAt: Date.parse('2026-09-19T02:00:00.000Z'), lastError: null, failures: 0, nextAttemptAt: Date.parse('2026-09-20T02:00:00.000Z'),
+            lastPruneAt: Date.parse('2026-09-19T02:01:00.000Z'), lastPruneError: null,
+        },
+        {
+            id: 'd-0a1b2c3d4e5f', name: 'Riverbend Community Garden Backblaze B2 (Frankfurt)', source: 'settings',
+            endpoint: 'https://s3.eu-central-003.backblazeb2.com', bucket: 'riverbend-community-garden-nightly-sealed-backups', region: 'eu-central-003',
+            prefix: '', accessKeyId: '0031…01', secretSet: true, problems: [], health: 'failing', lastSuccessAt: Date.parse('2026-09-18T02:00:00.000Z'),
+            lastSuccessBytes: 48_100_002, lastAttemptAt: Date.parse('2026-09-19T02:00:00.000Z'),
+            lastError: 'bucket "riverbend-community-garden-nightly-sealed-backups" at s3.eu-central-003.backblazeb2.com: PUT beanpool/a1b2c3d4e5f60718/beanpool-backup-2026-09-19T02-00-00.bpsealed failed after 3 tries: HTTP 503 SlowDown',
+            failures: 3, nextAttemptAt: Date.parse('2026-09-19T03:00:00.000Z'), lastPruneAt: null,
+            lastPruneError: 'bucket "riverbend-community-garden-nightly-sealed-backups" at s3.eu-central-003.backblazeb2.com: LIST beanpool/ answered HTTP 403 (AccessDenied).',
+        },
+        {
+            id: 'env-2', name: '.env destination 2', source: 'env', endpoint: null, bucket: null, region: null, prefix: null, accessKeyId: null,
+            secretSet: false, problems: ['missing: BACKUP_OFFBOX_2_BUCKET, BACKUP_OFFBOX_2_REGION', 'BACKUP_OFFBOX_2_ENDPOINT must start with https:// (a backup never travels in the clear)'],
+            health: 'broken', lastSuccessAt: null, lastSuccessBytes: null, lastAttemptAt: null, lastError: null, failures: 0, nextAttemptAt: null,
+            lastPruneAt: null, lastPruneError: null,
+        },
+    ],
+};
+
+const OFFBOX_LIST = {
+    destination: 'env-1',
+    backups: [
+        { key: 'beanpool/riverbend/a1b2c3d4e5f60718/beanpool-backup-2026-09-19T02-00-00.bpsealed', community: 'a1b2c3d4e5f60718', file: 'beanpool-backup-2026-09-19T02-00-00.bpsealed', madeAt: Date.parse('2026-09-19T02:00:00.000Z'), bytes: 48_234_112, ours: true },
+        { key: 'beanpool/riverbend/ffeeddccbbaa9988/beanpool-backup-2026-09-01T02-00-00.bpsealed', community: 'ffeeddccbbaa9988', file: 'beanpool-backup-2026-09-01T02-00-00.bpsealed', madeAt: Date.parse('2026-09-01T02:00:00.000Z'), bytes: 1_234_567, ours: false },
+    ],
+};
+
 const TAKEOVER_MISSING = [
     'photos sent in chats',
     'Commons project proposals still waiting for a decision',
@@ -1002,6 +1052,12 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/replication-resync') return ok({ success: true });
     if (pathname === '/api/local/admin/backup-status') return ok(BACKUP_STATUS);
 
+    // ---- backups off the server ----
+    if (pathname === '/api/local/admin/offbox-backups/status') return ok(OFFBOX_STATUS);
+    if (pathname === '/api/local/admin/offbox-backups/settings') return ok({ success: true, status: OFFBOX_STATUS });
+    if (pathname === '/api/local/admin/offbox-backups/run') return ok({ started: true, status: OFFBOX_STATUS });
+    if (pathname === '/api/local/admin/offbox-backups/list') return ok(OFFBOX_LIST);
+
     // ---- take-over on a standby (sealed keys slice 5) ----
     if (pathname === '/api/local/admin/takeover/progress') return ok(TAKEOVER_PROGRESS);
     if (pathname === '/api/local/admin/takeover/open') return ok({ success: true, preview: TAKEOVER_PREVIEW });
@@ -1074,6 +1130,7 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (/^\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(pathname)) return ok({ status: 'waiting', expiresAt: Date.now() + 120000 });
     if (pathname === '/api/local/admin/csrf-token') return ok({ csrfToken: `csrf_${longToken('csrf', 24)}` });
     if (pathname === '/api/local/verify-password' || pathname === '/api/verify-password') return ok({ success: true });
+    if (pathname === '/api/local/admin/auth/password') return ok({ success: true, role: 'owner', csrfToken: `csrf_${longToken('signin', 24)}` });
     if (pathname === '/api/local/change-password') return ok({ success: true });
     if (pathname === '/api/local/reset') return ok({ success: true });
     if (pathname === '/api/admin/login') return ok({ success: true });

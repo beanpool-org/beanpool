@@ -199,7 +199,8 @@ async function signIn(k: Key, ip: string, totpCode?: string, challenge?: { chall
 async function keySession(k: Key, ip: string, totpCode?: string): Promise<string | null> {
     const solved = await signIn(k, ip, totpCode);
     const ex = await req('/api/local/admin/auth/exchange', { method: 'POST', headers: viaTunnel(ip), body: { token: solved.json?.handshakeToken } });
-    return ex.json?.sessionId ?? null;
+    // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+    return (ex.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? null;
 }
 
 async function part2KeySignin2fa(owner: Key): Promise<void> {

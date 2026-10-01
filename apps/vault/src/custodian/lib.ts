@@ -215,6 +215,26 @@ export async function fetchPendingShare(baseUrl: string, key: CustodianKey, opts
     return { call, share: call.status === 200 ? (call.body.share as CustodianShare | null) : null };
 }
 
+/**
+ * Send the vault's operator settings (shared/settings.ts: the off-box store, the alert channels). They take effect
+ * when two custodians have sent the same. They hold secrets (the store's key, the mail password), so the release and
+ * host checks come first, as before a share: through the hello a locked or fresh vault answers, or an open one's.
+ */
+export async function sendSettings(baseUrl: string, key: CustodianKey, settings: unknown, opts: CallOptions = {}): Promise<CustodianCall> {
+    try {
+        await checkedHello(baseUrl, key, '/v1/unlock/hello', opts);
+    } catch (e) {
+        if (!(e instanceof CustodianRefusal) || e.code !== 'hello_refused' || !/\(409\)/.test(e.message)) throw e;
+        await checkedHello(baseUrl, key, '/v1/reshare/hello', opts);
+    }
+    return send(baseUrl, '/v1/unlock/settings', { settings }, key, opts);
+}
+
+/** The backups the vault can see by name: its own, and the off-box store's (or why that couldn't be listed). */
+export async function listBackups(baseUrl: string, key: CustodianKey, opts: CallOptions = {}): Promise<CustodianCall> {
+    return signedPost(baseUrl, '/v1/unlock/backups', {}, key, opts);
+}
+
 /** Drop the genesis or reshare waiting (`pendingId`, from its answer or the pending call). Two current custodians must. */
 export async function cancelPending(baseUrl: string, key: CustodianKey, pendingId: string, opts: CallOptions = {}): Promise<CustodianCall> {
     const sig = signStatement(key.seed, cancelStatement(pendingId));

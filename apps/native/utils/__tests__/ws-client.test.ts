@@ -118,7 +118,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
         const socket = await startAndConnect();
         expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
-        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1');
     });
 
     it('opens no socket at all, signed or not, to an address that names one host and reaches another (#1224 review 4113495290)', async () => {
@@ -458,5 +458,113 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
 
         expect(wsInstance).not.toBe(first);
         expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    // ── A full node: the "no room" close ───────────────────────────────────────────────────────────────────
+
+    /** What a full node does (apps/server/src/https-server.ts refuseSocketForRoom): the socket opens, then closes at once
+     *  with 4429 and the seconds to wait. */
+    function refuseForRoom(socket: any, reason = 'retry=300'): void {
+        socket.readyState = 3;
+        socket.onclose?.({ code: 4429, reason });
+    }
+
+    async function waitForNewSocket(current: any, limitMs: number): Promise<number> {
+        let waited = 0;
+        while (wsInstance === current && waited < limitMs) {
+            await vi.advanceTimersByTimeAsync(1000);
+            waited += 1000;
+        }
+        return waited;
+    }
+
+    it('a node with no room is tried again only after the 5 minutes it asked, then 10, then 20: never within 30 s', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        let socket = await startAndConnect();
+        const gaps: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            refuseForRoom(socket);
+            gaps.push(await waitForNewSocket(socket, 3_600_000));
+            socket = wsInstance;
+            await vi.advanceTimersByTimeAsync(10); // that try's socket opens, to be refused again
+        }
+        expect(gaps).toEqual([300_000, 600_000, 1_200_000]);
+    });
+
+    it('phones refused together come back spread over half the wait again', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        const socket = await startAndConnect();
+        refuseForRoom(socket);
+        const waited = await waitForNewSocket(socket, 3_600_000);
+        expect(waited).toBeGreaterThan(449_000);
+        expect(waited).toBeLessThanOrEqual(450_000);
+    });
+
+    it('while refused it still reads over HTTP: each try syncs as its socket opens', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        const socket = await startAndConnect();
+        refuseForRoom(socket);
+        vi.mocked(requestSync).mockClear();
+        await waitForNewSocket(socket, 3_600_000);
+        await vi.advanceTimersByTimeAsync(3010);
+        expect(requestSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('any other close after a refusal is an ordinary drop again: back within the 0–5 s window', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        const socket = await startAndConnect();
+        refuseForRoom(socket);
+        await waitForNewSocket(socket, 3_600_000);
+        await vi.advanceTimersByTimeAsync(10);
+        const admitted = wsInstance;
+        admitted.close(); // 1006: the node let it stay, and it dropped later
+        const waited = await waitForNewSocket(admitted, 60_000);
+        expect(waited).toBeLessThanOrEqual(6000);
+    });
+
+    it('a node asking for less than 30 s is waited on for 30 s at least', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        const socket = await startAndConnect();
+        refuseForRoom(socket, 'retry=1');
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(30_000);
+    });
+
+    it('a socket the node let in clears the run: refused, admitted 20 min, backgrounded 1 h, refused again waits 300 s, not 600', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        let socket = await startAndConnect();
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) }); // let in: it answers
+        for (let i = 0; i < 40; i++) { // 20 minutes, the heartbeat answered each time
+            await vi.advanceTimersByTimeAsync(30_000);
+            socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        }
+        mockAppStateListeners.forEach(l => l('background'));
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        mockAppStateListeners.forEach(l => l('active'));
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
+    });
+
+    it('backgrounding the app ends a run of refusals too', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        let socket = await startAndConnect();
+        refuseForRoom(socket);
+        await waitForNewSocket(socket, 3_600_000);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket); // the second in a row: it would wait 600 s
+        mockAppStateListeners.forEach(l => l('background'));
+        mockAppStateListeners.forEach(l => l('active'));
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
     });
 });

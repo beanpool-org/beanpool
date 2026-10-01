@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, DeviceEventEmitter, NativeEventSubscription } from 'react-native';
-import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, type LivePostChange } from '@beanpool/core';
+import { livePostChange, reconnectDelayMs, reconnectSyncDelayMs, wsNoRoomRetrySec, wsNoRoomDelayMs, type LivePostChange } from '@beanpool/core';
 import { requestSync, applyLivePostChange } from './pillar-sync';
 import { loadIdentity } from '../utils/identity';
 import { buildSignedWsParams } from '../utils/crypto';
@@ -15,6 +15,13 @@ class WebSocketSyncClient {
     private reconnectAttempt = 0;
     /** True while the connection being made is a retry after a drop, not a start or a foreground. */
     private isRetry = false;
+    /**
+     * The node's "no room" closes in a row (@beanpool/core WS_NO_ROOM_CLOSE_CODE: a full node lets the socket in and
+     * closes it at once, saying when to come back). Sizes the wait, which grows with each; any other close ends the run.
+     * Not reset when a socket opens, since a refused one opens before it is closed: reset by its first pong (a refused
+     * socket never gets one), and when the app disconnects.
+     */
+    private noRoomRefusals = 0;
     private reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
     /** The member this socket signed in as, so a pushed change about their own listing takes the full sync. */
     private memberPubkey: string | null = null;
@@ -143,6 +150,8 @@ class WebSocketSyncClient {
                     console.warn('[WS Sync] Failed to sign WS connect', err);
                 }
             }
+            // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
+            params.push('nr=1');
             if (params.length) {
                 wsUrl += `?${params.join('&')}`;
             }
@@ -234,7 +243,16 @@ class WebSocketSyncClient {
                     this.stopHeartbeat();
                     this.watchdogArmed = false;
                     this.lastPongAt = null;
-                    this.scheduleReconnect();
+                    // A full node: wait what it asked (5 minutes, growing) instead of coming back within 30 s. The
+                    // catch-up sync each try opens with keeps the screens current over HTTP meanwhile.
+                    const askedSec = wsNoRoomRetrySec(e?.code, e?.reason);
+                    if (askedSec !== null) {
+                        this.noRoomRefusals++;
+                        this.scheduleReconnect(wsNoRoomDelayMs(this.noRoomRefusals, askedSec));
+                    } else {
+                        this.noRoomRefusals = 0;
+                        this.scheduleReconnect();
+                    }
                 }
             };
 
@@ -305,6 +323,7 @@ class WebSocketSyncClient {
             this.reconnectSyncTimeoutId = null;
         }
         this.isRetry = false;
+        this.noRoomRefusals = 0;
 
         this.stopHeartbeat();
         this.watchdogArmed = false;
@@ -338,6 +357,8 @@ class WebSocketSyncClient {
     private handlePong(socket: WebSocket) {
         if (this.ws !== socket) return;
         this.lastPongAt = Date.now();
+        // The node let this socket in, so the next refusal is a new one, not one more in a row.
+        this.noRoomRefusals = 0;
         // Trap 2: Only arms after seeing at least one pong on this connection
         this.watchdogArmed = true;
         this.resetWatchdogTimer(socket);
@@ -391,13 +412,14 @@ class WebSocketSyncClient {
         return this.lastPongAt;
     }
 
-    private scheduleReconnect() {
+    /** `delayMs`: the node's own wait (a "no room" close); without it, the backoff below. */
+    private scheduleReconnect(delayMs?: number) {
         if (!this.isStarted || AppState.currentState !== 'active') return;
         if (this.reconnectTimeoutId) return;
 
         // Full jitter over a window that starts at 5 s and grows to 30 s. When Cloudflare restarts an edge server,
         // every phone on it drops at once; 1 s plus up to 1 s of jitter brought them all back inside two seconds.
-        const delay = reconnectDelayMs(this.reconnectAttempt);
+        const delay = delayMs ?? reconnectDelayMs(this.reconnectAttempt);
         console.log(`[WS Sync] Scheduling reconnect in ${(delay / 1000).toFixed(1)}s`);
 
         this.reconnectTimeoutId = setTimeout(() => {

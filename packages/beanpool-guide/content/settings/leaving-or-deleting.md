@@ -20,7 +20,7 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 - Type **WIPE** and tap **Confirm Sign Out**.
 - Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
-Your account and every community you saved are removed from this phone. In the phone app, your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first.
+Your account and every community you saved are removed from this phone. So are the links to Instagram or TikTok you made for your channels. In the phone app, your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first.
 
 A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see "Your 12 words").
 
@@ -55,6 +55,7 @@ Your community's server deletes all of the above at once. It also takes your nam
 - **A standby.** If your community has a standby copy of its server, the standby deletes them at its next copy.
 - **Snapshots.** The server keeps a copy of itself from each day, to undo a mistake. Each copy still holds your account as it was until the copy is deleted. That is after a week with the usual settings, and never more than 14 days.
 - **Backups.** A backup that an owner of the server downloaded before you deleted keeps everything until they delete it. The server can't reach it.
+- **Backups kept elsewhere.** If your community's server sends its backups to storage somewhere else, each one made before you deleted keeps your account as it was until the server deletes it there: after 30 days at most. These backups are locked: only the people your community trusts with its recovery code, and its owners, can open them.
 - **A note of the delete.** A short record of what was deleted, such as which two members were friends, stays for 30 days. The standby needs it to delete its copy.
 - **The server's console log.** It may show your name a while longer, until it fills up and is replaced. Nothing can change it.
 - **Your trades** stay in the ledger, under "Deleted Member", so everyone's beans still add up.

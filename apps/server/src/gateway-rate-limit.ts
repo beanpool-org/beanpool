@@ -3,7 +3,7 @@
  *
  * Buckets:
  *   - `ip:<client>`  — unsigned requests, `maxPerMinute` per real client address (client-ip.ts; an IPv6 client
- *     is counted by its /64, see limiterKeyForIp). It used to key
+ *     is counted by its /64, see limiterKeyForIp); five times that on the global node (NON_MEMBER_ADDRESS_FACTOR). It used to key
  *     on the raw socket address, which in tunnel mode is the cloudflared container for EVERY member, so a whole
  *     community shared one 120-a-minute bucket and a busy minute answered 429 to everyone.
  *   - `m:<pubkey>`   — requests with a verified signature by a member of this node (or a visitor's row, which only a
@@ -32,6 +32,10 @@
  *     confirm review of #1384: so had 120 chunked `{}` claims, or 120 large lengths declared and dropped).
  *   - `peer:<client>` — the peer protocol's own reads (https-server.ts GATEWAY_EXEMPT_PEER_READS), which the other
  *     buckets leave alone: `maxPerMinute × PEER_READ_FACTOR` per address, whoever signs (DoS review F4).
+ *   - `noroom:<client>` — the global node's sockets refused for a cap and answered with the "no room" close
+ *     (gatewayNoRoomUpgrade), as many a minute per address as its non-member bucket (600). Those are given back to the
+ *     address's requests, so a hall whose apps retry a full node keeps its HTTP; past this many a minute the refusal is
+ *     the old one, charged.
  *
  * A claimed signature that does not verify is charged to the address's unsigned bucket afterwards too, so forged
  * headers buy nothing for that address's plain traffic.
@@ -71,6 +75,7 @@ import { clientLimiterKey } from './client-ip.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 import { WRITER_LIMITS } from './config/writer-limits.js';
+import { getNodeProfile, type NodeProfile } from './config/node-profile.js';
 
 export const SIGNED_CEILING_FACTOR = 10;
 /**
@@ -80,6 +85,20 @@ export const SIGNED_CEILING_FACTOR = 10;
  * themselves are cheap now (state-engine communityCountsCached, getPublicCommunityHealth).
  */
 export const PEER_READ_FACTOR = 5;
+/**
+ * The non-member bucket (`ip:`) per address, against `maxPerMinute`, by profile. A local community's members are all
+ * invited, so 120 a minute per address is plenty for its visitors. On the global node every visitor and every joiner
+ * behind one address (a hall's wifi, a campus, a carrier NAT) shares that bucket, and a handful of cold opens spent it,
+ * so it is five times that, 600 a minute (scratch/global-node/DESIGN-global-two-doors-fable.md §6.4, the stopgap the
+ * director chose 2026-10-01). It widens what one address can read by the same factor, a deliberate trade until the guest
+ * pass (§6.2) gives each visitor's key an allowance of its own. Members, `m:`, are unchanged everywhere.
+ */
+export const NON_MEMBER_ADDRESS_FACTOR: Readonly<Record<NodeProfile, number>> = Object.freeze({ local: 1, global: 5 });
+
+/** The non-member bucket's size per address on this node now, for the operator's `maxPerMinute`. */
+export function nonMemberPerMinute(maxPerMinute: number): number {
+    return maxPerMinute * NON_MEMBER_ADDRESS_FACTOR[getNodeProfile()];
+}
 const WINDOW_MS = 60_000;
 
 /**
@@ -267,7 +286,7 @@ function logTrip(key: string, now: number): void {
         return;
     }
     const kind = key.startsWith('sig:') ? 'signed requests from ' : key.startsWith('claim:') ? 'unverified signatures from '
-        : key.startsWith('peer:') ? 'peer reads from ' : '';
+        : key.startsWith('peer:') ? 'peer reads from ' : key.startsWith('noroom:') ? 'sockets refused for room from ' : '';
     const label = key.startsWith('m:') ? `member ${key.slice(2, 14)}…` : `${kind}${logAddressTag(key.slice(key.indexOf(':') + 1))}`;
     try { logger.warn('AUTH', `[gateway] rate limit reached for ${label}; answering 429 until the window resets`); } catch { /* logging never blocks a response */ }
 }
@@ -338,7 +357,7 @@ export function gatewayAdmit(ctx: Koa.Context, maxPerMinute: number, claimsSigna
         else ctx.state.gatewayBodyLimit = CLAIM_SMALL_BODY_BYTES;
         return true;
     }
-    return take(ctx, `ip:${ip}`, maxPerMinute, now);
+    return take(ctx, `ip:${ip}`, nonMemberPerMinute(maxPerMinute), now);
 }
 
 /**
@@ -377,7 +396,8 @@ export function gatewayClaimVerified(ctx: Koa.Context): void {
 export function gatewayAdmitMember(ctx: Koa.Context, maxPerMinute: number, acts: boolean, now = Date.now()): boolean {
     if (!ctx.state.gatewaySignedClaim || !ctx.state.actor) return true;
     ctx.state.gatewayMemberCharged = true;
-    return take(ctx, acts ? `m:${ctx.state.actor}` : `ip:${clientLimiterKey(ctx)}`, maxPerMinute, now);
+    return acts ? take(ctx, `m:${ctx.state.actor}`, maxPerMinute, now)
+        : take(ctx, `ip:${clientLimiterKey(ctx)}`, nonMemberPerMinute(maxPerMinute), now);
 }
 
 /** After the request: a claimed signature that never produced a verified member is charged as unsigned. */
@@ -392,30 +412,58 @@ export function gatewayAdmitPeerRead(ctx: Koa.Context, maxPerMinute: number, now
     return take(ctx, `peer:${clientLimiterKey(ctx)}`, maxPerMinute * PEER_READ_FACTOR, now);
 }
 
+/** One request counted against `key` in the window `window` names: what gatewayNoRoomUpgrade gives back. */
+export interface GatewayCharge { key: string; window: number }
+
+/** Count one request against `key` when it has room: the seconds to wait (nothing counted), or the charge made. */
+function chargeKey(key: string, max: number, now: number): { wait: number; charge: GatewayCharge | null } {
+    const wait = waitFor(key, max, now);
+    return wait ? { wait, charge: null } : { wait: 0, charge: { key, window: count(key, now) } };
+}
+
 /**
  * A WebSocket upgrade from `client` (limiterKeyForIp of the real client), before its connect token is verified: charged
  * as an HTTP request is at gatewayAdmit, a claimed token (`claimsSignature`: any of its signature parameters present)
  * to `sig:` only (an upgrade has no body, so it never spends `claim:`), anything else to `ip:`. The seconds to wait when
- * refused, else 0; `claimed` is for gatewaySettleUpgrade.
+ * refused, else 0; `claimed` is for gatewaySettleUpgrade, and `charge` the `ip:` request counted (null for a claim, whose
+ * `sig:` stays counted: it bounds the token checks an address can ask for, refused or not).
  */
-export function gatewayAdmitUpgrade(client: string, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): { wait: number; claimed: boolean } {
+export function gatewayAdmitUpgrade(client: string, maxPerMinute: number, claimsSignature: boolean, now = Date.now()): { wait: number; claimed: boolean; charge: GatewayCharge | null } {
     upkeep(now);
     if (claimsSignature) {
         const wait = admitClaim(client, maxPerMinute, false, now);
-        return { wait, claimed: !wait };
+        return { wait, claimed: !wait, charge: null };
     }
-    return { wait: takeKey(`ip:${client}`, maxPerMinute, now), claimed: false };
+    return { ...chargeKey(`ip:${client}`, nonMemberPerMinute(maxPerMinute), now), claimed: false };
 }
 
 /**
  * The same upgrade once its token is checked (a `claimed` one only): a verified key is charged as gatewayAdmitMember
  * charges it, to its own bucket when it `acts` here and to the address's `ip:` when not; a token that did not verify is
- * counted as unsigned (gatewaySettle). The seconds to wait when the verified key's bucket is full, else 0.
+ * counted as unsigned (gatewaySettle). The seconds to wait when the verified key's bucket is full, else 0, and the
+ * request counted.
  */
-export function gatewaySettleUpgrade(client: string, maxPerMinute: number, claimed: boolean, verified: { key: string; acts: boolean } | null, now = Date.now()): number {
-    if (!claimed) return 0;
-    if (!verified) { count(`ip:${client}`, now); return 0; }
-    return takeKey(verified.acts ? `m:${verified.key}` : `ip:${client}`, maxPerMinute, now);
+export function gatewaySettleUpgrade(client: string, maxPerMinute: number, claimed: boolean, verified: { key: string; acts: boolean } | null, now = Date.now()): { wait: number; charge: GatewayCharge | null } {
+    if (!claimed) return { wait: 0, charge: null };
+    if (!verified) return { wait: 0, charge: { key: `ip:${client}`, window: count(`ip:${client}`, now) } };
+    return verified.acts ? chargeKey(`m:${verified.key}`, maxPerMinute, now)
+        : chargeKey(`ip:${client}`, nonMemberPerMinute(maxPerMinute), now);
+}
+
+/**
+ * A /ws socket from `client` the node has no room for (ws-limits.ts `noRoomClose`, the global node), about to be let in
+ * and closed with the "no room" close: true when its address has room in `noroom:` (as many a minute as its non-member
+ * bucket, nonMemberPerMinute), which is counted and the upgrade's `charges` given back, so the refusal costs the address
+ * none of its requests. False, nothing given back, past that: the caller refuses the old way, as charged. An app told
+ * "no room" waits 5 minutes or more (@beanpool/core wsNoRoomDelayMs), so 600 a minute is 3,000 phones behind one address
+ * coming back to a full node; an address past that is not the apps, and the work each costs (a handshake and a close)
+ * stays bounded.
+ */
+export function gatewayNoRoomUpgrade(client: string, maxPerMinute: number, charges: ReadonlyArray<GatewayCharge | null>, now = Date.now()): boolean {
+    if (waitFor(`noroom:${client}`, nonMemberPerMinute(maxPerMinute), now)) return false;
+    count(`noroom:${client}`, now);
+    for (const c of charges) if (c) giveBack(c.key, c.window);
+    return true;
 }
 
 /** Forget the hours that have left the rolling day. */

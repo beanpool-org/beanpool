@@ -342,6 +342,12 @@ export interface SyncOpenJoin {
     joinHash: string;
     joinedAt: string;
     updatedAt: string;
+    /**
+     * A random label shared by the members who joined from one address within a day of each other, so that the server
+     * that takes over still counts them as one reporter (auto-hide). Never the address. Null for a join from before the
+     * label, or one released by a deleted account; a main server from before it sends none.
+     */
+    joinCohort?: string | null;
 }
 
 /**
@@ -1218,6 +1224,7 @@ function openJoinOfRow(r: any): SyncOpenJoin {
         joinHash: r.join_hash,
         joinedAt: r.joined_at,
         updatedAt: r.updated_at || r.joined_at,
+        joinCohort: r.join_cohort ?? null,
     };
 }
 
@@ -1516,8 +1523,8 @@ export function exportSyncState(
     let openJoins: SyncOpenJoin[] = [];
     try {
         openJoins = (delta
-            ? db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins WHERE updated_at >= ?').all(since)
-            : db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at FROM open_joins').all()
+            ? db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at, join_cohort FROM open_joins WHERE updated_at >= ?').all(since)
+            : db.prepare('SELECT member_pubkey, provider, join_hash, joined_at, updated_at, join_cohort FROM open_joins').all()
         ).map(openJoinOfRow);
     } catch {
         // Table absent on older schema/fixtures

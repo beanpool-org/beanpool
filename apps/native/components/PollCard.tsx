@@ -10,6 +10,8 @@
  *   (`pollOpenVote`, `poll_open_vote` in the phone's cache), members also get a collapsible list of who voted for what.
  *   The card says which.
  * - Author "Close Poll" action for early closure.
+ * - On the worldwide community (`informal`), "An informal poll; it decides nothing": anyone may join there with a sign-in,
+ *   so a count can be tipped by one person with several accounts (utils/node-profile.ts pollsInformal).
  */
 
 import React, { useState } from 'react';
@@ -24,6 +26,7 @@ import {
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { votePoll, closePoll } from '../utils/db';
+import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
 
 export interface PollOption {
     id: string;
@@ -43,9 +46,11 @@ interface PollCardProps {
     post: any;
     currentPubkey?: string | null;
     onVoteSuccess?: () => void;
+    /** The worldwide community's polls (utils/node-profile.ts pollsInformal): the card says it decides nothing. */
+    informal?: boolean;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
 
@@ -264,6 +269,13 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                     );
                 })}
             </View>
+
+            {/* On the worldwide community: a show of opinion, never a decision. */}
+            {informal && (
+                <Text style={styles.informalNote} testID="poll-informal-note">
+                    💬 {INFORMAL_POLL_NOTE}
+                </Text>
+            )}
 
             {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
             {openVote ? (
@@ -516,6 +528,12 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.muted,
             marginTop: 4,
             marginBottom: 2,
+        },
+        informalNote: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.text.secondary,
+            marginTop: 4,
         },
         turnoutRow: {
             flexDirection: 'row',

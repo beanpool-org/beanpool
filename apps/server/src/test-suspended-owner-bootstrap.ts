@@ -170,10 +170,12 @@ async function main() {
             body: JSON.stringify({ token: solved.handshakeToken }),
         });
         const session: any = await exch.json();
-        if (exch.status !== 200 || !session.sessionId) {
+        // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+        const sessionId = (exch.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1];
+        if (exch.status !== 200 || !sessionId) {
             throw new Error(`handshake exchange failed for ${keys.pub.slice(0, 8)}: ${exch.status} ${JSON.stringify(session)}`);
         }
-        return session.sessionId;
+        return sessionId;
     }
 
     try {

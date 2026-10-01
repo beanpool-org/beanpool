@@ -41,6 +41,7 @@ The owners and admins who run your community's server can still see what is stor
 - Chats between two people are end-to-end encrypted: a message that cannot be locked is not sent. The notices BeanPool adds to a chat about a deal, such as its amount, are not encrypted. See "Messages".
 - Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See "The Pulse".
 - Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.
+- If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. A backup of the server made before then keeps them until it is replaced. See "Leaving or deleting your account".
 - If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See "Getting your account back".
 
 ## Read more

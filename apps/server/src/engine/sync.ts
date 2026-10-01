@@ -4,6 +4,7 @@
 
 import type Database from 'better-sqlite3';
 import { db, afterTransactionCommit, visitorsMarked, noteVisitorsMarkedByMainServer } from '../db/db.js';
+import { truncateWalAfterDelete } from '../db/wal-truncate.js';
 import { getNodeRole } from '../config/node-role.js';
 import crypto from 'node:crypto';
 import { bodyOfSignedText, bytesOfSignedText } from '@beanpool/core';
@@ -1544,6 +1545,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     let newMembers = 0, newPosts = 0;
     let updatedMembers = 0, updatedPosts = 0, wipedPosts = 0;
     let newTransactions = 0, accountChanges = 0, marketplaceTxns = 0, newMessages = 0;
+    // Chat lines this copy turned into tombstones (an author's delete, a removal, a deleted account's lines).
+    let blankedLines = 0;
     let tombstonesApplied = 0, conflictsSkipped = 0, recoverySharesImported = 0;
     let groupChanges = 0;
     // The plain tables' rows written or deleted (design G3), and each value or row of theirs left out.
@@ -2265,7 +2268,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         msg.editedAt || null,
                         msg.updatedAt || msg.editedAt || msg.timestamp
                     );
-                    if (res.changes > 0) newMessages++;
+                    if (res.changes > 0) {
+                        newMessages++;
+                        if (msg.type === 'removed') blankedLines++;
+                    }
                 }
             }
 
@@ -2669,6 +2675,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
     } finally {
         currentImportOrigin = null;
     }
+    // A line this copy blanked is zeroed in state.db, but state.db-wal still holds it as it was, on this standby as on its
+    // main server after a delete account (data-at-rest report F2, db/wal-truncate.ts): emptied now the import has committed.
+    if (blankedLines > 0) truncateWalAfterDelete('a copy blanked chat lines');
 
     // Updates and tombstones count, not just inserts. This was guarded on `newMembers > 0 ||
     // newPosts > 0`, which was fine when the broadcast only woke up sockets — but it now also

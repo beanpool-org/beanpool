@@ -28,6 +28,7 @@ import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
 import { avatarUrlFor } from '@beanpool/core';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
@@ -274,10 +275,13 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
     }
 }
 
-/** One stored row as a chat shows it; a removed row reads as `removedText` (the group chat passes its own). */
+/**
+ * One stored row as a chat shows it; a removed row reads as `removedText` (the group chat passes its own), or as its
+ * author's own delete when they deleted their account (engine/message-tombstone.ts blankMessagesOf).
+ */
 export function toThreadMessage(r: any, conversationId: string, removedText = EVENT_THREAD_REMOVED_TEXT): EventThreadMessage {
     const displayCiphertext = r.type === 'removed'
-        ? Buffer.from(removedText, 'utf8').toString('base64')
+        ? Buffer.from(blankedWithAccount(r.metadata) ? ACCOUNT_DELETED_TEXT : removedText, 'utf8').toString('base64')
         : r.ciphertext;
     return {
         id: r.id,

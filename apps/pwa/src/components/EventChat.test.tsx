@@ -143,6 +143,17 @@ describe('EventChat (docs/events-on-the-map.md §2.2, §3)', () => {
         expect(decodeEventChatText(b64('anything'), 'removed')).toBe('removed by the host');
     });
 
+    it('reads a line whose author deleted their account as their own delete, not the host\'s removal', async () => {
+        const gone = JSON.stringify({ removed: true, removedBy: 'goer-key', accountDeleted: true });
+        expect(decodeEventChatText(b64('This message was deleted'), 'removed', gone)).toBe('This message was deleted');
+        expect(decodeEventChatText(b64('anything'), 'removed', JSON.stringify({ removed: true, removedBy: 'host-key' }))).toBe('removed by the host');
+        expect(decodeEventChatText(b64('anything'), 'removed', 'not json')).toBe('removed by the host');
+        vi.mocked(api.getEventChat).mockResolvedValue(view({ messages: [message({ type: 'removed', metadata: gone })] }));
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        expect(await screen.findByText('This message was deleted')).toBeTruthy();
+        expect(screen.queryByText('removed by the host')).toBeNull();
+    });
+
     it('says why when the node refuses the chat, rather than showing an empty room', async () => {
         vi.mocked(api.getEventChat).mockRejectedValue(new Error('Only the host and people going can open this event chat'));
         renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);

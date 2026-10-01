@@ -151,6 +151,7 @@ export const SUITES = [
     'test-standby-visitor-marks',
     'test-standby-owner-deleted',
     'test-delete-scrubs-posts',
+    'test-delete-blanks-chat',
     'test-standby-board-standing',
     'test-place-watch-failover',
     'test-standby-rekey',

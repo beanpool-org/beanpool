@@ -16,6 +16,7 @@ import {
 import {
     canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
+import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
 import { avatarUrlFor } from '@beanpool/core';
 
@@ -85,6 +86,9 @@ const DELETED_BY_AUTHOR_PREVIEW = 'This message was deleted';
  * the only reading those can carry, whoever pressed the button, including the host or keeper's own line.
  */
 function tombstonePreview(row: any, removedText: string, authorDeleteText: string | null): string {
+    // A deleted account's line is its own author's delete in EVERY kind of chat, an event's and an enterprise's too,
+    // where `authorDeleteText` is null: it must not read as the host's or a keeper's removal.
+    if (blankedWithAccount(row.metadata)) return DELETED_BY_AUTHOR_PREVIEW;
     if (!authorDeleteText) return removedText;
     let meta: any = null;
     if (row.metadata) { try { meta = JSON.parse(row.metadata); } catch { /* unreadable: fall through */ } }

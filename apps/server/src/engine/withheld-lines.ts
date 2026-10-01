@@ -37,6 +37,8 @@ export interface WithheldConversation {
     owner_pubkey: string;
     other_pubkey: string;
     created_at: string;
+    /** Its owner's read marker (POST /api/messages/mark-read), as a participant row keeps one. */
+    owner_last_read_at?: string | null;
 }
 
 export interface WithheldLine {
@@ -77,6 +79,11 @@ export function openWithheldConversation(owner: string, other: string, id: strin
     return { conversation: { id, owner_pubkey: owner, other_pubkey: other, created_at: at }, created: true };
 }
 
+/** Its owner reads it: their read marker moves, as on a participant row (engine/messaging.ts markConversationRead). */
+export function markWithheldConversationRead(id: string, owner: string, at: string = new Date().toISOString()): void {
+    db.prepare('UPDATE withheld_conversations SET owner_last_read_at = ? WHERE id = ? AND owner_pubkey = ?').run(at, id, owner);
+}
+
 /** A withheld conversation becoming the real one (engine/messaging.ts): its row goes, its lines stay withheld. */
 export function dropWithheldConversation(id: string): void {
     db.prepare('DELETE FROM withheld_conversations WHERE id = ?').run(id);
@@ -88,7 +95,7 @@ export function withheldConversationView(c: WithheldConversation) {
     return {
         id: c.id, type: 'dm' as const, postId: null, postTitle: null, postStatus: 'active', name: null,
         createdBy: c.owner_pubkey, createdAt: c.created_at, participants,
-        readCursors: participants.map(publicKey => ({ publicKey, lastReadAt: null })),
+        readCursors: participants.map(publicKey => ({ publicKey, lastReadAt: publicKey === c.owner_pubkey ? c.owner_last_read_at ?? null : null })),
     };
 }
 
@@ -314,7 +321,7 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
             lastMsgType: null, lastSysType: null, name: null, createdBy: c.owner_pubkey, createdAt: c.created_at,
             participants: [c.owner_pubkey, c.other_pubkey],
             peerCallsign: p?.callsign ?? undefined, peerAvatar: p ? avatarUrlFor(p.public_key, p.avatar_url) : null,
-            peerLastReadAt: null, myLastReadAt: null,
+            peerLastReadAt: null, myLastReadAt: c.owner_last_read_at ?? null,
         } as unknown as T;
     });
     const lastLine = db.prepare('SELECT MAX(timestamp) AS at FROM messages WHERE conversation_id = ?');

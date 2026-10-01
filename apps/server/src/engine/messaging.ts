@@ -297,6 +297,7 @@ export function createConversation(
         db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, type, null, name || null, createdBy, createdAt);
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(id, p);
+        if (kept) keepOwnersReadMarker(kept);
     })();
 
     const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
@@ -324,10 +325,18 @@ function promoteWithheldConversation(cb: MessagingCallbacks, kept: WithheldConve
         db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, 'dm', NULL, NULL, ?, ?)`).run(kept.id, author, createdAt);
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(kept.id, p);
+        keepOwnersReadMarker(kept);
     })();
     const conv: Conversation = { id: kept.id, type: 'dm', name: null, createdBy: author, createdAt, participants };
     cb.broadcast({ type: 'conversation_created', conversation: conv }, participants);
     return kept.id;
+}
+
+/** A withheld conversation now the real one: its owner's read marker goes on to their participant row. */
+function keepOwnersReadMarker(kept: WithheldConversation): void {
+    if (!kept.owner_last_read_at) return;
+    db.prepare('UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?')
+        .run(kept.owner_last_read_at, kept.id, kept.owner_pubkey);
 }
 
 /** A line already stored under this client id, in `messages` or withheld (engine/withheld-lines.ts). */
@@ -886,10 +895,11 @@ export function deleteOwnMessage(
         // tombstone, heard on their own sockets only. To anyone else it is an id nobody has.
         const own = ownWithheldLine(messageId, authorPubkey);
         if (!own) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
-        if (own.type === 'removed') return toMessage(own);
+        // A withheld line has no system type: null, as a stored line's answer has it, so the two answers have one shape.
+        if (own.type === 'removed') return { ...toMessage(own), systemType: null as any };
         const { ciphertext, metadata } = tombstoneFields(own, authorPubkey, GROUP_THREAD_DELETED_TEXT);
         tombstoneWithheldLine(own.id, ciphertext, metadata);
-        const gone: Message = { ...toMessage(own), ciphertext, nonce: 'plaintext-v1', type: 'removed', metadata };
+        const gone: Message = { ...toMessage(own), systemType: null as any, ciphertext, nonce: 'plaintext-v1', type: 'removed', metadata };
         cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: gone, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
         return gone;
     }

@@ -1043,6 +1043,7 @@ CREATE TABLE IF NOT EXISTS withheld_conversations (
     owner_pubkey TEXT NOT NULL,
     other_pubkey TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    owner_last_read_at TEXT,
     CHECK (owner_pubkey != other_pubkey)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_withheld_conversations_pair ON withheld_conversations(owner_pubkey, other_pubkey);

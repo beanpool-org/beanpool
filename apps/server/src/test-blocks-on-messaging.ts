@@ -236,6 +236,26 @@ async function main(): Promise<void> {
     assert(annPhoto.status === 404 && anonPhoto.status === 404, `to nobody else (${annPhoto.status}, ${anonPhoto.status})`);
     const boMark = await call('POST', bo, '/api/messages/mark-read', { conversationId: boConv });
     assert(boMark.status === 200, `Bo marks it read as any chat (${show(boMark)})`);
+    // Mute and his own read marker answer and show as a real conversation's do (#1403 review, NON-BLOCKING): Cy's chat
+    // with Dee is the control.
+    const ccConv: string = cc.body?.conversation?.id;
+    await call('POST', cy, '/api/messages/mark-read', { conversationId: ccConv });
+    const ctrlMute = await call('POST', cy, '/api/messages/mute', { conversationId: ccConv, duration: '8h' });
+    const boMute = await call('POST', bo, '/api/messages/mute', { conversationId: boConv, duration: '8h' });
+    assert(boMute.status === ctrlMute.status && boMute.status === 200 && keysOf(boMute.body) === keysOf(ctrlMute.body)
+        && keysOf(boMute.body?.mute) === keysOf(ctrlMute.body?.mute) && boMute.body?.mute?.conversationId === boConv,
+        `Bo mutes it as any chat (${show(boMute)}; control ${show(ctrlMute)})`);
+    const boEntry3 = (await listOf(bo))?.conversations?.find((c: any) => c.id === boConv);
+    const cyEntry3 = (await listOf(cy))?.conversations?.find((c: any) => c.id === ccConv);
+    assert(!!boEntry3?.mute && !!cyEntry3?.mute && keysOf(boEntry3.mute) === keysOf(cyEntry3.mute) && !!boEntry3.myLastReadAt && !!cyEntry3?.myLastReadAt,
+        `his list shows the mute and his read marker, as Cy's does (${JSON.stringify(boEntry3?.mute)}, ${boEntry3?.myLastReadAt})`);
+    const boCursor = (await call('GET', bo, `/api/messages/${boConv}`)).body?.conversation?.readCursors?.find((r: any) => r.publicKey === bo.pk);
+    const cyCursor = (await call('GET', cy, `/api/messages/${ccConv}`)).body?.conversation?.readCursors?.find((r: any) => r.publicKey === cy.pk);
+    assert(!!boCursor?.lastReadAt && !!cyCursor?.lastReadAt, `and so does his read of it (${JSON.stringify(boCursor)})`);
+    const boUnmute = await call('POST', bo, '/api/messages/mute', { conversationId: boConv, duration: 'off' });
+    const ctrlUnmute = await call('POST', cy, '/api/messages/mute', { conversationId: ccConv, duration: 'off' });
+    assert(boUnmute.status === 200 && JSON.stringify(boUnmute.body) === JSON.stringify(ctrlUnmute.body)
+        && !(await listOf(bo))?.conversations?.find((c: any) => c.id === boConv)?.mute, `and unmutes it (${show(boUnmute)})`);
 
     // ── 4. a conversation the two already had ───────────────────────────────────────────────────
     console.log('── 4. a conversation the two already had ──');
@@ -308,6 +328,12 @@ async function main(): Promise<void> {
     const deeView = (await call('GET', dee, `/api/messages/${deeConv}`)).body?.messages?.find((m: any) => m.id === d2id);
     assert(ownEd.status === 200 && !!ownEd.body?.message?.editedAt && ownDel.status === 200 && ownDel.body?.message?.type === 'removed'
         && deeView?.type === 'removed', `she edits and deletes her own withheld line as any line (${show(ownEd)}, ${show(ownDel)})`);
+    const ctrlDel = await call('POST', dee, '/api/messages/delete', { messageId: ctrlLine.body?.message?.id });
+    const ownDelAgain = await call('POST', dee, '/api/messages/delete', { messageId: d2id });
+    const ctrlDelAgain = await call('POST', dee, '/api/messages/delete', { messageId: ctrlLine.body?.message?.id });
+    assert(keysOf(ownDel.body?.message) === keysOf(ctrlDel.body?.message) && ownDel.body?.message?.systemType === null
+        && keysOf(ownDelAgain.body?.message) === keysOf(ctrlDelAgain.body?.message) && ownDelAgain.body?.message?.systemType === null,
+        `the delete answers, first and again, have a stored line's shape, systemType null (${keysOf(ownDel.body?.message)})`);
     const annDel = await call('POST', ann, '/api/messages/delete', { messageId: boIds[0] });
     const nobodyDel = await call('POST', ann, '/api/messages/delete', { messageId: crypto.randomUUID() });
     assert(annDel.status === nobodyDel.status && JSON.stringify(annDel.body) === JSON.stringify(nobodyDel.body),
@@ -335,6 +361,9 @@ async function main(): Promise<void> {
         "nor Dee's edit or reaction from while she was blocked");
     assert(pushesTo(ann).length === pushesBefore + 2, `each pushes Ann now (${pushesTo(ann).length - pushesBefore})`);
     assert(JSON.stringify(await linesOf(bo, boConv)) === JSON.stringify([...boIds, b4.body?.message?.id]), 'Bo reads all four');
+    const boEntry5 = (await listOf(bo))?.conversations?.find((c: any) => c.id === boConv);
+    assert(!!boEntry5?.myLastReadAt && boEntry5.myLastReadAt === boEntry3?.myLastReadAt,
+        `his read marker from while it was withheld is the real conversation's (${boEntry5?.myLastReadAt})`);
 
     // ── 6. a group's chat ───────────────────────────────────────────────────────────────────────
     console.log("── 6. a group's chat ──");

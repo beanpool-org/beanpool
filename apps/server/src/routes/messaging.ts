@@ -28,7 +28,9 @@ import { respondProfileRefusal } from './profile-feature-gate.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
-import { withheldConversationOwnedBy, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld } from '../engine/withheld-lines.js';
+import {
+    withheldConversationOwnedBy, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
+} from '../engine/withheld-lines.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
  *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
@@ -404,8 +406,9 @@ router.post('/api/messages/mark-read', async (ctx) => {
     }
     const conv = getConversation(conversationId);
     if (!conv) {
-        // A conversation kept for its opener alone (engine/withheld-lines.ts) is read as any other, with nothing to move.
+        // A conversation kept for its opener alone (engine/withheld-lines.ts) is read as any other: their read marker moves.
         if (withheldConversationOwnedBy(conversationId, actor)) {
+            markWithheldConversationRead(conversationId, actor);
             ctx.body = { success: true };
             return;
         }
@@ -472,6 +475,14 @@ router.post('/api/messages/mute', async (ctx) => {
     }
     const conv = getConversation(conversationId);
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts) is muted as any other, the mute kept under
+        // its id: the id it keeps when it becomes the real one.
+        if (withheldConversationOwnedBy(conversationId, actor)) {
+            ctx.body = duration === 'off'
+                ? (clearChatMute(conversationId, actor), { success: true, mute: null })
+                : { success: true, mute: setChatMute(conversationId, actor, duration) };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;

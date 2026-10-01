@@ -39,6 +39,8 @@ You can join in the phone app or in a web browser. In a browser, open global.bea
 
 The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see "Getting your account back". After joining you don't sign in to open the app: your account is the key on your phone, like any other.
 
+**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, open **Invites** and tap **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See "More than one community".
+
 ## The four steps
 
 The bar at the top shows **Your Name**, **Your Photo**, **Safety Backup** and **How it Works**.
@@ -63,6 +65,7 @@ If you close the app halfway, it carries on from the same step next time.
 - **Can't reach the global community:** check your connection and tap **Try again**. You can still join a community with an invite.
 - **The global community didn't answer in time** (after you tap **Join**): your name wasn't checked and nothing was sent. Check your connection and tap **Join** again, or go back. While the app is checking your name, **Use a different sign-in** and **← Back to Home** still work.
 - **This sign-in already has a BeanPool identity:** you joined before, perhaps on another phone. Tap **Restore my account**, then use your 12 words or the same sign-in.
+- **This sign-in already joined the global community with a different BeanPool account** (joining from the account on your phone): that sign-in has its own account there. Tap **Use a different sign-in**.
 - **This community can't check sign-ins right now:** the global community has moved to another server and can't yet tell a returning account from a new one, so for now it takes nobody new this way. Nothing was saved. Try again later.
 - **Too many new accounts from this network:** there is a limit on new accounts from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
 - **Not taking new members right now:** join a community with an invite instead.

@@ -18,7 +18,8 @@ class WebSocketSyncClient {
     /**
      * The node's "no room" closes in a row (@beanpool/core WS_NO_ROOM_CLOSE_CODE: a full node lets the socket in and
      * closes it at once, saying when to come back). Sizes the wait, which grows with each; any other close ends the run.
-     * Not reset when a socket opens, since a refused one opens before it is closed.
+     * Not reset when a socket opens, since a refused one opens before it is closed: reset by its first pong (a refused
+     * socket never gets one), and when the app disconnects.
      */
     private noRoomRefusals = 0;
     private reconnectSyncTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -149,6 +150,8 @@ class WebSocketSyncClient {
                     console.warn('[WS Sync] Failed to sign WS connect', err);
                 }
             }
+            // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
+            params.push('nr=1');
             if (params.length) {
                 wsUrl += `?${params.join('&')}`;
             }
@@ -320,6 +323,7 @@ class WebSocketSyncClient {
             this.reconnectSyncTimeoutId = null;
         }
         this.isRetry = false;
+        this.noRoomRefusals = 0;
 
         this.stopHeartbeat();
         this.watchdogArmed = false;
@@ -353,6 +357,8 @@ class WebSocketSyncClient {
     private handlePong(socket: WebSocket) {
         if (this.ws !== socket) return;
         this.lastPongAt = Date.now();
+        // The node let this socket in, so the next refusal is a new one, not one more in a row.
+        this.noRoomRefusals = 0;
         // Trap 2: Only arms after seeing at least one pong on this connection
         this.watchdogArmed = true;
         this.resetWatchdogTimer(socket);

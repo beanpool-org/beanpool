@@ -43,7 +43,7 @@
  *     so on a full node the retries alone spent every address's request budget.
  * A local community keeps every number above. An operator scales a cap with the server in the node's .env (WS_LIMIT_ENV:
  * WS_MAX_SOCKETS=20000 on a 4 GB server, say), on either profile; anything but a whole number above 0 is ignored, and
- * said once in the log. Strangers never get more places than the node has, nor more from one address than it may hold.
+ * said once in the log. When WS_MAX_STRANGER_SOCKETS is not set, the strangers' cap scales with WS_MAX_SOCKETS by the profile's ratio (half local, 30% global). Strangers never get more places than the node has, nor more from one address than it may hold.
  * The listeners' connection cap follows (server-limits.ts).
  */
 import { getNodeProfile, type NodeProfile } from './config/node-profile.js';
@@ -108,17 +108,28 @@ export function wsLimits(): Readonly<WsLimits> {
     const key = `${profile}|${raw.join('|')}`;
     if (resolved?.key === key) return resolved.limits;
     const l: WsLimits = { ...BY_PROFILE[profile] };
+    let strangersSet = false;
     ENV_NAMES.forEach((name, i) => {
         const value = raw[i].trim();
         if (value === '') return;
         const n = /^\d{1,9}$/.test(value) ? Number(value) : 0;
-        if (n > 0) { l[WS_LIMIT_ENV[name]] = n; return; }
+        if (n > 0) { l[WS_LIMIT_ENV[name]] = n; if (name === 'WS_MAX_STRANGER_SOCKETS') strangersSet = true; return; }
         const message = `⚠️  ${name}=${JSON.stringify(raw[i])} is not a whole number above 0, so this node keeps its ${profile} profile's ${BY_PROFILE[profile][WS_LIMIT_ENV[name]]}.`;
         if (!warned.has(message)) { warned.add(message); console.warn(message); }
     });
+    // Lowering the node's cap alone must not hand strangers every place: unless the operator set the strangers' cap,
+    // it scales with the node by the profile's ratio (half on local, 30% on global).
+    if (!strangersSet && 'maxStrangerSockets' in testOverrides === false) {
+        const base = BY_PROFILE[profile];
+        l.maxStrangerSockets = Math.max(1, Math.floor(l.maxSockets * base.maxStrangerSockets / base.maxSockets));
+    }
     Object.assign(l, testOverrides);
     l.maxStrangerSockets = Math.min(l.maxStrangerSockets, l.maxSockets);
     l.maxStrangerSocketsPerAddress = Math.min(l.maxStrangerSocketsPerAddress, l.maxSocketsPerAddress);
+    if (strangersSet && l.maxStrangerSockets >= l.maxSockets) {
+        const message = `⚠️  WS_MAX_STRANGER_SOCKETS=${l.maxStrangerSockets} is not below this node's ${l.maxSockets} sockets, so strangers can hold every place and members can be shut out of live updates.`;
+        if (!warned.has(message)) { warned.add(message); console.warn(message); }
+    }
     resolved = { key, limits: Object.freeze(l) };
     return resolved.limits;
 }

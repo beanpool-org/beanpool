@@ -789,11 +789,13 @@ const NO_ROOM_CLOSE_GRACE_MS = 5_000;
  * for one more such answer this minute (gateway-rate-limit.ts gatewayNoRoomUpgrade, which gives back what the upgrade
  * was charged), the upgrade completes and closes at once with the "no room" close and its wait, which the apps read
  * (@beanpool/core wsNoRoomRetrySec): it is never added to the feed, holds no place, and is dropped if it doesn't answer
- * the close. Otherwise the old refusal: `status` before the upgrade, as charged.
+ * the close. Otherwise (a client that did not send `nr=1`, or a node without the close) the old refusal: `status` before the upgrade, as charged.
  */
 function refuseSocketForRoom(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer, client: string,
-    maxReqs: number, charges: ReadonlyArray<GatewayCharge | null>, status: 429 | 503): void {
-    if (!wsLimits().noRoomClose || !gatewayNoRoomUpgrade(client, maxReqs, charges)) {
+    maxReqs: number, charges: ReadonlyArray<GatewayCharge | null>, status: 429 | 503, understandsNoRoom: boolean): void {
+    // Only a client that says it reads the close (`nr=1` on its connect URL) gets it: an app built before it resets its
+    // backoff and syncs on every socket that opens, so against the close it would retry every few seconds.
+    if (!understandsNoRoom || !wsLimits().noRoomClose || !gatewayNoRoomUpgrade(client, maxReqs, charges)) {
         refuseUpgrade(socket, status, 30);
         return;
     }
@@ -832,7 +834,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 
         if (pathname === '/ws') {
             // The node's room first, before a token is verified or anything is charged.
-            if (!wsHasRoom()) { refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [], 503); return; }
+            if (!wsHasRoom()) { refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [], 503, parsedUrl.searchParams.get('nr') === '1'); return; }
             const claims = claimsWsSignature(parsedUrl.searchParams);
             const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false, charge: null };
             if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
@@ -858,7 +860,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // doorbells (or the open feed, where the operator chose it), is a stranger's, under the tighter caps.
             const place = admitWsSocket(client, connect.kind === 'member' ? { kind: 'keyed', key: connect.pubkey } : { kind: 'stranger' });
             if (!place.ok) {
-                refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [admitted.charge, settled], place.status);
+                refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [admitted.charge, settled], place.status, parsedUrl.searchParams.get('nr') === '1');
                 return;
             }
             holdUntilClosed(socket, place.release);

@@ -75,7 +75,9 @@ type Closed = { code: number; reason: string };
 type Open = { kind: 'open'; ws: WebSocket; closed: Promise<Closed>; events: any[] };
 type Outcome = Open | { kind: 'status'; status: number } | { kind: 'destroyed'; error: string };
 
-function upgrade(url: string, ip: string): Promise<Outcome> {
+/** `old`: an app built before the "no room" close, which doesn't send `nr=1` (a current one does). */
+function upgrade(url: string, ip: string, old = false): Promise<Outcome> {
+    if (!old) url += `${url.includes('?') ? '&' : '?'}nr=1`;
     return new Promise((resolve) => {
         const ws = new WebSocket(url, { headers: via(ip) });
         const events: any[] = [];
@@ -432,6 +434,54 @@ async function main() {
             'the operator\'s nodeProfile.announceJoins = true puts the broadcast back');
         db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.announceJoins`);
         await closeAll([w, mine]);
+    }
+
+    // ── 7. Old apps are refused the old way; a lowered node cap keeps the members' places ──────────────────
+    console.log('\n— 7. old clients get the plain 503; WS_MAX_SOCKETS alone scales strangers —');
+    {
+        setProfile('global');
+        updateGatewayConfig(unlimited);
+        wsl.setWsLimitsForTests({ maxSockets: 2, maxStrangerSockets: 2, maxSocketsPerAddress: 100 });
+        const two = [await upgrade(WS, '203.0.113.90'), await upgrade(WS, '203.0.113.91')];
+        const oldOne = await upgrade(WS, '203.0.113.92', true);
+        assert(oldOne.kind === 'status' && oldOne.status === 503, `a client that doesn't send nr=1 on a full global node gets the plain 503, as before (${show(oldOne)})`);
+        const newOne = await upgrade(WS, '203.0.113.93');
+        const newAnswer = await answer(newOne);
+        assert(newAnswer === `closed ${NO_ROOM} retry=300`, `a client that sends nr=1 gets the 4429 close (${newAnswer})`);
+        await closeAll([...two, newOne]);
+        wsl.setWsLimitsForTests(undefined);
+
+        // The strangers' cap follows the node's cap when only that is set: half on local, 30% on global.
+        setProfile('local');
+        process.env.WS_MAX_SOCKETS = '20';
+        const warns: string[] = [];
+        const origWarn = console.warn;
+        console.warn = (...a: unknown[]) => { warns.push(a.map(String).join(' ')); };
+        try {
+            assert(wsl.wsLimits().maxSockets === 20 && wsl.wsLimits().maxStrangerSockets === 10,
+                `local WS_MAX_SOCKETS=20 alone: strangers capped at 10 (${wsl.wsLimits().maxStrangerSockets})`);
+            const strangers = await openMany(Array.from({ length: 12 }, (_, i) => ({ url: WS, ip: `198.51.100.${i + 1}` })));
+            const kept = strangers.filter(o => o.kind === 'open').length;
+            const refusedStrangers = strangers.filter(o => o.kind === 'status' && o.status === 503).length;
+            assert(kept === 10 && refusedStrangers === 2, `12 strangers from 12 addresses: 10 kept, 2 refused (${tally(strangers)})`);
+            const m = await upgrade(`${WS}?${signedWsQuery(member())}`, '198.51.100.200');
+            assert(await stillOpenAfter(m), `and a member still connects (${show(m)})`);
+            await closeAll([...strangers, m]);
+
+            setProfile('global');
+            process.env.WS_MAX_SOCKETS = '1500';
+            assert(wsl.wsLimits().maxStrangerSockets === 450, `global WS_MAX_SOCKETS=1500 alone: strangers capped at 450 (${wsl.wsLimits().maxStrangerSockets})`);
+            process.env.WS_MAX_STRANGER_SOCKETS = '1500';
+            for (let i = 0; i < 3; i++) wsl.wsLimits();
+            assert(wsl.wsLimits().maxStrangerSockets === 1500, 'an explicit WS_MAX_STRANGER_SOCKETS is kept');
+            const said = warns.filter(w => w.includes('WS_MAX_STRANGER_SOCKETS'));
+            assert(said.length === 1, `an explicit value that leaves members no places is said once in the log (${said.length}: ${said[0] ?? ''})`);
+        } finally {
+            console.warn = origWarn;
+            delete process.env.WS_MAX_SOCKETS;
+            delete process.env.WS_MAX_STRANGER_SOCKETS;
+        }
+        setProfile('global');
     }
 
     setProfile('local');

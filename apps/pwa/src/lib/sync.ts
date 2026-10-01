@@ -97,6 +97,8 @@ function sendPing(socket: WebSocket): void {
 function handlePong(socket: WebSocket): void {
     if (ws !== socket) return;
     lastPongAt = Date.now();
+    // The node let this socket in (a refused one never gets a pong): the next refusal is a new one, not one more in a row.
+    noRoomRefusals = 0;
     // Trap 2: Only arms after seeing at least one pong on this connection
     watchdogArmed = true;
     resetWatchdogTimer(socket);
@@ -378,6 +380,8 @@ export function connectToAnchor(url?: string): void {
                 if (signed) params.push(signed);
             } catch { /* unsigned fallback */ }
             if (generation !== connectGeneration) return;
+            // Says this build reads the node's "no room" close (4429); one that doesn't is refused the old way.
+            params.push('nr=1');
             const wsUrl = params.length ? `${baseWsUrl}?${params.join('&')}` : baseWsUrl;
             establishConnection(wsUrl, baseWsUrl);
         })

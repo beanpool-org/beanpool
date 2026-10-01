@@ -630,7 +630,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         visitorRead(null);
         await vi.advanceTimersByTimeAsync(10);
 
-        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan']);
+        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan&nr=1']);
     });
 
     it('reopening for a member who has just joined starts afresh: at once, and syncing at once', async () => {
@@ -812,7 +812,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         await waitForNewSocket(lobby, 1_000);
         const signed = wsInstance;
         expect(signed).not.toBe(lobby);
-        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me');
+        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me&nr=1');
         signed.readyState = 1;
         signed.onopen();
         await vi.advanceTimersByTimeAsync(150);
@@ -823,5 +823,28 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(read).toHaveBeenCalledTimes(2);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(read).toHaveBeenCalledTimes(2);
+    });
+
+    it('a socket the node let in clears the run: refused, admitted 20 min, away 1 h, refused again waits 300 s, not 600', async () => {
+        let socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        refuseForRoom(socket);
+        expect(await waitInSeconds(socket, 3_600_000)).toBe(300_000);
+        socket = wsInstance;
+        socket.readyState = 1;
+        socket.onopen();
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) }); // let in: it answers
+        for (let i = 0; i < 40; i++) { // 20 minutes, the heartbeat answered each time
+            await vi.advanceTimersByTimeAsync(30_000);
+            socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        }
+        // The tab is reopened for a member (reconnectToAnchor unlinks the old socket before it closes).
+        reconnectToAnchor();
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        socket.readyState = 1;
+        socket.onopen();
+        refuseForRoom(socket);
+        expect(await waitInSeconds(socket, 3_600_000)).toBe(300_000);
     });
 });

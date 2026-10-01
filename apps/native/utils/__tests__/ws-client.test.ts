@@ -118,7 +118,7 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         vi.mocked(buildSignedWsParams).mockResolvedValueOnce('pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
         const socket = await startAndConnect();
         expect(buildSignedWsParams).toHaveBeenCalledWith('wss://testnode.beanpool.org/ws', 'aa', ME);
-        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2');
+        expect(socket.url).toBe('wss://testnode.beanpool.org/ws?callsign=Me&pubkey=p&ts=1&nonce=n&sig=s&for=testnode.beanpool.org&v=2&nr=1');
     });
 
     it('opens no socket at all, signed or not, to an address that names one host and reaches another (#1224 review 4113495290)', async () => {
@@ -527,5 +527,44 @@ describe('Native WebSocket Pong Watchdog (WebSocketSyncClient)', () => {
         const socket = await startAndConnect();
         refuseForRoom(socket, 'retry=1');
         expect(await waitForNewSocket(socket, 3_600_000)).toBe(30_000);
+    });
+
+    it('a socket the node let in clears the run: refused, admitted 20 min, backgrounded 1 h, refused again waits 300 s, not 600', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        let socket = await startAndConnect();
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) }); // let in: it answers
+        for (let i = 0; i < 40; i++) { // 20 minutes, the heartbeat answered each time
+            await vi.advanceTimersByTimeAsync(30_000);
+            socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        }
+        mockAppStateListeners.forEach(l => l('background'));
+        await vi.advanceTimersByTimeAsync(60 * 60_000);
+        mockAppStateListeners.forEach(l => l('active'));
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
+    });
+
+    it('backgrounding the app ends a run of refusals too', async () => {
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        let socket = await startAndConnect();
+        refuseForRoom(socket);
+        await waitForNewSocket(socket, 3_600_000);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket); // the second in a row: it would wait 600 s
+        mockAppStateListeners.forEach(l => l('background'));
+        mockAppStateListeners.forEach(l => l('active'));
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        await vi.advanceTimersByTimeAsync(10);
+        refuseForRoom(socket);
+        expect(await waitForNewSocket(socket, 3_600_000)).toBe(300_000);
     });
 });

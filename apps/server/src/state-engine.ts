@@ -1360,6 +1360,9 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey : null;
+    // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
+    // own sockets only, which it still makes member sockets below. The versions above moved all the same.
+    const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1387,7 +1390,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
+        const joinersOwn = !!joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey);
+        if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
                 ws._memberPubkey = event.member.publicKey;
@@ -1396,6 +1400,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 ws._pendingMemberPubkey = null;
             }
         }
+        if (joinToJoinerOnly && !joinersOwn) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;

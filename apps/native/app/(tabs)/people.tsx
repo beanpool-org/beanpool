@@ -7,6 +7,7 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { useIdentity } from '../IdentityContext';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { makeOfflineTicket } from '../../utils/member-statements';
+import { fetchMembership } from '../../utils/membership-probe';
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -229,7 +230,8 @@ export default function PeopleScreen() {
                 setAnchorUrl(val);
                 if (identity?.publicKey) {
                     try {
-                        const res = await fetch(`${val}/api/community/membership/${identity.publicKey}`);
+                        // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                        const res = await fetchMembership(val, identity);
                         if (res.ok) {
                             const data = await res.json();
                             setIsGuest(!data.isMember);
@@ -482,7 +484,8 @@ export default function PeopleScreen() {
             if (targetNodeUrl === anchorUrl) {
                 let isMember = false;
                 try {
-                    const res = await fetch(`${targetNodeUrl}/api/community/membership/${identity?.publicKey}`);
+                    // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                    const res = await fetchMembership(targetNodeUrl, identity ?? '');
                     if (res.ok) {
                         const data = await res.json();
                         isMember = !!data.isMember;

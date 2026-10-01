@@ -30,6 +30,14 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         removeItem: vi.fn(async (k: string) => { storage.delete(k); }),
     },
 }));
+// The probe is signed by the key it asks about (membership-probe.ts): the app's own signer, with real keys.
+vi.mock('expo-crypto', async () => {
+    const { randomBytes } = await import('node:crypto');
+    return { getRandomBytes: (n: number) => new Uint8Array(randomBytes(n)) };
+});
+/** The key stored on the phone, for a probe given only a public key. */
+const onPhone = vi.hoisted(() => ({ key: null as null | { publicKey: string; privateKey: string } }));
+vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => onPhone.key) }));
 
 import {
     keyMadeForThisJoin, resumePlan, getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding,
@@ -41,10 +49,13 @@ import {
 } from '../invite-next';
 import type { BeanPoolIdentity } from '../identity';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { boundSignatureValid } from './server-signature-check';
 
 const NODE = 'https://node.example';
-const MADE: BeanPoolIdentity = { publicKey: 'ef'.repeat(32), privateKey: '09'.repeat(32), callsign: 'Kim', createdAt: '' };
-const HAD: BeanPoolIdentity = { publicKey: 'ab'.repeat(32), privateKey: '07'.repeat(32), callsign: 'Kim', createdAt: '' };
+const keyOf = (seed: string) => Buffer.from(ed25519.getPublicKey(Buffer.from(seed, 'hex'))).toString('hex');
+const MADE: BeanPoolIdentity = { publicKey: keyOf('09'.repeat(32)), privateKey: '09'.repeat(32), callsign: 'Kim', createdAt: '' };
+const HAD: BeanPoolIdentity = { publicKey: keyOf('07'.repeat(32)), privateKey: '07'.repeat(32), callsign: 'Kim', createdAt: '' };
 const JOIN = { inviteCode: 'INV-ABC', anchorUrl: NODE, callsign: 'Kim' };
 const USED_BY_ANOTHER = 'This invite has already been used';
 /** engine/invites.ts redeemOfflineTicket's refusal of a spent ticket. */
@@ -79,17 +90,28 @@ function communityNode() {
 type Node = ReturnType<typeof communityNode>;
 let node: Node;
 
-/** GET /api/community/membership/<key>, answered by `node`. */
-const fetchMock = vi.fn(async (url: string, init?: { signal?: AbortSignal }) => {
+/** Whether a probe is signed by `key` for this node, as the server checks it (server-signature-check.ts). */
+const signedBy = (key: string, url: string, headers: Record<string, string> | undefined) =>
+    boundSignatureValid({ url, method: 'GET', headers: headers ?? {}, body: '' }, key);
+
+/**
+ * GET /api/community/membership/<key>, answered by `node` as the server answers it (routes/community.ts): only to a
+ * request signed by that key, refused to anyone else (multi-community review F3).
+ */
+const fetchMock = vi.fn(async (url: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => {
     const m = /\/api\/community\/membership\/([0-9a-f]+)$/.exec(url);
     if (!m) throw new Error(`unexpected request: ${url}`);
     if (node.probe === 'fails') throw new Error('Network request failed');
     if (node.probe === 'hangs') return new Promise<never>(() => { /* no answer, and deaf to the signal */ void init; });
+    if (!signedBy(m[1], url, init?.headers)) {
+        return { ok: false, status: init?.headers?.['X-Public-Key'] ? 403 : 401, json: async () => ({ error: 'Sign the membership probe with the key it asks about' }) };
+    }
     return { ok: true, status: 200, json: async () => ({ isMember: node.members.has(m[1]) }) };
 });
 
 beforeEach(() => {
     storage.clear();
+    onPhone.key = null;
     node = communityNode();
     fetchMock.mockClear();
     (globalThis as any).fetch = fetchMock;
@@ -133,7 +155,7 @@ async function next(phone: { key: BeanPoolIdentity | null }, answer: 'answered' 
         try {
             await node.redeem(identity.publicKey, answer);
         } catch (redeemErr: any) {
-            if (!(await redeemRefusalMeansIn(redeemErr?.message, NODE, identity.publicKey))) throw redeemErr;
+            if (!(await redeemRefusalMeansIn(redeemErr?.message, NODE, identity))) throw redeemErr;
         }
     }
     await setPendingOnboarding({ step: 'profileSetup', ...JOIN, redeemed: true, ...(keyIsNew ? { newKey: identity.publicKey } : {}) });
@@ -304,26 +326,42 @@ describe("afterSpentInvite: what Next does with an invite the node says is spent
 describe('nodeSaysMember: the node\'s membership probe, bounded', () => {
     it('yes only when the node says so', async () => {
         node.members.add(MADE.publicKey);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(true);
+        expect(await nodeSaysMember(NODE, HAD)).toBe(false);
+    });
+
+    it('asked signed by the key itself, for this node (the node answers no one else): given the key, or the one on the phone', async () => {
+        node.members.add(MADE.publicKey);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(true);
+        const [url, init] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string> }];
+        expect(url).toBe(`${NODE}/api/community/membership/${MADE.publicKey}`);
+        expect(signedBy(MADE.publicKey, url, init.headers)).toBe(true);
+        // Only its public half: signed with the phone's key when it is that one.
+        onPhone.key = MADE;
         expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(true);
-        expect(await nodeSaysMember(NODE, HAD.publicKey)).toBe(false);
+        // Any other key goes unsigned, the node refuses it, and that is no answer: never a yes.
+        onPhone.key = HAD;
+        expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(false);
+        const unsigned = fetchMock.mock.calls[2][1] as { headers: Record<string, string> };
+        expect(unsigned.headers).toEqual({ Accept: 'application/json' });
     });
 
     it('no for an error, an unclear answer, or none', async () => {
         fetchMock.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ isMember: true }) } as any);
-        expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(false);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(false);
         fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => { throw new SyntaxError('not JSON'); } } as any);
-        expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(false);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(false);
         fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ isMember: 'yes' }) } as any);
-        expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(false);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(false);
         node.probe = 'fails';
-        expect(await nodeSaysMember(NODE, MADE.publicKey)).toBe(false);
+        expect(await nodeSaysMember(NODE, MADE)).toBe(false);
     });
 
     it('a probe that never answers is no by its time, and is asked to stop', async () => {
         vi.useFakeTimers();
         node.probe = 'hangs';
         let answered: boolean | null = null;
-        const asked = nodeSaysMember(NODE, MADE.publicKey).then(a => { answered = a; });
+        const asked = nodeSaysMember(NODE, MADE).then(a => { answered = a; });
         await vi.advanceTimersByTimeAsync(MEMBERSHIP_PROBE_TIMEOUT_MS - 1);
         expect(answered).toBeNull();
         await vi.advanceTimersByTimeAsync(1);
@@ -336,16 +374,16 @@ describe('nodeSaysMember: the node\'s membership probe, bounded', () => {
 
 describe('redeemRefusalMeansIn: a refused redeem that means the key is in all the same', () => {
     it("the node's own 'already a member'", async () => {
-        expect(await redeemRefusalMeansIn('You are already a member of this community', NODE, MADE.publicKey)).toBe(true);
+        expect(await redeemRefusalMeansIn('You are already a member of this community', NODE, MADE)).toBe(true);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it("'already been used' only when the node says the key is in: never a join the node didn't take", async () => {
-        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE.publicKey)).toBe(false);
+        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE)).toBe(false);
         node.members.add(MADE.publicKey);
-        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE.publicKey)).toBe(true);
+        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE)).toBe(true);
         node.probe = 'fails';
-        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE.publicKey)).toBe(false);
+        expect(await redeemRefusalMeansIn(USED_BY_ANOTHER, NODE, MADE)).toBe(false);
     });
 
     /**
@@ -354,11 +392,11 @@ describe('redeemRefusalMeansIn: a refused redeem that means the key is in all th
      * (PR #1218, 4112785991).
      */
     it("an offline ticket's 'already been redeemed' the same: only when the node says the key is in", async () => {
-        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(false);
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE)).toBe(false);
         node.members.add(MADE.publicKey);
-        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(true);
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE)).toBe(true);
         node.probe = 'fails';
-        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE.publicKey)).toBe(false);
+        expect(await redeemRefusalMeansIn(TICKET_SPENT, NODE, MADE)).toBe(false);
     });
 
     it('a ticket whose first redeem landed, on a node that refuses its own member by the ticket: on, with the new words', async () => {
@@ -385,8 +423,8 @@ describe('redeemRefusalMeansIn: a refused redeem that means the key is in all th
     });
 
     it('anything else is not', async () => {
-        expect(await redeemRefusalMeansIn('Relay Node Offline', NODE, MADE.publicKey)).toBe(false);
-        expect(await redeemRefusalMeansIn(undefined, NODE, MADE.publicKey)).toBe(false);
+        expect(await redeemRefusalMeansIn('Relay Node Offline', NODE, MADE)).toBe(false);
+        expect(await redeemRefusalMeansIn(undefined, NODE, MADE)).toBe(false);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -496,7 +534,7 @@ describe('welcome.tsx: Next on "Your Name" does what the simulation above does',
             'if (storedIdentity) await adoptJoinKey(storedIdentity.publicKey);',
             'if (!inAlready) {',
             'await redeemInvite(parsedCode, identity.callsign, identity, { timeoutMs: NEXT_REQUEST_TIMEOUT_MS });',
-            'if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity.publicKey))) {',
+            'if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity))) {',
             'throw redeemErr;',
             'setInviteRedeemed(true);',
             "step: 'profileSetup',",

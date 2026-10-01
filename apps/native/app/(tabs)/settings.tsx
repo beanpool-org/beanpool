@@ -26,6 +26,7 @@ import { MemberAvatar } from '../../components/MemberAvatar';
 import { getBlockedUsers, unblockUser, clearBlocklist } from '../../utils/blocklist';
 import { getSavedNodes, SavedNode, removeSavedNode, getDatabaseFilenameForNode, recordRequestSigning } from '../../utils/nodes';
 import { isPlainNodeAddress, UNSAFE_NODE_ADDRESS_MESSAGE } from '../../utils/node-url';
+import { fetchMembership } from '../../utils/membership-probe';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Location from 'expo-location';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -1394,7 +1395,8 @@ export default function SettingsScreen() {
             // never reach the Register screen.
             if (identity?.publicKey) {
                 try {
-                    const probe = await fetch(`${finalAnchorUrl}/api/community/membership/${identity.publicKey}`);
+                    // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                    const probe = await fetchMembership(finalAnchorUrl, identity);
                     if (probe.ok) {
                         const data = await probe.json();
                         if (data?.isMember) {

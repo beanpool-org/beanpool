@@ -9,7 +9,7 @@
 import { defaultDatabaseDirectory } from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { closeDB } from './db';
-import { getDatabaseFilenameForNode } from './nodes';
+import { getDatabaseFilenameForNode, legacyDatabaseFilenameForNode } from './nodes';
 import { resetSyncFingerprints } from '../services/pillar-sync';
 
 /**
@@ -39,7 +39,9 @@ export async function removeCommunityCaches(communities: readonly string[]): Pro
         console.warn('[Account] No database directory: the cached community copies stay');
         return;
     }
-    const names = new Set(communities.map((url) => getDatabaseFilenameForNode(url)));
+    // And each one's name from before every community had a file of its own (nodes.ts), in case it never moved
+    // (cache-file-migration.ts): the account's copy goes with it either way.
+    const names = new Set(communities.flatMap((url) => [getDatabaseFilenameForNode(url), legacyDatabaseFilenameForNode(url)]));
     for (const name of names) {
         for (const suffix of DATABASE_FILE_SUFFIXES) {
             try {

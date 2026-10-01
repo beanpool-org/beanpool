@@ -24,6 +24,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signOutOfThisPhone } from './account-leaves-phone';
 import { communityName } from './community-name';
+import { fetchMembership } from './membership-probe';
 import type { BeanPoolIdentity } from './identity';
 import { PURGE_TIMEOUT_MS, anchorUrl, purgeAccountOnNode } from './node-post';
 import { assertPlainNodeAddress, isPlainNodeAddress } from './node-url';
@@ -64,8 +65,8 @@ export type DeletePlan =
     | { kind: 'last'; here: string; hereName: string };
 
 /**
- * GET /api/community/membership/<key> at `community`, as NodeStatusContext asks it. Never throws; gives up at
- * `timeoutMs`.
+ * GET /api/community/membership/<key> at `community`, signed by the key as every probe is (membership-probe.ts): a
+ * community answers it only to its own key. Never throws; gives up at `timeoutMs`.
  */
 export async function membershipAt(community: string, publicKey: string, timeoutMs: number = MEMBERSHIP_TIMEOUT_MS): Promise<Membership> {
     const base = communityAddress(community);
@@ -73,11 +74,7 @@ export async function membershipAt(community: string, publicKey: string, timeout
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-        const res = await fetch(`${base}/api/community/membership/${publicKey}`, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            signal: controller.signal,
-        });
+        const res = await fetchMembership(base, publicKey, controller.signal);
         if (!res.ok) return 'unreachable';
         const data: unknown = await res.json();
         if (!data || typeof data !== 'object') return 'unreachable';

@@ -74,8 +74,8 @@ export const DEFAULT_OFFBOX_RETENTION_DAYS = 30;
 /** The deletion promise: a deleted member's data is in no off-box backup after 30 days. */
 export const MAX_OFFBOX_RETENTION_DAYS = 30;
 export const MAX_OFFBOX_DESTINATIONS = 5;
-/** BACKUP_OFFBOX_1_… to BACKUP_OFFBOX_5_… */
-const ENV_SLOTS = MAX_OFFBOX_DESTINATIONS;
+/** BACKUP_OFFBOX_1_… and BACKUP_OFFBOX_2_…, the two docker-compose.yml passes through; more go in Settings. */
+const ENV_SLOTS = 2;
 
 const TICK_MS = 5 * 60_000;
 /** The first check after a start: soon, but not in the boot's own minute. */

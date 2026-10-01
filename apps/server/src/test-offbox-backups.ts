@@ -17,7 +17,8 @@
  *  4. Retention: past the days set, by the name's time or the store's, whichever is older; refuses more than 30 days.
  *  5. Credentials: in no log line (console or the log table), no answer, no backup (opened with the code), not in the
  *     database or local-config.json; the settings file is mode 600; a .env destination that can't be used names the
- *     setting, never the value; an http:// endpoint off this machine is refused.
+ *     setting, never the value; an http:// endpoint off this machine is refused; docker-compose.yml passes every .env
+ *     setting through.
  *  6. A standby: sends nothing and touches no bucket (not even a listing); no health line.
  *  7. Round trip: a FRESH server (child process: its own data dir, genesis, key, password) is given the destination in
  *     Settings, lists it (the lost community's backups, not its own), downloads the newest through its own route (hash
@@ -381,17 +382,23 @@ async function main(): Promise<void> {
     console.log('\n— 5. credentials —');
     const httpOff = await call('POST', '/api/local/admin/offbox-backups/settings', asOwner, { destination: { ...B, endpoint: 'http://backups.example.com' } });
     assert(httpOff.status === 400 && /https:\/\//.test(httpOff.json?.error), `5. an http:// endpoint off this machine is refused (${httpOff.json?.error})`);
-    process.env.BACKUP_OFFBOX_3_ENDPOINT = 'ftp://not-a-store';
-    process.env.BACKUP_OFFBOX_3_SECRET_ACCESS_KEY = 'env-three-SECRET-do-not-show';
+    process.env.BACKUP_OFFBOX_2_ENDPOINT = 'ftp://not-a-store';
+    process.env.BACKUP_OFFBOX_2_SECRET_ACCESS_KEY = 'env-two-SECRET-do-not-show';
     const st5 = await status();
-    const broken = st5.destinations.find((d: any) => d.id === 'env-3');
-    assert(broken?.health === 'broken' && broken.problems.some((p: string) => /BACKUP_OFFBOX_3_ENDPOINT/.test(p))
-        && broken.problems.some((p: string) => /missing: .*BACKUP_OFFBOX_3_BUCKET/.test(p)) && !JSON.stringify(st5).includes('ftp://not-a-store'),
+    const broken = st5.destinations.find((d: any) => d.id === 'env-2');
+    assert(broken?.health === 'broken' && broken.problems.some((p: string) => /BACKUP_OFFBOX_2_ENDPOINT/.test(p))
+        && broken.problems.some((p: string) => /missing: .*BACKUP_OFFBOX_2_BUCKET/.test(p)) && !JSON.stringify(st5).includes('ftp://not-a-store'),
         `5. a .env destination that can't be used names the settings, never their values (${JSON.stringify(broken?.problems)})`);
-    assert((await health()).problems.some((p: string) => /destination 3/.test(p) && /BACKUP_OFFBOX_3_ENDPOINT/.test(p)), "5. …and is in the owner's health");
-    SECRETS.push('env-three-SECRET-do-not-show');
-    delete process.env.BACKUP_OFFBOX_3_ENDPOINT;
-    delete process.env.BACKUP_OFFBOX_3_SECRET_ACCESS_KEY;
+    assert((await health()).problems.some((p: string) => /destination 2/.test(p) && /BACKUP_OFFBOX_2_ENDPOINT/.test(p)), "5. …and is in the owner's health");
+    SECRETS.push('env-two-SECRET-do-not-show');
+    delete process.env.BACKUP_OFFBOX_2_ENDPOINT;
+    delete process.env.BACKUP_OFFBOX_2_SECRET_ACCESS_KEY;
+    // The two .env destinations reach a docker node: docker-compose.yml passes every setting the server reads, empty by default.
+    const compose = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../docker-compose.yml'), 'utf8');
+    const settingNames = [1, 2].flatMap((n) => ['ENDPOINT', 'BUCKET', 'REGION', 'PREFIX', 'ACCESS_KEY_ID', 'SECRET_ACCESS_KEY', 'NAME'].map((f) => `BACKUP_OFFBOX_${n}_${f}`))
+        .concat(['BACKUP_OFFBOX_INTERVAL_HOURS', 'BACKUP_OFFBOX_RETENTION_DAYS']);
+    const notPassed = settingNames.filter((v) => !compose.includes(`- ${v}=\${${v}:-}`));
+    assert(notPassed.length === 0, `5. docker-compose.yml passes all ${settingNames.length} off-box settings from .env, empty by default${notPassed.length ? ` (missing: ${notPassed.join(', ')})` : ''}`);
     const shown = (await status()).destinations.filter((d: any) => d.health !== 'broken');
     assert(shown.every((d: any) => d.secretSet === true && d.accessKeyId !== KEY_ID && d.accessKeyId.includes('…')),
         `5. the status says a secret is set and shortens the key id (${shown.map((d: any) => d.accessKeyId).join(', ')})`);

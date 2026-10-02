@@ -80,6 +80,7 @@ export const SUITES = [
     'test-distance-search',
     'test-distance-query-parsing',
     'test-guest-view',
+    'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',
     'test-knock',
@@ -101,6 +102,7 @@ export const SUITES = [
     'test-gateway-real-client',
     'test-dos-hardening',
     'test-global-server-limits',
+    'test-profile-fanout',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',
     'test-password-brake-fairness',
@@ -447,6 +449,9 @@ export const VARIANTS = [
  * ms) stay in the pool.
  */
 export const SERIAL = {
+    // Compares a visitor's board read with a member's by CPU time, alternating rounds in one process (generous bound, ~2x
+    // the head's ratio): a neighbour's burst of CPU can still skew one round.
+    'test-guest-board-cost': 'relative CPU-time ratio inside one process',
     // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
     // during one of the pair and not the other is a failure that says nothing about the code.
     'test-distance-search-perf': 'relative timings, 2x slack',

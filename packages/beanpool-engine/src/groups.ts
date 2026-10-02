@@ -48,7 +48,8 @@ import {
     LIST_PREVIEW_CHARS,
     fitsTextLimit,
     isPreviewed,
-    previewText
+    previewText,
+    replaceLoneSurrogates
 } from '@beanpool/core';
 import { isSuspendedAccount, memberPhotoColumnsOf, type MemberPhotoColumns } from './members.js';
 import { likeContains } from './like.js';
@@ -136,7 +137,7 @@ export const GROUP_DESCRIPTION_NOT_TEXT = "A group's description must be text.";
 
 /** A group's name as it is stored (trimmed), or a refusal. */
 function groupNameIn(name: unknown): string {
-    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const trimmed = typeof name === 'string' ? replaceLoneSurrogates(name.trim()) : '';
     if (trimmed.length < 1 || !fitsTextLimit(trimmed, GROUP_NAME_LIMIT)) throw new Error(GROUP_NAME_LENGTH);
     return trimmed;
 }
@@ -145,7 +146,7 @@ function groupNameIn(name: unknown): string {
 function groupDescriptionIn(description: unknown): string | null {
     if (description === undefined || description === null) return null;
     if (typeof description !== 'string') throw new Error(GROUP_DESCRIPTION_NOT_TEXT);
-    const trimmed = description.trim();
+    const trimmed = replaceLoneSurrogates(description.trim());
     if (!fitsTextLimit(trimmed, GROUP_DESCRIPTION_LIMIT)) throw new Error(GROUP_DESCRIPTION_TOO_LONG);
     return trimmed || null;
 }

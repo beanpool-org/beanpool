@@ -99,6 +99,42 @@ export function utf8ByteLength(text: string): number {
     return bytes;
 }
 
+/**
+ * `text` with every lone (unpaired) UTF-16 surrogate replaced with U+FFFD (#1496).
+ *
+ * A lone surrogate counts as 1 unit / 3 bytes, but better-sqlite3 binds it as 3 bytes
+ * (ED xx xx, CESU-8) that read back as three U+FFFD characters (3 units / 9 bytes).
+ * Normalising before counting and storing ensures stored text never exceeds the limit.
+ */
+export function replaceLoneSurrogates(text: string): string {
+    const candidate = text as unknown as { toWellFormed?: () => string };
+    if (typeof candidate.toWellFormed === 'function') {
+        return candidate.toWellFormed();
+    }
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const c = text.charCodeAt(i);
+        if (c >= 0xd800 && c <= 0xdbff) {
+            if (i + 1 < text.length) {
+                const next = text.charCodeAt(i + 1);
+                if (next >= 0xdc00 && next <= 0xdfff) {
+                    result += text[i] + text[i + 1];
+                    i++;
+                    continue;
+                }
+            }
+            result += '\ufffd';
+        } else if (c >= 0xdc00 && c <= 0xdfff) {
+            result += '\ufffd';
+        } else {
+            result += text[i];
+        }
+    }
+    return result;
+}
+
+export const normalizeSurrogates = replaceLoneSurrogates;
+
 /** Does `text` fit `limit`, in characters and in bytes? */
 export function fitsTextLimit(text: string, limit: TextLimit): boolean {
     return text.length <= limit.chars && utf8ByteLength(text) <= limit.bytes;
@@ -122,10 +158,12 @@ export function previewText(text: string, chars: number = LIST_PREVIEW_CHARS): s
  * node only shows and never edits (a peer community's listing).
  */
 export function cutToLimit(text: string, limit: TextLimit): string {
-    return fitsTextLimit(text, limit) ? text : previewText(text, limit.chars - 1);
+    const normalised = replaceLoneSurrogates(text);
+    return fitsTextLimit(normalised, limit) ? normalised : previewText(normalised, limit.chars - 1);
 }
 
 /** Is `text` cut by previewText at `chars`? */
 export function isPreviewed(text: string | null | undefined, chars: number = LIST_PREVIEW_CHARS): boolean {
     return typeof text === 'string' && text.length > chars;
 }
+

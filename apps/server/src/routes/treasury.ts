@@ -43,7 +43,7 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlOf, isSyntheticAccount } from '@beanpool/core';
+import { avatarUrlOf, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { answerPotPaused } from '../engine/audit.js';
 
@@ -527,7 +527,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
-            pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
+            const cleanMemo = typeof memo === 'string' ? replaceLoneSurrogates(memo) : (memo || 'Enterprise Pledge');
+            pledgeToProject(txId, treasury, actor, parsedAmount, cleanMemo, (ctx.state as any)?.authSig);
             deps.broadcast?.({ type: 'project_updated', project: getCrowdfundProject(treasury) });
             ctx.body = { success: true, txId };
         } catch (err: any) {
@@ -562,7 +563,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
-        const enterpriseName = String(name || title || '').trim();
+        const enterpriseName = replaceLoneSurrogates(String(name || title || '').trim());
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
             ctx.body = { error: 'name must be at least 2 characters' };
@@ -578,7 +579,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         photoUrl = stripImageValue(photoUrl);
-        const enterprisePurpose = String(purpose || description || enterpriseName).trim();
+        const enterprisePurpose = replaceLoneSurrogates(String(purpose || description || enterpriseName).trim());
         // Its name and purpose are sent whole by every list of enterprises (#1493): each held to its limit.
         try { assertEnterpriseText(enterpriseName, enterprisePurpose); } catch (e: any) {
             ctx.status = 400;

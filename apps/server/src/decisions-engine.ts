@@ -40,7 +40,7 @@
 
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
-import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
@@ -750,8 +750,10 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(check.error || 'Cannot propose decision');
     }
     // The list of Decisions sends every one's title and description whole, unpaged (#1493): each held to its limit.
-    if (typeof opts.title === 'string' && !fitsTextLimit(opts.title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
-    if (typeof opts.description === 'string' && !fitsTextLimit(opts.description, DECISION_DESCRIPTION_LIMIT)) {
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title) : opts.title;
+    if (typeof title === 'string' && !fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description) : opts.description;
+    if (typeof description === 'string' && !fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) {
         throw new Error(DECISION_DESCRIPTION_TOO_LONG);
     }
 
@@ -811,8 +813,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     `).run(
         id,
         opts.authorPubkey,
-        opts.title,
-        opts.description,
+        title,
+        description,
         opts.touches,
         opts.effect,
         opts.subject || null,

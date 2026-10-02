@@ -227,3 +227,44 @@ describe("GroupDetailModal roster's faces", () => {
         expect(screen.getByText('N')).toBeInTheDocument();
     });
 });
+
+describe('GroupDetailModal invite-only card loading (#1496)', () => {
+    it('shows the full description when the roster answers 403 and the card answers with the full description', async () => {
+        const fullDescription = 'This is the full unabbreviated description of the invite-only group that explains all its details and rules.';
+        const previewDescription = 'This is the preview of the description...';
+
+        const previewGroup: Group = {
+            id: 'group-invite-1',
+            name: 'Invite Only Circle',
+            slug: 'invite-only-circle',
+            category: 'social',
+            joinPolicy: 'invite_only',
+            description: previewDescription,
+            memberCount: 5,
+            createdBy: 'pk-lead',
+            createdAt: '2026-01-01T00:00:00Z',
+        };
+
+        const cardGroup: Group = {
+            ...previewGroup,
+            description: fullDescription,
+        };
+
+        vi.mocked(getGroup).mockResolvedValue(cardGroup);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+
+        render(
+            <GroupDetailModal
+                group={previewGroup}
+                isOpen={true}
+                onClose={() => {}}
+                myPubkey="pk-invitee"
+            />
+        );
+
+        // When the roster is refused (403), the card must still load and show the full description
+        expect(await screen.findByText(fullDescription)).toBeInTheDocument();
+        expect(screen.queryByText(previewDescription)).toBeNull();
+    });
+});
+

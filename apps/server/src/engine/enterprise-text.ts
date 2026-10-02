@@ -7,7 +7,7 @@
 // starts or edits one through: POST /api/enterprise and /api/treasury, and the crowdfund create and edit. The text an
 // enterprise already holds, sent back unchanged by an edit, is not new and is kept, however long it was stored.
 
-import { ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
+import { ENTERPRISE_NAME_LIMIT, ENTERPRISE_PURPOSE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
 
 export const ENTERPRISE_NAME_TOO_LONG = textTooLongMessage("An enterprise's name", ENTERPRISE_NAME_LIMIT);
 export const ENTERPRISE_PURPOSE_TOO_LONG = textTooLongMessage("An enterprise's purpose", ENTERPRISE_PURPOSE_LIMIT);
@@ -17,10 +17,10 @@ export const ENTERPRISE_PURPOSE_TOO_LONG = textTooLongMessage("An enterprise's p
  * edit; its own text sent back is not held to the limit. Anything that is not text is left to the caller's own checks.
  */
 export function assertEnterpriseText(name: unknown, purpose: unknown, stored: { name?: unknown; purpose?: unknown } = {}): void {
-    if (typeof name === 'string' && name !== stored.name && !fitsTextLimit(name.trim(), ENTERPRISE_NAME_LIMIT)) {
+    if (typeof name === 'string' && name !== stored.name && !fitsTextLimit(replaceLoneSurrogates(name.trim()), ENTERPRISE_NAME_LIMIT)) {
         throw new Error(ENTERPRISE_NAME_TOO_LONG);
     }
-    if (typeof purpose === 'string' && purpose !== stored.purpose && !fitsTextLimit(purpose.trim(), ENTERPRISE_PURPOSE_LIMIT)) {
+    if (typeof purpose === 'string' && purpose !== stored.purpose && !fitsTextLimit(replaceLoneSurrogates(purpose.trim()), ENTERPRISE_PURPOSE_LIMIT)) {
         throw new Error(ENTERPRISE_PURPOSE_TOO_LONG);
     }
 }

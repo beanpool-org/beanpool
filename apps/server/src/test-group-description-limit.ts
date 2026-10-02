@@ -207,6 +207,12 @@ async function rulesOnGlobal(): Promise<void> {
         assert(r.status === 201 && card.body?.description === text && card.body?.descriptionTruncated === undefined,
             `a description at the limit in ${label} is taken, and the group's card sends all of it (${r.status} ${card.body?.description?.length})`);
     }
+    const loneHigh = '\ud800'.repeat(MAX);
+    const rLone = await call(base, 'POST', '/api/groups', C, { name: 'Lone surrogates', joinPolicy: 'open', description: loneHigh });
+    const cardLone = await call(base, 'GET', `/api/groups/${rLone.body?.id}`, M);
+    assert(rLone.status === 201 && cardLone.body?.description === '\ufffd'.repeat(MAX)
+        && Buffer.byteLength(storedDescription(rLone.body?.id) ?? '', 'utf8') <= 6_000,
+        'lone surrogates at the limit are normalised to U+FFFD and store within the byte limit');
     await settle();
     const created = sockM.events.filter((e) => e.type === 'group_created' && e.group?.id === made.Latin?.id);
     assert(created.length === 1 && created[0].group.description === `${'a'.repeat(PREVIEW)}…` && created[0].group.descriptionTruncated === true

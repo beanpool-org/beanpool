@@ -6,6 +6,8 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { livePostChange } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
+import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
+import { epochEndsInAnotherTab } from '../lib/another-tab';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -226,6 +228,31 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         // Nothing is starred in this test, so the ★ For You feed is empty and says so.
         expect(await screen.findByTestId('your-events')).toHaveTextContent('Working bee');
         expect(screen.getByText('No items found')).toBeInTheDocument();
+    });
+
+    it("a category starred here is kept on the member's account too, one truth with Home's interests (Home design §4.3)", async () => {
+        localStorage.removeItem('bp_fav_categories');
+        const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
+        await openForYou();
+        await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories')!)).toEqual(['food']);
+        await waitFor(() => expect(save).toHaveBeenCalledWith(identity.publicKey, { interests: ['food'] }));
+        localStorage.removeItem('bp_fav_categories');
+    });
+
+    it('after Sign Out in another tab, a star in this Market keeps no favourites and sends nothing (PR #1479 round 2)', async () => {
+        localStorage.removeItem('bp_fav_categories');
+        const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
+        await openForYou();
+        epochEndsInAnotherTab('signed-out');
+        try {
+            await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+            expect(localStorage.getItem('bp_fav_categories')).toBeNull();
+            expect(save).not.toHaveBeenCalled();
+        } finally {
+            localStorage.removeItem(ACCOUNT_EPOCH_KEY);
+            resetAccountEpochForTest();
+        }
     });
 
     it('is not there at all on a node without the route (decision 7)', async () => {

@@ -21,6 +21,7 @@
  *      on (and so their cards) where the ledger has moved, whatever an override says
  *   8. the other runs, each in a child process with its own node: the global profile (below), a local node with
  *      ENFORCE_READ_AUTH=false, and a fresh local node whose ledger never moved
+ *      (`me.interestsUpdatedAt`, the node's stamp for the member's interests, is in `me` too: PR #1479 round 2)
  *   9. the deciding review's five findings (#1472, 950e1a15): a 300,000-character category sent through the signed
  *      listing route and a Pulse link of 300,000 characters as the harvester stores it leave the answer a few KB (A); a
  *      suspended member's `me` says `standing: 'suspended'` (C); "Coming up" is the soonest events by start, an event
@@ -344,6 +345,12 @@ async function main(): Promise<void> {
             'no find on a local node, no safety for a member who came in by invite, and nothing for the two cards with no data of their own');
         assert(JSON.stringify(r.body?.me?.interests) === '["garden"]' && JSON.stringify(r.body?.layout?.order) === '["needs","market"]',
             `me.interests and the layout, unknown ids dropped (${JSON.stringify(r.body?.me?.interests)} ${JSON.stringify(r.body?.layout)})`);
+        // The node's stamp beside them (PR #1479 round 2): interests kept before it read as stamped at 1970; none kept, null.
+        assert(r.body?.me?.interestsUpdatedAt === new Date(0).toISOString(),
+            `me.interestsUpdatedAt: interests kept before the node stamped them read as stamped at 1970 (${r.body?.me?.interestsUpdatedAt})`);
+        const bobsOwn = await get('/api/home', bob);
+        assert(bobsOwn.status === 200 && bobsOwn.body?.me?.interestsUpdatedAt === null && JSON.stringify(bobsOwn.body?.me?.interests) === '[]',
+            `and null for a member who keeps none (${bobsOwn.status} ${bobsOwn.body?.me?.interestsUpdatedAt})`);
         const order = cardsOf(r);
         assert(order.indexOf('needs') < order.indexOf('deals') && order.indexOf('market') < order.indexOf('pulse') && order[order.length - 1] === 'community',
             `cards in the default order, community last (${order.join(',')})`);

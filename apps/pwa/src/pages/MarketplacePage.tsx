@@ -57,6 +57,8 @@ import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+import { shareInterests } from '../lib/home-interests';
+import { accountEpochHolds } from '../lib/account-epoch';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -186,11 +188,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             ? favCategories.filter(c => c !== catId)
             : [...favCategories, catId];
         setFavCategories(updated);
-        try {
-            localStorage.setItem('bp_fav_categories', JSON.stringify(updated));
-        } catch (e) {
-            console.error(e);
+        // A member's favourites are their interests: none kept once the account has left this browser (Sign Out in
+        // another tab, lib/account-epoch.ts), as shareInterests keeps none.
+        if (!identity?.publicKey || visitor || accountEpochHolds()) {
+            try {
+                localStorage.setItem('bp_fav_categories', JSON.stringify(updated));
+            } catch (e) {
+                console.error(e);
+            }
         }
+        // One truth with Home's interests (DESIGN-home-dashboard-fable.md §4.3): kept on the member's account too.
+        if (identity?.publicKey && !visitor) void shareInterests(identity.publicKey, updated);
     };
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);

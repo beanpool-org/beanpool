@@ -15,7 +15,8 @@
     "app-csp-check": "node e2e/app-csp-check.mjs",
     "web-join-check": "node e2e/web-join-check.mjs",
     "global-door-check": "node e2e/global-door-check.mjs",
-    "lobby-shots": "node e2e/lobby-shots.mjs"
+    "lobby-shots": "node e2e/lobby-shots.mjs",
+    "home-check": "node e2e/home-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",
@@ -41,6 +42,7 @@
     "@types/react-dom": "19.1.0",
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.4.27",
+    "axe-core": "^4",
     "jsdom": "^30.0.1",
     "playwright": "1.63.0",
     "postcss": "^8.5.8",

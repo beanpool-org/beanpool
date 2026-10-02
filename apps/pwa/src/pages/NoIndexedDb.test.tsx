@@ -84,6 +84,8 @@ const VISITOR_READS_EXACT = new Set([
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
     '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info', '/api/federation/links',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
+    // Home in one read: public only with the visitors' view on (HOME_READ_EXACT), as here.
+    '/api/home',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/,
@@ -129,6 +131,26 @@ const POLL = {
 };
 const GUEST_POSTS = [OFFER, NEED, EVENT, POLL];
 
+/**
+ * GET /api/home as the global node answers it (routes/home-answer.ts, H0): the visitors' subset with `welcome` to a reader
+ * with no account here, a member's Home to a signed member. The listings as the guest list has them, no person in them.
+ */
+function homeBody(member: boolean) {
+    return {
+        generatedAt: NOW, profile: 'global',
+        features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true, exampleListings: true, openJoin: true },
+        ...(member ? {} : { welcome: true }),
+        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' } : null,
+        layout: null,
+        cards: {
+            find: { point: null, communities: [], communityCount: 3, nearbyPosts: null, watches: member ? [] : null, knock: null, directoryFetchedAt: null },
+            events: { items: [{ id: EVENT.id, title: EVENT.title, startsAt: EVENT.eventStartAt, endsAt: EVENT.eventEndAt, place: null, rsvp: null }], radiusKm: null },
+            market: { items: [OFFER, NEED].map(p => ({ id: p.id, type: p.type, title: p.title, category: p.category, photoUrl: p.photos[0] ?? null })), total14d: 2, more: false, examples: true },
+            community: { name: null, members: 3, communities: 3 },
+        },
+    };
+}
+
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
@@ -161,6 +183,10 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         if (path === '/api/marketplace/transactions') return json(200, []);
         if (path.startsWith('/api/messages/conversations/')) return json(200, { conversations: [], totalUnread: 0 });
         if (path === '/api/groups') return json(200, []);
+        if (path === '/api/home') {
+            const h = (init.headers ?? {}) as Record<string, string>;
+            return json(200, homeBody(!!(h['X-Public-Key'] ?? h['x-public-key'])));
+        }
         return json(200, {});
     }));
     return calls;
@@ -211,6 +237,9 @@ describe.each(Object.keys(NO_IDB))('a visitor whose browser has IndexedDB %s', (
         const calls = stubNode(GLOBAL);
         render(<App />);
         await screen.findByTestId('guest-lobby');
+        // The visitors' Home first (H3), from the same unsigned reads; then the lobby's Market, one tap away.
+        expect(await screen.findByTestId('home-card-market')).toHaveTextContent('Sourdough loaves');
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Market/ }));
         const list = await screen.findByTestId('visitor-list');
         expect(within(list).getAllByTestId('visitor-card').map(c => within(c).getByText(/Sourdough|ladder/).textContent)).toEqual(['Sourdough loaves', 'Borrow a ladder']);
         expect(within(list).getByTestId('event-card')).toHaveTextContent('Seed swap in the park');
@@ -246,7 +275,8 @@ describe('a browser whose IndexedDB works', () => {
         stubNode(GLOBAL);
         render(<App />);
         await screen.findByTestId('guest-lobby');
-        expect(await screen.findByTestId('lobby-join')).toBeEnabled();
+        // Join waits for the browser's key check (GuestLobby: disabled while it asks); Home draws the card before it answers.
+        await waitFor(() => expect(screen.getByTestId('lobby-join')).toBeEnabled());
         expect(screen.queryByTestId('lobby-too-old')).toBeNull();
         expect(document.body.textContent).not.toMatch(SENTENCE);
     });

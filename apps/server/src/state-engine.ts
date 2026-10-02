@@ -17,14 +17,14 @@ import {
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
-import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
+import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -795,24 +795,7 @@ export function initStateEngine(): void {
         try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
-    if (getNodeRole() === 'primary') {
-        // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
-        // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
-        // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
-        // into a pending deal whose escrow was empty.
-
-        // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
-        migrateConsolidateConversations();
-        repairConsolidatedMessagesMetadata();
-
-        // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
-        // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
-        try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
-        try {
-            const made = backfillGroupThreads();
-            if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
-        } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
-    }
+    if (getNodeRole() === 'primary') runMainServerMigrations();
 
     // A convenor who comes back cancels any vote to replace them, with a line in the group's chat.
     setMemberActivityHook((pk) => {
@@ -829,34 +812,8 @@ export function initStateEngine(): void {
     // Sweep zero-balance escrow accounts from settled/cancelled transactions
     sweepSettledEscrowAccounts();
 
-    // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
-    // boot). Primary only — it dispatches real push notifications to members, which a
-    // passive backup replica must never do independently of the primary it mirrors.
-    if (getNodeRole() === 'primary') {
-        setTimeout(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 1000);
-        setInterval(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 60 * 1000);
-
-        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
-        // evaluate passed grants queue, and fire expired grace-period prunes.
-        setTimeout(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-        }, 30 * 1000);
-        setInterval(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-            // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
-            try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
-            // Group convenor votes past their 14-day deadline.
-            try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
-            // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
-            // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
-            // itself is bounded by one indexed range scan over events starting inside the next week.
-            try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
-        }, 60 * 1000);
-    }
+    // The main server's timers (armMainServerTimers): on a main server only.
+    if (getNodeRole() === 'primary') armMainServerTimers();
 
     // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
     // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
@@ -865,6 +822,96 @@ export function initStateEngine(): void {
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
+}
+
+/** The main server's one-time passes at its boot (initStateEngine), and on a promotion in place (becomeMainServerInPlace). */
+function runMainServerMigrations(): void {
+    // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
+    // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
+    // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
+    // into a pending deal whose escrow was empty.
+
+    // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
+    migrateConsolidateConversations();
+    repairConsolidatedMessagesMetadata();
+
+    // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
+    // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
+    try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
+    try {
+        const made = backfillGroupThreads();
+        if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
+    } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+}
+
+/** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
+let mainServerTimersArmed = false;
+
+// Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
+// boot). Primary only — it dispatches real push notifications to members, which a
+// passive backup replica must never do independently of the primary it mirrors.
+//
+// Armed on a main server only, and each tick asks the role again (onMainServer): a process made a standby after its
+// boot (a role set back while it runs) runs none of them, and logs nothing, where each used to throw StandbyLedgerError
+// with a stack trace every minute (the 2026-10-02 review of #1433).
+//
+// Armed once a process, at a main server's boot or when a take-over finished at boot makes this process the main server
+// (becomeMainServerInPlace).
+function armMainServerTimers(): void {
+    if (mainServerTimersArmed) return;
+    mainServerTimersArmed = true;
+    const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
+    setTimeout(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 1000);
+    setInterval(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 60 * 1000);
+
+    // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+    // evaluate passed grants queue, and fire expired grace-period prunes.
+    setTimeout(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+    }), 30 * 1000);
+    setInterval(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
+        try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
+        // Group convenor votes past their 14-day deadline.
+        try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
+        // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
+        // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
+        // itself is bounded by one indexed range scan over events starting inside the next week.
+        try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+    }), 60 * 1000);
+}
+
+/**
+ * A standby a take-over made the main server in this process, after its database booted as a standby's (services/
+ * takeover.ts resumeTakeoverAtBoot: a take-over a crash stopped before its `role` step, finished at the next start). It
+ * runs now what a main server's boot runs and a standby's skipped, so it is the same main server a restart would give,
+ * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
+ * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
+ * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, and the main server's timers
+ * (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
+ * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
+ * Each part idempotent and on its own guard; nothing on a standby. Never throws.
+ */
+export function becomeMainServerInPlace(): void {
+    if (getNodeRole() !== 'primary') return;
+    const step = (what: string, fn: () => void) => {
+        try { fn(); } catch (e) { console.warn(`[Topology] Becoming the main server: ${what} failed:`, e); }
+    };
+    step('the node profile', () => { mirrorNodeProfileAtBoot('primary'); });
+    step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
+    step("the database's main-server passes", () => runMainServerSchemaPasses());
+    step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
+    step('the BeanPool enterprise', () => { seedPulseCurated(); });
+    step('stranded pledges', () => { returnStrandedPledges({ transfer, conservingTransaction }); });
+    step('the one-time migrations', () => runMainServerMigrations());
+    step("the main server's timers", () => armMainServerTimers());
+    console.log('[Topology] This process is the main server now: it runs what a main server\'s boot runs, with no restart.');
 }
 
 /**

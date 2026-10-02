@@ -11,6 +11,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createHash, randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 (globalThis as any).__DEV__ = false;
 
@@ -472,5 +474,59 @@ describe('the "one way back" card (§2.5): until a sign-in is added or the words
         expect(oneWayBackPlace(await readOneWayBack(key), 30 * DAY, true)).toBe('none');
         // Per account: another key on the phone has none.
         expect(await readOneWayBack('c'.repeat(64))).toBeNull();
+    });
+});
+
+describe('the screens are wired to what is tested above (the screens can\'t render here: vitest.config.ts)', () => {
+    const src = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../..', rel), 'utf-8');
+    const between = (s: string, from: string, to: string) => {
+        const a = s.indexOf(from);
+        const b = s.indexOf(to, a + from.length);
+        expect(a, from).toBeGreaterThanOrEqual(0);
+        return s.slice(a, b < 0 ? undefined : b);
+    };
+
+    it('a node without the 12-words door: the door looks exactly as before, the sign-in alone (both door screens)', () => {
+        expect(src('app/welcome.tsx')).toMatch(/const words = wordsDoorOn\(check\.profile\.features\);\s*setWordsDoor\(words\);\s*setGlobalPhase\(words \? 'choose' : 'signIn'\);/);
+        expect(src('app/join-global.tsx')).toMatch(/const words = wordsDoorOn\(check\.profile\.features\);\s*setWordsDoor\(words\);\s*setPhase\(words \? 'choose' : 'signIn'\);/);
+    });
+
+    it('the work starts as the door opens (the two choices), with the key the join is signed by', () => {
+        const welcome = src('app/welcome.tsx');
+        expect(between(welcome, "if (mode !== 'globalJoin' || globalPhase !== 'choose') return;", '}, [mode, globalPhase]);'))
+            .toMatch(/joinKeyForThisPhone\(globalKey\)[\s\S]*doorWork\.start\(GLOBAL_NODE_URL, key\.identity, 'words'\)/);
+        expect(between(src('app/join-global.tsx'), "if (phase !== 'choose') return;", '}, [phase, startWork]);'))
+            .toMatch(/accountKeyForDoor\(\)[\s\S]*startWork\(GLOBAL_NODE_URL, account\.identity, 'words'\)/);
+    });
+
+    it('the 12-words join: the name check, then the work (Back still works), then the key onto the phone, then the join', () => {
+        const join = between(src('app/welcome.tsx'), 'async function handleWordsJoin()', 'async function afterDoorAnswer(');
+        const order = ['checkNameAtDoor(', 'await run.solution()', 'joinSendingRef.current = true', 'commitJoinKey(key, name)', 'submitWordsJoin('].map(s => join.indexOf(s));
+        expect(order.every(i => i >= 0)).toBe(true);
+        expect([...order].sort((a, b) => a - b)).toEqual(order);
+    });
+
+    it('the existing-account join by words asks no lock and writes no key: no sign-in, so no copy', () => {
+        const join = between(src('app/join-global.tsx'), 'async function handleWordsJoin()', 'async function afterAnswer(');
+        expect(join).not.toMatch(/authenticateUser|commitJoinKey|importIdentity|keepJoinedIdentity/);
+        expect(join).toMatch(/submitWordsJoin\(GLOBAL_NODE_URL, account\.identity, typed, run\)/);
+    });
+
+    it('Safety Backup for a 12-words member: the words note first, the tickbox, then "Add a sign-in as a second way back"', () => {
+        const backup = between(src('app/welcome.tsx'), "if (mode === 'seedBackup' && pendingIdentity)", "if (mode === 'onboardingGuide' && pendingIdentity)");
+        expect(backup).toMatch(/\{wordsMember \? \(\s*<WordsBackupNote \/>/);
+        const tick = backup.indexOf("I've saved these words");
+        const add = backup.indexOf('WORDS_BACKUP_TEXT.addSignIn');
+        expect(tick).toBeGreaterThan(backup.indexOf('<WordsBackupNote />'));
+        expect(add).toBeGreaterThan(tick);
+        // The phone's lock for a key the join didn't make, as the protection sheet asks it.
+        expect(backup).toMatch(/<LinkSignInSheet[\s\S]*askPhoneLock=\{!pendingWordsAreNew\}/);
+    });
+
+    it('the card is on the landing screen and in Account Protection', () => {
+        expect(src('app/(tabs)/index.tsx')).toContain('<OneWayBackCard place="landing" colors={colors} />');
+        expect(src('app/(tabs)/settings.tsx')).toContain('<OneWayBackCard place="settings" colors={colors} />');
+        // A 12-words join starts it; a sign-in join never does.
+        expect(src('app/welcome.tsx')).toContain("if (way === 'words') await startOneWayBack(identity.publicKey, GLOBAL_NODE_URL);");
     });
 });

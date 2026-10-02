@@ -134,34 +134,47 @@ export function copyStaging(): { pid: number | null } | null {
 }
 
 /**
- * In the data directory, beside the staging one (which a failed copy deletes): the objects a whole copy that failed had
- * fetched, kept for the next (keepFetchedObjects).
+ * In the data directory, beside the staging one (which a failed copy deletes): the objects a pull that failed had fetched,
+ * kept for the next (keepFetchedObjects).
  */
 export const KEPT_OBJECTS_FILE = 'copy-objects-kept.json';
 
-/** The objects kept for the next whole copy (keepFetchedObjects) at `now`: those written from `since`. Null: none. */
-function keptObjects(dataDir: string, now: number): { since: number; until: number } | null {
-    let kept: { since?: unknown; until?: unknown };
+/**
+ * The objects kept for the next pull (keepFetchedObjects) at `now`: those written from `since`, and how many the failed
+ * pulls fetched. Null: none.
+ */
+function keptObjects(dataDir: string, now: number): { since: number; until: number; objects: number } | null {
+    let kept: { since?: unknown; until?: unknown; objects?: unknown };
     try { kept = JSON.parse(fs.readFileSync(path.join(dataDir, KEPT_OBJECTS_FILE), 'utf-8')); } catch { return null; }
     const since = Number(kept?.since);
     const until = Number(kept?.until);
     // Unreadable, or past its time: nothing kept. No row names these objects, so the sweep deleting one costs only its
     // fetch again.
     if (!Number.isFinite(since) || !Number.isFinite(until) || now >= until) return null;
-    return { since, until };
+    const objects = Number(kept?.objects);
+    return { since, until, objects: Number.isFinite(objects) && objects > 0 ? Math.floor(objects) : 0 };
 }
 
 /**
- * A whole copy failed after it had fetched listing photos' objects (services/backup-puller.ts): each object this server's
- * store holds that was written from `since` is kept from the orphan sweep until `until`, so the next whole copy, asked for
- * after the wait a failed one waits (RESYNC_RETRY_MS, an hour), fetches only what the store still lacks (F5 of the standby
- * review). No row names them, and the staging that did is deleted; the sweep's hour of grace alone would have taken them
- * by then. Kept from the earliest `since` of the copies that failed since the last whole copy landed, to the latest
- * `until`; let go when one lands (releaseFetchedObjects) or once `until` has passed. Never throws.
+ * A pull failed after it had fetched listing photos' objects (services/backup-puller.ts): each object this server's store
+ * holds that was written from `since` is kept from the orphan sweep until `until`, so the next pull, asked for after the
+ * wait a failed one waits (RESYNC_RETRY_MS, an hour, and longer for each copy in a row whose photos could not all be
+ * fetched), fetches only what the store still lacks (F5 of the standby review). No row names them, and the staging that
+ * did is deleted; the sweep's hour of grace alone would have taken them by then. A delta's are kept too: one whose photo
+ * the main server can't send is asked for every minute, for as long as it can't. Kept from the earliest `since` of the
+ * pulls that failed since the objects were last let go, to the latest `until`; `objects` (this pull's fetches) added to
+ * the count Settings shows. A pull that failed before it fetched anything (`since` null) only moves `until` on, when
+ * objects are kept: its next is due later than the kept ones' was. Let go when a whole copy lands (releaseFetchedObjects)
+ * or once `until` has passed. Never throws.
  */
-export function keepFetchedObjects(since: number, until: number): void {
+export function keepFetchedObjects(since: number | null, until: number, objects = 0): void {
     const prev = keptObjects(DATA_DIR, Date.now());
-    const kept = { since: prev ? Math.min(prev.since, since) : since, until: Math.max(prev?.until ?? 0, until) };
+    if (since === null && !prev) return;
+    const kept = {
+        since: Math.min(prev?.since ?? Infinity, since ?? Infinity),
+        until: Math.max(prev?.until ?? 0, until),
+        objects: (prev?.objects ?? 0) + Math.max(0, objects),
+    };
     const file = path.join(DATA_DIR, KEPT_OBJECTS_FILE);
     try {
         fs.writeFileSync(`${file}.tmp`, JSON.stringify(kept));
@@ -169,6 +182,11 @@ export function keepFetchedObjects(since: number, until: number): void {
     } catch (e) {
         console.warn(`[Stager] The objects a failed copy fetched could not be kept for the next: ${(e as Error)?.message || e}`);
     }
+}
+
+/** How many objects failed pulls fetched that are kept for the next now (keepFetchedObjects); null: none kept. */
+export function fetchedObjectsKept(now = Date.now()): number | null {
+    return keptObjects(DATA_DIR, now)?.objects ?? null;
 }
 
 /** A whole copy landed, or was made ready: the objects kept for it (keepFetchedObjects) are the sweep's to judge again. */

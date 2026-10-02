@@ -244,10 +244,16 @@ function uniquifyCallsign(callsign: string, excludePublicKey?: string): string {
 }
 
 /**
+ * The node's broadcast as a member's own card edit calls it: `{ ownCard: true }` lets the node keep it to the member's
+ * circle where profiles are not announced (state-engine BroadcastOptions.ownCard, node-profile.ts announceProfiles).
+ */
+type CardBroadcast = (event: any, recipients?: string[], opts?: { ownCard?: boolean }) => void;
+
+/**
  * Internal member registration.
  */
 export function registerMemberInternal(
-    broadcast: (event: any) => void,
+    broadcast: CardBroadcast,
     publicKey: string,
     callsign: string,
     invitedBy: string | null,
@@ -287,8 +293,8 @@ export function registerMemberInternal(
         // changed, and uniquify it (excluding self) so a re-register never collides.
         if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
             callsign = uniquifyCallsign(callsign, publicKey);
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
-            broadcast({ type: 'profile_updated', publicKey });
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
+            broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
         }
         return getMember(db, publicKey)!;
     }
@@ -359,7 +365,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     if (existing) {
         let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
         if (homeNodeUrl && !existing.home_node_url) {
@@ -410,7 +416,7 @@ export function assertNodeMember(publicKey: string): void {
  * Update member profile avatar, bio, callsign, or contact information.
  */
 export function updateProfile(
-    broadcast: (event: any) => void,
+    broadcast: CardBroadcast,
     publicKey: string,
     update: {
         avatar?: string | null;
@@ -477,7 +483,7 @@ export function updateProfile(
     db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
       .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
 
-    broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
+    broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt }, undefined, { ownCard: true });
     // Read as the owner: POST /api/profile/update answers the signer, who always sees their own contact details.
     return getProfile(db, publicKey, publicKey);
 }

@@ -9,7 +9,7 @@
  *   there, or it can't be asked): the web app goes back to it, and the key stays.
  * - The node doesn't delete: nothing in the browser changes, and the screen says the key is still here.
  */
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPage } from './SettingsPage';
 import * as api from '../lib/api';
@@ -82,8 +82,10 @@ describe('Settings: Permanently Delete Account', () => {
         localStorage.setItem('beanpool-theme-mode', 'dark');
         await openDelete();
 
-        expect(await screen.findByTestId('delete-key-plan')).toHaveTextContent(
-            "Your key and 12 words leave this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy.");
+        // The plan first reads "Checking whether this browser still needs your key…" while the page asks: wait for its
+        // answer, not just for the line to exist (it raced on CI, PR #1456).
+        await waitFor(() => expect(screen.getByTestId('delete-key-plan')).toHaveTextContent(
+            "Your key and 12 words leave this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy."));
         await act(async () => { fireEvent.click(purgeButton()); });
 
         expect(api.purgeAccountApi).toHaveBeenCalledTimes(1);

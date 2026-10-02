@@ -648,8 +648,8 @@ built, and described `/api/recovery/collect` as releasing a piece when it opens 
 | `POST` | `/api/recovery/collect/hub` | Session key | K2, under D7 |
 | `POST` | `/api/recovery/collect/sso-nonce` | Session key | Nonce for the K3 exchange |
 | `POST` | `/api/recovery/collect/sso` | Session key + verified `id_token` | K3 |
-| `POST` | `/api/recovery/collect/cancel` | Owner-signed | R1's stop — reachable by the OWNER, who lacks the session id |
-| `POST` | `/api/recovery/collect/mine` | Owner-signed | Live sessions against my account |
+| `POST` | `/api/recovery/collect/cancel` | Owner-signed | R1's stop — reachable by the OWNER, who lacks the session id. Stops every live session against the account in one call, named or not |
+| `POST` | `/api/recovery/collect/mine` | Owner-signed | How many sessions are live against my account (`count`), and the newest few, never all |
 
 **Approving** — a keeper, on their own phone:
 

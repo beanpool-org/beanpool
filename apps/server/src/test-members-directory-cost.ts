@@ -180,6 +180,24 @@ async function main() {
     assert(full.find(m => m.callsign === 'Admin')?.nodeRole === 'admin' && /^\/api\/avatar\//.test(full.find(m => m.callsign === 'Admin')?.avatarUrl),
         'the admin carries their role and their photo URL');
 
+    // ── 1b. a rename reaches another phone's delta ───────────────────────────────────────────────────────────────────
+    // A rename through POST /api/community/register wrote only `callsign`, so a phone holding the list and a cursor from
+    // before got the new name from no delta (they select by joined_at / profile_updated_at).
+    const renamer = keypair();
+    row(renamer.pubKeyHex, 'Before Name', { joined: '2026-01-02T00:00:00.000Z' });
+    const heldList = await fetch(`${BASE}/api/members`, { headers: signedHeaders('GET', '/api/members', '', reader) });
+    await heldList.text();
+    const cursor = new Date(Date.now() - 1000).toISOString();
+    await new Promise(r => setTimeout(r, 20));
+    const regBody = JSON.stringify({ publicKey: renamer.pubKeyHex, callsign: 'After Name' });
+    const reg = await fetch(`${BASE}/api/community/register`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', '/api/community/register', regBody, renamer) }, body: regBody });
+    await reg.text();
+    const afterRename = JSON.parse((await get(`/api/members?updatedAfter=${encodeURIComponent(cursor)}`, reader)).text) as any[];
+    assert(reg.status === 200 && afterRename.some(m => m.publicKey === renamer.pubKeyHex && m.callsign === 'After Name'),
+        `a rename through /api/community/register is in another member's delta from before it (register ${reg.status}, delta ${afterRename.map(m => m.callsign).join(', ')})`);
+    db.prepare('DELETE FROM members WHERE public_key = ?').run(renamer.pubKeyHex);
+
     // ── 2. what a delta costs, at a global node's size ───────────────────────────────────────────────────────────────
     const N = 30_000;
     const t0 = Date.now();

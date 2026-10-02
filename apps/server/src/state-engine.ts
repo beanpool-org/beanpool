@@ -35,6 +35,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
+import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
@@ -707,11 +708,28 @@ export function initStateEngine(): void {
     // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
     // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
     // empty. It has to survive a restart to mean anything.
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && typeof commonsRow.balance === 'number') {
-        setCommonsBalance(commonsRow.balance);
-        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
+    //
+    // A row that holds no number (NULL, or text such as 'NaN') makes the pot UNKNOWN in memory: NaN, never 0 (#1445
+    // confirmation, NB-1). Left at the module's 0, the boot's own flush wrote 0 over the row, the audit then found no
+    // broken pot, a take-over reported the old pot as drift, and a rebaseline accepted it. As NaN it is the non-finite pot
+    // every path already handles: nothing writes it (engine/audit.ts persistCommonsBalance), the audit counts the row as
+    // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
+    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
+    //
+    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
+    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
+    if (restoredPot !== null && !Number.isFinite(restoredPot)) {
+        setCommonsBalance(restoredPot);
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+            + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
+            + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
+            + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
+    } else if (restoredPot !== null) {
+        setCommonsBalance(restoredPot);
+        const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -822,6 +840,11 @@ export function initStateEngine(): void {
     // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
     // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
     startPruningUnusedInvites();
+
+    // Recovery sessions that released nothing, past their window or stopped, for every owner: a pile of strangers' opens
+    // against a member who never opens the app is retired too (engine/recovery-release.ts sweepRecoveryCollections).
+    // Every role: the sessions are each server's own.
+    startSweepingRecoveryCollections();
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
@@ -1133,7 +1156,11 @@ function sweepSettledEscrowAccounts(): void {
           )
     `).get(DUST_THRESHOLD) as { dustSum: number };
 
-    if (dustSumRow && dustSumRow.dustSum !== 0) {
+    // Not while the pot is unknown or not finite (its row holds no number, or ±Infinity): the absorb below is a raw
+    // `balance + ?` on the pot's row, which SQLite reads as 0 + dust for text and would write over it (NB-1 on #1445), and
+    // zeroing the dust without crediting a pot would destroy it. The dust stays where it is until the pot is mended.
+    const potKnown = Number.isFinite(COMMONS_BALANCE);
+    if (potKnown && dustSumRow && dustSumRow.dustSum !== 0) {
         setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
         db.prepare(`
             UPDATE accounts 
@@ -1143,7 +1170,7 @@ function sweepSettledEscrowAccounts(): void {
         `).run(dustSumRow.dustSum);
     }
 
-    db.prepare(`
+    if (potKnown) db.prepare(`
         UPDATE accounts 
         SET balance = 0,
             last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -1314,8 +1341,12 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // is a trade's step, which changes its listing on the board (spoken for, back up, or done and gone), so
 // every other socket gets the listings' doorbell for it instead (ringListingDoorbell).
 //
+// `ownCard`: a `profile_updated` for a member's edit of their own card (engine/members.ts updateProfile). Where profiles
+// are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
+// and to the members who share a conversation with them (cardCircle); the versions move all the same.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1374,6 +1405,17 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     const row = db.prepare('SELECT audience_scope FROM posts WHERE id = ?').get(postId) as { audience_scope: string | null } | undefined;
     if (!row) return false;
     return row.audience_scope === null || row.audience_scope === 'public';
+}
+
+/**
+ * Who hears a member's card edit where profiles are not announced (BroadcastOptions.ownCard): the member, on their other
+ * devices, and everyone who shares a conversation with them (a direct one or a group's), whose chats show that card.
+ */
+function cardCircle(pubkey: string): Set<string> {
+    const rows = db.prepare(`SELECT DISTINCT o.public_key FROM conversation_participants mine
+        JOIN conversation_participants o ON o.conversation_id = mine.conversation_id
+        WHERE mine.public_key = ?`).all(pubkey) as { public_key: string }[];
+    return new Set([pubkey, ...rows.map(r => r.public_key)]);
 }
 
 /** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
@@ -1446,6 +1488,10 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
     // own sockets only, which it still makes member sockets below. The versions above moved all the same.
     const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
+    // Where profiles are not announced (the global node, node-profile.ts announceProfiles), a member's card edit goes to
+    // their circle only (cardCircle). The versions above moved all the same.
+    const toCircle = event?.type === 'profile_updated' && opts?.ownCard && typeof event.publicKey === 'string'
+        && !getProfileSwitches().announceProfiles ? cardCircle(event.publicKey) : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1484,6 +1530,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             }
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
+        if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -2496,6 +2543,21 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
+ * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ */
+function commonsPotFromRow(balance: unknown): number {
+    return typeof balance === 'number' ? balance : NaN;
+}
+
+/** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
+function describeRowBalance(balance: unknown): string {
+    if (balance === null || balance === undefined) return 'NULL';
+    if (Buffer.isBuffer(balance)) return 'a BLOB';
+    return typeof balance === 'string' ? `text '${balance}'` : String(balance);
+}
+
+/**
  * Put the in-memory ledger back to what the rows say, or halt.
  *
  * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
@@ -2521,8 +2583,9 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
         if (commonsSnapshot !== null) {
             setCommonsBalance(commonsSnapshot);
         } else {
-            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+            // A row holding no number makes the pot unknown (NaN), as at boot: memory never keeps a pot the rows don't hold.
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+            if (row) setCommonsBalance(commonsPotFromRow(row.balance));
         }
     } catch (resyncError: any) {
         // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
@@ -2632,7 +2695,7 @@ export function moveToCommons(
  *
  * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
  * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
- * null if the pot cannot cover it — the Commons never goes into debt.
+ * null if the pot cannot cover it (unless `allowDeficit`), and always when the pot is not a finite number: nothing moves.
  */
 export function payFromCommons(
     to: string,
@@ -2657,48 +2720,59 @@ export function payFromCommons(
     // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
     const recipientNow = ledger.getAccount(to).balance;
     if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
-    if (!ledger.deductFromCommons(amount)) {
-        if (!opts?.allowDeficit) return null;
-        setCommonsBalance(getCommonsBalanceExact() - amount);
-        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    // A pot that is unknown (its row held no number at boot, so it is NaN) or not finite pays nothing, `allowDeficit` or
+    // not, and nothing moves (#1445 confirmation, NB-3). `allowDeficit` used to go on to credit the recipient and write the
+    // history row, and only the flush at the end refused the pot: called outside a conservingTransaction, the credit stayed
+    // and the pot's debit was never written, Beans minted (measured, test-commons-pot-edges: 1 Bean per call). Before
+    // anything moves, so a caller inside a conservingTransaction gets a plain refusal, not a throw and a ledger resync.
+    if (!Number.isFinite(getCommonsBalanceExact())) {
+        console.warn(`[Commons] Refused to pay ${amount} from a Commons pot that is not a number (${String(getCommonsBalanceExact())}). Memo: ${memo}`);
+        return null;
     }
+    // The pot can't cover it and no deficit is allowed: refused here, before anything moves (deductFromCommons's own test).
+    if (!opts?.allowDeficit && getCommonsBalanceExact() < amount) return null;
 
-    const toAcc = ledger.getAccount(to);
-    toAcc.balance += amount;
+    // THE WHOLE MOVE IN ONE conservingTransaction (NB-3): the pot drawn down and the recipient credited in memory, the
+    // history row, the recipient's row and the pot's row all commit together or not at all, and a failure puts memory back
+    // to the rows. It used to be the history row and the recipient's row as separate autocommits, then the pot's row in
+    // the flush: only a caller that held a conservingTransaction itself was safe. Nested in one (a prune, a settlement
+    // reversal, an escrow write-off), it is a savepoint, as transfer() is.
+    const txn = conservingTransaction((): Transaction | null => {
+        if (!ledger.deductFromCommons(amount)) {
+            if (!opts?.allowDeficit) return null;
+            setCommonsBalance(getCommonsBalanceExact() - amount);
+            console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from: 'COMMONS_POOL', to, amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-        authSigner: opts?.authSigner ?? null,
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+        const toAcc = ledger.getAccount(to);
+        toAcc.balance += amount;
 
-    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
-    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
-    // them and this must too (review finding).
-    //
-    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
-    // to land separately, or a crash between them destroys beans on disk.
-    //
-    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
-    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
-    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
-    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
-    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
-    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
-    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
-    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
-    persistDecayAndCommons();
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from: 'COMMONS_POOL', to, amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(built.id, built.from, built.to, built.amount, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, built.timestamp);
+
+        // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this they are
+        // stranded and the transactions table drifts from account balances — `moveToCommons` persists them and this must
+        // too (review finding). The decay debits and the pot's row, which carries both their credit and this payment's
+        // debit, land in the same commit as everything above.
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the pot's debit durable
+        return built;
+    });
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -4585,7 +4659,10 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
-    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
+    // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
+    // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
+        .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -4609,7 +4686,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
+    // profile_updated_at too, for the directory's delta (vouchMember).
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
+        .run(new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -6987,7 +7066,9 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
 export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
     const granted = grantedCreditForTier(tier);
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
+    // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
+    // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
+    db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }

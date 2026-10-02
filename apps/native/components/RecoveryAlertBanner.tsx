@@ -13,7 +13,10 @@
  *       hands the account to another device.
  * - **The member's community** (`/api/recovery/collect/mine`): a restore at a community that keeps a sign-in copy
  *   (every copy, in a build without a vault; old ones until the date they are removed, in a build with one, key vault
- *   design §5.1). Watched every ~30 s while the app is in front, as before the vault. Stop cancels it.
+ *   design §5.1). Watched every ~30 s while the app is in front, as before the vault. The community sends how many
+ *   sessions are live and the newest few, never all of them: strangers can open any number. Stop It Now stops every
+ *   one in a single request (stopEveryRecoverySession), and says "all cancelled" only when the community says none is
+ *   left (PR #1456 deciding review).
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -36,6 +39,11 @@ export const RECOVERY_ALERT_COPY = {
         const code = (e as { code?: string } | null)?.code;
         return code === 'collected' ? 'Already gone through' : code === 'stopped' ? 'Already stopped' : 'No longer waiting';
     },
+    /** After Stop It Now, in the community's own count of what is still live (stopEveryRecoverySession). */
+    stoppedTitle: (left: number) => (left === 0 ? '✅ Recovery Stopped' : 'Not all stopped'),
+    stoppedBody: (left: number) => (left === 0
+        ? 'All active recovery sessions have been cancelled.'
+        : `${left} recovery session${left === 1 ? ' is' : 's are'} still active. Tap Stop It Now again.`),
     approvedTitle: 'Let through',
     approvedBody: (name: string) => `You let the restore with ${name} through. Your other phone or computer gets your account `
         + 'the next time it checks.',
@@ -48,6 +56,36 @@ interface RecoverySession {
     startedAt: string;
 }
 
+/** Sends one signed request to the member's community and returns its answer; throws when it refuses. */
+type CommunityRequest = (path: string, body: Record<string, unknown>) => Promise<any>;
+
+/**
+ * Stop every live recovery against this account, and say how many are still live afterwards, by the community's count.
+ *
+ * One request: the community stops them all (`/collect/cancel` with no session named), however many strangers
+ * opened, and answers with `live`. A community from before that refuses a Stop that names no session: then one per
+ * listed session, as before (such a community lists every one, and holds at most ten), and what is left is the number
+ * that failed.
+ */
+export async function stopEveryRecoverySession(listed: { collectionId: string }[], request: CommunityRequest): Promise<number> {
+    try {
+        const res = await request('/api/recovery/collect/cancel', {});
+        if (typeof res?.live === 'number') return res.live;
+    } catch {
+        // An older community ('Which session?'), or no answer: one by one below.
+    }
+    let failed = 0;
+    for (const session of listed) {
+        try {
+            await request('/api/recovery/collect/cancel', { collectionId: session.collectionId });
+        } catch (e) {
+            failed++;
+            console.warn(`[RecoveryAlert] Failed to cancel session ${session.collectionId}:`, (e as Error).message);
+        }
+    }
+    return failed;
+}
+
 export interface RecoveryAlertBannerProps {
     onStopSuccess?: () => void;
 }
@@ -55,6 +93,8 @@ export interface RecoveryAlertBannerProps {
 export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps = {}): React.JSX.Element | null {
     const { identity } = useIdentity();
     const [sessions, setSessions] = useState<RecoverySession[]>([]);
+    /** How many are live, by the community's count: more than `sessions`, which holds the newest few. */
+    const [liveCount, setLiveCount] = useState(0);
     const [holds, setHolds] = useState<VaultHold[]>([]);
     /** Holds this phone let through ("Yes, it's me"): shown as let through until the other device collects, no buttons. */
     const [approved, setApproved] = useState<string[]>([]);
@@ -76,6 +116,8 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                     startedAt: c.startedAt,
                 }));
                 setSessions(active);
+                // A community from before the count lists every one.
+                setLiveCount(typeof res.count === 'number' ? res.count : active.length);
             }
         } catch (e) {
             // Swallow — this is a best-effort check. If the endpoint doesn't exist
@@ -158,26 +200,18 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                     onPress: async () => {
                         setStopping(true);
                         try {
-                            // Cancel each active session
-                            for (const session of sessions) {
-                                try {
-                                    await signedRequest('/api/recovery/collect/cancel', {
-                                        collectionId: session.collectionId,
-                                    });
-                                } catch (e) {
-                                    console.warn(`[RecoveryAlert] Failed to cancel session ${session.collectionId}:`, (e as Error).message);
-                                }
+                            const left = await stopEveryRecoverySession(sessions, signedRequest);
+                            if (left === 0) {
+                                // Stopped sessions hand nothing more over. If onStopSuccess is provided, notify
+                                // parent view to refresh protection state.
+                                setSessions([]);
+                                setLiveCount(0);
+                                onStopSuccess?.();
+                            } else {
+                                // Not "all cancelled" when some are not: read again, so the banner shows what is live.
+                                void fetchSessions();
                             }
-
-                            // Cancelling marks active recovery sessions as 'cancelled' on the
-                            // server, preventing fragment releases. If onStopSuccess is provided,
-                            // notify parent view to refresh protection state.
-                            setSessions([]);
-                            onStopSuccess?.();
-                            Alert.alert(
-                                '✅ Recovery Stopped',
-                                'All active recovery sessions have been cancelled.',
-                            );
+                            Alert.alert(RECOVERY_ALERT_COPY.stoppedTitle(left), RECOVERY_ALERT_COPY.stoppedBody(left));
                         } catch (e) {
                             Alert.alert('Error', 'Failed to stop recovery. Please try again.');
                         } finally {
@@ -187,7 +221,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                 },
             ],
         );
-    }, [sessions]);
+    }, [sessions, fetchSessions, onStopSuccess]);
 
     const handleStopHold = useCallback((hold: VaultHold) => {
         if (!identity) return;
@@ -320,7 +354,7 @@ export function RecoveryAlertBanner({ onStopSuccess }: RecoveryAlertBannerProps 
                         If this is not you, stop it immediately.
                     </Text>
                     <Text style={styles.detail}>
-                        {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                        {liveCount} active session{liveCount > 1 ? 's' : ''}
                         {sessions[0].startedAt ? ` • Started ${new Date(sessions[0].startedAt).toLocaleString()}` : ''}
                     </Text>
                     <TouchableOpacity

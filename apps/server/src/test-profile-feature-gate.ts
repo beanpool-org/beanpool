@@ -43,6 +43,7 @@ async function main() {
         decisions: false,
         invites: false,
         announceJoins: false,
+        announceProfiles: false,
     };
 
     assert(featureOffFor('/api/marketplace/posts/request', mockSwitchesOff) === 'escrow',

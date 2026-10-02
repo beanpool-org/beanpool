@@ -822,6 +822,9 @@ CREATE TABLE IF NOT EXISTS recovery_collections (
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner ON recovery_collections(owner_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_updated_at ON recovery_collections(updated_at);
+-- The prune and the node-wide sweep (engine/recovery-release.ts sweepRecoveryCollections) walk one owner's sessions
+-- newest first, a batch at a time: without this each batch sorted the owner's whole pile (PR #1456 re-review).
+CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner_created ON recovery_collections(owner_pubkey, status, created_at);
 
 -- One fragment released into one collection. The unique constraint is what makes a release
 -- idempotent rather than cumulative: a keeper tapping Approve twice, or a client retrying a

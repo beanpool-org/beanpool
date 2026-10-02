@@ -12,6 +12,13 @@
  *      same network is asked a raised level (4); the phone does it, says the busy sentence with its own estimate on
  *      the way, and joins
  *   5. the sign-in door at ordinary rates: its work route says none, and a sign-in join goes through as before
+ *   6. the 12-words ceiling refuses, then is lifted: Join inside a minute says when and sends nothing; Join after it
+ *      sends `POST /api/join/work` again, and joins (PR #1452 review, finding 1)
+ *   7. a phone clock 6 minutes off: the node's 401 at the work route and at the 12-words join reads "check the date and
+ *      time", never "sign in again" (finding 3)
+ *   8. a removed member adding a sign-in: `account_closed` in its own sentence, never "try again later" (finding 4)
+ *   9. a 12-words account on ANOTHER phone: the node's /api/community/me says `words`, so the card and Add a sign-in
+ *      show there; refused while suspended, in a sentence; gone once a sign-in is added (#1454 review, finding 2)
  *
  * Nothing else is contacted: the phone's fetch is held to this node's address and throws for anything else, the node's
  * own fetch refuses every host but this machine, and the provider's sheet is a stub minting tokens with a key the node
@@ -88,8 +95,9 @@ import {
     submitWordsJoin,
     type DoorAnswer,
 } from '../global-join';
-import { BUSY_LEVEL, busyLevelSentence, startDoorWork, type DoorWorkRun, type DoorWorkState } from '../door-work';
+import { BUSY_LEVEL, busyLevelSentence, fetchDoorWork, startDoorWork, type DoorWorkRun, type DoorWorkState } from '../door-work';
 import { linkSignIn } from '../join-link';
+import { askOneWayBackStanding, oneWayBackFromNode, oneWayBackPlace, readOneWayBack } from '../one-way-back';
 import { noVault } from './fake-vault';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
@@ -226,6 +234,9 @@ async function joinByWords(name: string, onState?: (s: DoorWorkState) => void) {
 }
 
 let first: BeanPoolIdentity;
+/** Step 3's second 12-words member (still on the 12-words rules), and step 4's removed one. */
+let ben: BeanPoolIdentity;
+let cal: BeanPoolIdentity;
 
 describe('the phone\'s door against a real global-profile node', () => {
     it('1. the node says it has the 12-words door, and the phone\'s check reads it so', async () => {
@@ -276,6 +287,7 @@ describe('the phone\'s door against a real global-profile node', () => {
         await control('limiters');
         const second = await joinByWords('Ben Words');
         expect(second.answer.kind).toBe('joined');
+        ben = second.identity;
         const taken = await linkSignIn({ url: URL_BASE, identity: second.identity, provider: 'google', phoneLock: null });
         expect(taken).toMatchObject({ kind: 'refused', reason: 'already_joined' });
         if (taken.kind === 'refused') expect(taken.message).toMatch(/already the sign-in of another BeanPool account/);
@@ -289,6 +301,7 @@ describe('the phone\'s door against a real global-profile node', () => {
         const removed = await joinByWords('Cal Removed');
         expect(removed.answer.kind).toBe('joined');
         await control('prune', { key: removed.identity.publicKey });
+        cal = removed.identity;
         expect((await control('member', { key: removed.identity.publicKey })).join.ip_kept_until).toBeTruthy();
 
         // A new phone on the same network.
@@ -323,6 +336,121 @@ describe('the phone\'s door against a real global-profile node', () => {
         const answer: DoorAnswer = await submitJoin(URL_BASE, identity, 'Eve Google', signedIn.signin, { work: run });
         expect(answer.kind, answer.kind === 'joined' ? '' : doorMessage(answer)).toBe('joined');
         expect((await control('member', { key: identity.publicKey })).join.provider).toBe('google');
+    }, STEP_MS);
+
+    it('6. the 12-words ceiling, then lifted: Join inside a minute says when and sends nothing; after it, POST /api/join/work, and in', async () => {
+        newPhone();
+        await control('limiters');
+        // Every 12-words join above came from this one address: a ceiling of 1 an hour is already reached.
+        await control('doorNumber', { name: 'wordsPerHour', value: '1' });
+        let skew = 0;
+        const phoneNow = () => Date.now() + skew;
+        const key = await joinKeyForThisPhone();
+        const run = startDoorWork({ url: URL_BASE, identity: key.identity, door: 'words', now: phoneNow });
+        runs.push(run);
+        const refused = await run.solution();
+        expect(refused).toMatchObject({ kind: 'refused', answer: { kind: 'rate_limited', door: 'words' } });
+        if (refused.kind === 'refused') expect(doorMessage(refused.answer as Exclude<DoorAnswer, { kind: 'joined' }>)).toMatch(/^A very large number of 12-words accounts were made from your network in the last hour\. Sign in to join now, or try again (in \d+ minutes?|in about an hour)\.$/);
+        const workAsks = () => sent.filter(r => r.method === 'POST' && r.path === '/api/join/work').length;
+        const asked = workAsks();
+
+        // The operator lifts the ceiling. Two Joins inside the minute: the sentence again, nothing sent.
+        await control('doorNumber', { name: 'wordsPerHour', value: '500' });
+        skew = 10_000;
+        expect((await run.solution()).kind).toBe('refused');
+        skew = 40_000;
+        expect((await run.solution()).kind).toBe('refused');
+        expect(workAsks()).toBe(asked);
+
+        // A minute on, Join asks the node again: the work comes, it's done, and the 12-words join goes in.
+        skew = 61_000;
+        const ready = await run.solution();
+        expect(ready.kind).toBe('solved');
+        expect(workAsks()).toBe(asked + 1);
+        expect(sent.filter(r => r.path === '/api/join/work').at(-1)?.status).toBe(200);
+        const identity = await commitJoinKey(key, 'Fay Lifted');
+        expect(await submitWordsJoin(URL_BASE, identity, 'Fay Lifted', run)).toMatchObject({ kind: 'joined', callsign: 'Fay Lifted' });
+    }, STEP_MS);
+
+    it('7. a phone clock 6 minutes off: "check the date and time" at the work route and at the 12-words join; never "sign in again"', async () => {
+        newPhone();
+        await control('limiters');
+        const key = await joinKeyForThisPhone();
+        // The work route, signed with the wrong time.
+        vi.useFakeTimers({ now: Date.now() + 6 * 60_000, toFake: ['Date'] });
+        let work;
+        try {
+            work = await fetchDoorWork(URL_BASE, key.identity, 'words');
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(work).toMatchObject({ kind: 'refused', answer: { kind: 'phone_clock' } });
+        expect(sent.at(-1)).toMatchObject({ path: '/api/join/work', status: 401 });
+
+        // Work done with the right time; then the join, signed with the wrong one.
+        const run = startDoorWork({ url: URL_BASE, identity: key.identity, door: 'words' });
+        runs.push(run);
+        const solvedFirst = await run.solution();
+        expect(solvedFirst.kind, JSON.stringify(solvedFirst)).toBe('solved');
+        const identity = await commitJoinKey(key, 'Gus Clock');
+        vi.useFakeTimers({ now: Date.now() + 6 * 60_000, toFake: ['Date'] });
+        let answer: DoorAnswer;
+        try {
+            answer = await submitWordsJoin(URL_BASE, identity, 'Gus Clock', run);
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(sent.at(-1)).toMatchObject({ path: '/api/join', status: 401 });
+        expect(answer.kind).toBe('phone_clock');
+        for (const said of [answer, (work as { answer: DoorAnswer }).answer]) {
+            const message = doorMessage(said as Exclude<DoorAnswer, { kind: 'joined' }>);
+            expect(message).toMatch(/date and time/);
+            expect(message).not.toMatch(/sign in again/i);
+        }
+        expect((await control('member', { key: identity.publicKey })).member).toBeNull();
+    }, STEP_MS);
+
+    it('8. a removed member adding a sign-in: its own sentence, never "try again later"', async () => {
+        const answer = await linkSignIn({ url: URL_BASE, identity: cal, provider: 'google', phoneLock: null });
+        expect(sent.at(-1)).toMatchObject({ path: '/api/join/link/sso-nonce', status: 403 });
+        expect(answer).toMatchObject({ kind: 'refused', reason: 'account_closed' });
+        if (answer.kind === 'refused') {
+            expect(answer.message).toMatch(/was closed/);
+            expect(answer.message).not.toMatch(/try again/i);
+        }
+    }, STEP_MS);
+
+    it('9. a 12-words account on another phone: the node says words, so Add a sign-in shows; refused while suspended; gone once added', async () => {
+        // Ben's account, restored on a phone that never made his join: no record here.
+        newPhone();
+        await control('limiters');
+        expect(await readOneWayBack(ben.publicKey)).toBeNull();
+        const standing = await askOneWayBackStanding(URL_BASE, ben);
+        expect(sent.at(-1)).toMatchObject({ method: 'GET', path: '/api/community/me', status: 200 });
+        expect(standing?.words).toBe(true);
+        expect(Math.abs((standing?.joinedAt ?? 0) - Date.now())).toBeLessThan(STEP_MS * 10);
+        const record = await oneWayBackFromNode(ben.publicKey, URL_BASE, standing);
+        expect(oneWayBackPlace(record, Date.now(), false)).toBe('card');
+
+        // Suspended: the card still says so (the node still says 12 words), and adding a sign-in is refused in a sentence.
+        await control('status', { key: ben.publicKey, status: 'suspended' });
+        expect((await askOneWayBackStanding(URL_BASE, ben))?.words).toBe(true);
+        google.sub = 'e2e-google-sub-ben';
+        const refused = await linkSignIn({ url: URL_BASE, identity: ben, provider: 'google', phoneLock: null });
+        expect(refused).toMatchObject({ kind: 'refused', reason: 'not_a_member' });
+        if (refused.kind === 'refused') {
+            expect(refused.message).toMatch(/suspended/);
+            expect(refused.message).not.toMatch(/\b[a-z]+_[a-z_]+\b/);
+        }
+        expect((await control('member', { key: ben.publicKey })).join.provider).toBe('words');
+
+        // Active again: added from this phone; the node then says so, and the card goes.
+        await control('status', { key: ben.publicKey, status: 'active' });
+        await control('limiters');
+        expect(await linkSignIn({ url: URL_BASE, identity: ben, provider: 'google', phoneLock: null })).toMatchObject({ kind: 'linked' });
+        const after = await askOneWayBackStanding(URL_BASE, ben);
+        expect(after).toEqual({ words: false, joinedAt: null });
+        expect(oneWayBackPlace(await oneWayBackFromNode(ben.publicKey, URL_BASE, after), Date.now(), false)).toBe('none');
     }, STEP_MS);
 
     it('a key that never joined can\'t add a sign-in: said in words', async () => {

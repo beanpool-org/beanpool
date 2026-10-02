@@ -35,7 +35,7 @@ export const LINK_PATH = '/api/join/link';
 
 /** Why a sign-in wasn't added. */
 export type LinkRefusal =
-    | 'already_joined' | 'removed' | 'not_words_member' | 'already_linked' | 'not_a_member' | 'door_closed'
+    | 'already_joined' | 'removed' | 'not_words_member' | 'already_linked' | 'not_a_member' | 'account_closed' | 'key_invalidated' | 'door_closed'
     | 'door_key_missing' | 'rate_limited' | 'sign_in_again' | 'sign_in_unavailable' | 'unsupported' | 'try_again' | 'unreachable';
 
 export type LinkAnswer =
@@ -49,7 +49,12 @@ export const LINK_MESSAGES: Record<LinkRefusal, string> = {
     removed: 'The BeanPool account this {provider} account joined with was removed from the global community, so it can\'t be added to yours. Nothing was changed.',
     not_words_member: 'Your account joined the global community another way, so there is no sign-in to add here. Nothing was changed.',
     already_linked: 'Your account in the global community already has a sign-in. Nothing was changed.',
-    not_a_member: 'Only a member of the global community can add a sign-in there, and this phone\'s account isn\'t one now. Nothing was changed.',
+    /** 403 from the link routes: not an active member there, which for a 12-words member means suspended (#1454 finding 2). */
+    not_a_member: 'Your account isn\'t active in the global community right now (it may be suspended), so a sign-in can\'t be added. Nothing was changed.',
+    /** 403 from the signature check: a removed member's key, or one its owner deleted (PR #1452 review, finding 4). Later can't work. */
+    account_closed: 'This account\'s place in the global community was closed, so a sign-in can\'t be added to it. Nothing was changed.',
+    /** 403 from the signature check: this key was replaced by a new one. The new key's device or 12 words can add one. */
+    key_invalidated: 'This phone\'s key was replaced by a new one, so a sign-in can\'t be added with it. Nothing was changed. Use the device or the 12 words that hold the new key.',
     door_closed: 'The global community isn\'t adding sign-ins right now. Nothing was changed. Please try again later.',
     door_key_missing: 'The global community can\'t check sign-ins right now, so nothing was added. Please try again later.',
     rate_limited: 'There were too many tries in a short time, so nothing was added. Please try again {when}.',
@@ -76,6 +81,9 @@ const CODES: Partial<Record<string, LinkRefusal>> = {
     not_words_member: 'not_words_member',
     already_linked: 'already_linked',
     not_a_member: 'not_a_member',
+    // The signature check's own refusals, before any link route runs (https-server.ts): never "try again later".
+    account_closed: 'account_closed',
+    key_invalidated: 'key_invalidated',
     door_key_missing: 'door_key_missing',
     sign_in_unavailable: 'sign_in_unavailable',
     invite_only: 'door_closed',

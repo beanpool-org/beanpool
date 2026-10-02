@@ -85,6 +85,9 @@ import { startDoorWork, type DoorWorkRun } from '../door-work';
 import { LINK_MESSAGES, linkSignIn, linkedNotice, readLinkAnswer, type LinkRefusal } from '../join-link';
 import {
     ONE_WAY_BACK_WEEK_MS,
+    askOneWayBackStanding,
+    oneWayBackCommunity,
+    oneWayBackFromNode,
     dismissOneWayBack,
     dismissedOneWayBack,
     finishOneWayBack,
@@ -425,6 +428,121 @@ describe('adding a sign-in later (§2.5): one sign-in, two jobs', () => {
     });
 });
 
+describe('a removed or replaced account adding a sign-in (PR #1452 review, finding 4), and a suspended one (#1454 finding 2)', () => {
+    it('account_closed and key_invalidated: their own sentences; never "try again later", which can\'t work', () => {
+        const closed = readLinkAnswer(403, { error: 'This account was closed here.', code: 'account_closed' }, 'google');
+        expect(closed).toMatchObject({ kind: 'refused', reason: 'account_closed' });
+        const replaced = readLinkAnswer(403, { error: 'This key was replaced.', code: 'key_invalidated' }, 'google');
+        expect(replaced).toMatchObject({ kind: 'refused', reason: 'key_invalidated' });
+        for (const a of [closed, replaced]) {
+            if (a.kind !== 'refused') continue;
+            expect(a.message).not.toMatch(/try again/i);
+            expect(a.message).not.toMatch(CODE_RE);
+            expect(a.message).toMatch(/Nothing was changed/);
+        }
+        if (closed.kind === 'refused') expect(closed.message).toMatch(/closed/);
+        if (replaced.kind === 'refused') expect(replaced.message).toMatch(/replaced/);
+    });
+
+    it('not an active member (a suspended account): said so, never "try again later"', () => {
+        const a = readLinkAnswer(403, { error: 'Only an active member of this community can add a sign-in here.', code: 'not_a_member' }, 'google');
+        expect(a).toMatchObject({ kind: 'refused', reason: 'not_a_member' });
+        if (a.kind === 'refused') {
+            expect(a.message).toMatch(/suspended/);
+            expect(a.message).not.toMatch(/try again later/i);
+        }
+    });
+});
+
+/**
+ * #1454 review, inline finding 2 (your-12-words.md:64): "Add a sign-in" existed only on the phone where the 12-words join
+ * was made, because the card read a record that only that join writes. A member who restores their 12-words account on
+ * another phone got no card and no Add a sign-in anywhere. The node's own word decides now, as the web app's does:
+ * `GET /api/community/me` says `probation.rules: 'words'` for a member who came in with 12 words and has added no
+ * sign-in.
+ */
+describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s word decides (#1454 review, finding 2)', () => {
+    const HOUR = 60 * 60 * 1000;
+    const joined = Date.parse('2026-10-01T00:00:00.000Z');
+    /** The node's /api/community/me: `rules` and the join's end of new-account limits (7 days by 12 words). */
+    function nodeSays(answer: { status: number; body?: unknown } | 'offline') {
+        const seen: { method: string; path: string; signedBy?: string }[] = [];
+        globalThis.fetch = vi.fn(async (url: any, init: any) => {
+            seen.push({ method: init?.method ?? 'GET', path: new URL(String(url)).pathname, signedBy: init?.headers?.['X-Public-Key'] });
+            if (answer === 'offline') throw new TypeError('Network request failed');
+            return new Response(JSON.stringify(answer.body ?? {}), { status: answer.status });
+        }) as any;
+        return seen;
+    }
+    const words = { status: 200, body: { probation: { rules: 'words', ageEndsAt: new Date(joined + 168 * HOUR).toISOString(), endsWhen: { hours: 168, keptPosts: 3 } } } };
+    const ordinary = { status: 200, body: { probation: { rules: 'ordinary', ageEndsAt: null, endsWhen: { hours: 72, keptPosts: 3 } } } };
+
+    it('asks the node, signed by the account\'s own key: words, a sign-in already, or no word at all', async () => {
+        const member = await draftIdentity();
+        const seen = nodeSays(words);
+        expect(await askOneWayBackStanding(GLOBAL, member)).toEqual({ words: true, joinedAt: joined });
+        expect(seen).toEqual([{ method: 'GET', path: '/api/community/me', signedBy: member.publicKey }]);
+        nodeSays(ordinary);
+        expect(await askOneWayBackStanding(GLOBAL, member)).toEqual({ words: false, joinedAt: null });
+        // No word: offline, a refusal (not a member there), or an older node that doesn't say.
+        nodeSays('offline');
+        expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
+        nodeSays({ status: 403, body: { error: 'Read access requires a member identity' } });
+        expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
+        nodeSays({ status: 200, body: { probation: { onProbation: false } } });
+        expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
+    });
+
+    it('a 12-words account restored on another phone (no record here): the card, from the node\'s word, with Add a sign-in', async () => {
+        const member = await draftIdentity();
+        expect(await readOneWayBack(member.publicKey)).toBeNull();
+        const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined }, joined + 30 * HOUR);
+        expect(record).toEqual({ url: GLOBAL, joinedAt: joined });
+        expect(oneWayBackPlace(record, joined + 30 * HOUR, false)).toBe('card');
+        // Kept, so putting it away holds on this phone too.
+        expect(await readOneWayBack(member.publicKey)).toEqual({ url: GLOBAL, joinedAt: joined });
+    });
+
+    it('a sign-in added elsewhere (the web, another phone): the node says so, and the card goes here too, for good', async () => {
+        const member = await draftIdentity();
+        await startOneWayBack(member.publicKey, GLOBAL, joined);
+        const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: false, joinedAt: null });
+        expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('none');
+        expect((await readOneWayBack(member.publicKey))?.done).toBe('linked');
+        // And a member who never joined by words, with no record: nothing.
+        const other = await draftIdentity();
+        expect(await oneWayBackFromNode(other.publicKey, GLOBAL, { words: false, joinedAt: null })).toBeNull();
+        expect(await readOneWayBack(other.publicKey)).toBeNull();
+    });
+
+    it('the phone thought a sign-in was added, the node says not: the node is right, and the card is back', async () => {
+        const member = await draftIdentity();
+        await startOneWayBack(member.publicKey, GLOBAL, joined);
+        await finishOneWayBack(member.publicKey, 'linked');
+        const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined });
+        expect(record?.done).toBeUndefined();
+        expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('card');
+        // "I still have my 12 words" stays the member's own: Settings keeps the sign-in offered, quietly.
+        await finishOneWayBack(member.publicKey, 'checked');
+        expect((await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined }))?.done).toBe('checked');
+    });
+
+    it('no word from the node (offline, an older node): the phone\'s own record, as before', async () => {
+        const member = await draftIdentity();
+        expect(await oneWayBackFromNode(member.publicKey, GLOBAL, null)).toBeNull();
+        await startOneWayBack(member.publicKey, GLOBAL, joined);
+        expect(await oneWayBackFromNode(member.publicKey, GLOBAL, null)).toEqual({ url: GLOBAL, joinedAt: joined });
+    });
+
+    it('asked only where it is about: the record\'s community, else the global community when it is the one in use', () => {
+        expect(oneWayBackCommunity({ url: GLOBAL, joinedAt: 0 }, 'https://mullum.beanpool.org')).toBe(GLOBAL);
+        expect(oneWayBackCommunity(null, GLOBAL)).toBe(GLOBAL);
+        expect(oneWayBackCommunity(null, `${GLOBAL}/`)).toBe(GLOBAL);
+        expect(oneWayBackCommunity(null, 'https://mullum.beanpool.org')).toBeNull();
+        expect(oneWayBackCommunity(null, null)).toBeNull();
+    });
+});
+
 describe('the "one way back" card (§2.5): until a sign-in is added or the words are checked; back once after the first post and once after a week', () => {
     const DAY = 24 * 60 * 60 * 1000;
     const start: OneWayBack = { url: GLOBAL, joinedAt: 0 };
@@ -501,9 +619,22 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
 
     it('the 12-words join: the name check, then the work (Back still works), then the key onto the phone, then the join', () => {
         const join = between(src('app/welcome.tsx'), 'async function handleWordsJoin()', 'async function afterDoorAnswer(');
-        const order = ['checkNameAtDoor(', 'await run.solution()', 'joinSendingRef.current = true', 'commitJoinKey(key, name)', 'submitWordsJoin('].map(s => join.indexOf(s));
+        const order = ['checkNameAtDoor(', 'await solutionUnlessLeft(run, leave.signal)', 'joinSendingRef.current = true', 'commitJoinKey(key, name)', 'submitWordsJoin('].map(s => join.indexOf(s));
         expect(order.every(i => i >= 0)).toBe(true);
         expect([...order].sort((a, b) => a - b)).toEqual(order);
+    });
+
+    it('"Choose another way" while the work finishes: the step stops waiting and drops its spinner at once (PR #1452 review, finding 2)', () => {
+        // The wait for the work ends when the member leaves (use-door-work.test.ts measures solutionUnlessLeft), and the way
+        // out clears `loading`, so the two choices and Back to Home are enabled on the screen it draws.
+        const welcome = src('app/welcome.tsx');
+        expect(between(welcome, 'async function handleWordsJoin()', 'async function afterDoorAnswer(')).not.toContain('await run.solution()');
+        expect(between(welcome, 'function signInAgainAtDoor()', 'function chooseWordsAtDoor()')).toMatch(/nameCheckRef\.current\?\.abort\(\);\s*setLoading\(false\);/);
+        const account = src('app/join-global.tsx');
+        const words = between(account, 'async function handleWordsJoin()', 'async function afterAnswer(');
+        expect(words).toContain('await solutionUnlessLeft(run, stop.signal)');
+        expect(words).not.toContain('await run.solution()');
+        expect(between(account, 'function signInAgain()', 'async function ')).toMatch(/nameCheckRef\.current\?\.abort\(\);\s*setLoading\(false\);/);
     });
 
     it('the existing-account join by words asks no lock and writes no key: no sign-in, so no copy', () => {

@@ -57,6 +57,9 @@ export function LinkSignInSheet({
 
     const close = () => {
         abortRef.current?.abort();
+        // At "✅ Sign-in added", Android's Back is the Done button's path: the screen behind learns of the sign-in, or
+        // Safety Backup keeps offering it (PR #1452 review, finding 5).
+        if (step === 'done' && linked) onLinked(linked);
         onClose();
     };
 

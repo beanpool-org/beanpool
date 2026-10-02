@@ -16,6 +16,7 @@
  *   member {key}                the member's row and its open_joins row (door, network hash, how long the hash is kept)
  *   probation {key}             the member's new-account limits, as /api/community/me reports them
  *   prune {key}                 a moderator removes the member (adminPruneUser), as the moderation screen does
+ *   status {key, status}        the member's status (`suspended`, `active`), as the server suites set it
  *   doorNumber {name, value}    a `doorNumbers.<name>` override, as an operator sets one in node_config
  *   removedNewcomers {ips}      a 12-words newcomer from each address, removed minutes after joining (design §2.4)
  *   quit                        exit
@@ -83,6 +84,11 @@ async function main(): Promise<void> {
         probation: ({ key }) => probationState(String(key)),
         prune: ({ key }) => {
             adminPruneUser(String(key), 'owner:password');
+            return true;
+        },
+        status: ({ key, status }: { key?: string; status?: string }) => {
+            if (status !== 'suspended' && status !== 'active') throw new Error(`no status ${String(status)}`);
+            db.prepare('UPDATE members SET status = ? WHERE public_key = ?').run(status, String(key));
             return true;
         },
         // For the emulator's busy-level screens: a door number (`doorNumbers.<name>`, as an operator would set it), and a

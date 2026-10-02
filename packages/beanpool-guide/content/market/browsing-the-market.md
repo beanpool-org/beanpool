@@ -24,7 +24,7 @@ Type in **Search marketplace...** at the top. On a small phone it may just say *
 The row of buttons under the search chooses what you see:
 
 - **All**, **Offers** or **Needs**.
-- **For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and events you have said you are going to or interested in.
+- **For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and your upcoming events you have said you are going to.
 - **Events** and **Polls**.
 
 The second row narrows it down:

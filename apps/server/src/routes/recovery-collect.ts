@@ -29,8 +29,8 @@
  * unauthenticated by necessity, so that alert was a push anybody with a callsign could send a member, as often as the
  * auth limiter allowed, and it defended nothing that remains: it was there for D7 and R1, the friend tier's colluding
  * keepers, which is scrapped. What an open with no sign-in can still reach is the hub's piece of a legacy two-layer copy
- * after 24 hours, half a seed, useless alone. The owner still sees every live session in the app
- * (`/api/recovery/collect/mine`, the recovery banner) and can stop it there.
+ * after 24 hours, half a seed, useless alone. The owner still sees how many sessions are live in the app
+ * (`/api/recovery/collect/mine`, the recovery banner) and can stop them all there, in one call (`/collect/cancel`).
  *
  * ## What leaves, and when
  *
@@ -53,7 +53,10 @@ import {
     releaseHubFragment,
     releaseSsoFragmentForIdentity,
     cancelCollection,
+    cancelAllCollectionsFor,
+    countOpenCollectionsFor,
     openCollectionsFor,
+    pruneCollectionsFor,
     RecoveryReleaseError,
     type Collection,
 } from '../engine/recovery-release.js';
@@ -84,11 +87,11 @@ function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolea
 
 
 /**
- * The second alert: a sign-in has just RELEASED this member's sign-in fragment. For a single-blob keeper
- * that fragment is the whole seed; for a two-layer one it makes the hub's piece available at once. The
- * alert when the session opened says somebody is trying, and the seed follows seconds later, so this one
- * says it worked: an owner who did not do it learns their key is out and needs moving, which stopping the
- * session no longer fixes. Plain words, and nothing of the fragment in it.
+ * The one alert: a sign-in has just RELEASED this member's sign-in fragment. For a single-blob keeper
+ * that fragment is the whole seed; for a two-layer one it makes the hub's piece available at once.
+ * Nothing is pushed when a session opens (see the header), so this is the first the owner hears from a
+ * push, and it says it worked: an owner who did not do it learns their key is out and needs moving,
+ * which stopping the session no longer fixes. Plain words, and nothing of the fragment in it.
  */
 function notifySeedReleased(collection: Collection, provider: SsoProvider): void {
     try {
@@ -107,6 +110,9 @@ function notifySeedReleased(collection: Collection, provider: SsoProvider): void
         console.error('[recovery] could not notify about a released fragment:', (e as Error).message);
     }
 }
+
+/** How many of the owner's live sessions `/collect/mine` lists: the newest, beside the count of all of them. */
+export const MINE_LISTED = 3;
 
 function fail(ctx: any, e: unknown): void {
     // A sign-in first: a provider that could not be asked is 503, try again, not a refused sign-in (signInFailure).
@@ -345,26 +351,61 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         } catch (e) { return fail(ctx, e); }
     });
 
-    /** R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id. */
+    /**
+     * R1's cheap stop — reachable by the OWNER, who is the one without the attacker's session id.
+     *
+     * Stops EVERY live session against the owner's account, in one call (engine cancelAllCollectionsFor), whether or
+     * not it names one. Strangers decide how many sessions there are (anybody can open one, and nothing evicts one in
+     * its sign-in window), so a Stop that took them one request each ran into the owner's own rate limits a few
+     * hundred in and left the rest live while the app said "all cancelled" (PR #1456 deciding review). An app from
+     * before this names one session per request: the first request stops them all, so its words are true too.
+     *
+     * A named session is still checked: it must be the caller's own (400 otherwise, as before). The answer says what
+     * happened: `cancelled` (the named session, or any, was live and is stopped), `stopped` (how many), and `live`
+     * (how many are live now: 0 unless a new one opened since).
+     */
     router.post('/api/recovery/collect/cancel', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
         // A visitor's row has no account here being recovered, as a key with no row has none (getActingMember).
         if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
         const id = (ctx as any).requestBody?.collectionId;
-        if (typeof id !== 'string' || !id) { ctx.status = 400; ctx.body = { error: 'Which session?' }; return; }
+        if (id !== undefined && id !== null && (typeof id !== 'string' || !id)) {
+            ctx.status = 400; ctx.body = { error: 'Which session?' }; return;
+        }
         try {
+            // The named one first, so a session that is somebody else's, or none at all, is refused before anything stops.
+            const named = typeof id === 'string' ? cancelCollection(id, owner) : null;
+            const rest = cancelAllCollectionsFor(owner);
+            const stopped = rest + (named ? 1 : 0);
             ctx.status = 200;
-            ctx.body = { cancelled: cancelCollection(id, owner) };
+            ctx.body = { cancelled: named ?? stopped > 0, stopped, live: countOpenCollectionsFor(owner) };
         } catch (e) { return fail(ctx, e); }
     });
 
-    /** Live recoveries against the caller's own account — what makes cancelling possible at all. */
+    /**
+     * Live recoveries against the caller's own account — what makes cancelling possible at all.
+     *
+     * `count` is how many, and `collections` the newest few of them ({@link MINE_LISTED}), never all: strangers decide
+     * how many there are, and both apps poll this every ~30 s while open. Listing every one, with its progress, sent
+     * 624 KB a poll at 2,100 sessions and held the node for 0.7 s at 20,000 (PR #1456 deciding review). Both banners
+     * show the count and when the newest started; an app from before `count` shows how many it was sent.
+     *
+     * Sessions past their sign-in window are pruned first (engine pruneCollectionsFor), so a burst of strangers' opens
+     * is gone from here half an hour after it stops, rather than when somebody next opens one.
+     */
     router.post('/api/recovery/collect/mine', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;
         if (!owner || !getActingMember(owner)) { ctx.status = 401; ctx.body = { error: 'Sign in first.' }; return; }
+        try {
+            pruneCollectionsFor(owner);
+        } catch (e) {
+            // A read must not fail for its housekeeping: the next open or read prunes again.
+            console.error('[recovery] could not prune recovery sessions on read:', (e as Error).message);
+        }
         ctx.status = 200;
         ctx.body = {
-            collections: openCollectionsFor(owner).map(c => ({
+            count: countOpenCollectionsFor(owner),
+            collections: openCollectionsFor(owner, MINE_LISTED).map(c => ({
                 collectionId: c.id,
                 generation: c.generation,
                 startedAt: c.createdAt,

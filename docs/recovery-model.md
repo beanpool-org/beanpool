@@ -241,6 +241,8 @@ attempts and the real member finds a locked door on the day they need it. A capp
 
 The account owner is alerted via `RecoveryAlertBanner` on both Native and PWA clients if an active recovery session is opened on the community node (`/api/recovery/collect/mine`). The owner can cancel an unauthorized recovery session directly from the banner via `/api/recovery/collect/cancel`, after which the node hands nothing more to that session, not even a copy it already released.
 
+Strangers can open any number of sessions against a name: nothing evicts one in its 30-minute sign-in window, since until a sign-in checks out the member's own looks the same as a stranger's. So `/collect/mine` sends the count and the newest few, never every session; one `/collect/cancel` stops every live session against the account; the banners say "all cancelled" only when the node says none is left; and a pile is pruned to the idle cap (10) on the owner's next read once its window has passed (PR #1456 deciding review, 2026-10-02).
+
 The owner gets a push when a sign-in releases their copy (`account.restored`). Opening a session sends none: anybody with a callsign can open one, so that push (`account.recovery-started`) was a way to ping a member at will (defence review FABLE-sec-sso finding 5, 2026-10-02). Phones still understand it from a community that hasn't updated.
 
 Sessions are never evicted while a sign-in may be under way (their first 30 minutes) or once they have released a copy; the per-account cap of 10 applies to idle ones only.

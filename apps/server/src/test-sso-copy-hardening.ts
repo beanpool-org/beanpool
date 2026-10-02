@@ -12,6 +12,10 @@
  *   5. Opening a session against someone's name (anybody can) sends them no push, and a flood of opens evicts neither
  *      the member's own sign-in in progress nor a session that has released its copy. The member's own restore still
  *      tells them, once, when it goes through.
+ *   6. (PR #1456 deciding review) So strangers with many addresses can pile thousands of sessions against one name.
+ *      What that costs the member stays small: their app is sent the count and the newest few, one Stop takes every
+ *      session in one request (and says so truthfully), and a pile is gone from their app half an hour after it stops
+ *      growing. Their own restore, in progress through the flood, still goes through.
  *
  * Local only: the node is this process's own HTTPS server on localhost. Google's key set is answered here, Expo's push
  * endpoint is answered here, and anything else is refused and counted.
@@ -117,6 +121,50 @@ async function call(key: Key, path: string, body: unknown): Promise<{ status: nu
     return { status: res.status, body: parsed, text };
 }
 
+/**
+ * Signed like `call`, but from one client address (`X-Forwarded-For`, which a localhost caller may set: loopback is a
+ * trusted proxy, client-ip.ts) and with NO limiter reset: what a stranger with many addresses, or the member on their
+ * own one, really gets. An IPv6 address is counted by its /64.
+ */
+async function callFrom(addr: string, key: Key, path: string, body: unknown): Promise<{ status: number; body: any; text: string; ms: number }> {
+    const bodyString = JSON.stringify(body ?? {});
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const t0 = performance.now();
+    const res = await fetch(`${BASE}${path}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Forwarded-For': addr,
+            'X-Public-Key': key.pk,
+            'X-Signature': crypto.sign(null, Buffer.from(`POST\n${path}\n${ts}\n${nonce}\n${bodyString}`), key.priv).toString('base64'),
+            'X-Timestamp': String(ts),
+            'X-Nonce': nonce,
+        },
+        body: bodyString,
+    });
+    const text = await res.text();
+    const ms = performance.now() - t0;
+    let parsed: any;
+    try { parsed = JSON.parse(text); } catch { parsed = undefined; }
+    return { status: res.status, body: parsed, text, ms };
+}
+
+/** `n` strangers' /64s (2001:db8:<block>:<i>::/64), each opening `per` sessions against `callsign`, 32 at a time. */
+async function flood(callsign: string, block: number, n: number, per: number): Promise<number[]> {
+    const addrs: string[] = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < per; j++) addrs.push(`2001:db8:${block.toString(16)}:${i.toString(16)}::1`);
+    const statuses: number[] = [];
+    let next = 0;
+    await Promise.all(Array.from({ length: 32 }, async () => {
+        while (next < addrs.length) {
+            const addr = addrs[next++];
+            statuses.push((await callFrom(addr, throwaway(), '/api/recovery/collect', { callsign })).status);
+        }
+    }));
+    return statuses;
+}
+
 interface Owner { key: Key; seedHex: string; callsign: string }
 interface Deposited { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string }
 
@@ -163,6 +211,8 @@ async function seedFrom(f: any, device: Key, collectionId: string): Promise<stri
     const opened = await openSeedFromSso({ encryptedShare: copy.payload, shareIv: copy.payloadIv, shareTag: copy.payloadTag, kdfParams: copy.kdfParams! }, 'google', SUB);
     return Buffer.from(opened.seed).toString('hex');
 }
+
+const getRow = (id: string) => db.prepare('SELECT status FROM recovery_collections WHERE id = ?').get(id) as { status: string } | undefined;
 
 const pushesTo = (owner: Owner): string[] =>
     (db.prepare('SELECT kind FROM push_notices WHERE recipient = ? ORDER BY rowid').all(owner.key.pk) as { kind: string }[]).map(r => r.kind);
@@ -287,6 +337,97 @@ async function main(): Promise<void> {
     assert(live?.live === true, 'and a flood never locks the member out: a new restore is always live');
     assert((await call(fetchedLater.device, '/api/recovery/collect/status', { collectionId: fetchedLater.collectionId })).body?.live === true,
         '...while the released sessions are still live');
+
+    // ── 6. A pile of strangers' sessions stays small to the member, and one Stop takes it all ────────────────────
+    // PR #1456 deciding review: nothing evicts a session in its sign-in window (5, above), so strangers with many
+    // addresses can pile thousands against one name. Real signed HTTP, distinct /64s, and no limiter is ever reset here.
+    console.log('\n── 6. a pile of strangers\' sessions ────────────────────');
+    const eve = addOwner();
+    await deposit(eve);
+    const EVE_ADDR = '198.51.100.7';      // Eve's own phone, the one with the banner
+    const NEW_PHONE = '203.0.113.44';     // Eve on a new phone, restoring
+    const evesRestore = { device: throwaway(), collectionId: '' };
+    const evesOpen = await callFrom(NEW_PHONE, evesRestore.device, '/api/recovery/collect', { callsign: eve.callsign });
+    evesRestore.collectionId = evesOpen.body?.collectionId;
+    const evesNonce = (await callFrom(NEW_PHONE, evesRestore.device, '/api/recovery/collect/sso-nonce', { collectionId: evesRestore.collectionId })).body?.nonce;
+    assert(evesOpen.status === 200 && typeof evesNonce === 'string', "Eve opens a restore on a new phone and asks for a nonce, then goes to Google's sheet");
+
+    // While she is on the sheet: 100 strangers' /64s, 15 opens each, the most the auth limiter lets each one have.
+    const STRANGER_NETS = 100;
+    const t0 = performance.now();
+    const opened = await flood(eve.callsign, 1, STRANGER_NETS, 15);
+    console.log(`  (${opened.length} opens in ${Math.round(performance.now() - t0)} ms)`);
+    assert(opened.every(s => s === 200), `${opened.length} strangers' opens from ${STRANGER_NETS} /64s all go through (they must: a restoring device has no account)`);
+    const sixteenth = await callFrom('2001:db8:1:0::99', throwaway(), '/api/recovery/collect', { callsign: eve.callsign });
+    assert(sixteenth.status === 429, `...and the limiter is real: a 16th open from one /64 is refused (${sixteenth.status})`);
+
+    const evesSignIn = await callFrom(NEW_PHONE, evesRestore.device, '/api/recovery/collect/sso', {
+        collectionId: evesRestore.collectionId, provider: 'google', idToken: googleToken(SUB, evesNonce), nonce: evesNonce,
+    });
+    assert(evesSignIn.status === 200, `Eve's own restore, in progress through the flood, is neither evicted nor blocked (${evesSignIn.status} ${evesSignIn.body?.error ?? ''})`);
+    const evesCopy = await callFrom(NEW_PHONE, evesRestore.device, '/api/recovery/collect/fragments', { collectionId: evesRestore.collectionId, seal: SEAL });
+    assert(await seedFrom(evesCopy.body?.fragments?.[0], evesRestore.device, evesRestore.collectionId).catch(() => null) === eve.seedHex,
+        '...and goes through to her seed');
+
+    const liveFor = (o: Owner): number => (db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections
+        WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?`).get(o.key.pk, new Date().toISOString()) as { n: number }).n;
+    const pile = liveFor(eve);
+    const eveMine = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
+    console.log(`  (/collect/mine at ${pile} live sessions: ${eveMine.text.length} bytes, ${Math.round(eveMine.ms)} ms)`);
+    assert(eveMine.status === 200 && eveMine.body?.count === pile, `Eve's app is told how many sessions are live: all ${pile} (${eveMine.body?.count})`);
+    assert(eveMine.text.length < 4096, `...in a small answer, not every session: ${eveMine.text.length} bytes at ${pile} sessions`);
+    assert(Array.isArray(eveMine.body?.collections) && eveMine.body.collections.length >= 1 && eveMine.body.collections.length <= 3
+        && !!eveMine.body.collections[0].startedAt, `...with the newest few, which is what the banner shows (${eveMine.body?.collections?.length})`);
+
+    // Bigger piles, as a stranger with more addresses makes them: rows put straight in, in their sign-in window.
+    const pileUp = (n: number) => db.prepare(`
+        WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
+        INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+        SELECT lower(hex(randomblob(32))), ?, (SELECT generation FROM recovery_collections WHERE id = ?), lower(hex(randomblob(32))),
+               'open', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ? FROM k
+    `).run(n, eve.key.pk, evesRestore.collectionId, new Date(Date.now() + 72 * 3600_000).toISOString());
+    pileUp(20_000);
+    const big = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
+    console.log(`  (/collect/mine at ${big.body?.count} live sessions: ${big.text.length} bytes, ${Math.round(big.ms)} ms)`);
+    assert(big.status === 200 && big.body?.count === liveFor(eve) && big.text.length < 4096,
+        `at ${liveFor(eve)} sessions the answer is still ${big.text.length} bytes`);
+    assert(big.ms < 500, `...and quick, so a poll does not hold the node (${Math.round(big.ms)} ms)`);
+    const strangerOpen = await callFrom('2001:db8:2:0::1', throwaway(), '/api/recovery/collect', { callsign: eve.callsign });
+    console.log(`  (one more open against the pile: ${Math.round(strangerOpen.ms)} ms)`);
+
+    // Stop It Now: ONE request from Eve's own address takes every live session, and says so truthfully.
+    const before = liveFor(eve);
+    const stop = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/cancel', {});
+    assert(stop.status === 200 && stop.body?.live === 0 && stop.body?.stopped === before,
+        `one Stop from Eve stops all ${before} live sessions (${stop.status}: stopped ${stop.body?.stopped}, live ${stop.body?.live} ${stop.body?.error ?? ''})`);
+    assert(liveFor(eve) === 0, `...and the node agrees: ${liveFor(eve)} live`);
+    const kept6 = db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections WHERE owner_pubkey = ?
+        AND id NOT IN (SELECT collection_id FROM recovery_releases)`).get(eve.key.pk) as { n: number };
+    assert(kept6.n === 0, `...the ones that released nothing are gone (${kept6.n} left)...`);
+    assert(getRow(evesRestore.collectionId)?.status === 'cancelled', "...and Eve's own restore, which released her copy, is kept as evidence, stopped");
+    const afterStop = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
+    assert(afterStop.body?.count === 0 && afterStop.body?.collections?.length === 0, 'her banner then reads nothing live');
+
+    // An app from before names one session per Stop: its first request stops them all, so its "all cancelled" is true.
+    await flood(eve.callsign, 3, 10, 15);
+    const listed = (await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {})).body?.collections ?? [];
+    const oldStop = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/cancel', { collectionId: listed[0]?.collectionId });
+    assert(oldStop.status === 200 && oldStop.body?.cancelled === true && liveFor(eve) === 0,
+        `an older app's Stop, naming one session, stops all 150 (${oldStop.status}, ${liveFor(eve)} live)`);
+    const someoneElses = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/cancel', { collectionId: r.collectionId });
+    assert(someoneElses.status === 400, `naming a session against somebody else's account is still refused (${someoneElses.status})`);
+    const stranger = await callFrom('2001:db8:4:0::1', throwaway(), '/api/recovery/collect/cancel', {});
+    assert(stranger.status === 401, `and a stranger's key stops nothing (${stranger.status})`);
+
+    // A pile that nobody stops is gone half an hour after it stops growing, on Eve's next poll, not 72 hours later
+    // when somebody next opens one.
+    await flood(eve.callsign, 5, 20, 15);
+    const piled = liveFor(eve);
+    db.prepare(`UPDATE recovery_collections SET created_at = ? WHERE owner_pubkey = ? AND status = 'open'`)
+        .run(new Date(Date.now() - 31 * 60_000).toISOString(), eve.key.pk);
+    const later = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
+    assert(later.body?.count <= 10 && liveFor(eve) <= 10,
+        `${piled} strangers' sessions past their sign-in window are down to the idle cap at Eve's next poll (${later.body?.count}, ${liveFor(eve)} live)`);
 
     assert(blocked.length === 0, `nothing was reached off this machine (${blocked.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} checks passed.`);

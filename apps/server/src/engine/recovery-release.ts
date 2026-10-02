@@ -31,10 +31,14 @@
 //
 // K1, K2 and K3 are all machine-released. Without D7 that trio is a silent, fully automated path
 // into any account — and a user who signs in with Google on an Android phone backed up to the same
-// Google account has one company holding two of the three. The delay plus notification is what
-// gives the owner and their keepers a chance to notice. Since this file also refuses K1 outright,
-// the automated set is now smaller still, but D7 stays: it is cheap, and it is the difference
-// between "the hub can be part of a quiet takeover" and "it cannot".
+// Google account has one company holding two of the three. D7 was written as a delay plus a push
+// to the owner when a session opened; the push is gone (defence review FABLE-sec-sso finding 5,
+// 2026-10-01: anybody with a callsign could send it, as often as the auth limiter allowed), so
+// what remains is the delay, and the live session in the owner's app (`/collect/mine`) where they
+// can stop it. That is accepted because of what the hub's piece now is: since this file refuses
+// K1 outright and the friend tier is scrapped, the only hub piece released on the delay alone is
+// half of a legacy two-layer copy, useless without the sign-in's piece; a sign-in's release does
+// push the owner (routes/recovery-collect.ts notifySeedReleased).
 //
 // ## Re-splitting is the stop button
 //
@@ -85,6 +89,16 @@ const RELEASABLE: readonly KeeperType[] = ['hub', 'sso'];
  * window by the auth limiter (15 opens a minute per address) times the window, released ones by sign-ins that
  * verified. The hub's 24-hour path (D7) waits on an idle session, and only legacy two-layer copies have one; what it
  * releases alone is half a seed, useless without the sign-in.
+ *
+ * So a stranger with many addresses CAN have thousands of sessions in their window against one name (PR #1456 deciding
+ * review: 2,100 from 140 /64s in 2 s). Capping those is what this cap must not do: until a sign-in checks out, the
+ * member's session and a stranger's look the same, so any cap on them evicts or refuses the member once the stranger
+ * has enough addresses. What such a pile can cost is bounded instead, where it lands:
+ *
+ *   - it lasts one window, not 72 hours: the prune runs when the owner's app reads its sessions as well as on each
+ *     open, so thirty minutes after the last open the pile is down to this cap;
+ *   - the owner is sent its size and the newest few (routes/recovery-collect.ts `/collect/mine`), never every row;
+ *   - the owner's Stop takes every one in one statement (cancelAllCollectionsFor).
  */
 const MAX_LIVE_COLLECTIONS_PER_OWNER = 10;
 
@@ -109,9 +123,11 @@ export const SIGN_IN_WINDOW_MS = 30 * 60 * 1000;
  * kept whatever its state, because that one is evidence — the owner needs to be able to see that
  * an attempt happened, which is the whole point of being able to cancel and re-split.
  *
- * Run opportunistically when a session opens, scoped to that owner. No timer (this codebase keeps
- * having to remove those) and no hourly sweep to forget about: rows appear only here, so this is
- * the only moment growth can happen, and the work is bounded by one member's own sessions.
+ * Run opportunistically, scoped to one owner: when a session opens, when the owner's app reads its live sessions
+ * (`/collect/mine`), and after the owner's Stop. No timer (this codebase keeps having to remove those) and no hourly
+ * sweep to forget about. Opening is the only moment rows appear; the read is what retires a pile of sessions whose
+ * sign-in window has passed without waiting for somebody to open another one (PR #1456 deciding review: a burst
+ * otherwise stayed listed for the full 72 hours).
  */
 export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evicted: number } {
     const now = nowIso();
@@ -580,9 +596,12 @@ export function releaseSsoFragment(collectionId: string, ssoLookupHash: string):
  * key (services/recovery-seal-key.ts), a file in the data folder rather than a variable, and
  * unwrapped here; what the device receives is unchanged.
  *
- * So this IS the node handing over a piece it can read. That is safe only because it is one piece
- * of three, and the D7 delay plus the owner notification are what actually defend it — not the
- * secrecy of this row.
+ * So this IS the node handing over a piece it can read. What defends it is that it is one piece,
+ * half a seed, useless without the sign-in's, and the D7 delay — not the secrecy of this row, and
+ * not a notification: nothing is pushed when a session opens or when the hub releases (defence
+ * review FABLE-sec-sso finding 5, 2026-10-01). Released after 24 hours with no sign-in, it reaches
+ * the owner only as a live session in their app, which they can stop. The owner is pushed when a
+ * sign-in releases its piece, which is the one that completes the seed.
  */
 export function releaseHubFragment(collectionId: string): ReleasedFragment {
     assertPlainTablesWritable();
@@ -710,13 +729,49 @@ export function cancelCollection(collectionId: string, byPubkey: string): boolea
     return true;
 }
 
-/** Every live collection against an account — what a "someone is recovering your account" notice reads. */
-export function openCollectionsFor(ownerPubkey: string): Collection[] {
+/**
+ * Stop every live recovery against an account, in one statement: what the owner's Stop means.
+ *
+ * Strangers can open any number of sessions against a name inside their sign-in window (see
+ * MAX_LIVE_COLLECTIONS_PER_OWNER: nothing evicts those, so nobody can push out the member's own sign-in). A stop that
+ * took them one request at a time ran into the owner's own rate limits a few hundred in, with the rest still live (PR
+ * #1456 deciding review). This one takes them all, however many, and the owner's "all stopped" is then true. The
+ * sessions that released nothing are deleted in the same pass; one that released something stays as evidence.
+ *
+ * @returns how many were live and are now stopped
+ */
+export function cancelAllCollectionsFor(ownerPubkey: string): number {
+    if (!ownerPubkey) return 0;
+    const stopped = db.prepare(`
+        UPDATE recovery_collections SET status = 'cancelled',
+               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
+    `).run(ownerPubkey, nowIso()).changes;
+    pruneCollectionsFor(ownerPubkey);
+    return stopped;
+}
+
+/** How many live collections there are against an account: the number the owner's banner shows. */
+export function countOpenCollectionsFor(ownerPubkey: string): number {
+    const row = db.prepare(`
+        SELECT COUNT(*) AS n FROM recovery_collections
+        WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
+    `).get(ownerPubkey, nowIso()) as { n: number };
+    return row.n;
+}
+
+/**
+ * Live collections against an account, newest first — what a "someone is recovering your account" notice reads.
+ * `limit` bounds the answer: a route sends the owner a few and the count (countOpenCollectionsFor), never all of them,
+ * since strangers decide how many there are.
+ */
+export function openCollectionsFor(ownerPubkey: string, limit = -1): Collection[] {
     const rows = db.prepare(`
         SELECT * FROM recovery_collections
         WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
-        ORDER BY created_at DESC
-    `).all(ownerPubkey, nowIso()) as Record<string, unknown>[];
+        ORDER BY created_at DESC, rowid DESC
+        LIMIT ?
+    `).all(ownerPubkey, nowIso(), limit) as Record<string, unknown>[];
     return rows.map(rowToCollection);
 }
 

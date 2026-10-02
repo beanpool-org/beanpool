@@ -367,8 +367,9 @@ test("the names list's pages say the design's sentences, and none of the old pro
         "Every admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, each admin looks at the admins their phone shows: a phone that still shows the removed admin taps Remove @X's old key. Whatever the server says, that phone then makes a new key without them or writes nothing. Two phones that show different list keys are being shown different things: add no names until they match, and tell your admins.",
         // The design addendum's (e): the vouched history gives a way forward through any admin whose phone opens the list.
         "A key made by someone no admin your phone trusts has checked. Meet that admin, or an admin whose phone already opens the list, and check each other's phones.",
-        // Round 7 (the re-review's guide :61): what Take @name's history does with the other history's keys.
-        "Your phone keeps the other history's keys, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin your phone had removed stays removed: before it writes, it makes a new key without them.",
+        // Design Addendum 3 (§5): Follow the server's history replaces Take @name's history; the standby paragraph names it.
+        "The server shows a key history your phone didn't take. A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Ask your admins what happened. Tap Follow the server's history: your phone keeps the other history's keys, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin your phone had removed stays removed: before it writes, it makes a new key without them.",
+        "If the standby's copy was older than the main server's, the phones say so and can put the key history back. If an admin's phone made a new key on the standby first, the other phones say the server shows a different key history and offer to follow it (see When the app refuses).",
         // Decided with the design (§12 Q3): the 12 words alone don't make a lost phone safe.
         "The 12 words alone aren't enough for an admin whose phone was lost",
     ]) assert.ok(operators.includes(sentence), `running-a-known-community says: ${sentence.slice(0, 70)}…`);
@@ -378,7 +379,8 @@ test("the names list's pages say the design's sentences, and none of the old pro
         /any admin can (\*\*)?start a new key/i, /working with whoever runs/i, /removed admin working with/i,
         /can't read a name without an admin checking the wrong phone/i, /Nothing written from then on can be read/i,
         /To be sure, meet another admin and compare the list key/i, /they should show the same one/i,
-        /Admins check for that by meeting and comparing their phones/i, /for reading only/i, /stay on it, for reading/i]) {
+        /Admins check for that by meeting and comparing their phones/i, /for reading only/i, /stay on it, for reading/i,
+        /Take @/, /take their history/i, /an admin whose phone has the server's history can (check yours|meet you)/i, /only at a meeting/i]) {
         assert.doesNotMatch(`${operators}\n${members}`, gone);
     }
 });

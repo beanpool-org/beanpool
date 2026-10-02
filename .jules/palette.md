@@ -213,3 +213,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-02 - EventChat Composer & Send Button Focus Rings
 **Learning:** `EventChat.tsx` chat composer textarea and Send action button lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500` to the textarea composer and `focus-visible:ring-offset-1` to the Send button in `EventChat.tsx`.
+
+## 2026-10-03 - InstallPrompt Touch Target Sizing & Test Coverage
+**Learning:** `InstallPrompt.tsx` interactive controls ("Dismiss", "How?", "Install", and "Don't show this again") lacked explicit minimum touch target sizing (height/width < 44px on mobile devices), and the component lacked unit test coverage.
+**Action:** Added explicit `minWidth: '44px'`, `minHeight: '44px'` touch target properties and inline flex alignment to buttons in `InstallPrompt.tsx`, and created comprehensive unit test suite in `InstallPrompt.test.tsx`.

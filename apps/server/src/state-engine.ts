@@ -816,7 +816,8 @@ export function initStateEngine(): void {
         try { runLedgerAudit(); } catch (e) { console.warn('[LedgerAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
-    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily)
+    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
+    // at each run (engine/audit.ts): its numbers are about Beans, and its member walk freezes a large node.
     setTimeout(() => {
         try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
     }, 2.5 * 60 * 1000);
@@ -8269,7 +8270,8 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
     return runLedgerAuditEngine();
 }
 
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+/** Null where Beans are off: the audit does not run there (engine/audit.ts). */
+export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
     return runWashSybilMetricsEngine();
 }
 

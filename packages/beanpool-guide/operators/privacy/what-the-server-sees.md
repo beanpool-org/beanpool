@@ -35,7 +35,7 @@ So others can read how each member voted. Whoever runs the machine can copy the 
 
 ## Members' sign-in recovery copies
 
-A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
+A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in or adds one to a 12-words account, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them.
 
 Whoever holds the database and that key can open a member's copy, though, with the id that member's sign-in account gives the server. The server receives that id every time the member signs in. That means whoever runs the machine, anyone with a copy of the whole data folder, and whoever opens a locked backup. The members' guide tells members this plainly, and that only their 12 words keep everyone else out. Don't look.
 
@@ -51,7 +51,7 @@ Your community is for its members. Someone who is not a member, signed in to Bea
 
 - the community's name, its counts and totals (members, posts, trades, the Commons pot), what it has switched on, and its health summary;
 - the price guide: things and their usual prices, with no people or posts in it;
-- what it takes to join or come back: whether an invite code works and who sent it, whether a name is taken here, and whether a key is a member here, but never that member's name. For a sign-in recovery, the one member whose whole name was typed, with their key and no photo. The name checks are limited to 15 a minute from one internet address;
+- what it takes to join or come back: whether an invite code works and who sent it, whether a name is taken here, and whether a key is a member here, but never that member's name. For a sign-in recovery, the one member whose whole name was typed, with their key and no photo. The name checks are limited to 15 a minute from one internet address, or, while someone joins through the open door, to the door's own limits (see Rate limits);
 - the pictures an app shows without signing: a profile picture by the member's key, a post's photos at their own addresses (see below), the locked attachments of direct messages, and the pictures of Pulse items.
 
 Everything else is for members only: the market, the enterprises with who keeps and backs them, Decisions, Commons projects, crowdfunds and the Pulse. Someone who is not a member is told it is for members, and pointed to the global community, global.beanpool.org, to look around.

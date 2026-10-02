@@ -53,7 +53,7 @@ import {
 } from '@beanpool/core';
 import { getNodeApiUrl } from './api';
 import { identityFromMnemonic, JOIN_PROVIDERS, type BeanPoolIdentity, type JoinProvider } from './identity';
-import { door, providerLabel, type DoorAnswer } from './web-join';
+import { door, isWrongClock, providerLabel, WRONG_CLOCK, type DoorAnswer } from './web-join';
 
 // ===================== THE ACCOUNT (the node's lookup) =====================
 
@@ -254,6 +254,7 @@ export async function openRestoredAccount(
 export function releaseRefusalMessage(answer: DoorAnswer, provider: JoinProvider, callsign: string): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     const label = providerLabel(provider);
+    if (isWrongClock(answer)) return WRONG_CLOCK;
     if (answer.status === 400) return `That ${label} account isn't a way back into ${callsign}. Try the sign-in you joined with, or your 12 words.`;
     if (answer.status === 401) return `${label} sign-in couldn't be checked or took too long. Try again.`;
     if (answer.status === 429 || answer.status === 503) return said ?? `${label} sign-in could not be checked right now. Please try again in a minute.`;
@@ -264,6 +265,7 @@ export function releaseRefusalMessage(answer: DoorAnswer, provider: JoinProvider
 /** A refused request to open the session or get a nonce, in plain words. */
 export function sessionRefusalMessage(answer: DoorAnswer, callsign: string): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (isWrongClock(answer)) return WRONG_CLOCK;
     if (answer.status === 400) return `${callsign} has no sign-in to come back with here. Use your 12 words, or the phone app.`;
     if (answer.status === 409) return `More than one account here is called ${callsign}. Use your 12 words, or the phone app.`;
     if (answer.status === 429) return said ?? 'Too many tries from this network. Please try again later.';

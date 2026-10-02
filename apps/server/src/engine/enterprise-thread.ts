@@ -34,6 +34,17 @@ export function isEnterpriseThreadHidden(status: string | null | undefined): boo
 }
 
 /**
+ * No enterprise for this thread to be read under, as the enterprise's own thread route answers (routes/treasury.ts):
+ * the key is no enterprise, or a pruned or deleted one. GET /api/messages/:id asks it too, so the thread can't be read
+ * by its id after its enterprise is gone (FABLE-sec-events-chat F2, 2026-10-01).
+ */
+export function isEnterpriseThreadGone(enterprisePubkey: string): boolean {
+    const row = db.prepare('SELECT is_treasury, status FROM members WHERE public_key = ?').get(enterprisePubkey) as
+        { is_treasury: number; status: string | null } | undefined;
+    return !row || !row.is_treasury || isEnterpriseThreadHidden(row.status);
+}
+
+/**
  * A wound-up, suspended or disabled enterprise is still shown, so its thread still reads — but nobody can post.
  * Paused is NOT here: pausing is exactly when people need to talk about it.
  */

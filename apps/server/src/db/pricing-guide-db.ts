@@ -8,6 +8,7 @@
  */
 
 import { db, deletePlainRows } from './db.js';
+import { likeContains } from '@beanpool/engine';
 import { admitByAddress } from './writes-by-address.js';
 import { travellingRows } from '../engine/replication-manifest.js';
 import { assertPlainTablesWritable } from '../config/node-role.js';
@@ -79,8 +80,9 @@ export function getPricingGuideItems(category?: string, query?: string): Pricing
     }
 
     if (query && query.trim()) {
-        sql += ' AND (name LIKE ? OR description LIKE ?)';
-        const q = `%${query.trim()}%`;
+        // The text taken literally: a `%` or `_` someone types is that character, not a wildcard (a visitor reaches this).
+        sql += " AND (name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')";
+        const q = likeContains(query.trim());
         params.push(q, q);
     }
 

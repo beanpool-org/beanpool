@@ -204,7 +204,8 @@ The fleet manager keeps what each server sends:
 
 - A server with no recovery code sends a backup that is not locked. The fleet manager keeps it as before: the latest database, and one copy a day for 30 days, and shows the server as "Partial: database, no keys". The same goes for a server that runs a BeanPool older than locked backups.
 - A server with a recovery code sends a locked backup. The fleet manager keeps it as it came: the newest, and one a day for 30 days. It cannot open these files and does not need to.
-- When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours. A collection started by hand from the dashboard still asks at once.
+- When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours.
+- The copies are files in its data folder, under backups/(server name). A community server no longer lists, collects or hands out these copies itself: the old fleet manager pages (/api/manager/backups) were removed in October 2026.
 
 Once a server's backups are locked, the fleet manager also locks the unlocked copies it holds for that server, and deletes each unlocked copy only after reading its locked copy back and opening it. It does this only when all three hold:
 

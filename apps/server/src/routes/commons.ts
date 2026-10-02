@@ -30,6 +30,7 @@ import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js
 import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -218,7 +219,7 @@ router.post('/api/commons/decisions', async (ctx) => {
         // switched off: 404 feature_off, as the feature gate in front of this route answers.
         if (respondProfileRefusal(ctx, err)) return;
         ctx.status = 400;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 
@@ -411,7 +412,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         ctx.body = { success: true, project };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to update project' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update project') };
     }
 });
 
@@ -435,7 +436,7 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to delete project' };
+        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
     }
 });
 
@@ -481,7 +482,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         ctx.body = { success: true, txId };
     } catch (err: any) {
         ctx.status = 400;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 

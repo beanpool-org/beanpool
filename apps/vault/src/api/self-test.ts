@@ -56,7 +56,8 @@ export async function selfTest(ownFile: string): Promise<SelfTestResult> {
         const seed = crypto.randomBytes(32);
         const msg = crypto.randomBytes(40);
         const sig = ed25519.sign(msg, seed);
-        return ed25519.verify(sig, msg, ed25519.getPublicKey(seed)) && !ed25519.verify(sig, crypto.randomBytes(40), ed25519.getPublicKey(seed));
+        return ed25519.verify(sig, msg, ed25519.getPublicKey(seed), { zip215: false })
+            && !ed25519.verify(sig, crypto.randomBytes(40), ed25519.getPublicKey(seed), { zip215: false });
     });
     await check('xchacha20poly1305', () => {
         const key = crypto.randomBytes(32);

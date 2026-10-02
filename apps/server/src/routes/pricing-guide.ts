@@ -62,8 +62,9 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
     router.get('/api/pricing-guide', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const category = ctx.query.category as string | undefined;
-        const search = ctx.query.q as string | undefined;
+        // `?q=a&q=b` arrives as an array: one string or none, never a value .trim() throws on.
+        const category = typeof ctx.query.category === 'string' ? ctx.query.category : undefined;
+        const search = typeof ctx.query.q === 'string' ? ctx.query.q : undefined;
 
         // A listing photo as a thumbnail only for a reader who may read that listing (withReadersThumbnail).
         const readerMayReadListings = !photoKeysRequired() || passesReadGate(ctx.state?.actor as string | undefined);

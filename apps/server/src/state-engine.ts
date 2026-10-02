@@ -11,7 +11,7 @@ import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing }
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
@@ -889,24 +889,36 @@ function armMainServerTimers(): void {
  * runs now what a main server's boot runs and a standby's skipped, so it is the same main server a restart would give,
  * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
  * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
- * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, and the main server's timers
- * (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, settled escrows swept, and the main
+ * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
  * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
  * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
- * Each part idempotent and on its own guard; nothing on a standby. Never throws.
+ * Each part idempotent and on its own guard; nothing on a standby. Throws only the node profile's refusals, which stop a
+ * main server's boot and so stop this (config/node-profile.ts isMainServerBootRefusal).
  */
 export function becomeMainServerInPlace(): void {
     if (getNodeRole() !== 'primary') return;
     const step = (what: string, fn: () => void) => {
         try { fn(); } catch (e) { console.warn(`[Topology] Becoming the main server: ${what} failed:`, e); }
     };
-    step('the node profile', () => { mirrorNodeProfileAtBoot('primary'); });
+    // The node profile first, as a main server's boot has it, with its refusals: a database that is a global node under another
+    // NODE_PROFILE, or the guest view's escape hatches set (ENFORCE_READ_AUTH=false, ENFORCE_WS_AUTH=false), stop every main
+    // server's boot, so they stop this promotion too: thrown, before anything of a main server's runs or serves, and the
+    // start ends as such a boot does (index.ts main().catch exits 1). The take-over is kept, past its restart: the next start
+    // boots as the main server and refuses with the same words until the setting is fixed, then goes on.
+    try {
+        mirrorNodeProfileAtBoot('primary');
+    } catch (e) {
+        if (isMainServerBootRefusal(e)) throw e;
+        console.warn('[Topology] Becoming the main server: the node profile failed:', e);
+    }
     step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
     step("the database's main-server passes", () => runMainServerSchemaPasses());
     step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
     step('the BeanPool enterprise', () => { seedPulseCurated(); });
     step('stranded pledges', () => { returnStrandedPledges({ transfer, conservingTransaction }); });
     step('the one-time migrations', () => runMainServerMigrations());
+    step('settled escrow accounts', () => sweepSettledEscrowAccounts());
     step("the main server's timers", () => armMainServerTimers());
     console.log('[Topology] This process is the main server now: it runs what a main server\'s boot runs, with no restart.');
 }

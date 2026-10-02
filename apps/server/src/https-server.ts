@@ -121,7 +121,7 @@ import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
 import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { createManagerBackupsRoutes } from './routes/manager-backups.js';
+import { scrubServerFaults } from './routes/member-error-text.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
@@ -968,7 +968,6 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
 function isSignatureBypassed(p: string): boolean {
     return p.startsWith('/api/local/') ||
         p.startsWith('/api/admin/') ||
-        p.startsWith('/api/manager/') ||
         p.startsWith('/api/pair/') ||
         p.startsWith('/api/pricing-guide/admin/') ||
         p.startsWith('/api/pricing-guide/reports') ||
@@ -1089,6 +1088,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         ctx.request.ip = clientIp(ctx);
         await next();
     });
+
+    // A database, network or bug's text in an answer outside the operator's routes is a server fault: replaced by fixed
+    // words and answered 500, over every route and gate below (routes/member-error-text.ts).
+    app.use(scrubServerFaults());
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)
     app.use(federationCors());
@@ -1361,8 +1364,8 @@ export async function startHttpsServer(port: number): Promise<number> {
                     (ctx as any).requestBody = parsed;
                     // Koa core does NOT parse request bodies, and this server mounts no bodyparser
                     // middleware, so `ctx.request.body` is undefined unless it is set right here.
-                    // Fourteen handlers across routes/pairing.ts, routes/pricing-guide.ts and
-                    // routes/manager-backups.ts read the `ctx.request.body` spelling — every one of
+                    // Fourteen handlers across routes/pairing.ts, routes/pricing-guide.ts and the fleet
+                    // manager's backup routes (deleted 2026-10-02) read the `ctx.request.body` spelling — every one of
                     // them was silently receiving `{}`. Pairing 400'd on every attempt, and a
                     // single-node harvest fell through its `!nodeId` guard and ran the whole fleet.
                     // Both spellings now name the same parsed object.
@@ -1696,7 +1699,6 @@ export async function startHttpsServer(port: number): Promise<number> {
         createTreasuryRoutes(deps),
         createPublicAddressRoutes(deps),
         createAppAddressesRoutes(deps),
-        createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),

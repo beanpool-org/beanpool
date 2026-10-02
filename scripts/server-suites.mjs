@@ -244,7 +244,6 @@ export const SUITES = [
     'test-offline-ticket-check',
     'test-request-body',
     'test-admin-thresholds',
-    'test-manager-backups',
     'test-push-preferences',
     'test-push-token-own-rows',
     'test-push-leave-statement',
@@ -371,6 +370,7 @@ export const SUITES = [
     'test-slice6-review-findings',
     'test-security-followups-0919',
     'test-security-followups-1001',
+    'test-storm-smalls',
 ];
 
 /**

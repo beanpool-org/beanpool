@@ -6,10 +6,11 @@
  *  1. An admin's key session is refused (403, in words), with nothing changed, on the restore (the live database's roles
  *     and members as they were, no upload left), /backup, the snapshot download, the replication token's generate, mode
  *     and clear (the standby's token still works), replication-config/save, a snapshot delete (the file still there), a
- *     change to the snapshot settings, the manager's two backup downloads, a copy through the admin-password path
+ *     change to the snapshot settings, a copy through the admin-password path
  *     (an admin's session wins over any X-Admin-Password header), and every off-box backup route (status, settings, run,
- *     list, download). A moderator's session too. An owner's key session and the node password get each of them.
- *  2. The replication token alone, on every /api/local/admin/* and /api/manager/* route the node serves: it gets what
+ *     list, download). A moderator's session too. An owner's key session and the node password get each of them. The
+ *     fleet manager's backup downloads are gone (deleted 2026-10-02): nobody gets a database there, an owner neither.
+ *  2. The replication token alone, on every /api/local/admin/* route the node serves: it gets what
  *     no credential gets, and never a database, except on the standby's own routes (the copy routes, replication-access
  *     and the take-over envelope), where it is taken. With backups readable (no recovery code) and locked (one).
  *  3. A readable backup's node_config.json carries no credential (the admin hash and salt, the 2FA secret, the token's
@@ -270,8 +271,6 @@ async function main(): Promise<void> {
             unchanged: () => fs.existsSync(path.join(dataDir!, 'snapshots', snapA.name)) ? null : 'the snapshot is gone' },
         { what: 'a snapshot settings change', method: 'POST', route: '/api/local/admin/snapshots/config', body: JSON.stringify({ keep: 1 }),
             unchanged: () => JSON.stringify(getAutoSnapshotConfig()) === snapshotConfigBefore ? null : 'the settings changed' },
-        { what: "the manager's download-db", method: 'GET', route: '/api/manager/backups/download-db?nodeId=local', unchanged: () => null },
-        { what: "the manager's download-history", method: 'GET', route: '/api/manager/backups/download-history?nodeId=local&filename=beanpool-2026-01-01.db', unchanged: () => null },
         { what: 'a copy through the admin-password path', method: 'GET', route: '/api/local/admin/sync-snapshot', headers: { 'x-admin-password': 'anything at all' }, unchanged: () => null },
         { what: 'the off-box backups status', method: 'POST', route: '/api/local/admin/offbox-backups/status', unchanged: () => null },
         { what: 'an off-box backups settings change', method: 'POST', route: '/api/local/admin/offbox-backups/settings', body: JSON.stringify({ retentionDays: 1 }),
@@ -305,8 +304,10 @@ async function main(): Promise<void> {
         assert(sd.status === 200 && isGzip(sd.bytes), `1. the snapshot download: ${who} gets it (${sd.status})`);
         const copy = await call('GET', '/api/local/admin/sync-snapshot', { ...creds, 'x-admin-password': who === 'the node password' ? PW : 'anything at all' });
         assert(copy.status !== 401 && copy.status !== 403, `1. a copy through the admin-password path: ${who} passes the gate (${copy.status})`);
+        // The fleet manager's backup routes are gone (2026-10-02): no database there for anyone, an owner included.
         const mdb = await call('GET', '/api/manager/backups/download-db?nodeId=local', creds);
-        assert(mdb.status !== 401 && mdb.status !== 403, `1. the manager's download-db: ${who} passes the gate (${mdb.status})`);
+        assert(mdb.status >= 400 && mdb.status < 500 && !isGzip(mdb.bytes) && !mdb.bytes.includes(SQLITE),
+            `1. the manager's download-db is gone: ${who} gets no database there (${mdb.status})`);
         const offbox = await call('POST', '/api/local/admin/offbox-backups/status', creds);
         assert(offbox.status === 200 && offbox.json?.state === 'none', `1. the off-box backups status: ${who} reads it (${offbox.status})`);
         const cfg = await call('POST', '/api/local/admin/snapshots/config', creds, JSON.stringify({ keep: getAutoSnapshotConfig().keep }));

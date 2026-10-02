@@ -27,7 +27,7 @@ import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { SOURCE_FREE_FAILURES, NODE_CHECKS_PER_MIN, acquirePasswordAttempt, settlePasswordAttempt } from './password-brake.js';
@@ -118,6 +118,7 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
 
     async function call(path: string, headers: Record<string, string>, body: any, method = 'POST'): Promise<{ status: number; body: any; retryAfter: number }> {
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
         const res = await fetch(`${base}${path}`, method === 'GET'
             ? { headers }
             : { method, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });

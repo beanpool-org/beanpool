@@ -399,6 +399,11 @@ async function main() {
         await flush();
         assert(sent.length === 0, 'pruning the same posts again sends nothing');
 
+        const overLimitIds = Array.from({ length: 201 }, (_, i) => `post_overlimit_${i}`);
+        const overLimitRes = await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: overLimitIds });
+        assert(overLimitRes.status === 400, 'bulk-delete with > 200 items is rejected with 400');
+        assert(/Bulk delete limit exceeded/.test(overLimitRes.body?.error || ''), 'rejection error message specifies limit');
+
         // ── 8. The enterprise ledger after an arbitrated deal ────────────────────────────────────
         console.log('\n— 8. the enterprise ledger names an arbitrated deal\'s signer in words —');
         const { publicKey: farm } = se.createTreasury('FarmCoop', '/uploads/avatar.jpg', 200);

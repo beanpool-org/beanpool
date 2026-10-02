@@ -262,7 +262,7 @@ export default function NamesListScreen() {
             {
                 text: 'Delete', style: 'destructive', onPress: async () => {
                     setBusy(true);
-                    const done = await deleteNamesEntry(anchor, identity, entry.id);
+                    const done = await deleteNamesEntry(anchor, identity, entry.id, STORE);
                     setBusy(false);
                     if (!done.ok) { setFormError(done.message); return; }
                     setOpened({ ...opened, list: { ...list, entries: list.entries.filter((e) => e.id !== entry.id) } });
@@ -528,7 +528,8 @@ export default function NamesListScreen() {
                         ? btn(COPY.startAgainButton, startAgain, 'danger') : null}
                     {plan.kind === 'wait' && plan.canMakeNew ? btn(COPY.makeNewButton, startAgain, 'danger') : null}
                     {plan.kind === 'refused' && plan.reason === 'rolled_back' ? btn(COPY.putBackButton, putBack, 'primary') : null}
-                    {plan.kind === 'refused' && plan.reason === 'different_history' && plan.canFollow ? btn(COPY.followButton, follow, 'danger') : null}
+                    {plan.kind === 'refused' && plan.canFollow && (plan.reason === 'different_history' || (plan.reason === 'untrusted_maker' && opened.pin.chain.length > 0))
+                        ? btn(COPY.followButton, follow, 'danger') : null}
                     {plan.kind === 'refused' && plan.reason === 'other_community' ? null : checkSomeone}
                 </View>
                 {myKeyCard}

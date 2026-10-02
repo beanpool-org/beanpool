@@ -35,7 +35,7 @@ import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
-    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare, namesSeenAfterRead,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -110,6 +110,8 @@ export interface NamesListBody {
     current: string | null;
     entries: SealedEntryRow[];
     confirmations: ConfirmationRow[];
+    /** The ids an admin deleted (the access log's `delete` lines, newest 10,000; design Addendum 4). */
+    deleted?: string[];
 }
 
 export type NamesAction = 'read' | 'export' | 'add' | 'edit' | 'delete' | 'confirm' | 'second' | 'revoke'
@@ -168,8 +170,15 @@ export const secondConfirmation = (anchor: string, id: BeanPoolIdentity, confirm
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations/${encodeURIComponent(confirmationId)}/second`, {});
 export const revokeConfirmation = (anchor: string, id: BeanPoolIdentity, confirmationId: string) =>
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations/${encodeURIComponent(confirmationId)}/revoke`, {});
-export const deleteNamesEntry = (anchor: string, id: BeanPoolIdentity, entryId: string) =>
-    call<{ id: string }>(anchor, id, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}`);
+/** Deletes an entry; once the node says it's gone, this phone stops counting it as seen (an honest delete is no loss). */
+export async function deleteNamesEntry(anchor: string, id: BeanPoolIdentity, entryId: string, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<{ id: string }>> {
+    const done = await call<{ id: string }>(anchor, id, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}`);
+    if (done.ok) {
+        const pin = await readNamesPinFrom(store, id.publicKey, anchor);
+        if (pin && pin.seen.includes(entryId)) await writeNamesPinTo(store, id.publicKey, anchor, { ...pin, seen: pin.seen.filter((x) => x !== entryId) });
+    }
+    return done;
+}
 export const setNamesSettings = (anchor: string, id: BeanPoolIdentity, settings: { twoAdminsToConfirm?: boolean }) =>
     call<{ twoAdminsToConfirm: boolean; namesShownToMembers: boolean }>(anchor, id, 'POST', `${NAMES_PATH}/settings`, settings);
 
@@ -329,7 +338,10 @@ export interface NamesOpened {
     sentTo: string[];
     /** Admins the node lists whose phones this phone hasn't checked: "Check @X in person" (never a share on a callsign). */
     toCheck: NamesAdminRow[];
-    /** Rolled back: how many entries this phone last saw that the node no longer has. */
+    /**
+     * Ready: entries this phone saw that are neither on the node nor deleted by an admin (design Addendum 4). Rolled back:
+     * the card's estimate, before anything is read.
+     */
     lost: number;
 }
 
@@ -393,10 +405,34 @@ async function sendGeneration(anchor: string, identity: BeanPoolIdentity, store:
     return sent;
 }
 
-async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Pick<Synced, 'pin'>, drops: string[]): Promise<NamesResult<true>> {
+async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<NamesResult<true>> {
     const made = makeNamesGenerationFor(synced.pin, identity, drops);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, made.pin))) return NOT_KEPT;
-    return sendGeneration(anchor, identity, store, made.pin, made.generation);
+    const first = await postGeneration(anchor, identity, made.generation);
+    if (first.ok) return { ok: true, value: true };
+    // The node counts a holder on its own word (design Addendum 4): a phone that took the head's key from a box but has
+    // sent no header since isn't one, and its own new key is refused (409 `ask_for_share`). It says so by sending its
+    // signed header to the admins it trusts (never to a key this statement drops), then sends the statement once more.
+    if (first.code === 'ask_for_share' && (await claimHeldKey(anchor, identity, synced, drops))) {
+        return sendGeneration(anchor, identity, store, made.pin, made.generation);
+    }
+    if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...made.pin, pending: null });
+    return first;
+}
+
+/** Sends this phone's ring, under its signed header, to every trusted listed admin but `drops`: true when one landed. */
+async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<boolean> {
+    const { pin, state } = synced;
+    const head = pin.chain[pin.chain.length - 1];
+    if (!head || !pin.ring[head.id]) return false;
+    let landed = false;
+    for (const a of state.admins) {
+        const to = a.pubkey.toLowerCase();
+        if (to === pin.me || !pin.trusted.includes(to) || drops.includes(to)) continue;
+        const share = namesSharesToSend(pin, state, identity, to)[0];
+        if (share && (await postShare(anchor, identity, share)).ok) landed = true;
+    }
+    return landed;
 }
 
 /**
@@ -413,6 +449,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     let made: string[] | null = null;
     let carried: string[] = [];
     let madeN = 0;
+    let askedFor = '';
     const pend = l.value.pin.pending;
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
@@ -432,6 +469,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
         if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return sent;
         if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
+        if (!sent.ok && sent.code === 'ask_for_share') askedFor = askForShareWords(l.value.state, identity.publicKey);
         l = await look(anchor, identity, store);
         if (!l.ok) return l;
         notices.push(...l.value.notices);
@@ -441,6 +479,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     let list: NamesListBody | null = null;
     let kept = pin;
     const due: string[] = [];
+    let gone = 0;
     if (plan.kind === 'ready') {
         for (const share of namesSharesToSend(pin, state, identity)) {
             due.push(share.to);
@@ -450,10 +489,15 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         const got = await fetchNamesList(anchor, identity);
         if (!got.ok) return got;
         list = got.value;
-        kept = { ...pin, lastCount: list.entries.length };
+        // Names this phone saw that are neither on the node nor deleted by an admin: a loss, said with its count.
+        const after = namesSeenAfterRead(pin, list.entries.map((e) => e.id), list.deleted ?? []);
+        kept = after.pin;
+        gone = after.gone.length;
         await writeNamesPinTo(store, identity.publicKey, anchor, kept);
     }
     const words = noticeWords(notices, state);
+    if (askedFor) words.push(askedFor);
+    if (gone) words.push(NAMES_COPY.lostEntries(gone));
     if (made && made.length) {
         // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
         // sent" only for the admins the key reached; the rest get it on the next open.
@@ -469,16 +513,15 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
             ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
         ].filter((w) => w));
     }
-    if (plan.kind === 'refused' && plan.reason === 'rolled_back') {
-        const lost = Math.max(0, pin.lastCount - (state.counts?.entries ?? 0));
-        if (lost) words.push(NAMES_COPY.lostSinceCopy(lost));
-    }
+    // The rolled-back card's estimate, before anything is read; the exact count comes on the ready read after it.
+    const estimate = plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.seen.length - (state.counts?.entries ?? 0)) : 0;
+    if (estimate) words.push(NAMES_COPY.lostSinceCopy(estimate));
     return {
         ok: true,
         value: {
             state, plan, pin: kept, ring: namesRingKeys(kept), generations, list, notices: words, made, sentTo,
             toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
-            lost: plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.lastCount - (state.counts?.entries ?? 0)) : 0,
+            lost: plan.kind === 'ready' ? gone : estimate,
         },
     };
 }
@@ -506,8 +549,17 @@ export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdent
     const { plan } = l.value;
     if (!(plan.kind === 'wait' && plan.canMakeNew)) return { ok: false, status: 0, code: 'no_plan', message: 'There is no new key to make here.' };
     const sent = await makeAndSend(anchor, identity, store, l.value, plan.drops);
+    if (!sent.ok && sent.code === 'ask_for_share') return { ...sent, message: askForShareWords(l.value.state, identity.publicKey) };
     if (!sent.ok) return sent;
     return openNamesList(anchor, identity, store);
+}
+
+/** The 409 `ask_for_share` in words: who the node says holds the current key (design Addendum 4). */
+function askForShareWords(state: NamesState, me: string): string {
+    // The holder the node names; on a stale screen it may name none here, then the current key's maker.
+    const maker = (state.generations as { id?: string; maker?: string }[] ?? []).find((g) => g?.id === state.current?.id)?.maker ?? '';
+    const holder = (state.holdersOfCurrent ?? []).find((k) => k !== me.toLowerCase()) ?? maker;
+    return NAMES_COPY.askForShare(callsignIn(state, holder));
 }
 
 /**
@@ -536,7 +588,8 @@ export async function followServerHistory(anchor: string, identity: BeanPoolIden
     const l = await look(anchor, identity, store);
     if (!l.ok) return l;
     const { plan, state } = l.value;
-    if (!(plan.kind === 'refused' && plan.reason === 'different_history' && plan.canFollow)) {
+    // Addendum 4: also on a stop at a maker no trusted admin vouches for (a non-empty chain; an empty one is Start again).
+    if (!(plan.kind === 'refused' && (plan.reason === 'different_history' || plan.reason === 'untrusted_maker') && plan.canFollow && l.value.pin.chain.length > 0)) {
         return { ok: false, status: 0, code: 'no_plan', message: 'There is no key history to follow here.' };
     }
     const followed = followNamesServer(l.value.pin, state);
@@ -895,7 +948,9 @@ export const NAMES_COPY = {
         + (holders.length
             ? `${either(holders)} ${holders.length > 1 ? 'hold' : 'holds'} it and will send it on their next open.`
             : notTrusting.length
-            ? `${either(notTrusting)} ${notTrusting.length > 1 ? 'hold it, but their phones don’t trust this one yet: meet one of them' : 'holds it, but their phone doesn’t trust this one yet: meet them'} and check each other’s phones.`
+            ? (notTrusting.length > 1
+                ? `${either(notTrusting)} hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
+                : `${at(notTrusting[0])} holds it, but their phone doesn’t trust this one yet: meet ${at(notTrusting[0])} and check each other’s phones.`)
             : 'Nobody who is an admin now holds it: type it again from your paper copy, or delete it.'),
     startAgain: (count: number) => 'Nobody who is an admin now holds the list’s keys. You can start a new key; the '
         + `${count} ${count === 1 ? 'entry' : 'entries'} written before stay locked until an admin who held a key comes back, or they are typed again from your paper copy.`,
@@ -904,9 +959,30 @@ export const NAMES_COPY = {
     missingRecord: 'The server is missing part of the list’s key history, so this phone can’t check the newest key. Nothing was read or written. '
         + 'Ask whoever runs the server, or an admin.',
     /** Holders whose phones don't trust this one (round 9): nothing comes until a check in person. */
-    waitNotTrusted: (holders: string[]) => `${either(holders)} ${holders.length > 1
-        ? 'hold the list’s keys, but their phones don’t trust this one yet: meet one of them'
-        : 'holds the list’s keys, but their phone doesn’t trust this one yet: meet them'} and check each other’s phones.`,
+    /** Holders whose phones don't trust this one (the reviewer's :851, design Addendum 4): a check comes first. */
+    holdersNoTrust: (holders: string[]) => (holders.length > 1
+        ? `${either(holders)} hold the list’s keys, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
+        : `${at(holders[0] ?? '')} holds the list’s keys, but their phone doesn’t trust this one yet: meet ${at(holders[0] ?? '')} and check each other’s phones.`),
+    // Design Addendum 4 (§4), exact.
+    followFromHere: (n: number) => `If none of them can be reached, follow the server’s history: this phone takes key ${n} for its place only, `
+        + 'with no new trust and no new key, and before it writes it makes a new key without any admin it had removed.',
+    refusedRemoved: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and this phone had removed ${at(who)}’s key; `
+        + `the server’s history hasn’t. Nothing was read or written. Check ${at(who)}’s phone in person only if ${at(who)} is an admin again: `
+        + `this phone then trusts them again. Or check an admin whose phone already opens the list: this phone then takes key ${n} for its `
+        + `place only and makes a new key without ${at(who)} before it writes. If none of them can be reached, follow the server’s history: `
+        + 'the same, without a meeting.',
+    refusedRemovedGone: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, who is no longer an admin, and this `
+        + `phone had removed ${at(who)}’s key. Nothing was read or written. Check an admin whose phone already opens the list, or follow `
+        + `the server’s history: either way this phone takes key ${n} for its place only and makes a new key without ${at(who)} before it writes.`,
+    waitRemovedHolder: (who: string, n: number) => `The server says ${at(who)} holds key ${n}, and this phone had removed ${at(who)}’s key. `
+        + `Nobody else can make a new key until an owner removes ${at(who)} or moves their account to a new key.`,
+    askForShare: (who: string) => `The server says ${at(who)} holds the current key, so only their phone can make the next one. Ask `
+        + `${at(who)} to open the names list; if their phone is lost, have an owner remove them.`,
+    lostEntries: (n: number) => (n === 1
+        ? '1 entry this phone saw isn’t on the server now, and no admin deleted it. '
+        : `${n} entries this phone saw aren’t on the server now, and no admin deleted them. `)
+        + 'A server put back to an older copy does that. Whoever runs the server may still have them on the other copy and can put '
+        + 'them back; the phones still hold their keys. Otherwise type them again from your paper copy.',
     waitNewKey: (holders: string[]) => (holders.length
         ? `The list needs a new key before anything more is written. ${either(holders)} will make it the next time they open the names list.`
         : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
@@ -979,28 +1055,44 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): strin
     const name = (k: string) => callsignIn(state, k);
     if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
     if (plan.kind === 'wait') {
-        // "Will send" only for holders whose phones trust this one; otherwise a check in person comes first (round 9).
-        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders);
-        const holders = sending.map(name);
-        if (!plan.canMakeNew && !sending.length && plan.holders.length) return NAMES_COPY.waitNotTrusted(plan.holders.map(name));
         if (plan.canMakeNew) {
             const maker = o.pin.chain.length ? readNamesGeneration(o.pin.chain[o.pin.chain.length - 1], undefined, new Set([plan.keyId]))?.maker ?? '' : '';
             return NAMES_COPY.nobodyHoldsKey(plan.n, state.counts?.byKey?.[plan.keyId] ?? 0, name(maker));
         }
-        if (!plan.newKeyNeeded) return NAMES_COPY.wait(holders);
+        if (!plan.holders.length) {
+            // Nobody this phone trusts holds it, and someone the server says holds it is an admin this phone removed: only an
+            // owner can unblock it (design Addendum 4).
+            const others = (state.admins ?? []).filter((a) => a.pubkey.toLowerCase() !== o.pin.me && (a.keyIds ?? []).includes(plan.keyId));
+            if (others.length && others.every((a) => a.pubkey.toLowerCase() in o.pin.dropped || o.pin.manualDrops.includes(a.pubkey.toLowerCase()))) {
+                return NAMES_COPY.waitRemovedHolder(either(others.map((a) => a.callsign)).replace(/^@/, ''), plan.n);
+            }
+        }
+        // "Will send" only for holders whose phones trust this one; the rest get the meeting words (round 9, Addendum 4).
+        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders);
+        const noTrust = plan.holders.filter((k) => !sending.includes(k)).map(name);
+        if (!sending.length && noTrust.length) return NAMES_COPY.holdersNoTrust(noTrust);
+        const holders = sending.map(name);
+        const rest = noTrust.length ? ` ${NAMES_COPY.holdersNoTrust(noTrust)}` : '';
+        if (!plan.newKeyNeeded) return NAMES_COPY.wait(holders) + rest;
         // This phone's own drops (by hand, or standing from a history it left): the holder only sends the key.
         const chainIds = new Set(o.pin.chain.map((l) => l.id));
         const own = plan.drops.filter((k) => o.pin.manualDrops.includes(k) || (k in o.pin.dropped && !chainIds.has(o.pin.dropped[k])));
-        return own.length ? NAMES_COPY.waitOwnKey(holders, own.map(name)) : NAMES_COPY.waitNewKey(holders);
+        return (own.length ? NAMES_COPY.waitOwnKey(holders, own.map(name)) : NAMES_COPY.waitNewKey(holders)) + rest;
     }
     switch (plan.reason) {
         case 'other_community': return NAMES_COPY.otherCommunity;
         case 'missing_record': return NAMES_COPY.missingRecord;
         case 'different_history': return NAMES_COPY.refusedDifferent;
         case 'rolled_back': return NAMES_COPY.refusedRolledBack(plan.offered?.n ?? 0, plan.newest?.n ?? 0);
-        case 'untrusted_maker':
-            return plan.canStartAgain && o.pin.chain.length === 0
-                ? `${NAMES_COPY.refusedUntrusted(plan.n ?? 0, name(plan.maker ?? ''))}\n\n${NAMES_COPY.startAgain(state.counts?.entries ?? 0)}`
-                : NAMES_COPY.refusedUntrusted(plan.n ?? 0, name(plan.maker ?? ''));
+        case 'untrusted_maker': {
+            const n = plan.n ?? 0;
+            const who = name(plan.maker ?? '');
+            if (o.pin.chain.length === 0) {
+                return plan.canStartAgain ? `${NAMES_COPY.refusedUntrusted(n, who)}\n\n${NAMES_COPY.startAgain(state.counts?.entries ?? 0)}` : NAMES_COPY.refusedUntrusted(n, who);
+            }
+            // Addendum 4: a maker this phone had removed on a history it left, and Follow from here.
+            if (plan.standing) return plan.canCheck ? NAMES_COPY.refusedRemoved(n, who) : NAMES_COPY.refusedRemovedGone(n, who);
+            return plan.canFollow ? `${NAMES_COPY.refusedUntrusted(n, who)}\n\n${NAMES_COPY.followFromHere(n)}` : NAMES_COPY.refusedUntrusted(n, who);
+        }
     }
 }

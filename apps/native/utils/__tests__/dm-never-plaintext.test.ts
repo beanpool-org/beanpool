@@ -74,7 +74,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { insertMessage, editMessage, sendImageMessage } from '../db';
-import { decryptDM, isEncryptedNonce } from '../e2e-crypto';
+import { openDmLine, isEncryptedNonce } from '../e2e-crypto';
 import { DmNotLockedError, isDmNotLocked, dmNotLockedLine, restoredDraft } from '../dm-lock';
 
 // A delivered send ends with require('react-native') for a DeviceEventEmitter nudge, which node cannot parse and no
@@ -103,8 +103,10 @@ function reply(status: number, body: any) {
 const calls = (method: string, path: string) => fetchMock.mock.calls.filter(([url, init]) =>
     String(url).startsWith(`https://test.beanpool.org${path}`) && (init?.method ?? 'GET') === method);
 const sentBodies = (path: string) => calls('POST', path).map(([, init]) => JSON.parse(init.body));
-const peerReads = (ciphertext: string, nonce: string) =>
-    decryptDM(ciphertext, nonce, { myEdPrivHex: bytesToHex(peer.seed), peerEdPubHex: me.publicKey, conversationId: CONV });
+/** The other person's phone opening a line as the node stores it: bound to its author (me) and its id (format 3). */
+const peerReads = (sent: { ciphertext: string; nonce: string; id?: string; messageId?: string }, part: 'body' | 'attachment' = 'body') =>
+    openDmLine({ ciphertext: sent.ciphertext, nonce: sent.nonce }, { myEdPrivHex: bytesToHex(peer.seed), peerEdPubHex: me.publicKey },
+        { conversationId: CONV, senderPubHex: me.publicKey, messageId: (sent.id ?? sent.messageId)!, part }).text;
 const messageWrites = () => store.writes.filter(w => /^INSERT INTO messages|^UPDATE messages SET ciphertext/.test(w.sql));
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64');
 /** Nothing readable anywhere: not in a write to the phone's database, not in anything sent to the node. */
@@ -150,7 +152,7 @@ describe('a DM line', () => {
 
         const [sent] = sentBodies('/api/messages/send');
         expect(isEncryptedNonce(sent.nonce)).toBe(true);
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('meet at the gate at 6');
+        expect(peerReads(sent)).toBe('meet at the gate at 6');
         expect(messageWrites()[0].params[3]).toBe(sent.ciphertext);   // the bubble's own row holds the same ciphertext
         nothingReadable('meet at the gate at 6');
     });
@@ -161,7 +163,7 @@ describe('a DM line', () => {
         await insertMessage(CONV, me.publicKey, 'hello');
         await vi.waitFor(() => expect(calls('POST', '/api/messages/send')).toHaveLength(1));
         const [sent] = sentBodies('/api/messages/send');
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('hello');
+        expect(peerReads(sent)).toBe('hello');
     });
 
     it('no key for the other person: asks the node once, then nothing is written or sent', async () => {
@@ -185,7 +187,7 @@ describe('a DM line', () => {
         await vi.waitFor(() => expect(calls('POST', '/api/messages/send')).toHaveLength(1));
         expect(store.participants.get(CONV)?.has(peer.publicKey)).toBe(true);
         const [sent] = sentBodies('/api/messages/send');
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('meet at 6');
+        expect(peerReads(sent)).toBe('meet at 6');
         nothingReadable('meet at 6');
     });
 
@@ -194,7 +196,7 @@ describe('a DM line', () => {
         await insertMessage(CONV, me.publicKey, 'on my way');
         await vi.waitFor(() => expect(calls('POST', '/api/messages/send')).toHaveLength(1));
         const [sent] = sentBodies('/api/messages/send');
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('on my way');
+        expect(peerReads(sent)).toBe('on my way');
     });
 
     it('and one the node doesn\'t know either is not sent', async () => {
@@ -231,14 +233,14 @@ describe('a resend of a failed bubble', () => {
         await vi.waitFor(() => expect(calls('POST', '/api/messages/send')).toHaveLength(1));
         const [sent] = sentBodies('/api/messages/send');
         expect(sent.id).toBe(FAILED);
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('hello');
+        expect(peerReads(sent)).toBe('hello');
     });
 });
 
 describe('an edit follows the same rule', () => {
     it('no key: not sent, and the message on the phone is untouched', async () => {
         dm([me.publicKey]);
-        await expect(editMessage(CONV, 'msg-1', 'actually 7')).rejects.toBeInstanceOf(DmNotLockedError);
+        await expect(editMessage(CONV, randomUUID(), 'actually 7')).rejects.toBeInstanceOf(DmNotLockedError);
         expect(calls('POST', '/api/messages/edit')).toHaveLength(0);
         expect(messageWrites()).toHaveLength(0);
         nothingReadable('actually 7');
@@ -246,9 +248,9 @@ describe('an edit follows the same rule', () => {
 
     it('with the key: the new words go locked', async () => {
         dm([me.publicKey, peer.publicKey]);
-        await editMessage(CONV, 'msg-1', 'actually 7');
+        await editMessage(CONV, randomUUID(), 'actually 7');
         const [sent] = sentBodies('/api/messages/edit');
-        expect(peerReads(sent.ciphertext, sent.nonce)).toBe('actually 7');
+        expect(peerReads(sent)).toBe('actually 7');
         nothingReadable('actually 7');
     });
 });

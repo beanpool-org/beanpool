@@ -817,8 +817,10 @@ export async function sendMessageApi(
     type?: 'text' | 'image',
     attachment?: MessageAttachment,
     metadata?: string,
+    /** The message's own id (a lower-case UUID v4), which a DM line is sealed to: the node stores the line under it. */
+    id?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
 }
 
 export async function editMessageApi(

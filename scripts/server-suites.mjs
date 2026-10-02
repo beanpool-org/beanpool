@@ -355,6 +355,8 @@ export const SUITES = [
     'test-groups-chat',
     'test-chat-parity',
     'test-dm-never-plaintext',
+    'test-dm-line-relay',
+    'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',
     'test-groups-succession',

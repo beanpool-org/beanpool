@@ -276,6 +276,8 @@ router.post('/api/messages/send', async (ctx) => {
 
                             // Fire-and-forget over secure Libp2p mesh
                             federatedRelayMessage(p2pNode, targetConnector.peerId, {
+                                // The line's id, carried verbatim: the line is sealed to it (relayedMessageId).
+                                id: msg.id,
                                 senderPublicKey: authorPubkey,
                                 senderCallsign: localMember?.callsign,
                                 senderNodeUrl: localUrl,

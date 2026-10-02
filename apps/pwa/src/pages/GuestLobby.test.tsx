@@ -692,7 +692,11 @@ describe("a sign-in in a page that heard another tab's sign-out: the account sig
     }
 
     async function lobbyRestore(member: BeanPoolIdentity) {
-        fireEvent.click(screen.getAllByTestId('header-join')[0]);
+        // Join is disabled until the lobby's browserKeyProblem() answers: wait for it, as restoreWith12Words does,
+        // or a slow runner clicks a disabled button and the overlay never opens (#1411's Test-All run 37045576983).
+        const join = screen.getAllByTestId('header-join')[0];
+        await waitFor(() => expect(join).not.toBeDisabled());
+        fireEvent.click(join);
         const overlay = await screen.findByTestId('lobby-join-overlay');
         fireEvent.click(await within(overlay).findByRole('button', { name: 'I have my 12 words' }));
         for (let i = 0; i < 12; i++) fireEvent.change(await within(overlay).findByLabelText(`Recovery word ${i + 1}`), { target: { value: member.mnemonic![i] } });

@@ -9,17 +9,24 @@ import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, sign
 import { createRefreshGate } from '../utils/refresh-gate';
 import { anchorUrl } from '../utils/node-post';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
-import { getCachedNodeProfile, decisionsOn } from '../utils/node-profile';
+import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    buildNeedsYou, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_SLOT,
+    buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
+import { HOME_HEADER_WAIT_MS, homeForHeader, onHomeRead } from '../utils/home-store';
+import { decideOnNode, localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
 // wording live in utils/needs-you.ts.
+//
+// Home's answer (GET /api/home, utils/home-store.ts) carries the same lines (design §5.2 "The header reads Home's
+// answer"): while one is fresher than two minutes the node's part (admin work, votes, group lines) is drawn from it and
+// the header asks the node nothing; on Home it waits a moment for the read Home has under way. The phone's own deals
+// and unread messages still come from its database.
 
 const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
     admin: 'shield-account-outline',
@@ -41,24 +48,9 @@ const SAFETY_POLL_MS = 120_000;
 // writes it there, so read a moment later rather than immediately.
 const WS_SETTLE_MS = 3_000;
 
-/** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). */
-function go(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
-    switch (target.to) {
-        case 'deal': return router.push({ pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } });
-        case 'my-deals': return router.push({ pathname: '/(tabs)/', params: { tab: 'deals' } });
-        // Commons has no route or param for one Decision, so every vote lands on its Decide section.
-        case 'decide': return router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
-        // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
-        case 'chat': return router.push(target.event
-            ? { pathname: '/chat/[id]', params: { id: target.conversationId, event: '1' } }
-            : target.thread
-                ? { pathname: '/chat/[id]', params: { id: target.conversationId, [target.thread]: '1' } }
-                : { pathname: '/chat/[id]', params: { id: target.conversationId } });
-        // Talk → Messages lists chats with people; the Unread filter narrows it to these.
-        case 'unread-messages': return router.push({ pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } });
-        // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
-        case 'your-groups': return router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } });
-    }
+/** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). Home's Needs you card too. */
+export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
+    return router.push(needsTargetHref(target));
 }
 
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;
@@ -89,29 +81,30 @@ async function loadAdmin(identity: BeanPoolIdentity): Promise<Pick<NodeParts, 'a
     return { admin: { role: mine.role, queue }, communityName: mine.communityName };
 }
 
-/** Whether the community the phone is on has formal Decisions, as it last said (the tab strip keeps that copy current). */
-async function votesHere(): Promise<boolean> {
+/** The switches of the community the phone is on, as it last said (the tab strip keeps that copy current). No request. */
+async function switchesHere(): Promise<NodeFeatures | null> {
     const profile = await settle((async () => getCachedNodeProfile(await anchorUrl()))());
-    return decisionsOn(profile?.features);
+    return profile?.features ?? null;
 }
 
 /**
- * Two signed requests to the node, plus the admin queue for owners and admins. No Decisions where the node has none
- * (the worldwide community): nothing there is open to a vote, so there is no vote to show, and the 🛡️ words don't
- * say an emergency suspension is being voted on.
+ * Two signed requests to the node, plus the admin queue for owners and admins. A vote is asked for only where it lands
+ * on a screen the node shows, Commons → Decide (home-cards.ts `decideOnNode`: Decisions on, and Beans on so the Commons
+ * tab is there), by the same rule as the lines drawn from Home's answer (`mergeNeeds`), so a vote never opens a hidden
+ * tab and the icon doesn't come and go with the age of Home's answer (PR #1483 review 4166559525). On the worldwide
+ * community nothing is open to a vote, and the 🛡️ words don't say an emergency suspension is being voted on.
  */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
-    const [decisions, yourGroups, admin, votesOn] = await Promise.all([
-        settle(votesHere().then(votes => (votes ? getDecisions('open') : null))),
+    const features = await switchesHere();
+    const [decisions, yourGroups, admin] = await Promise.all([
+        decideOnNode({ ...features }) ? settle(getDecisions('open')) : null,
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
-        // A second read of the phone's own copy: no request.
-        votesHere(),
     ]);
     return {
         decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
-        admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,
+        admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,
         communityName: admin?.communityName ?? null,
     };
 }
@@ -146,14 +139,23 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
 
     const local = useRef<LocalParts>({ transactions: null, conversations: null });
     const node = useRef<NodeParts>({ decisions: null, groupChats: null, admin: null, communityName: null });
+    /** The node's lines from Home's answer, with the node's switches, while the header draws from it (null: from its own reads). */
+    const home = useRef<{ items: HomeNeedsItem[]; features: HomeAnswer['features'] } | null>(null);
     const localBusy = useRef(false);
     const localAgain = useRef(false);
     const nodeBusy = useRef(false);
     const gate = useRef<ReturnType<typeof createRefreshGate> | null>(null);
+    const pathnameRef = useRef(pathname);
+    pathnameRef.current = pathname;
 
     const rebuild = useCallback(() => {
         if (!me) { setEntries([]); return; }
-        setEntries(buildNeedsYou({ me, now: Date.now(), ...local.current, ...node.current }));
+        const now = Date.now();
+        if (home.current) {
+            setEntries(mergeNeeds(home.current.items, localNeeds(me, now, local.current.transactions, local.current.conversations), now, home.current.features));
+            return;
+        }
+        setEntries(buildNeedsYou({ me, now, ...local.current, ...node.current }));
     }, [me]);
 
     const refreshLocal = useCallback(async () => {
@@ -173,16 +175,35 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     useEffect(() => {
         local.current = { transactions: null, conversations: null };
         node.current = { decisions: null, groupChats: null, admin: null, communityName: null };
+        home.current = null;
         setEntries([]);
         if (!me) return;
         const g = createRefreshGate(NODE_MIN_GAP_MS, async () => {
             const id = identityRef.current;
             if (nodeBusy.current || !id || id.publicKey !== me) return;
             nodeBusy.current = true;
-            try { node.current = await loadNode(id); rebuild(); } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
+            try {
+                // Home's answer when it is fresh (or, on Home, the one its read is about to bring): no request of our own.
+                const url = await anchorUrl();
+                const fromHome = await homeForHeader(url, me, pathnameRef.current === '/' ? HOME_HEADER_WAIT_MS : 0);
+                if (fromHome) {
+                    home.current = { items: fromHome.answer.cards.needs?.items ?? [], features: fromHome.answer.features };
+                    node.current = { ...node.current, communityName: fromHome.answer.cards.community?.name ?? node.current.communityName };
+                } else {
+                    home.current = null;
+                    node.current = await loadNode(id);
+                }
+                rebuild();
+            } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
         });
         gate.current = g;
-        return () => { g.cancel(); if (gate.current === g) gate.current = null; };
+        // Home's read landed: draw from it at once (its lines are the node's, as fresh as they come).
+        const off = onHomeRead((read, _url, publicKey) => {
+            if (read.kind !== 'answer' || publicKey !== me || !read.stored.asked.split(',').includes('needs')) return;
+            home.current = { items: read.stored.answer.cards.needs?.items ?? [], features: read.stored.answer.features };
+            rebuild();
+        });
+        return () => { g.cancel(); off(); if (gate.current === g) gate.current = null; };
     }, [me, rebuild]);
 
     const poke = useCallback(() => {
@@ -213,7 +234,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     // 🛡️ is the Settings "Manage" press, landing at the item's /settings section; the rest are app routes.
     const open = (t: NeedsYouTarget) => {
         if (t.to === 'admin') { manage.start(node.current.communityName || 'this community', t.section); return; }
-        go(t);
+        goToNeedsTarget(t);
     };
 
     const fit = fitNeedsYou(entries, width);

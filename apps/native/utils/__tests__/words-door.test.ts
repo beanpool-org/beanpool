@@ -696,8 +696,13 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         expect(backup).toMatch(/<LinkSignInSheet[\s\S]*askPhoneLock=\{!pendingWordsAreNew\}/);
     });
 
-    it('the Market\'s "+ ADD POST" steps aside while the card\'s actions rest under it; the actions stay full width (re-review, finding 4)', () => {
-        const market = src('app/(tabs)/index.tsx');
+    it('"+ ADD POST" steps aside while the card\'s actions rest under it; the actions stay full width (re-review, finding 4)', () => {
+        // The landing screen is Home since H2: its button steps aside for the card's actions (and every card's), and
+        // the Market's still steps aside for the Find your community card's.
+        const home = src('app/(tabs)/index.tsx');
+        expect(home).toMatch(/\{!fabAside && \(\s*<Pressable accessibilityRole="button" accessibilityLabel="Add a post" style=\{\[st\.fab/);
+        expect(home).toMatch(/onActionsAt=\{at => band\.report\('safety:actions', at\)\}/);
+        const market = src('app/(tabs)/market.tsx');
         expect(market).toMatch(/\{!categoryPanel\.open && !fabAside && \(\s*<Pressable accessibilityRole="button" style=\{styles\.fab\}/);
         expect(market).toMatch(/onScrollY: \(y\) => \{ marketScrollY\.current = y; updateFabAside\(\); \}/);
         const card = src('components/OneWayBackCard.tsx');
@@ -706,7 +711,9 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
     });
 
     it('the card is on the landing screen and in Account Protection', () => {
-        expect(src('app/(tabs)/index.tsx')).toContain('<OneWayBackCard place="landing" colors={colors} onActionsAt={onCardActionsAt} />');
+        // Home, the landing screen since H2 (app/(tabs)/index.tsx); the Market no longer draws it.
+        expect(src('app/(tabs)/index.tsx')).toMatch(/<OneWayBackCard\s+place="landing"/);
+        expect(src('app/(tabs)/market.tsx')).not.toContain('<OneWayBackCard');
         expect(src('app/(tabs)/settings.tsx')).toContain('<OneWayBackCard place="settings" colors={colors} />');
         // A 12-words join starts it; a sign-in join never does.
         expect(src('app/welcome.tsx')).toContain("if (way === 'words') await startOneWayBack(identity.publicKey, GLOBAL_NODE_URL);");

@@ -18,7 +18,7 @@ export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
  */
 export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'message', 'group'];
 
-/** Where a tap lands. Resolved to a route by the component, so this file stays free of navigation. */
+/** Where a tap lands: {@link needsTargetHref} names the screen, and the component navigates there. */
 export type NeedsYouTarget =
     | { to: 'admin'; section: SettingsSection }
     | { to: 'deal'; postId: string; txId: string }
@@ -28,6 +28,30 @@ export type NeedsYouTarget =
     | { to: 'unread-messages' }
     /** Talk → Groups (groups slice 2): group, enterprise and event chats are listed there, not under Messages. */
     | { to: 'your-groups' };
+
+/**
+ * The screen each landing opens, as `router.push` takes it (components/NeedsYouIcons.tsx `goToNeedsTarget`; Home's Needs
+ * you card too). Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode).
+ */
+export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>): { pathname: string; params?: Record<string, string> } {
+    switch (target.to) {
+        case 'deal': return { pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } };
+        case 'my-deals': return { pathname: '/(tabs)/market', params: { tab: 'deals' } };
+        // Commons has no route or param for one Decision, so every vote lands on its Decide section. Only a node with
+        // Decisions sends a vote line (routes/home-answer.ts, the header's own read).
+        case 'decide': return { pathname: '/(tabs)/projects', params: { section: 'decide' } };
+        // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
+        case 'chat': return target.event
+            ? { pathname: '/chat/[id]', params: { id: target.conversationId, event: '1' } }
+            : target.thread
+                ? { pathname: '/chat/[id]', params: { id: target.conversationId, [target.thread]: '1' } }
+                : { pathname: '/chat/[id]', params: { id: target.conversationId } };
+        // Talk → Messages lists chats with people; the Unread filter narrows it to these.
+        case 'unread-messages': return { pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } };
+        // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
+        case 'your-groups': return { pathname: '/(tabs)/chats', params: { view: 'groups' } };
+    }
+}
 
 export interface NeedsYouEntry {
     kind: NeedsYouKind;

@@ -62,6 +62,7 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { openShareRow } from './engine/recovery-shares.js';
 import { isNodeWrapped } from './services/recovery-seal-key.js';
 import { sealSeedToSso, sealShareToSso, openShareFromSso } from '@beanpool/core';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -142,7 +143,7 @@ async function call(id: Id | null, path: string, body: unknown): Promise<{ statu
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: raw });
+    const res = await localFetch(`${BASE}${path}`, { method: 'POST', headers, body: raw });
     let parsed: any;
     try { parsed = await res.json(); } catch { parsed = undefined; }
     return { status: res.status, body: parsed };
@@ -163,7 +164,7 @@ function funnelCount(event: string, variant: string): number {
     return getFunnel(1).filter(r => r.event === event && r.variant === variant).reduce((n, r) => n + r.count, 0);
 }
 async function info(): Promise<any> {
-    return (await (await fetch(`${BASE}/api/community/info`)).json()) as any;
+    return (await (await localFetch(`${BASE}/api/community/info`)).json()) as any;
 }
 
 async function main(): Promise<void> {

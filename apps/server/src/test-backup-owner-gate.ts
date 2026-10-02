@@ -37,6 +37,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { localFetch } from './keepalive-test-fetch.js';
 
 // A trigger boot keeps when one of its name is there (schema.sql's CREATE TRIGGER IF NOT EXISTS; state-engine.ts even puts
 // it back from the database's own text): not members_touch_updated_at, which db.ts drops and makes again at every boot.
@@ -194,7 +195,7 @@ async function main(): Promise<void> {
             (init.headers as Record<string, string>)['Content-Type'] ??= Buffer.isBuffer(body) ? 'application/octet-stream' : 'application/json';
             init.body = Buffer.isBuffer(body) ? new Uint8Array(body) : body;
         }
-        const res = await fetch(base + route, init);
+        const res = await localFetch(base + route, init);
         const bytes = Buffer.from(await res.arrayBuffer());
         let json: any = null;
         try { json = JSON.parse(bytes.toString('utf8')); } catch { /* a file */ }

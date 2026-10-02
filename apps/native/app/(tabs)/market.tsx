@@ -1287,6 +1287,8 @@ export default function MarketScreen() {
                         pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
                     ]}
                     accessibilityRole="button"
+                    accessibilityLabel={`${freshTodayCount} fresh listing${freshTodayCount > 1 ? 's' : ''} posted today`}
+                    accessibilityHint="Dismisses this banner"
                 >
                     <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
                         <Text style={{ fontSize: 20 }}>🔥</Text>

@@ -10,7 +10,7 @@
  * A group, event or enterprise chat is node-readable by design (the node moderates and pushes it, and the chat says
  * so): its lines stay `plaintext-v1`.
  */
-import { encodePlaintext, encryptDM, type DMKeyContext } from './e2e-crypto';
+import { encodePlaintext, sealDmLine, type DMKeyContext, type DmPart } from './e2e-crypto';
 
 /** Chats the node has to read. Everything else a member writes in is a direct message. */
 const NODE_READABLE_CHATS = new Set(['group_thread', 'event_thread', 'enterprise_thread']);
@@ -48,20 +48,34 @@ export function dmKeyContext(conv: ChatLike | null | undefined, me: Me): DMKeyCo
 }
 
 /**
- * Lock `text` (a message, an edit, or a photo's caption or picture) for this DM. Throws DmNotLockedError when the other
- * person's key can't be found or the encryption throws: never a readable fallback.
+ * What a DM line is sealed to besides its conversation and its sender (e2e-crypto, format 3): the id the node will store
+ * the message under (sent with it), which part of the message it is, the line it was written after (an edit keeps its
+ * line's own), and for a reply the message it answers.
  */
-export function lockForDm(text: string, conv: ChatLike | null | undefined, me: Me): { ciphertext: string; nonce: string } {
+export interface DmLineSeal {
+    messageId: string;
+    part?: DmPart;
+    after?: string | null;
+    /** The message a reply answers, exactly as its metadata's replyToId names it (both parts of a photo carry it). */
+    replyToId?: string | null;
+}
+
+/**
+ * Lock `text` (a message, an edit, or a photo's caption or picture) for this DM, sealed to me as its sender and to
+ * `line`. Throws DmNotLockedError when the other person's key can't be found or the encryption throws: never a readable
+ * fallback.
+ */
+export function lockForDm(text: string, conv: ChatLike | null | undefined, me: Me, line: DmLineSeal): { ciphertext: string; nonce: string } {
     const ctx = dmKeyContext(conv, me);
     if (!ctx) throw new DmNotLockedError();
     try {
-        return encryptDM(text, ctx);
+        return sealDmLine(text, ctx, { senderPubHex: me.publicKey, messageId: line.messageId, part: line.part, after: line.after, replyToId: line.replyToId });
     } catch {
         throw new DmNotLockedError();
     }
 }
 
 /** A line for `conv` as it goes to the node: readable in a node-readable chat, locked everywhere else. */
-export function payloadForChat(text: string, conv: ChatLike | null | undefined, me: Me): { ciphertext: string; nonce: string } {
-    return isNodeReadableChat(conv) ? encodePlaintext(text) : lockForDm(text, conv, me);
+export function payloadForChat(text: string, conv: ChatLike | null | undefined, me: Me, line: DmLineSeal): { ciphertext: string; nonce: string } {
+    return isNodeReadableChat(conv) ? encodePlaintext(text) : lockForDm(text, conv, me, line);
 }

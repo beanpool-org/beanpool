@@ -1311,7 +1311,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
-            const mine = viewer ? rsvps.find(v => v.member_pubkey === viewer) : undefined;
+            // ⚡ Bolt: single-pass RSVP loop to compute going/interested counts and locate viewer's RSVP without extra .find() array scan
+            let goingCount = 0;
+            let interestedCount = 0;
+            let mine: any | undefined;
+            for (const v of rsvps) {
+                if (v.status === 'going') goingCount++;
+                else if (v.status === 'interested') interestedCount++;
+                if (viewer && v.member_pubkey === viewer) mine = v;
+            }
             // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
             // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
             const host = !viewerIsVisitor && isEventHost(db, r, viewer);
@@ -1332,13 +1340,6 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
-            }
-            // ⚡ Bolt: single-pass RSVP counting to avoid double .filter() scans and array allocations
-            let goingCount = 0;
-            let interestedCount = 0;
-            for (const v of rsvps) {
-                if (v.status === 'going') goingCount++;
-                else if (v.status === 'interested') interestedCount++;
             }
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;

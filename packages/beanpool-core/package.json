@@ -30,6 +30,11 @@
       "import": "./dist/sso-share-vectors.js",
       "default": "./dist/sso-share-vectors.js"
     },
+    "./dm-line-vectors": {
+      "types": "./dist/dm-line-vectors.d.ts",
+      "import": "./dist/dm-line-vectors.js",
+      "default": "./dist/dm-line-vectors.js"
+    },
     "./door-work": {
       "types": "./dist/door-work.d.ts",
       "import": "./dist/door-work.js",

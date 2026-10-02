@@ -520,7 +520,10 @@ export function EconomySection({
                     </div>
 
                     {loadingTreasuries ? (
-                        <div className="p-8 text-center text-xs text-nature-400">Loading enterprises...</div>
+                        <div className="p-8 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
+                            <span className="animate-spin text-terra-400">⏳</span>
+                            <span>Loading enterprises...</span>
+                        </div>
                     ) : treasuries.length === 0 ? (
                         <div className="p-8 text-center bg-nature-900/40 border border-nature-800 rounded-2xl">
                             <p className="text-sm font-semibold text-white mb-1">No enterprises created yet</p>
@@ -707,7 +710,12 @@ export function EconomySection({
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                         <h3 className="text-base font-bold text-white m-0">Pending Commons Proposals ({commonsData.proposed.length})</h3>
-                        {commonsData.proposed.length === 0 ? (
+                        {loadingCommons ? (
+                            <div className="py-6 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
+                                <span className="animate-spin text-terra-400">⏳</span>
+                                <span>Loading proposals...</span>
+                            </div>
+                        ) : commonsData.proposed.length === 0 ? (
                             <div className="py-6 text-center text-xs text-nature-400">
                                 No pending proposals.
                             </div>

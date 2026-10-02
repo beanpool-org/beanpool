@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -31,7 +31,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../components/chat/Cha
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { isDmNotLocked, dmNotLockedLine, restoredDraft } from '../../utils/dm-lock';
 import {
-    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
@@ -99,6 +99,17 @@ export default function ChatRoute() {
         group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
     );
 
+    // A DM stays a DM (utils/db.ts, the DM guard): a conversation this phone has seen as a DM, or that holds an encrypted
+    // line, opens only in the DM screen below, whatever type the node now gives it or a link says. Asked before any
+    // node-readable view opens; null while asking.
+    const [knownDm, setKnownDm] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!id) return;
+        let alive = true;
+        isKnownDmConversation(String(id)).then(k => { if (alive) setKnownDm(k); }, () => { if (alive) setKnownDm(false); });
+        return () => { alive = false; };
+    }, [id]);
+
     useEffect(() => {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
@@ -111,6 +122,8 @@ export default function ChatRoute() {
         return () => { alive = false; };
     }, [id, isEventChat, threadKind]);
 
+    if (knownDm) return <ChatScreen />;
+    if ((isEventChat || threadKind) && knownDm === null) return null;
     if (isEventChat && id) return <EventChatView eventId={String(id)} />;
     if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} />;
     return <ChatScreen />;
@@ -479,7 +492,7 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? '', m.unattributed ? 1 : 0].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -965,8 +978,27 @@ function ChatScreen() {
         );
     };
 
+    // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row in a member's name
+    // that wasn't encrypted, or the admin page's message. In the middle of the chat, never in its named author's bubble,
+    // and with no actions: there is nobody's line to answer or react to.
+    const renderUnattributedLine = (item: any) => (
+        <View style={[chat.systemMessageContainer, { marginTop: 12, marginBottom: 12 }]} testID="dm-line-unattributed">
+            <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
+                <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
+                <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
+                    {item.text}
+                </Text>
+            </View>
+            {item.integrityNote ? (
+                <Text style={[chat.systemTimestamp, { fontSize: 12, fontStyle: 'italic', textAlign: 'center', maxWidth: '90%' }]}>{item.integrityNote}</Text>
+            ) : null}
+            <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
+        </View>
+    );
+
     const renderMessage = (item: any) => {
         if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
+        if (item.unattributed) return renderUnattributedLine(item);
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
@@ -1023,16 +1055,12 @@ function ChatScreen() {
         };
 
         const quote = item.metadata?.replyToId ? (() => {
-            const parentMsg = messagesById.get(item.metadata.replyToId);
-            const parentText = !parentMsg
-                ? 'Message not found'
-                : isTombstone(parentMsg)
-                    ? tombstoneText(parentMsg, 'dm')
-                    : parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text;
-            const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
+            // The answered message as the thread judged it (dmQuoteFor), never its row's raw words and named author.
+            const q = dmQuoteFor(messagesById.get(item.metadata.replyToId), identity?.publicKey, peerName);
             return {
-                author: parentAuthor,
-                text: parentText,
+                author: q.author,
+                text: q.text,
+                note: q.note,
                 onPress: () => {
                     const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
                     if (index > -1) {
@@ -1081,20 +1109,30 @@ function ChatScreen() {
                     <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
                 ) : null}
                 status={status}
-                footer={item.type === 'image' && !item.text ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
-                        <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
-                            {item.timestamp}
-                        </Text>
-                        {isMe && item.outgoing && (
-                            <MaterialCommunityIcons
-                                name={item.readByPeer ? 'check-all' : 'check'}
-                                size={14}
-                                color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
-                                style={{ marginLeft: 3 }}
-                            />
-                        )}
-                    </View>
+                footer={(item.type === 'image' && !item.text) || item.integrityNote ? (
+                    <>
+                        {item.type === 'image' && !item.text ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
+                                <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
+                                    {item.timestamp}
+                                </Text>
+                                {isMe && item.outgoing && (
+                                    <MaterialCommunityIcons
+                                        name={item.readByPeer ? 'check-all' : 'check'}
+                                        size={14}
+                                        color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
+                                        style={{ marginLeft: 3 }}
+                                    />
+                                )}
+                            </View>
+                        ) : null}
+                        {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
+                        {item.integrityNote ? (
+                            <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
+                                ⚠️ {item.integrityNote}
+                            </Text>
+                        ) : null}
+                    </>
                 ) : null}
             />
         );
@@ -1318,14 +1356,11 @@ function ChatScreen() {
                     />
                 )}
 
-                {replyToMessage && !editingMessage && (
-                    <ChatReplyBanner
-                        styles={chat}
-                        author={replyToMessage.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')}
-                        text={replyToMessage.type === 'image' ? '🔒 Photo' : replyToMessage.text}
-                        onCancel={() => setReplyToMessage(null)}
-                    />
-                )}
+                {replyToMessage && !editingMessage && (() => {
+                    // What is being answered, as the thread judged it (dmQuoteFor).
+                    const q = dmQuoteFor(replyToMessage, identity?.publicKey, peerName);
+                    return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
+                })()}
 
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>

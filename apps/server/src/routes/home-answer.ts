@@ -9,7 +9,8 @@
  * rather than sent empty ("cards with nothing to say take no space"), so the shown-when rules that need the node's data
  * are applied here; the ones that need only the member's own layout (a dismissal, a hidden card) are the app's. Two
  * cards carry no data of their own: `interests` is drawn from `me.interests`, and `invite` from `features.invites` and
- * `steps.firstOffer` (no `steps` card on a local node means every step is done, the first Offer among them).
+ * `me.firstOffer` (§3.1 "after the first Offer"). `me.firstOffer` is in every answer to a reader with their own cards,
+ * whatever the layout hides: `steps` can be hidden, and a hidden card isn't built, so its own `firstOffer` can't decide it.
  *
  * ## Who gets what
  *
@@ -21,11 +22,13 @@
  *     notice or vote is ever read for it (privacy-defaults-2026-09-28).
  *   - the COMMUNITY's cards, what other members post and do (`events`, `market`, `decide`, `joined`, `pulse`): for a
  *     reader who reads as a member (readsAsMember). A suspended or disabled member, while that lasts, and everyone else
- *     get the visitors' subset where the node has one, and nothing of these elsewhere.
+ *     get the visitors' subset where the node has one, and nothing of these elsewhere. Such a member's `me` says so
+ *     (`standing: 'suspended'`), and they never get `welcome`: that is the visitors' Join card (§3.2 (c), §5.3), and
+ *     a suspended member invited to join would be invited to open a second account while the first is suspended.
  *   - the visitors' subset (§5.3), on a node that shows visitors the listings and not the people (`guestListingsOnly`, the
  *     global profile): `find`, `market` and `events` in the listings' visitors' view (guestPost: nobody in them, each place
  *     its rough area), and `community` (counts). No Pulse, no `joined`, nothing of the reader's own unless they pass the
- *     gate, and `welcome: true`.
+ *     gate, and `welcome: true` for a reader with no account here (no `me`).
  *   - `community`: anyone who is answered at all. Its counts are community totals, public by rule.
  *
  * ## Money (H0b)
@@ -37,7 +40,13 @@
  * ## Cost
  *
  * `cards=` limits the work: only the cards asked for are computed (a hidden Pulse runs no Pulse query), and each read has
- * a limit. `homeCardBuilds` counts each card's assembly, for the suite to prove it.
+ * a limit. `homeCardBuilds` counts each card's assembly, for the suite to prove it. "Coming up" reads the soonest few
+ * events in start order (PostFilter.upcomingUntil, on idx_posts_event_start), never every event on the node.
+ *
+ * ## Size
+ *
+ * Every text a member, a feed or a peer sets is cut or left out (`clip`, `bounded`), the category and the Pulse link
+ * included, so the answer stays a few kilobytes whatever anyone typed (§5.2 "under 6 KB gzipped").
  */
 import { PRICING_CATEGORIES, avatarUrlFor, normalizeCategory } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
@@ -96,8 +105,11 @@ const JOINED_NAMES = 4;
 const PULSE_ITEMS = 2;
 /** The newest listings the Market card chooses its few from (starred categories first), and counts in `total14d`. */
 const MARKET_POOL = 40;
-/** The newest events "Coming up" reads to find the next few: an event is updated when it is made or changed, so the soonest are among these. */
-const EVENT_POOL = 100;
+/**
+ * The soonest events "Coming up" reads, in start order (PostFilter.upcomingUntil): the few it shows and two spare, for
+ * one whose times can't be read (a peer's copy) and is left out here.
+ */
+const EVENT_POOL = EVENT_ITEMS + 2;
 /** Open polls counted, then "50+". */
 const POLL_POOL = 50;
 /** Fewer real listings in view than this, on a node that asks for them, and the app shows its example cards (utils/example-listings.ts). */
@@ -137,6 +149,16 @@ export interface HomeMe {
     probation: ProbationSummary | null;
     interests: string[];
     area: { lat: number; lng: number } | null;
+    /**
+     * Whether they have posted an Offer here, which decides the `invite` card (§3.1 "after the first Offer"), whatever
+     * their layout hides (the `steps` card, which also says it, can be hidden and is then not built).
+     */
+    firstOffer: boolean;
+    /**
+     * 'member', or 'suspended' while their account is suspended or disabled: they read their own things and see the
+     * community as a visitor does (readsAsMember), and an app says so in plain words rather than inviting them to join.
+     */
+    standing: 'member' | 'suspended';
 }
 
 export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
@@ -200,6 +222,8 @@ interface Ctx {
     interests: string[];
     /** Read once per answer, for `needs` and `groups`. */
     chats?: ReturnType<typeof listYourChats>;
+    /** Read once per answer, for `steps` and `me`. */
+    firstOffer?: boolean;
 }
 
 /**
@@ -259,9 +283,19 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  */
 const TITLE_CHARS = 120;
 const NAME_CHARS = 60;
+/** A category: one of the catalogue's ids, or a short word an older app or a peer stored. Only checked to be text (engine/post-fields.ts). */
+const CATEGORY_CHARS = 40;
+/** A link out (a Pulse item's): longer is no link a card can use, so it is left out, never cut (pulse-submit MAX_ITEM_URL_LENGTH). */
+const URL_CHARS = 2048;
+/** An id or a short machine word (a platform, a time): the node's own are far shorter; a longer one is a peer's or a feed's, and left out. */
+const ID_CHARS = 128;
 function clip(s: string, max: number): string {
     const chars = Array.from(s);
     return chars.length <= max ? s : `${chars.slice(0, max - 1).join('')}…`;
+}
+/** Text that can't be cut without breaking it (an id, a link, a time): itself while it is at most `max` long, else null. */
+function bounded(s: string | null | undefined, max: number): string | null {
+    return typeof s === 'string' && s.length <= max ? s : null;
 }
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -418,17 +452,22 @@ function findCard(c: Ctx): HomeCards['find'] | undefined {
     return landingCardFor(c.me ?? undefined, c.askedPoint, !c.member);
 }
 
+/** Whether the signer has posted an Offer here (any status: a first Offer since taken down still counts), read once per answer. */
+function firstOfferOf(c: Ctx): boolean {
+    return c.firstOffer ??= !!(db.prepare("SELECT EXISTS(SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND origin_node IS NULL) AS offer")
+        .get(c.me!) as { offer: number }).offer;
+}
+
 function stepsCard(c: Ctx): HomeCards['steps'] | undefined {
     built('steps');
     const me = c.me!;
     const row = getMember(me);
     const mine = db.prepare(`SELECT
-            EXISTS(SELECT 1 FROM posts WHERE author_pubkey = ? AND type = 'offer' AND origin_node IS NULL) AS offer,
             EXISTS(SELECT 1 FROM posts WHERE author_pubkey = ? AND type IN ('offer', 'need') AND origin_node IS NULL) AS post,
-            EXISTS(SELECT 1 FROM invite_codes WHERE created_by = ?) AS invited`).get(me, me, me) as { offer: number; post: number; invited: number };
+            EXISTS(SELECT 1 FROM invite_codes WHERE created_by = ?) AS invited`).get(me, me) as { post: number; invited: number };
     const steps = {
         joinedAt: row?.joinedAt ?? null,
-        firstOffer: !!mine.offer,
+        firstOffer: firstOfferOf(c),
         firstPost: !!mine.post,
         photo: !!row?.avatarUrl,
         interests: c.interests.length > 0,
@@ -462,7 +501,9 @@ function dealsCard(c: Ctx): HomeCards['deals'] | undefined {
 
 function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     built('enterprise');
-    if (!c.switches.enterprises) return undefined;
+    // §3.1 "`features.enterprises` on": enterprises AND treasuries (config/node-profile.ts getNodeFeatures), as this
+    // answer's own `features` says, and as the enterprise's own screen answers (404 feature_off with treasuries off).
+    if (!c.features.enterprises) return undefined;
     const kept = keeperOf(c.me!);
     if (!kept.length) return undefined;
     const id = kept[0];
@@ -482,16 +523,18 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     // "Within 50 km" where the listings come nearest first (the global profile) and there is a point; elsewhere every event.
     const near = c.point && c.switches.distanceSortDefault ? c.point : null;
     const until = c.now + EVENT_DAYS * DAY_MS;
+    // The soonest few in START order, in SQL (PostFilter.upcomingUntil): not the most recently updated, which an event
+    // posted weeks ahead falls out of behind newer ones, and never every event on the node.
     const items = postsFor(c, {
-        types: ['event'], limit: EVENT_POOL,
+        types: ['event'], status: 'active', upcomingUntil: iso(until), limit: EVENT_POOL,
         near: near ? { ...near, radiusKm: EVENTS_RADIUS_KM } : undefined, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
     })
-        .filter(p => p.status === 'active' && p.eventState !== 'cancelled' && !!p.eventStartAt
-            && Date.parse(p.eventStartAt) <= until && Date.parse(p.eventEndAt || p.eventStartAt) > c.now)
+        .filter(p => p.status === 'active' && p.eventState !== 'cancelled' && !!bounded(p.eventStartAt, ID_CHARS) && !!bounded(p.id, ID_CHARS)
+            && Date.parse(p.eventStartAt!) <= until && Date.parse(p.eventEndAt || p.eventStartAt!) > c.now)
         .sort((a, b) => Date.parse(a.eventStartAt!) - Date.parse(b.eventStartAt!))
         .slice(0, EVENT_ITEMS)
         .map((p): EventItem => ({
-            id: p.id, title: clip(p.title, TITLE_CHARS), startsAt: p.eventStartAt!, endsAt: p.eventEndAt ?? null,
+            id: p.id, title: clip(p.title, TITLE_CHARS), startsAt: p.eventStartAt!, endsAt: bounded(p.eventEndAt, ID_CHARS),
             // The typed place and the reader's own RSVP are a member's; a visitor gets "place shown after you join".
             place: c.member && p.eventPlaceName ? clip(p.eventPlaceName, NAME_CHARS) : null,
             rsvp: c.member ? p.myRsvp ?? null : null,
@@ -511,10 +554,11 @@ function marketCard(c: Ctx): HomeCards['market'] | undefined {
     }).filter(p => p.status === 'active' && p.active !== false);
     const since = c.now - MARKET_DAYS * DAY_MS;
     const recent = pool.filter(p => Date.parse(p.createdAt) >= since);
-    const shown = starredFirst(recent, p => p.category, c.member ? c.interests : [])
+    const shown = starredFirst(recent.filter(p => !!bounded(p.id, ID_CHARS)), p => p.category, c.member ? c.interests : [])
         .slice(0, c.member ? MARKET_ITEMS : VISITOR_MARKET_ITEMS)
         .map((p): MarketItem => ({
-            id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: p.category,
+            // The category is only checked to be text when it is written (engine/post-fields.ts): cut like the title.
+            id: p.id, type: p.type as 'offer' | 'need', title: clip(p.title, TITLE_CHARS), category: clip(String(p.category ?? ''), CATEGORY_CHARS),
             ...(c.switches.beans ? { credits: p.credits } : {}),
             photoUrl: p.photos?.[0] ?? null,
             ...(c.point ? { distanceKm: p.distanceKm ?? null } : {}),
@@ -566,15 +610,19 @@ function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
         return count ? { count7d: count, radiusKm: p ? JOINED_RADIUS_KM : null } : undefined;
     }
     if (!rows.length) return undefined;
-    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clip(r.callsign, NAME_CHARS), avatarUrl: avatarUrlFor(r.public_key, r.avatar_url) })) };
+    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clip(r.callsign, NAME_CHARS), avatarUrl: bounded(avatarUrlFor(r.public_key, r.avatar_url), URL_CHARS) })) };
 }
 
 function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
     built('pulse');
     const since = c.now - PULSE_DAYS * DAY_MS;
     const recent = getPulseFeed({ limit: 6 }).items.filter(i => !!i.publishedAt && Date.parse(i.publishedAt) >= since);
-    const items = starredFirst(recent, i => i.category, c.interests).slice(0, PULSE_ITEMS).map(i => ({
-        id: i.id, title: i.title === null ? null : clip(i.title, TITLE_CHARS), platform: i.platform, callsign: clip(i.callsign, NAME_CHARS), category: i.category, url: i.url,
+    // An item whose id or platform a feed or a peer made long is left out; its link, past URL_CHARS, is no link (the
+    // harvester stores a feed's links uncut: pulse-submit's MAX_ITEM_URL_LENGTH is for submissions).
+    const usable = recent.filter(i => !!bounded(i.id, ID_CHARS) && !!bounded(i.platform, ID_CHARS));
+    const items = starredFirst(usable, i => i.category, c.interests).slice(0, PULSE_ITEMS).map(i => ({
+        id: i.id, title: i.title === null ? null : clip(i.title, TITLE_CHARS), platform: i.platform, callsign: clip(i.callsign, NAME_CHARS),
+        category: clip(String(i.category ?? ''), CATEGORY_CHARS), url: bounded(i.url, URL_CHARS),
         // Through the node's own proxy (an <img> can't sign; no member's address reaches a CDN), as the Pulse screen.
         thumbnailUrl: i.thumbnailUrl ? `/api/pulse/items/${encodeURIComponent(i.id)}/thumbnail` : null,
     }));
@@ -689,13 +737,16 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             probation: probation?.onProbation ? probation : null,
             interests,
             area: area ? { lat: area.lat, lng: area.lng } : null,
+            firstOffer: firstOfferOf(c),
+            standing: member ? 'member' : 'suspended',
         };
     }
     return {
         generatedAt: iso(now),
         profile: getNodeProfile(),
         features: { ...features, door: getDoor() },
-        ...(c.guestView ? { welcome: true as const } : {}),
+        // The visitors' Join card: for a reader with no account here only, never a suspended member (`me.standing`).
+        ...(c.guestView && !own ? { welcome: true as const } : {}),
         me: meBlock,
         layout,
         cards,

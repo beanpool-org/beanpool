@@ -19,14 +19,24 @@
  *      what a cold landing and a 304 cost (requests, bytes, server time), printed
  *   7. H0b on a local node: the Beans card is each signer's own balance as the ledger holds it, and Beans and escrow stay
  *      on (and so their cards) where the ledger has moved, whatever an override says
- *   8. the other runs, each in a child process with its own node: the global profile (below) and a local node with
- *      ENFORCE_READ_AUTH=false
+ *   8. the other runs, each in a child process with its own node: the global profile (below), a local node with
+ *      ENFORCE_READ_AUTH=false, and a fresh local node whose ledger never moved
+ *   9. the deciding review's five findings (#1472, 950e1a15): a 300,000-character category sent through the signed
+ *      listing route and a Pulse link of 300,000 characters as the harvester stores it leave the answer a few KB (A); a
+ *      suspended member's `me` says `standing: 'suspended'` (C); "Coming up" is the soonest events by start, an event
+ *      posted 20 days before 100 newer ones included (D); `me.firstOffer` is there whether or not `steps` is hidden (E)
  *
  * The global run (NODE_PROFILE=global, child): an unsigned reader and a key that is no member here get the visitors'
  * subset (`welcome`, find, market, events, community; no `me`, no layout, no Pulse, no `joined`, even when asked), naming
  * nobody; a member gets their own Home, with `joined` a count by area and no names, the `find` card the landing card's
  * own body, and H0b: with Beans and escrow off, no Beans card and no deals, though a balance and a deal
- * written behind the switches' back are there to show; the visitors' answer stays under 6 KB gzipped.
+ * written behind the switches' back are there to show; the visitors' answer stays under 6 KB gzipped. And (review A, C,
+ * D): a 300,000-character category leaves the visitors' answer a few KB; a disabled member gets their own `me`
+ * (`standing: 'suspended'`), never `welcome`, and the visitors' view of the listings; "Coming up" within 50 km is the
+ * soonest by start, read from each event's area, with 101 upcoming.
+ *
+ * The fresh-ledger run (a local node whose ledger never moved, child; review B): the enterprise card follows
+ * `features.enterprises` (enterprises AND treasuries), so with treasuries switched off a keeper gets no enterprise card.
  *
  * The read-auth-off run (ENFORCE_READ_AUTH=false, child, H0b): the route refuses an unsigned call (401) and a non-member
  * (403) itself, and the Beans card is the signer's own whatever key the query names.
@@ -38,10 +48,13 @@ delete process.env.CF_RECORD_NAME;
 // Module consts read at import: settled before the dynamic imports in main().
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
-type RunKind = 'local' | 'global' | 'open-reads';
+type RunKind = 'local' | 'global' | 'open-reads' | 'fresh-ledger';
 const RUN: RunKind = (process.env.HOME_TEST_RUN as RunKind | undefined) || 'local';
-/** Beans move on this run's node: a local node. The global node's ledger never moves (its money switches are off). */
-const MONEY = RUN !== 'global';
+/**
+ * Beans move on this run's node: a local node. The global node's ledger never moves (its money switches are off), nor
+ * does the fresh-ledger node's, so its money switches can be changed.
+ */
+const MONEY = RUN === 'local' || RUN === 'open-reads';
 if (RUN === 'global') process.env.NODE_PROFILE = 'global';
 else delete process.env.NODE_PROFILE;
 if (RUN === 'open-reads') process.env.ENFORCE_READ_AUTH = 'false';
@@ -110,6 +123,17 @@ async function get(urlPath: string, id?: Id | null, extra: Record<string, string
     let body: any;
     try { body = JSON.parse(text); } catch { /* empty (304) */ }
     return { status: res.status, text, body, etag: res.headers.get('etag'), headers: res.headers, ms };
+}
+/** A signed POST with a JSON body, through the real signature middleware. */
+async function postJson(urlPath: string, id: Id, payload: unknown): Promise<Res> {
+    beforeCall();
+    const started = performance.now();
+    const body = JSON.stringify(payload);
+    const res = await fetch(`${BASE}${urlPath}`, { method: 'POST', body, headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', urlPath, body, id) } });
+    const text = await res.text();
+    let parsed: any;
+    try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, text, body: parsed, etag: res.headers.get('etag'), headers: res.headers, ms: performance.now() - started };
 }
 const gz = (s: string) => zlib.gzipSync(Buffer.from(s)).length;
 /** A balance as a JSON number anywhere in an answer: a bare substring also matches part of a distance or a time. */
@@ -214,8 +238,44 @@ async function main(): Promise<void> {
     const ALL = 'cards=needs,safety,find,steps,interests,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,invite,community';
     const cardsOf = (r: Res) => Object.keys(r.body?.cards ?? {});
 
+    /** Review A: what one member can type into a listing's category, and a feed into a Pulse link. */
+    const HUGE = 300_000;
+    const hugeCategory = `cat${'c'.repeat(HUGE)}`;
+    const hugeListing = async (who: Id) => {
+        const r = await postJson('/api/marketplace/posts', who, {
+            type: 'offer', category: hugeCategory, title: 'HomeSentinel huge category', description: 'An ordinary offer', credits: 0,
+            authorPublicKey: who.pk, lat: BYRON.lat + 0.01, lng: BYRON.lng + 0.01, photos: [TINY_PNG],
+        });
+        assert(r.status === 200 || r.status === 201, `setup: ${who.name}'s signed listing with a ${HUGE}-character category is accepted, as the route does (${r.status} ${r.text.slice(0, 120)})`);
+        return r.body?.id ?? r.body?.post?.id;
+    };
+    /**
+     * Review D: 101 upcoming events. "the repair cafe" starts in 12 hours and was posted (and last updated) 20 days before
+     * the other 100, which 25 hosts post now, each starting 2 to 12 days out (a host may have 5 upcoming).
+     */
+    const hundredAndOneEvents = () => {
+        const cafe = post(bob, 'event', 'general', 'HomeSentinel tomorrow: the repair cafe', {
+            eventStartAt: new Date(Date.now() + 12 * 3600_000).toISOString(), eventEndAt: new Date(Date.now() + 14 * 3600_000).toISOString(),
+        });
+        const old = new Date(Date.now() - 20 * DAY).toISOString();
+        db.prepare('UPDATE posts SET created_at = ?, updated_at = ? WHERE id = ?').run(old, old, cafe.id);
+        for (let h = 0; h < 25; h++) {
+            const host = member(`HomeHost${h}`, { area: BYRON });
+            for (let k = 0; k < 4; k++) {
+                const start = Date.now() + (2 + ((h * 4 + k) % 11)) * DAY;
+                post(host, 'event', 'general', `HomeSentinel weekly market ${h}-${k}`, {
+                    eventStartAt: new Date(start).toISOString(), eventEndAt: new Date(start + 3600_000).toISOString(),
+                });
+            }
+        }
+        const upcoming = (db.prepare("SELECT COUNT(*) AS c FROM posts WHERE type = 'event' AND event_start_at > ?").get(new Date().toISOString()) as { c: number }).c;
+        assert(upcoming >= 101, `setup: ${upcoming} upcoming events, the repair cafe the soonest and the least recently updated`);
+        return cafe;
+    };
+
     if (RUN === 'global') return globalRun();
     if (RUN === 'open-reads') return openReadsRun();
+    if (RUN === 'fresh-ledger') return freshLedgerRun();
 
     // ── 1. who is answered ──────────────────────────────────────────────────────────────────────────────────────
     console.log('── 1. who is answered on a local node ──');
@@ -299,6 +359,8 @@ async function main(): Promise<void> {
         assert(d.status === 200 && ['market', 'events', 'joined', 'pulse', 'decide'].every(k => !danCards.includes(k)) && danCards.includes('community'),
             `a suspended member gets their own cards and the community's counts, none of what others post (${d.status} ${danCards.join(',')})`);
         assert(!d.text.includes('HomeSentinel') && !d.text.includes('HomeCarol'), 'naming no listing and no member');
+        assert(d.body?.me?.standing === 'suspended' && d.body?.welcome === undefined && a.body?.me?.standing === 'member',
+            `review C: the suspended member's me says so plainly (standing ${d.body?.me?.standing}), Alice's says member (${a.body?.me?.standing}), and nobody is invited to join`);
     }
 
     // ── 4. the ETag ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -432,8 +494,55 @@ async function main(): Promise<void> {
         }
     }
 
+    // ── 9. the deciding review's findings (#1472 at 950e1a15) ─────────────────────────────────────────────────────
+    console.log('\n── 9. the deciding review\'s findings ──');
+    {
+        // A: a listing's category and a Pulse link are cut or left out, so the answer stays a few KB whatever anyone typed.
+        const before = await get('/api/home', carol);
+        const hugeId = await hugeListing(bob);
+        const after = await get('/api/home', carol);
+        const item = after.body?.cards?.market?.items?.find((i: any) => i.id === hugeId);
+        assert(!!item && item.category.length <= 40 && item.category.startsWith('catccc'),
+            `A: the listing is on Carol's Market card, its category cut to ${item?.category?.length} characters`);
+        assert(gz(after.text) < SIX_KB && Buffer.byteLength(after.text) < 16 * 1024 && !after.text.includes('c'.repeat(200)),
+            `A: Carol's default Home is ${Buffer.byteLength(after.text)} B (${gz(after.text)} B gz) with it, ${Buffer.byteLength(before.text)} B before: a few KB`);
+        const hugeUrl = `https://blog.example.org/${'u'.repeat(HUGE)}`;
+        db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, external_id, url, title, thumbnail_url, published_at, category, source, muted, curated, created_at, updated_at)
+                    VALUES ('item-home-huge', 'chan-home', ?, 'rss', 'ext-huge', ?, 'HomeSentinel huge link', NULL, ?, 'food', 'autolist', 0, 0, ?, ?)`)
+            .run(bob.pk, hugeUrl, new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+        const pulse = await get('/api/home?cards=pulse', carol);
+        const huge = pulse.body?.cards?.pulse?.items?.find((i: any) => i.id === 'item-home-huge');
+        assert(!!huge && huge.url === null && Buffer.byteLength(pulse.text) < 4096 && !pulse.text.includes('u'.repeat(200)),
+            `A: a harvested Pulse link of ${hugeUrl.length} characters is left out (url ${huge ? (huge.url === null ? 'null' : `${String(huge.url).length} characters`) : 'item missing'}), the item kept: ${Buffer.byteLength(pulse.text)} B (${gz(pulse.text)} B gz)`);
+        const everyCard = await get(`/api/home?${ALL}`, carol);
+        assert(gz(everyCard.text) < SIX_KB && Buffer.byteLength(everyCard.text) < 16 * 1024 && !everyCard.text.includes('c'.repeat(200)) && !everyCard.text.includes('u'.repeat(200)),
+            `A: every card, both in view: ${Buffer.byteLength(everyCard.text)} B (${gz(everyCard.text)} B gz)`);
+
+        // D: "Coming up" is the soonest by start, not the 100 most recently updated.
+        const cafe = hundredAndOneEvents();
+        const ev = await get('/api/home?cards=events', alice);
+        const items = ev.body?.cards?.events?.items ?? [];
+        const starts = items.map((i: any) => Date.parse(i.startsAt));
+        assert(items[0]?.id === cafe.id && items.length === 3 && starts.every((t: number, i: number) => i === 0 || starts[i - 1] <= t),
+            `D: with 101+ upcoming, the soonest first, the repair cafe posted 20 days earlier included (${items.map((i: any) => i.title.slice(13, 50)).join(' | ')})`);
+
+        // E: whether the first Offer is done is in `me`, whether or not the steps card is shown.
+        const erin = member('HomeErin', { joinedAt: new Date(Date.now() - 40 * DAY).toISOString() });
+        setPref(erin, 'home.layout', { v: 1, order: [], hidden: ['steps'], dismissed: {}, updatedAt: new Date().toISOString() });
+        const e1 = await get('/api/home', erin);
+        assert(e1.status === 200 && e1.body?.cards?.steps === undefined && e1.body?.features?.invites === true && e1.body?.me?.firstOffer === false,
+            `E: Erin hides First steps and has no Offer: me.firstOffer ${e1.body?.me?.firstOffer} (cards ${cardsOf(e1).join(',')})`);
+        post(erin, 'offer', 'tools', 'HomeSentinel erin first offer');
+        const e2 = await get('/api/home', erin);
+        assert(e2.body?.me?.firstOffer === true && e2.body?.cards?.steps === undefined, `E: her first Offer posted, me.firstOffer ${e2.body?.me?.firstOffer}, steps still hidden`);
+        const a = await get('/api/home?cards=', alice);
+        assert(a.body?.me?.firstOffer === true, `E: with no card asked for at all, Alice's me.firstOffer is there (${a.body?.me?.firstOffer})`);
+    }
+
     // ── 8. the other runs ───────────────────────────────────────────────────────────────────────────────────────
-    for (const [kind, what] of [['global', 'the global profile'], ['open-reads', 'a local node with ENFORCE_READ_AUTH=false']] as const) {
+    for (const [kind, what] of [
+        ['global', 'the global profile'], ['open-reads', 'a local node with ENFORCE_READ_AUTH=false'], ['fresh-ledger', 'a local node whose ledger never moved'],
+    ] as const) {
         console.log(`\n── 8. ${what}, in its own process ──`);
         const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), `beanpool-home-${kind}-`));
         ownedDirs.add(dataDir);
@@ -501,9 +610,48 @@ async function main(): Promise<void> {
         db.prepare("INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at) VALUES (?, 'words', ?, ?)").run(alice.pk, `words:${crypto.randomUUID()}`, new Date().toISOString());
         const words2 = await get('/api/home?cards=safety', alice);
         assert(words2.body?.cards?.safety?.words === true, `a 12-words member gets the safety card (${JSON.stringify(words2.body?.cards)})`);
-        const d = await get(`/api/home?${ALL}`, dan);
-        assert(d.status === 200 && d.body?.welcome === true && !cardsOf(d).includes('pulse') && !cardsOf(d).includes('joined'),
-            `a suspended member gets the visitors' subset of the community's cards (${cardsOf(d).join(',')})`);
+        const d = await get(`/api/home?${ALL}&lat=${BYRON.lat}&lng=${BYRON.lng}`, dan);
+        assert(d.status === 200 && !cardsOf(d).includes('pulse') && !cardsOf(d).includes('joined') && d.headers.get('x-beanpool-view') === 'guest',
+            `a suspended member gets the visitors' subset of the community's cards, and the answer says so (${cardsOf(d).join(',')}; ${d.headers.get('x-beanpool-view')})`);
+        assert(d.body?.welcome === undefined && d.body?.me?.standing === 'suspended' && !!d.body?.me?.joinedAt,
+            `review C: a disabled member is never sent the visitors' welcome (Join): their own me, standing ${d.body?.me?.standing} (welcome ${d.body?.welcome})`);
+        assert(d.body?.cards?.events?.items?.[0]?.place === null && !d.text.includes('HomeSentinel Town Hall'), 'and the listings in the visitors\' view');
+
+        // Review A on global: one listing's huge category in every nearby visitor's Home.
+        const hugeId = await hugeListing(bob);
+        const v = await get(`/api/home?lat=${BYRON.lat}&lng=${BYRON.lng}`, null);
+        const vItem = v.body?.cards?.market?.items?.find((i: any) => i.id === hugeId);
+        assert(!!vItem && vItem.category.length <= 40 && gz(v.text) < SIX_KB && Buffer.byteLength(v.text) < 16 * 1024 && !v.text.includes('c'.repeat(200)),
+            `A: a visitor near the listing gets ${Buffer.byteLength(v.text)} B (${gz(v.text)} B gz), its category cut (${vItem?.category?.length ?? 'listing missing'})`);
+
+        // Review D on global: within 50 km, from each event's area for a visitor, soonest first.
+        const cafe = hundredAndOneEvents();
+        for (const [who, id] of [['a visitor', null], ['a member', alice]] as const) {
+            const ev = await get(`/api/home?cards=events&lat=${BYRON.lat}&lng=${BYRON.lng}`, id);
+            const items = ev.body?.cards?.events?.items ?? [];
+            const starts = items.map((i: any) => Date.parse(i.startsAt));
+            assert(items[0]?.id === cafe.id && items.length === 3 && ev.body?.cards?.events?.radiusKm === 50 && starts.every((t: number, i: number) => i === 0 || starts[i - 1] <= t),
+                `D: ${who} within 50 km, 101+ upcoming: the soonest first (${items.map((i: any) => i.title.slice(13, 50)).join(' | ')})`);
+        }
+    }
+
+    // ── the fresh-ledger run ────────────────────────────────────────────────────────────────────────────────────
+    async function freshLedgerRun(): Promise<void> {
+        console.log('── a local node whose ledger never moved: the enterprise card follows features.enterprises ──');
+        const ent = se.createTreasury('HomeSentinel Ent', 'bundled://sprout', 0, { leadKeeperPubkey: alice.pk });
+        const on = await get('/api/home?cards=enterprise', alice);
+        assert(on.body?.features?.enterprises === true && on.body?.cards?.enterprise?.id === ent.publicKey,
+            `setup: Alice keeps HomeSentinel Ent, and with enterprises and treasuries on she gets its card (${JSON.stringify(on.body?.cards?.enterprise)})`);
+        setOverride('treasuries', 'false');
+        const s = getProfileSwitches();
+        const off = await get('/api/home?cards=enterprise', alice);
+        assert(s.enterprises && !s.treasuries && off.body?.features?.enterprises === false,
+            `setup: treasuries switched off, enterprises on, so features.enterprises is false (${off.body?.features?.enterprises})`);
+        assert(off.status === 200 && off.body?.cards?.enterprise === undefined,
+            `review B: no enterprise card where features.enterprises is off (${JSON.stringify(off.body?.cards?.enterprise)})`);
+        const page = await get(`/api/enterprise/${ent.publicKey}`, alice);
+        assert(page.status === 404, `the screen the card would lead to answers 404 there (${page.status} ${page.text.slice(0, 80)})`);
+        setOverride('treasuries', null);
     }
 
     // ── the read-auth-off run ───────────────────────────────────────────────────────────────────────────────────

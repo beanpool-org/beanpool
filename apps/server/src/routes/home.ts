@@ -3,6 +3,9 @@
  *
  *   GET /api/home?cards=needs,steps,…&lat=&lng=   → { generatedAt, profile, features, welcome?, me, layout, cards }
  *
+ * `welcome` (the visitors' Join card) only for a reader with no account here; `me` (with `firstOffer` and `standing`)
+ * for a reader with their own cards, a suspended member included.
+ *
  * The whole Home screen from one signed read, assembled in-process (routes/home-answer.ts buildHome), never by fanning out
  * over HTTP. `cards` limits the work to the cards asked for (absent: every card but the ones the member's own layout
  * hides); unknown ids are dropped, never refused. `lat`/`lng` is the point "near you" is measured from; without one, a
@@ -73,7 +76,8 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
         // `private`: the answer is the reader's own, so no shared cache (a CDN or proxy in front of the node) may store it.
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
         // A node with two views says which this is, as the listing does (viewer.ts VIEW_HEADER). Elsewhere nothing is said.
-        if (getProfileSwitches().guestListingsOnly) ctx.set(VIEW_HEADER, body.welcome ? 'guest' : 'member');
+        // A suspended member's community cards are the visitors' view, though they get no `welcome` (home-answer.ts).
+        if (getProfileSwitches().guestListingsOnly) ctx.set(VIEW_HEADER, body.me?.standing === 'member' ? 'member' : 'guest');
         const inm = ctx.get('If-None-Match');
         if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
             ctx.status = 304;

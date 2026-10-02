@@ -31,7 +31,7 @@ The setting up itself is not kept. The server checks it, and remembers only that
 
 A standby copies these records (all but the connection's reference), and so does the take-over bundle, so a server that takes over still knows who joined which way. A 12-words join needs no door key: a server without data/open-join.key turns sign-ins away and still takes 12-words joins.
 
-**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from the phone they joined on (not from a phone they later restored the account onto), and not while they are suspended. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does.
+**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from any phone or browser where they are in their account, not only the one they joined on: the app and the web page ask the server how the account joined, and offer it while the account has only its 12 words. They can't while they are suspended or once their account is closed. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does.
 
 ## Who may invite
 

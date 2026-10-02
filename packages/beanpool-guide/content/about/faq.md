@@ -47,7 +47,7 @@ No, if you kept your 12-word recovery phrase. Install the app and restore your a
 
 ## Do I need a Google, Apple or Facebook account?
 
-No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from the phone you joined on, and not while your account is suspended. See "Joining BeanPool" and "Your 12 words".
+No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from any phone or browser where you are in your account, and not while your account is suspended. See "Joining BeanPool" and "Your 12 words".
 
 ## Can I belong to more than one community?
 

@@ -2064,6 +2064,55 @@ describe('U. Round 15: notices kept until said, one limit for a claim, a pin rea
             expect(node.current()!).toMatchObject({ maker: bea.publicKey, parentId: two, drops: [owen.publicKey] });
         }, 30_000);
     }
+
+    /** The phone's stores, where the next `failPinReads` reads of a pin throw (a SecureStore or AsyncStorage error). */
+    let failPinReads = 0;
+    const FLAKY: NamesPinStore = {
+        ...STORE,
+        getItem: async (k) => {
+            if (failPinReads > 0 && k.startsWith('beanpool:names-trust:')) { failPinReads--; throw new Error('storage busy'); }
+            return mem.get(k) ?? null;
+        },
+    };
+    afterEach(() => { failPinReads = 0; });
+
+    for (const how of ['the pin reads (control)', 'the pin read fails once', 'the pin was wiped during the read'] as const) {
+        it(`U4 (the re-review's :690) a Remove tapped during the list read stands after it: ${how}; nothing is sealed under key 1`, async () => {
+            const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+            const k1 = node.current()!.id;
+            const label = namesTrustStoreKey(owen.publicKey, COMMUNITY);
+            let release!: () => void;
+            const gate = new Promise<void>((r) => { release = r; });
+            let out = false;
+            hold = (req) => {
+                if (out || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries') return null;
+                out = true;
+                return gate;
+            };
+            const opening = openNamesList(COMMUNITY, owen, FLAKY);
+            for (let i = 0; i < 1000 && !out; i++) await new Promise((r) => setTimeout(r, 5));
+            expect(out).toBe(true); // Owen's list read is held
+            expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
+            expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]);
+            if (how === 'the pin read fails once') failPinReads = 1; // the read's own fresh read of the pin
+            if (how === 'the pin was wiped during the read') mem.delete(label);
+            release();
+            const o = await opening;
+            expect(o.ok && o.value.list?.entries.length).toBe(2); // the list is shown either way
+            expect(failPinReads).toBe(0);
+            if (how === 'the pin was wiped during the read') {
+                expect(mem.has(label)).toBe(false); // f8d11de4: the open's copy came back, its ring included
+                return;
+            }
+            expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]); // f8d11de4: [] after a failed read
+            sent = [];
+            const r = await saveNamesEntry(COMMUNITY, owen, STORE, o.ok ? o.value : null as never, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(r.ok === false && r.code).toBe('still_removing');
+            expect(sentAs('POST', '/api/names/entries')).toEqual([]);
+            expect(node.entries.filter((e) => e.keyId === k1).length).toBe(2);
+            void ada;
+        }, 30_000);
+    }
 });
 
 describe('E. Rollback, forks', () => {

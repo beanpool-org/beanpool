@@ -704,8 +704,9 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
 
 /**
  * The list read, after the pin's chain is let go (round 14): a big list on a slow link can take minutes, and nothing it
- * does needs the chain until it saves `seen`, which is a short link of its own that reads the pin afresh. So a Remove or
- * a check tapped during a long read isn't held up, and isn't written over (round 12's race stays closed).
+ * does needs the chain until it saves `seen`, which is a short link of its own that reads the pin afresh and saves nothing
+ * when that read fails (round 15). So a Remove or a check tapped during a long read isn't held up, and isn't written over
+ * (round 12's race stays closed).
  */
 async function readTheList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: NamesResult<NamesOpened>): Promise<NamesResult<NamesOpened>> {
     if (!opened.ok || opened.value.plan.kind !== 'ready') return opened;
@@ -722,7 +723,12 @@ async function readTheList(anchor: string, identity: BeanPoolIdentity, store: Na
         // Names this phone saw that are neither on the node nor deleted by an admin: a loss, said with its count.
         // Only what the pin had seen when the read began can be missing from it; an id seen since (a Save that landed during
         // the read) is kept, never counted lost.
-        const now = (await readNamesPinFrom(store, identity.publicKey, anchor)) ?? o.pin;
+        const now = await readNamesPinFrom(store, identity.publicKey, anchor);
+        if (!now) {
+            // The pin couldn't be read again (round 15, :690): nothing is saved, never the pin as the open had it, which would
+            // undo a Remove, a check or a new key saved during the read. `seen` stays; the next ready read counts any loss.
+            return { ok: true, value: { ...o, list, lost: 0 } };
+        }
         const before = new Set(o.pin.seen ?? []);
         const since = (now.seen ?? []).filter((id) => !before.has(id));
         const read = namesSeenAfterRead({ ...now, seen: o.pin.seen ?? [] }, list.entries.map((e) => e.id), list.deleted ?? []);

@@ -14,7 +14,7 @@ import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
 import * as sync from '../lib/sync';
-import { importIdentity, markPendingJoinSent, savePendingJoin, loadPendingJoin, loadIdentityStrict, IdentityHeldError } from '../lib/identity';
+import { importIdentity, markPendingJoinSent, loadPendingJoin, loadIdentityStrict, IdentityHeldError } from '../lib/identity';
 import { browserKeyProblem } from '../lib/web-join';
 import { keyProblemSentence } from '../components/WebJoin';
 import { request } from '../lib/api';

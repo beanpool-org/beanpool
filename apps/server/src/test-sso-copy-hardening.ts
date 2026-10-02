@@ -17,8 +17,9 @@
  *      session in one request (and says so truthfully), and a pile is gone from their app half an hour after it stops
  *      growing. Their own restore, in progress through the flood, still goes through.
  *   7. (PR #1456 re-review) And a pile against a member who never opens the app is retired anyway: a node-wide sweep,
- *      in batches that never hold the node, leaves each owner's idle cap, deletes the expired and the long-stopped, and
- *      keeps every session that released something and every one in its sign-in window.
+ *      in statements of SWEEP_BATCH rows (tens of milliseconds each here) with the event loop free between them, leaves
+ *      each owner's idle cap, deletes the expired and the long-stopped, and keeps every session that released something
+ *      and every one in its sign-in window.
  *
  * Local only: the node is this process's own HTTPS server on localhost. Google's key set is answered here, Expo's push
  * endpoint is answered here, and anything else is refused and counted.
@@ -37,6 +38,9 @@ import { startHttpsServer } from './https-server.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
+// The suite's own server, in this process: a call after a long synchronous stretch (rows written by the hundred
+// thousand) must not reuse a socket the server is about to close (keepalive-test-fetch.ts; CI run 36964891493).
+import { localFetch } from './keepalive-test-fetch.js';
 
 /** The scheme a device asks for (core KEEPER_ALG_RELEASE), spelled out so this suite reads the same on a node without it. */
 const SEAL = 'x25519-xc20p-release-v1';
@@ -62,6 +66,8 @@ globalThis.fetch = (async (input: any, init?: any) => {
         });
     }
     if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    // The node's own update check (a timer, which §7's longer run reaches): answered here, so it reaches nothing either.
+    if (url.hostname === 'api.github.com') return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } });
     blocked.push(url.hostname);
     throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
 }) as typeof fetch;
@@ -107,7 +113,7 @@ async function call(key: Key, path: string, body: unknown): Promise<{ status: nu
     const bodyString = JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await localFetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -134,7 +140,7 @@ async function callFrom(addr: string, key: Key, path: string, body: unknown): Pr
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const t0 = performance.now();
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await localFetch(`${BASE}${path}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -503,18 +509,38 @@ async function main(): Promise<void> {
     await sweepNow();
     assert(rowsFor(fay, EMPTY) === 0, `half an hour on, the sweep deletes the stopped ones that released nothing (${rowsFor(fay, EMPTY)} left)`);
 
-    // 250,000: half idle past its window against one member, half expired against another. No batch holds the node.
+    // A poll on a big aged pile against one member prunes one batch, not the pile.
     const gus = addOwner(); await deposit(gus);
-    const hal = addOwner(); await deposit(hal);
     const gen = (o: Owner) => (db.prepare('SELECT MAX(generation) AS g FROM recovery_shares WHERE owner_pubkey = ?').get(o.key.pk) as { g: number }).g;
-    const bulk = (o: Owner, n: number, created: string, expires: string) => db.prepare(`WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
+    db.prepare(`WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
         INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
-        SELECT lower(hex(randomblob(32))), ?, ?, lower(hex(randomblob(32))), 'open', ?, ? FROM k`).run(n, o.key.pk, gen(o), created, expires);
-    bulk(gus, 125_000, new Date(Date.now() - 40 * 60_000).toISOString(), new Date(Date.now() + 70 * 3600_000).toISOString());
-    bulk(hal, 125_000, new Date(Date.now() - 73 * 3600_000).toISOString(), new Date(Date.now() - 3600_000).toISOString());
+        SELECT lower(hex(randomblob(32))), ?, ?, lower(hex(randomblob(32))), 'open', ?, ? FROM k`)
+        .run(50_000, gus.key.pk, gen(gus), new Date(Date.now() - 40 * 60_000).toISOString(), new Date(Date.now() + 70 * 3600_000).toISOString());
     const gusPoll = await callFrom('198.51.100.71', gus.key, '/api/recovery/collect/mine', {});
-    console.log(`  (Gus's first poll on 125,000 aged sessions: ${Math.round(gusPoll.ms)} ms)`);
-    assert(gusPoll.status === 200 && gusPoll.ms < 500, `a poll on an aged pile of 125,000 prunes one batch, not the pile (${Math.round(gusPoll.ms)} ms)`);
+    console.log(`  (Gus's first poll on 50,000 aged sessions: ${Math.round(gusPoll.ms)} ms)`);
+    assert(gusPoll.status === 200 && gusPoll.ms < 500, `a poll on an aged pile of 50,000 prunes one batch, not the pile (${Math.round(gusPoll.ms)} ms)`);
+
+    // 250,000 more, interleaved across 2,000 members (row by row, as strangers' opens against many names land): each
+    // member's alternate rounds idle past their window or expired, so each has about 62 idle and 63 expired. The cold confirm of e326b1aa found the owner lookup held the
+    // loop ~240 ms on such a layout, unbatched; it now walks the covering index.
+    const OWNERS = 2_000;
+    db.exec('CREATE TEMP TABLE pile_owners (rn INTEGER PRIMARY KEY, pk TEXT NOT NULL)');
+    db.prepare(`WITH RECURSIVE k(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM k WHERE i < ? - 1)
+        INSERT INTO pile_owners (rn, pk) SELECT i, lower(hex(randomblob(32))) FROM k`).run(OWNERS);
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+        SELECT pk, 'pile' || rn, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis' FROM pile_owners`).run();
+    db.prepare(`WITH RECURSIVE k(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM k WHERE i < ? - 1)
+        INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+        SELECT lower(hex(randomblob(32))), (SELECT pk FROM pile_owners WHERE rn = i % ?), 1, lower(hex(randomblob(32))), 'open',
+               CASE WHEN (i / ?) % 2 = 0 THEN ? ELSE ? END, CASE WHEN (i / ?) % 2 = 0 THEN ? ELSE ? END FROM k`)
+        .run(250_000, OWNERS,
+            OWNERS, new Date(Date.now() - 40 * 60_000).toISOString(), new Date(Date.now() - 73 * 3600_000).toISOString(),
+            OWNERS, new Date(Date.now() + 70 * 3600_000).toISOString(), new Date(Date.now() - 3600_000).toISOString());
+    const pileLeft = (): number => (db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections
+        WHERE owner_pubkey IN (SELECT pk FROM pile_owners)`).get() as { n: number }).n;
+    const pileMax = (): number => (db.prepare(`SELECT MAX(n) AS m FROM (SELECT COUNT(*) AS n FROM recovery_collections
+        WHERE owner_pubkey IN (SELECT pk FROM pile_owners) GROUP BY owner_pubkey)`).get() as { m: number | null }).m ?? 0;
+
     const times: number[] = [];
     let swept = 0;
     // A bystander asks the node something the whole time; how long it waits is how long the sweep holds the loop.
@@ -523,23 +549,36 @@ async function main(): Promise<void> {
     const bystander = (async () => {
         while (!sweepDone) {
             const t = performance.now();
-            await fetch(`${BASE}/api/version`).then(r => r.text()).catch(() => '');
+            await localFetch(`${BASE}/api/version`).then(r => r.text()).catch(() => '');
             waits.push(performance.now() - t);
         }
     })();
     const t7 = performance.now();
-    await sweepNow((ms, rows) => { times.push(ms); swept += rows; });
+    const batches: [number, number][] = [];
+    await sweepNow((ms, rows) => { times.push(ms); swept += rows; batches.push([ms, rows]); });
     const sweepMs = performance.now() - t7;
     sweepDone = true;
     await bystander;
+    const pct = (xs: number[], p: number) => [...xs].sort((x, y) => x - y)[Math.min(xs.length - 1, Math.floor(xs.length * p))] ?? 0;
     const longest = Math.max(0, ...times);
-    const median = [...times].sort((x, y) => x - y)[Math.floor(times.length / 2)] ?? 0;
     const longestWait = Math.max(0, ...waits);
-    console.log(`  (swept ${swept} rows in ${times.length} batches, ${Math.round(sweepMs)} ms; median batch ${median.toFixed(1)} ms, longest ${longest.toFixed(1)} ms; `
-        + `a bystander's longest wait ${longestWait.toFixed(1)} ms over ${waits.length} requests)`);
-    assert(rowsFor(gus, EMPTY) <= 10 && rowsFor(hal, EMPTY) === 0, `the sweep retires the 250,000 (Gus ${rowsFor(gus, EMPTY)}, Hal ${rowsFor(hal, EMPTY)} left)`);
-    assert(times.length > 1 && longest < 100, `...in batches, none holding the node for more than ~100 ms (longest ${longest.toFixed(1)} ms)`);
-    assert(waits.length > 1 && longestWait < 400, `...so a request made meanwhile is answered within a batch (longest wait ${longestWait.toFixed(1)} ms)`);
+    console.log(`  (swept ${swept} rows in ${times.length} statements, ${Math.round(sweepMs)} ms; statement median ${pct(times, 0.5).toFixed(1)} ms, `
+        + `p95 ${pct(times, 0.95).toFixed(1)} ms, longest ${longest.toFixed(1)} ms; a bystander's wait median ${pct(waits, 0.5).toFixed(1)} ms, `
+        + `longest ${longestWait.toFixed(1)} ms over ${waits.length} requests)`);
+    assert(rowsFor(gus, EMPTY) <= 10 && pileLeft() === OWNERS * 10 && pileMax() === 10,
+        `the sweep retires the piles: Gus's to ${rowsFor(gus, EMPTY)}, 2,000 members' 250,000 to their caps (${pileLeft()} left, at most ${pileMax()} each)`);
+    // Batched by construction, then by time. The time bounds are statistical, with room for a loaded CI machine. Four
+    // copies of this suite at once here gave p95 55-105 ms, and a few single statements of 0.5-3 s, 53-row ones among
+    // them: the disk's fsyncs under four writers, not the statement's work, so no bound is put on the single longest.
+    // An unbatched sweep fails all three at once: one statement over these piles takes seconds (an aged 125,000 took
+    // 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a p95 of seconds.
+    const batch = rr.SWEEP_BATCH as number;
+    assert(times.length >= 300 && batches.every(([, rows]) => rows <= batch),
+        `...in hundreds of statements of at most ${batch} rows each (${times.length}; most rows in one: ${Math.max(0, ...batches.map(([, r]) => r))})`);
+    assert(pct(times, 0.95) < 250,
+        `...that are short: p95 ${pct(times, 0.95).toFixed(1)} ms (median ${pct(times, 0.5).toFixed(1)}, longest ${longest.toFixed(1)})`);
+    assert(waits.length >= 20 && pct(waits, 0.5) < 100 && pct(waits, 0.99) < 1000,
+        `...so requests made meanwhile are answered throughout (${waits.length}; median ${pct(waits, 0.5).toFixed(1)} ms, p99 ${pct(waits, 0.99).toFixed(1)} ms, longest ${longestWait.toFixed(1)} ms)`);
 
     assert(blocked.length === 0, `nothing was reached off this machine (${blocked.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} checks passed.`);

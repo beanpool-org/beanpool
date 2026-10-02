@@ -203,7 +203,9 @@ const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediat
  * app polls, so a pile against a member who never opens the app was never retired. This runs on a timer instead.
  *
  * In batches of SWEEP_BATCH rows, each its own statement (so its own transaction), yielding to the event loop between
- * them: a 250,000 pile goes without any request waiting more than one batch. Evicted idle sessions are deleted
+ * them: a 250,000 pile goes in hundreds of statements of tens of milliseconds, and a request that arrives meanwhile
+ * waits for the statement under way and its own turns, not for the pile (test-sso-copy-hardening §7 measures both on an
+ * interleaved pile across 2,000 owners). Evicted idle sessions are deleted
  * outright: they released nothing, so pruneCollectionsFor would delete them in the same pass. `onBatch` is for tests
  * that time each batch.
  */
@@ -221,29 +223,36 @@ export async function sweepRecoveryCollections(
         return n;
     };
 
-    // Dead and empty, any owner.
+    // Dead and empty, any owner: the table in windows of SWEEP_BATCH rowids, so each statement examines at most that many
+    // rows and each row is examined once. "The first SWEEP_BATCH dead rows" instead re-read every live row ahead of them
+    // on every batch, which on a pile interleaved across owners grew to 180 ms a statement (cold confirm of e326b1aa).
     const dead = db.prepare(`
-        DELETE FROM recovery_collections WHERE rowid IN (
-            SELECT rowid FROM recovery_collections
-            WHERE (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
-              AND id NOT IN (SELECT collection_id FROM recovery_releases)
-            LIMIT ?
-        )
+        DELETE FROM recovery_collections
+        WHERE rowid > ? AND rowid <= ?
+          AND (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
+          AND id NOT IN (SELECT collection_id FROM recovery_releases)
     `);
-    while (run(() => dead.run(nowIso(), new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString(), SWEEP_BATCH).changes) >= SWEEP_BATCH) {
+    const top = (db.prepare('SELECT MAX(rowid) AS m FROM recovery_collections').get() as { m: number | null }).m ?? 0;
+    for (let from = 0; from < top; from += SWEEP_BATCH) {
+        run(() => dead.run(from, from + SWEEP_BATCH, nowIso(), new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString()).changes);
         await yieldToEventLoop();
     }
-    await yieldToEventLoop();
 
-    // Idle beyond each owner's cap. The owners first (one indexed pass), then each owner's oldest idle, a batch at a time.
+    // Idle beyond each owner's cap. The owners first, then each owner's oldest idle, a batch at a time.
+    //
+    // The owner lookup reads only the covering index (owner_pubkey, status, created_at), already in owner order, and
+    // filters on what that index holds. With expires_at in the filter it read the table for every row, which on a pile
+    // interleaved across many owners held the loop ~240 ms at 250,000 (cold confirm of e326b1aa). Leaving expires_at
+    // out can only over-count an owner (the expired went in the pass above, bar the ones that released something):
+    // the delete below re-checks it, so an owner listed in error loses nothing.
     const windowStart = (): string => new Date(Date.now() - SIGN_IN_WINDOW_MS).toISOString();
     let owners: { owner: string }[] = [];
     run(() => {
         owners = db.prepare(`
-            SELECT owner_pubkey AS owner FROM recovery_collections
-            WHERE status = 'open' AND expires_at > ? AND created_at <= ?
+            SELECT owner_pubkey AS owner FROM recovery_collections INDEXED BY idx_recovery_collections_owner_created
+            WHERE status = 'open' AND created_at <= ?
             GROUP BY owner_pubkey HAVING COUNT(*) > ?
-        `).all(nowIso(), windowStart(), MAX_LIVE_COLLECTIONS_PER_OWNER) as { owner: string }[];
+        `).all(windowStart(), MAX_LIVE_COLLECTIONS_PER_OWNER) as { owner: string }[];
         return 0;
     });
     const idle = db.prepare(`

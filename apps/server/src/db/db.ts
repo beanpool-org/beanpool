@@ -380,7 +380,7 @@ function backfillBoardStanding(): void {
 }
 
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
-const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
+export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
 /**
  * Brings this node's members rows into the rules a fresh install's table has (schema.sql's CHECKs on members, read from its
@@ -427,7 +427,7 @@ function bringMembersToSchemaRules(schemaSql: string): void {
  * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
  * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
  * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
- * persistCommonsBalance); it relies on every primitive that moves the pot refusing a non-finite amount, not on this.
+ * persistCommonsBalance), so that write refuses a pot that is not a finite number itself, before it binds anything.
  *
  * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
  * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its
@@ -882,6 +882,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
@@ -1458,24 +1460,8 @@ export function initSchema() {
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
-    // Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at
-    // this boot rather than on each code's next use, which may be never.
-    try {
-        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
-        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
-    } catch (e) {
-        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
-    }
-
-    // On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
-    // takes over boots as a main server, which seeds one if the copy brought none.
-    if (getNodeRole() !== 'backup') {
-        try {
-            seedPricingGuideIfEmpty(false, db);
-        } catch (err) {
-            console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
-        }
-    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
 
     try {
         migrateProjectsAndCommonsToEnterprises(db);
@@ -1487,6 +1473,64 @@ export function initSchema() {
     stampPlainTables();
     markLinkTreasuries();
     fillReleaseOwners();
+}
+
+/**
+ * Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at this boot
+ * rather than on each code's next use, which may be never; a suspended member's too on a main server.
+ */
+function upgradeBreakGlassHashesAtBoot(): void {
+    try {
+        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
+        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
+    }
+}
+
+/**
+ * On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
+ * takes over boots as a main server, which seeds one if the copy brought none.
+ */
+function seedPricingGuideOnMainServer(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        seedPricingGuideIfEmpty(false, db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    }
+}
+
+/**
+ * What initSchema runs only on a main server, run now: for a standby a take-over made the main server in this process, after
+ * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
+ * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
+ * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
+ * treasuries' markers and the recovery releases' owners. Nothing on a standby. Never throws.
+ */
+export function runMainServerSchemaPasses(): void {
+    if (getNodeRole() === 'backup') return;
+    markExistingVisitors();
+    try {
+        bringMembersToSchemaRules(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8'));
+    } catch (e) {
+        console.error('[DB] ❌ Could not read schema.sql for the members\' schema rules:', e);
+    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
+    for (const t of PLAIN_TABLES) stampUnstampedRows(t);
+    markLinkTreasuries();
+    fillReleaseOwners();
+}
+
+/** A plain table's rows the ALTER left with no stamp, stamped now, on a main server only (stampPlainTables). */
+function stampUnstampedRows(t: (typeof PLAIN_TABLES)[number]): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        db.prepare(`UPDATE ${t.table} SET ${t.watermark} = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${t.watermark} IS NULL`).run();
+    } catch (e) {
+        console.error(`[DB] ❌ Could not stamp ${t.table}'s unstamped rows:`, e);
+    }
 }
 
 /**

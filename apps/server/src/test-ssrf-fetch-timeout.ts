@@ -25,9 +25,16 @@
  * 6. The timeout does not take the process down when the caller never reads the body.
  * 7. The test hook is inert unless BEANPOOL_SSRF_TEST_HOOK=1, and ssrfSafeFetch itself still
  *    refuses loopback, so nothing here has loosened the guard.
+ * 8. A connect that fails at once (an egress firewall's EPERM, ENETUNREACH for an IPv6 address
+ *    with no route, EAFNOSUPPORT) is a rejected promise, not an uncaught exception. The pinned
+ *    lookup used to call back synchronously, so the error was emitted before the request had its
+ *    socket listeners and the whole node exited: found in the global load rehearsal, where a
+ *    sandbox denying outbound connects crashed the node at the first Pulse scheduler tick.
  *
  * No network: every target is a server this file starts on 127.0.0.1, reached through the
- * resolver test hook. Nothing here contacts Instagram or any other external host.
+ * resolver test hook, or 255.255.255.255, whose TCP connect is refused by the kernel itself
+ * (ENETUNREACH on Linux, EAFNOSUPPORT on macOS) before any packet is sent. Nothing here contacts
+ * Instagram or any other external host.
  *
  * Run: BEANPOOL_SSRF_TEST_HOOK=1 pnpm exec tsx src/test-ssrf-fetch-timeout.ts
  */
@@ -40,6 +47,7 @@ import {
     ssrfSafeFetch,
     __ssrfSafeFetchWithResolverForTests,
     RequestTimeoutError,
+    createCustomLookup,
 } from './engine/pulse-resolver.js';
 
 let run = 0, passed = 0;
@@ -216,6 +224,58 @@ async function main(): Promise<void> {
     process.env.BEANPOOL_SSRF_TEST_HOOK = saved;
     assert(hookRefused.includes('SSRF_BLOCKED') && hookRefused.includes('test hook is disabled'),
         'and the test hook itself refuses to run without BEANPOOL_SSRF_TEST_HOOK=1');
+
+    // ── 8. A connect that fails at once is a rejection, not a crash ──────────────────────────
+    console.log('\n--- 8. A connect that fails at once does not crash the process ---');
+    // dns.lookup always calls back on a later tick, and http/https/net rely on that: the request
+    // attaches its socket listeners after createConnection returns. A lookup that calls back
+    // synchronously lets a synchronous connect() failure be emitted before then.
+    const pinned = createCustomLookup('203.0.113.7', 4);
+    for (const [label, opts] of [
+        ['{ all: true }', { all: true }],
+        ['{ all: false }', { all: false }],
+        ['a numeric family', 4],
+        ['no options', undefined],
+    ] as const) {
+        let got: unknown[] | null = null;
+        const answered = new Promise<void>((resolve) => {
+            const cb = (...args: unknown[]) => { got = args; resolve(); };
+            if (opts === undefined) (pinned as any)('probe.test', cb);
+            else (pinned as any)('probe.test', opts, cb);
+        });
+        assert(got === null, `the pinned lookup does not call back before it returns (${label})`);
+        await outcomeOf(() => answered, 1000);
+        const args = (got ?? []) as unknown[];
+        const yieldsPinned = label === '{ all: true }'
+            ? args[0] === null && Array.isArray(args[1]) && (args[1] as any[]).length === 1
+                && (args[1] as any[])[0].address === '203.0.113.7' && (args[1] as any[])[0].family === 4
+            : args[0] === null && args[1] === '203.0.113.7' && args[2] === 4;
+        assert(yieldsPinned, `and it still yields only the pinned address and family (${label})`);
+    }
+
+    // 255.255.255.255 is refused by the kernel inside connect() itself, so nothing leaves the
+    // machine. It only gets this far because the test resolver pins it; the real resolver refuses it.
+    const uncaught: Error[] = [];
+    const onUncaught = (e: Error) => { uncaught.push(e); };
+    process.on('uncaughtException', onUncaught);
+    const toUnroutable = async (_host: string) => ({ pinnedIp: '255.255.255.255', family: 4 });
+    for (const scheme of ['https', 'http']) {
+        const before = uncaught.length;
+        const failed = await outcomeOf(() => __ssrfSafeFetchWithResolverForTests(
+            `${scheme}://probe.test/`, { timeoutMs: TIMEOUT }, toUnroutable), CEILING);
+        // Let any late emit surface before judging.
+        await new Promise((r) => setTimeout(r, 100));
+        const crashed = uncaught.slice(before);
+        assert(crashed.length === 0,
+            `${scheme}: a connect that fails at once raises no uncaught exception`
+            + (crashed.length ? ` (got: ${crashed.map((e) => e.message).join('; ')})` : ''));
+        // The connect error itself (syscall 'connect'), not a timeout, a hang, or the TypeError a
+        // half-built TLS socket throws when the error beats the request to it.
+        const err = failed.error as (Error & { syscall?: string; code?: string }) | null;
+        assert(err !== null && err.syscall === 'connect' && typeof err.code === 'string',
+            `${scheme}: the fetch rejects with the connect error itself (${err?.code ?? err?.message ?? 'no error'})`);
+    }
+    process.off('uncaughtException', onUncaught);
 
     for (const t of timers) clearInterval(t as any);
     for (const s of servers) s.close();

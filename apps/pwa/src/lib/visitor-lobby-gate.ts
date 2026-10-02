@@ -31,8 +31,10 @@ export function resetCommunityInfoOnce(): void {
 /**
  * Whether this browser is part way through joining or getting an account back: a sign-in coming back, an invite in
  * the address, a join key waiting (sent or not), or a key an invite went with. Then the welcome page opens at once,
- * as it always has, and settles it; the lobby is for a browser with nothing in flight. A store that can't be read is
- * taken as something in flight: the welcome page reads it again and says what it finds.
+ * as it always has, and settles it; the lobby is for a browser with nothing in flight. A store that is missing or
+ * won't open reads as nothing in flight (the readers answer none for it: there is no join to settle, and the lobby
+ * needs no key to look); any other failure to read is taken as something in flight, and the welcome page reads it
+ * again and says what it finds.
  */
 export async function joinInFlight(): Promise<boolean> {
     if (captureAuthReturn()) return true;

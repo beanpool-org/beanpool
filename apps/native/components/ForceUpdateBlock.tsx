@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 import appConfig from '../app.json';
 import { useIdentity } from '../app/IdentityContext';
@@ -11,12 +13,13 @@ import { bootClockMs } from '../modules/boot-clock';
 import { onCommunitySwitched } from '../utils/community-switch';
 import { checkCommunityForUpdate, createForceUpdateGate, STORE_URLS } from '../utils/force-update';
 import { hasMnemonic } from '../utils/identity';
-import { authenticateUser, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
+import { authenticateUser, doorPrompts, isAppLockPromptOpen, whenAppLockPromptsClose } from '../utils/LocalAuth';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
 import {
     leaveFromUpdateBlock, otherCommunitiesOnPhone, planLeaveFromUpdateBlock, switchFromUpdateBlock, type BlockLeavePlan,
     type OtherCommunity,
 } from '../utils/update-block-escape';
+import { holdStatusBarStyle } from '../utils/status-bar-hold';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
 import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { usePutAwayAfterLeave } from '../utils/words-put-away';
@@ -98,7 +101,8 @@ function WordsWindow({ children, onClose, background }: { children: ReactNode; o
 }
 
 export default function ForceUpdateBlock() {
-    const { colors } = useTheme();
+    const { colors, theme } = useTheme();
+    const insets = useSafeAreaInsets();
     const { identity, setIdentity } = useIdentity();
     const { recheck } = useNodeStatus();
     const [block, setBlock] = useState<{ version: string } | null>(null);
@@ -128,6 +132,8 @@ export default function ForceUpdateBlock() {
             // App Lock's own unlock prompt is not the member leaving (utils/force-update.ts).
             appLockPromptOpen: isAppLockPromptOpen,
             whenAppLockPromptsClose,
+            // A door's prompt (the words, a payment) is the member leaving, even where it never changes AppState.
+            doorPrompts,
         });
         void gate.start(AppState.currentState);
         const sub = AppState.addEventListener('change', (next) => { void gate.appStateChanged(next); });
@@ -163,6 +169,37 @@ export default function ForceUpdateBlock() {
     const wordsPage = wordsShown || page.kind === 'add-words';
 
     const showing = !!block;
+
+    /**
+     * The status bar's icons over the block: dark on its light background, light on its dark one, the rule every screen
+     * uses (app/_layout.tsx and the rest). Held on top of the screens' own StatusBars while the block is up, whatever
+     * mounts beneath it meanwhile, and given back to them when it comes down (utils/status-bar-hold.ts).
+     *
+     * On Android the block is a Modal, a window of its own, which copies the app window's icons once, as it opens
+     * (ReactModalHostView updateSystemAppearance, RN 0.83), and never again. Opened at once, it copied the screen
+     * beneath's (white icons on the block's light page). So it opens BAR_SETTLE_MS after the hold starts, and opens
+     * afresh if the theme flips while it is up. The words' window opens later, with the hold still on, and copies the
+     * same.
+     */
+    const barStyle = theme === 'dark' ? 'light' : 'dark';
+    useEffect(() => {
+        if (!showing) return;
+        return holdStatusBarStyle(barStyle === 'light' ? 'light-content' : 'dark-content');
+    }, [showing, barStyle]);
+    const [barsSetFor, setBarsSetFor] = useState<'light' | 'dark' | null>(null);
+    useEffect(() => {
+        if (!showing || Platform.OS !== 'android') { setBarsSetFor(null); return; }
+        const timer = setTimeout(() => setBarsSetFor(barStyle), BAR_SETTLE_MS);
+        return () => clearTimeout(timer);
+    }, [showing, barStyle]);
+    const barsSet = Platform.OS !== 'android' || barsSetFor === barStyle;
+    /**
+     * Android: the block's own window is open (its Modal's onShow). The words' window, a Modal inside it, opens only after
+     * that: two windows opened in one go can open inner first, and the block's would then cover the words. That happens
+     * when the block opens afresh for a theme flip with the words on screen.
+     */
+    const [blockWindowOpen, setBlockWindowOpen] = useState(false);
+    useEffect(() => { if (!barsSet) setBlockWindowOpen(false); }, [barsSet]);
 
     useEffect(() => {
         if (!showing || Platform.OS !== 'android') return;
@@ -299,10 +336,37 @@ export default function ForceUpdateBlock() {
             </WordsOutsideScreens>
         </View>
     );
+    /**
+     * Every page's scroll view, framed inside the status bar, the navigation bar and any cutout. The block and its words
+     * window are edge-to-edge (an Android Modal is drawn from the top of the display since Expo 55, and iOS's
+     * FullWindowOverlay covers the whole window), so with padding alone a page taller than the screen put its card under
+     * the status bar, and scrolled text ran under the clock. Framing the scroll view rather than padding its content keeps
+     * both clear: the page's own background fills the bars, and nothing scrolls under them. The insets come from the root
+     * SafeAreaProvider, as for the app's other full-screen Modals (EventDetail, CreateGroupModal).
+     */
+    const scrollFrame = {
+        marginTop: insets.top,
+        marginBottom: insets.bottom,
+        marginLeft: insets.left,
+        marginRight: insets.right,
+    };
     const pageScroll = (children: ReactNode) => (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+        <ScrollView style={scrollFrame} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
             <View style={card}>{children}</View>
         </ScrollView>
+    );
+    /**
+     * The page with boxes to type in (Add my 12 words): it keeps the focused box and the rows below it above the keyboard,
+     * as Settings does for the same form. A plain ScrollView can't on Android: the page is in an edge-to-edge Modal,
+     * whose window the keyboard no longer shrinks from Android 11 on, and automaticallyAdjustKeyboardInsets is iOS only
+     * (#1415's third deciding review). The app's one KeyboardProvider (app/_layout.tsx) already hears the keyboard in a
+     * Modal's window: never a second one in here, which stops keyboard avoidance across the app
+     * (react-native-keyboard-controller's ModalAttachedWatcher holds the dialog's one dismiss listener).
+     */
+    const typingPageScroll = (children: ReactNode) => (
+        <KeyboardAwareScrollView style={scrollFrame} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={16}>
+            <View style={card}>{children}</View>
+        </KeyboardAwareScrollView>
     );
 
     let pageView: ReactNode = null;
@@ -327,7 +391,7 @@ export default function ForceUpdateBlock() {
     } else if (page.kind === 'add-words') {
         pageView = (
             <WordsWindow onClose={toMain} background={colors.surface.app}>
-                {pageScroll(wordsAdded ? (
+                {typingPageScroll(wordsAdded ? (
                     <>
                         <Text style={[styles.body, { color: colors.feedback.success.fg }]} accessibilityLiveRegion="polite">
                             Your 12 words are on this phone again.
@@ -410,7 +474,7 @@ export default function ForceUpdateBlock() {
     }
 
     const main = (
-        <ScrollView contentContainerStyle={styles.scroll}>
+        <ScrollView style={scrollFrame} contentContainerStyle={styles.scroll}>
             <View style={card}>
                 <Text style={styles.icon} accessibilityElementsHidden importantForAccessibility="no">⬆️</Text>
                 <Text accessibilityRole="header" style={[styles.title, { color: colors.text.heading }]}>
@@ -510,7 +574,7 @@ export default function ForceUpdateBlock() {
         <View style={[styles.fill, { backgroundColor: colors.surface.app }]} accessibilityViewIsModal>
             {/* A page in a window of its own (Android, the words) leaves the block's screen under it; any other replaces it. */}
             {page.kind === 'main' || (Platform.OS === 'android' && wordsPage) ? main : null}
-            {pageView}
+            {Platform.OS === 'android' && wordsPage && !blockWindowOpen ? null : pageView}
         </View>
     );
 
@@ -523,16 +587,34 @@ export default function ForceUpdateBlock() {
             </FullWindowOverlay>
         );
     }
+    if (!barsSet) return null;
     return (
-        <Modal visible animationType="fade" statusBarTranslucent onRequestClose={() => BackHandler.exitApp()}>
+        <Modal
+            key={barStyle}
+            visible
+            animationType="fade"
+            statusBarTranslucent
+            onShow={() => setBlockWindowOpen(true)}
+            onRequestClose={() => BackHandler.exitApp()}
+        >
             {screen}
         </Modal>
     );
 }
 
+/** Space around each page's card, inside the safe area. */
+const PAGE_PADDING = 16;
+/**
+ * How long the Android block waits, after asking for its status bar icons, before its window opens and copies them:
+ * the request reaches the app's window through the native modules' thread, and the window opens from the UI thread's
+ * next frame, so a few frames' margin. The block comes up at a safe moment, never in a hurry.
+ */
+const BAR_SETTLE_MS = 120;
+
 const styles = StyleSheet.create({
     fill: { ...StyleSheet.absoluteFillObject },
-    scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 16 },
+    /** Inside scrollFrame, which keeps it clear of the bars. */
+    scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: PAGE_PADDING },
     card: { width: '100%', maxWidth: 360, borderRadius: 20, borderWidth: 1, paddingVertical: 28, paddingHorizontal: 20, alignItems: 'center' },
     icon: { fontSize: 40, marginBottom: 12 },
     title: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 },

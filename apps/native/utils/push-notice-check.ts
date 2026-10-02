@@ -266,7 +266,7 @@ function verifyUnknownKind(d: Record<string, unknown>, recipient: string, pushKe
     try {
         // pushNoticeBytes is typed for the kinds core knows; the bytes are the kind's text either way.
         const fields = { c: d.c, k: d.k as PushNoticeKind, i: d.i, t: d.t };
-        valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes(fields, recipient), hexToBytes(pushKey));
+        valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes(fields, recipient), hexToBytes(pushKey), { zip215: false });
     } catch {
         valid = false;
     }

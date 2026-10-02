@@ -39,7 +39,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword, setBreakGlassMode, updateGatewayConfig } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { resetAdminAuthTarpit, validateCsrfToken } from './admin-auth.js';
 import { mintHandshakeToken, createPasswordSession, validateAdminSession, revokeAdminSession, MAX_PASSWORD_SESSIONS } from './admin-key-auth.js';
 import { APP_DOCUMENT_CSP, DOCUMENT_CSP } from './app-document-csp.js';
@@ -61,6 +61,7 @@ const LISTED = 'https://listed.example';
 interface Reply { status: number; body: any; text: string; headers: Headers; cookie: string; sessionId: string | null }
 
 async function call(method: string, p: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<Reply> {
+    forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
     const res = await fetch(`${BASE}${p}`, {
         method,
         headers: { ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) },

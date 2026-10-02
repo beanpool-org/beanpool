@@ -178,7 +178,7 @@ function keptReportsTooMany(pubkey: string, now: number): boolean {
     const row = db.prepare(
         `SELECT COUNT(*) AS c FROM (SELECT DISTINCT ar.target_post_id FROM abuse_reports ar
            JOIN posts p ON p.id = ar.target_post_id
-          WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ?
+          WHERE ar.reporter_pubkey = ? AND ar.status = 'reviewed' AND ar.updated_at > ? AND ar.target_pulse_item_id IS NULL
             AND p.active = 1 AND p.status != 'cancelled'
           LIMIT ?)`
     ).get(pubkey, since, AUTO_HIDE.keptReportsToStopCounting) as { c: number };
@@ -242,11 +242,11 @@ export function hideTally(postId: string, now: number = Date.now()): HideTally {
         `SELECT ar.reporter_pubkey AS reporter, MIN(ar.created_at) AS created_at, m.joined_at
            FROM abuse_reports ar
            JOIN members m ON m.public_key = ar.reporter_pubkey
-          WHERE ar.target_post_id = ? AND (ar.status = 'pending' OR ar.status IS NULL)
+          WHERE ar.target_post_id = ? AND ar.target_pulse_item_id IS NULL AND (ar.status = 'pending' OR ar.status IS NULL)
             AND ar.reporter_pubkey IS NOT ? AND m.status = 'active'
             AND NOT EXISTS (SELECT 1 FROM abuse_reports d
-                             WHERE d.target_post_id = ar.target_post_id AND d.reporter_pubkey = ar.reporter_pubkey
-                               AND d.status = 'reviewed')
+                             WHERE d.target_post_id = ar.target_post_id AND d.target_pulse_item_id IS NULL
+                               AND d.reporter_pubkey = ar.reporter_pubkey AND d.status = 'reviewed')
           GROUP BY ar.reporter_pubkey
           ORDER BY MIN(ar.created_at)`
     ).all(postId, post.author_pubkey) as { reporter: string; created_at: string | null; joined_at: string | null }[];
@@ -349,11 +349,11 @@ export function restoreHiddenPost(cb: ModerationNoticeCallbacks, postId: string,
         if (res.changes === 0) return;
         restored = true;
         reporters = (db.prepare(
-            `SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+            `SELECT DISTINCT reporter_pubkey FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
         ).all(postId) as { reporter_pubkey: string }[]).map(r => r.reporter_pubkey);
         db.prepare(
             `UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-              WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+              WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
         ).run(postId);
     })();
     if (!restored) return 'not_hidden';

@@ -63,10 +63,12 @@ import {
     PulseThumbnailService,
     extractInstagramEmbedUrl,
     extractThumbnailFromEmbedHtml,
+    SSRF_REFUSED_TEXT,
 } from '../engine/pulse-thumbnail.js';
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
+import { memberErrorText } from './member-error-text.js';
 import { avatarUrlFor } from '@beanpool/core';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
@@ -532,6 +534,18 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     };
 }
 
+/**
+ * A refused address, in words that name no address (FABLE-sec-errors LOW-1, 2026-10-01): the guard's own message says
+ * which private address the node's resolver gave the member's name, and why it was refused, which is the internal
+ * network the guard is there to keep out of reach. The detail stays in the server's log.
+ */
+export { SSRF_REFUSED_TEXT };
+
+function ssrfRefusal(err: SsrfSecurityError): string {
+    logger.warn('SYS', `[PulseSubmit] Address refused: ${err.message}`);
+    return SSRF_REFUSED_TEXT;
+}
+
 export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps): Router {
     const router = new Router();
     const thumbnailService = (deps as PulseSubmitRouteDeps)?.thumbnailService ?? getPulseThumbnailService();
@@ -693,11 +707,11 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             }
             if (err instanceof SsrfSecurityError) {
                 ctx.status = 400;
-                ctx.body = { error: 'ssrf_blocked', message: err.message };
+                ctx.body = { error: 'ssrf_blocked', message: ssrfRefusal(err) };
                 return;
             }
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to preview URL.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to preview URL.') };
         }
     });
 
@@ -851,12 +865,12 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             }
             if (err instanceof SsrfSecurityError) {
                 ctx.status = 400;
-                ctx.body = { error: 'ssrf_blocked', message: err.message };
+                ctx.body = { error: 'ssrf_blocked', message: ssrfRefusal(err) };
                 return;
             }
             if (err instanceof WriterLimitError && respondProfileRefusal(ctx, err)) return;
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to submit post.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to submit post.') };
         }
     });
 
@@ -1253,7 +1267,7 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             };
         } catch (err: any) {
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to ingest OAuth items.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to ingest OAuth items.') };
         }
     });
 

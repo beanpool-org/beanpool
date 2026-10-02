@@ -37,6 +37,7 @@ import { registerVisitor } from './engine/members.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setSignatureSwitchClockForTests } from './engine/member-signature.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
 
@@ -69,7 +70,7 @@ async function probe(key: string, signer?: Id, opts: { forHost?: string; method?
         const url = `https://${opts.forHost ?? OWN_NAME}${path}`;
         Object.assign(headers, await buildBoundRequestHeaders({ method: opts.method ?? 'GET', url, body: '', publicKeyHex: signer.pk, sign: ed25519Signer(signer.seed) }));
     }
-    return answer(await fetch(`${BASE}${path}`, { method: opts.method ?? 'GET', headers }));
+    return answer(await localFetch(`${BASE}${path}`, { method: opts.method ?? 'GET', headers }));
 }
 
 /** The probe signed as an app before request binding signs it: `GET\nPATH\nTS\nNONCE\n`, no community named. */
@@ -78,7 +79,7 @@ async function oldAppProbe(key: string, signer: Id): Promise<Answer> {
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
     const sig = crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), signer.privateKey).toString('base64');
-    return answer(await fetch(`${BASE}${path}`, { headers: { 'X-Public-Key': signer.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce } }));
+    return answer(await localFetch(`${BASE}${path}`, { headers: { 'X-Public-Key': signer.pk, 'X-Signature': sig, 'X-Timestamp': String(ts), 'X-Nonce': nonce } }));
 }
 
 async function checks(where: string, alice: Id, bob: Id, nobody: Id, vic: Id, names: { alice: string; bob: string }): Promise<void> {
@@ -93,7 +94,7 @@ async function checks(where: string, alice: Id, bob: Id, nobody: Id, vic: Id, na
             `${where}: unsigned, ${keys[i][0]}: 401 signature_required, no answer about the key (got ${r.status} ${r.text.slice(0, 100)})`);
     });
     assert(new Set(unsigned.map(r => r.text)).size === 1, `${where}: the same refusal word for word, whichever key was asked about`);
-    const head = await Promise.all([alice.pk, nobody.pk].map(k => fetch(`${BASE}/api/community/membership/${k}`, { method: 'HEAD' })));
+    const head = await Promise.all([alice.pk, nobody.pk].map(k => localFetch(`${BASE}/api/community/membership/${k}`, { method: 'HEAD' })));
     assert(head.every(r => r.status === 401) && head[0].headers.get('content-length') === head[1].headers.get('content-length'),
         `${where}: a HEAD is refused the same, for a member's key and for no one's (${head.map(r => `${r.status}/${r.headers.get('content-length')}`).join(', ')})`);
 

@@ -316,7 +316,7 @@ async function main() {
         assert(hits.length === 0, `no other server source reads it (found: ${hits.join(', ') || 'none'})`);
 
         // The open-check records, likewise: written by their route, read only by the list.
-        const openAllowed = new Set(['engine/owner-lock-opens.ts', 'engine/owner-words-checks.ts', 'routes/owner-unlock.ts', 'test-owner-words-check.ts']);
+        const openAllowed = new Set(['engine/owner-lock-opens.ts', 'engine/owner-words-checks.ts', 'routes/owner-unlock.ts', 'test-owner-words-check.ts', 'test-owner-lock-open-check.ts']);
         const openHits: string[] = [];
         const walkOpen = (dir: string) => {
             for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

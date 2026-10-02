@@ -5,7 +5,11 @@ import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
-import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
+import {
+    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
+    type DMKeyContext, type DmPart,
+} from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -21,7 +25,7 @@ import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey,
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { GroupSuccessionData } from './group-succession';
-import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, type LocalMessageRow } from './chat-sync';
+import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -294,6 +298,7 @@ async function _doInitDB() {
             poll_options TEXT,
             poll_closes_at DATETIME,
             poll_open_vote INTEGER DEFAULT 0,
+            poll_new_or_words_votes INTEGER,
             audience_scope TEXT DEFAULT 'public',
             target_group_id TEXT,
             target_pubkey TEXT,
@@ -544,6 +549,9 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
         // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
+        // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
+        // polls; NULL where it says nothing). The split by answer travels inside poll_options.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -796,6 +804,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
                 r.pollOptions = [];
             }
             r.pollClosesAt = r.poll_closes_at || r.pollClosesAt;
+            if (typeof r.poll_new_or_words_votes === 'number') r.pollNewOrWordsVotes = r.poll_new_or_words_votes;
             if (localVotes.has(r.id)) {
                 r.userVotedOptionId = localVotes.get(r.id);
             }
@@ -999,7 +1008,8 @@ export async function getConversations(myPubkey: string) {
                ) as postStatus,
                COALESCE(p.credits, c.post_credits) as postCredits,
                COALESCE(p.photos, c.post_photo) as postPhotos,
-               m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata, MAX(m.timestamp) as timestamp,
+               m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata,
+               m.id as lastId, m.author_pubkey as lastAuthor, MAX(m.timestamp) as timestamp,
                p.author_pubkey as postAuthor, p.type as postType,
                (SELECT mt3.buyer_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxBuyer,
                (SELECT mt3.seller_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxSeller,
@@ -1062,57 +1072,31 @@ export async function getConversations(myPubkey: string) {
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
-        if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
+        // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
+        // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
+        // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
+        // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
+        const lastView = row.lastId && !isNodeReadableChatType(row.convType)
+            ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
+                previewIdentity?.privateKey && row.otherPubkey ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: row.otherPubkey } : null, row.id).get(row.lastId)
+            : undefined;
+        // The node's own notice in a DM: said to be one, never shown as the other person's line (formatted below).
+        const lastIsDmNotice = !!row.lastId && !isNodeReadableChatType(row.convType)
+            && dmLineKind({ authorPubkey: row.lastAuthor, nonce: row.lastNonce, type: row.lastMsgType }) === 'node-notice';
+        if (lastView) {
+            if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
+            else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
+            else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
+            else if (lastView.mark === 'from-admins') displayMsg = `From your community's admins: ${lastView.text}`;
+            else displayMsg = dmLineShownText(lastView);
+        } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
                 displayMsg = decodeUtf8(decodeBase64(row.lastMessage));
             } catch {
                 displayMsg = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.lastNonce)) {
-            // v2-encrypted DM — only ever set on dm threads, so otherPubkey is THE peer.
-            if (previewIdentity?.privateKey && row.otherPubkey) {
-                try {
-                    displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                        myEdPrivHex: previewIdentity.privateKey,
-                        peerEdPubHex: row.otherPubkey,
-                        conversationId: row.id,
-                    });
-                } catch (err) {
-                    let decrypted = false;
-                    if (row.lastMetadata) {
-                        try {
-                            const meta = JSON.parse(row.lastMetadata);
-                            if (meta) {
-                                if (meta.originalConversationId) {
-                                    displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                                        myEdPrivHex: previewIdentity.privateKey,
-                                        peerEdPubHex: row.otherPubkey,
-                                        conversationId: meta.originalConversationId,
-                                    });
-                                    decrypted = true;
-                                } else if (Array.isArray(meta.originalConversationIds)) {
-                                    for (const legacyId of meta.originalConversationIds) {
-                                        try {
-                                            displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                                                myEdPrivHex: previewIdentity.privateKey,
-                                                peerEdPubHex: row.otherPubkey,
-                                                conversationId: legacyId,
-                                            });
-                                            decrypted = true;
-                                            break;
-                                        } catch (e) {}
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    if (!decrypted) {
-                        displayMsg = '🔒 Encrypted message';
-                    }
-                }
-            } else {
-                displayMsg = '🔒 Encrypted message';
-            }
+            displayMsg = '🔒 Encrypted message';
         } else if (row.lastNonce === '00000') {
             displayMsg = formatSystemMessage(row.lastSysType, row.lastMetadata, myPubkey, {
                 postAuthor: row.postAuthor,
@@ -1122,6 +1106,7 @@ export async function getConversations(myPubkey: string) {
                 defaultText: row.lastMessage
             });
         }
+        if (lastIsDmNotice) displayMsg = `${dmQuoteLabel('notice')}: ${displayMsg}`;
 
         const isPayer = row.txBuyerPubkey === myPubkey;
         const isPayee = row.txSellerPubkey === myPubkey;
@@ -1883,9 +1868,10 @@ export async function votePoll(postId: string, optionId: string) {
         try {
             const database = await waitForInit();
             await database.runAsync(
-                `UPDATE posts SET poll_options = ?, status = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE posts SET poll_options = ?, poll_new_or_words_votes = ?, status = ?, updated_at = ? WHERE id = ?`,
                 [
                     JSON.stringify(json.post.pollOptions || []),
+                    pollNewOrWordsVotesColumn(json.post),
                     json.post.status,
                     json.post.updatedAt || new Date().toISOString(),
                     postId
@@ -2383,11 +2369,89 @@ export async function removeEventChatMessage(postId: string, messageId: string):
 }
 
 /** The local conversation's kind, so /chat/:id can hand an event chat to its own screen. */
+// ── A DM stays a DM ─────────────────────────────────────────────────────────────────────────────────────────────
+// The node says what type a conversation is, and a group's, an event's and an enterprise's chats are node-readable by
+// design: shown in their own views, their lines plaintext-v1, and this phone sends plaintext into them. So the node
+// retyping a DM as one of those would show its unencrypted lines as members' words, and make this phone send the next
+// line readable. A conversation this phone has ever seen as a DM, or that holds an encrypted line (no node-readable
+// chat ever does: the node refuses one), stays a DM here whatever the node says: it opens only in the DM view, with
+// the DM checks, and is locked when sent to. A type change from the node is ignored, and logged. The ids seen as DMs
+// are kept in AsyncStorage, so a database wipe-and-fetch, or the node dropping the chat for a while, forgets none.
+
+const DM_SEEN_KEY = 'beanpool_dm_conversations_seen';
+
+async function dmConversationsSeen(): Promise<Set<string>> {
+    try {
+        const raw = JSON.parse((await AsyncStorage.getItem(DM_SEEN_KEY)) || '[]');
+        return new Set(Array.isArray(raw) ? raw.filter((x: unknown) => typeof x === 'string') : []);
+    } catch {
+        return new Set();
+    }
+}
+
+/** Remember conversations seen as DMs (never forgotten; ids are UUIDs, so one list serves every community). */
+async function rememberDmConversations(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const seen = await dmConversationsSeen();
+    const before = seen.size;
+    for (const id of ids) if (typeof id === 'string' && id) seen.add(id);
+    if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
+}
+
+/** True for a conversation this phone has seen as a DM, or that holds an encrypted line. */
+export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
+    if (!conversationId) return false;
+    if ((await dmConversationsSeen()).has(conversationId)) return true;
+    try {
+        const database = await getDb();
+        const row = await database.getFirstAsync<any>(
+            "SELECT 1 AS y FROM messages WHERE conversation_id = ? AND nonce LIKE ? LIMIT 1", [conversationId, `${V2_NONCE_PREFIX}%`]);
+        if (row) return true;
+        const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        return conv?.type === 'dm';
+    } catch {
+        return false;
+    }
+}
+
+/** The type this phone keeps for a conversation the node calls `nodeType`: a known DM stays one. */
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined): Promise<string> {
+    const t = nodeType || 'dm';
+    if (t === 'dm') {
+        await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    if (await isKnownDmConversation(conversationId)) {
+        console.warn(`[DM guard] the node calls DM ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a DM`);
+        await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    return t;
+}
+
+/** Any conversation this phone holds under another type that is a known DM goes back to being one (logged). */
+async function holdDmTypes(): Promise<void> {
+    try {
+        const database = await getDb();
+        const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        for (const r of rows || []) {
+            if (r?.id && await isKnownDmConversation(r.id)) {
+                console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
+                await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
+                await rememberDmConversations([r.id]);
+            }
+        }
+    } catch {}
+}
+
 export async function getConversationKind(conversationId: string): Promise<string | null> {
     try {
         const database = await getDb();
         const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return row?.type ?? null;
+        const type = row?.type ?? null;
+        // A known DM is a DM, whatever type its row says, or with no row (the node dropped it): the DM guard above.
+        if (type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
+        return type;
     } catch {
         return null;
     }
@@ -2734,6 +2798,15 @@ function emitOwnProfileUpdated(pubkey: string): void {
     emitAppEvent('profile_updated', { pubkey });
 }
 
+/**
+ * The `poll_new_or_words_votes` column for a poll as the node sent it: how many of its votes came from new or 12-word
+ * accounts (@beanpool/core poll-vote-origins), or NULL where the node says nothing (a local community, a group's poll).
+ */
+function pollNewOrWordsVotesColumn(p: any): number | null {
+    const n = p?.pollNewOrWordsVotes ?? p?.poll_new_or_words_votes;
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
 /** The `photos` column writeSyncedPost stores for a listing from the node: its URLs, never a local file's. */
 function syncedPhotosColumn(p: any): string | null {
     return p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null;
@@ -2749,7 +2822,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2782,6 +2855,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.poll_closes_at || p.pollClosesAt || null,
             // Every column is written here (INSERT OR REPLACE), so the ballot too: an open vote only when the node says so.
             (p.pollOpenVote ?? p.poll_open_vote) === true || (p.pollOpenVote ?? p.poll_open_vote) === 1 ? 1 : 0,
+            pollNewOrWordsVotesColumn(p),
             // The node sends 'public' for a row with no scope (rowToPost); the table's default says the same.
             p.audienceScope || p.audience_scope || 'public',
             p.targetGroupId || p.target_group_id || null,
@@ -3178,7 +3252,7 @@ async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversation
     return messages.filter((m: any) => {
         const local = localById.get(m.id);
         if (!local) return true;
-        if ((m.metadata || null) !== (local.metadata || null)) return true;
+        if ((withoutSendState(m.metadata || null) || null) !== (local.metadata || null)) return true;
         const editedAt = m.editedAt || m.edited_at || null;
         if (editedAt && editedAt !== local.edited_at) return true;
         // A delete or a removal that the node recorded without touching the metadata we hold (an older row
@@ -3383,7 +3457,11 @@ export async function syncMessages(publicKey: string) {
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
+                if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
+                    console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
+                }
                 if (!localConv) {
                     needsConvWrite = true;
                 } else if (
@@ -3416,6 +3494,8 @@ export async function syncMessages(publicKey: string) {
                 needsConvWrite = true; // on any doubt, fall through to the write path
             }
 
+            // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten.
+            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type) : (conv.type || 'dm');
             if (needsConvWrite) {
             await acquireSyncLock();
             try {
@@ -3427,7 +3507,7 @@ export async function syncMessages(publicKey: string) {
                             'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             [
                                 conv.id,
-                                conv.type || 'dm',
+                                heldType,
                                 conv.postId || conv.post_id || null,
                                 conv.name || null,
                                 conv.createdBy || '',
@@ -3550,6 +3630,11 @@ export async function syncMessages(publicKey: string) {
             console.error('[Sync] Failed to prune legacy conversations:', pruneErr);
         }
 
+        // The DM guard: every conversation the node lists as a DM is remembered as one, and any held under another type
+        // that is a known DM (seen as one, or holding an encrypted line) goes back to being one.
+        await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id));
+        await holdDmTypes();
+
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
     } catch (err) {
@@ -3667,6 +3752,9 @@ export async function syncSingleConversation(conversationId: string) {
         } finally {
             releaseSyncLock();
         }
+        // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it.
+        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId]);
+        await holdDmTypes();
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -3765,7 +3853,7 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
         const database = await getDb();
         await database.runAsync(
             'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [conv.id, conv.type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
+            [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
         );
         for (const pk of Array.isArray(conv.participants) ? conv.participants : []) {
             if (typeof pk === 'string' && pk) {
@@ -3790,12 +3878,83 @@ async function requireDmKeyContext(conversationId: string): Promise<DMKeyContext
     return ctx;
 }
 
-function lockWith(ctx: DMKeyContext, text: string): { ciphertext: string; nonce: string } {
+/**
+ * What a DM line is sealed to besides its conversation (e2e-crypto, format 3): who sends it, under which message id the
+ * node will store it, which part of the message it is, and the line it is written after.
+ */
+interface DmLineToSeal {
+    senderPubHex: string;
+    messageId: string;
+    part?: DmPart;
+    after?: string | null;
+    /** The message a reply answers (its metadata's replyToId), which the node can read but not change unnoticed. */
+    replyToId?: string | null;
+}
+
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
     try {
-        return encryptDM(text, ctx);
+        return sealDmLine(text, ctx, line);
     } catch {
         throw new DmNotLockedError();
     }
+}
+
+/**
+ * A line of mine this phone hasn't had confirmed by the node: `__sendState` 'sending' or 'failed', which only this phone
+ * writes (the sync drops it from the node's metadata: chat-sync withoutSendState), on a row by my own key. Never another
+ * person's row, whatever its metadata says.
+ */
+function isUndeliveredRow(metadata: string | null | undefined, author: string | null | undefined, myPubkey: string | null | undefined): boolean {
+    if (!metadata || !myPubkey || author !== myPubkey) return false;
+    try {
+        const s = JSON.parse(metadata)?.__sendState;
+        return s === 'sending' || s === 'failed';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The line a new one is written after (sealed into it, so the other phone can tell when the node shows it out of order):
+ * the newest encrypted line on this phone that the node has confirmed. Never one still sending or failed: a line resent
+ * later lands after this one, and naming it would mark this one as reordered.
+ */
+async function lineToWriteAfter(conversationId: string, exceptId?: string): Promise<string | null> {
+    const database = await getDb();
+    const rows = await database.getAllAsync<any>(
+        'SELECT id, nonce, metadata, author_pubkey FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
+        [conversationId, `${V2_NONCE_PREFIX}%`]
+    ).catch(() => [] as any[]);
+    const me = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+    const newestFirst = (rows || []).filter((r: any) => r?.id && r.id !== exceptId);
+    return dmAfterReference(newestFirst.reverse().map((r: any) => ({ id: r.id, nonce: r.nonce, pending: isUndeliveredRow(r.metadata, r.author_pubkey, me) })));
+}
+
+/**
+ * What one of my lines was sealed to besides its id, for its edit to keep: the line it was written after (an edit stays
+ * where its line is) and the message it answers (its metadata's replyToId, which the line is bound to).
+ */
+async function sealOfLine(conversationId: string, messageId: string): Promise<{ after: string | null; replyToId: string | null }> {
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>(
+        'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
+    ).catch(() => null);
+    const replyToId = replyToIdOf(row?.metadata);
+    if (!row || !isEncryptedNonce(row.nonce)) return { after: null, replyToId };
+    const ctx = await getDmKeyContext(conversationId).catch(() => null);
+    if (!ctx) return { after: null, replyToId };
+    try {
+        const after = openDmLine({ ciphertext: row.ciphertext, nonce: row.nonce }, ctx,
+            { conversationId, senderPubHex: row.author_pubkey, messageId, part: 'body', metadata: row.metadata }).after;
+        return { after, replyToId };
+    } catch {
+        return { after: null, replyToId };
+    }
+}
+
+/** The message a line answers, from metadata as a send carries it (a JSON string): sealed into the line. */
+function replyToIdOf(metadata: string | null | undefined): string | null {
+    return dmReplyToOf(metadata ?? null) ?? null;
 }
 
 async function isNodeReadableConversation(conversationId: string): Promise<boolean> {
@@ -3807,6 +3966,8 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
         await refreshConversationFromNode(conversationId);
         row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
     }
+    // A known DM is locked whatever type its row says (the DM guard): the node can't make this phone send it readable.
+    if (isNodeReadableChatType(row?.type) && await isKnownDmConversation(conversationId)) return false;
     return isNodeReadableChatType(row?.type);
 }
 
@@ -3815,11 +3976,11 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  * plaintext-v1, as designed. Every other conversation is a DM, locked or not sent: DmNotLockedError when the other
  * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
  */
-async function lockForConversation(conversationId: string, text: string): Promise<{ ciphertext: string; nonce: string }> {
+async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string }> {
     if (await isNodeReadableConversation(conversationId)) {
         return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
     }
-    return lockWith(await requireDmKeyContext(conversationId), text);
+    return lockWith(await requireDmKeyContext(conversationId), text, line);
 }
 
 export async function getMessages(conversationId: string, opts?: { limit?: number }) {
@@ -3844,6 +4005,16 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // Load the DM key context once so v2-encrypted rows can be decrypted in the map below.
     let dmCtx: DMKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }
+    // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
+    // the thread check below, whether or not this phone has the other person's key yet. Fails closed: a conversation
+    // this phone has no row for yet (a chat opened from a push or a link, before the first full sync has written it) is
+    // judged as a DM, so no row of it is shown as anyone's words unchecked. Only the DM screen reads this (a group's,
+    // an event's and an enterprise's chats have their own views).
+    let isDm = true;
+    try {
+        const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        isDm = !!dmCtx || !convRow || !isNodeReadableChatType(convRow.type) || await isKnownDmConversation(conversationId);
+    } catch {}
     // Read receipts: my pubkey (to flag outgoing) + the peer's read cursor.
     let myPubkey: string | null = null;
     let peerLastReadAt: string | null = null;
@@ -3881,9 +4052,32 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
     } catch {}
 
+    // Every line of a DM judged at once, in the order it is shown (by the node's timestamps, as selected above), by
+    // e2e-crypto checkDmThread: an encrypted line is opened bound to the author and id this phone holds it under, and one
+    // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
+    // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
+    // as the community admins'. Only the node's own notices are left to the system formatting below.
+    const lineViews = isDm
+        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId)
+        : null;
+
     return rows.map(row => {
         let displayTxt = row.ciphertext;
-        if (row.nonce === '00000') {
+        let integrityNote: string | null = null;
+        let unattributed = false;
+        const view = lineViews?.get(row.id);
+        if (view) {
+            displayTxt = view.mark === 'not-verified' && !dmCtx && isEncryptedNonce(row.nonce)
+                ? '[Encrypted — update your app to read]'
+                : dmLineShownText(view);
+            // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
+            // not had it, so it is never marked out of order (a clock behind the node's would sort it before the line it
+            // follows). Only that mark, and only on my own unconfirmed row: no other mark applies to a line I just wrote,
+            // and another person's row is never one (isUndeliveredRow).
+            integrityNote = view.mark === 'out-of-order' && isUndeliveredRow(row.metadata, row.author_pubkey, myPubkey) ? null : dmLineMarkText(view.mark);
+            // Shown in the middle of the chat as nobody's, never in its named author's bubble.
+            unattributed = dmLineIsUnattributed(view);
+        } else if (row.nonce === '00000') {
             displayTxt = formatSystemMessage(row.system_type, row.metadata, myPubkey, {
                 ...fallbackInfo,
                 defaultText: row.ciphertext
@@ -3895,40 +4089,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
                 displayTxt = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.nonce)) {
-            if (dmCtx) {
-                try {
-                    displayTxt = decryptDM(row.ciphertext, row.nonce, dmCtx);
-                } catch (err) {
-                    // Decryption failed. Try using original conversation ID(s) from metadata (moved during consolidation)
-                    let decrypted = false;
-                    if (row.metadata) {
-                        try {
-                            const meta = JSON.parse(row.metadata);
-                            if (meta) {
-                                if (meta.originalConversationId) {
-                                    const legacyCtx = { ...dmCtx, conversationId: meta.originalConversationId };
-                                    displayTxt = decryptDM(row.ciphertext, row.nonce, legacyCtx);
-                                    decrypted = true;
-                                } else if (Array.isArray(meta.originalConversationIds)) {
-                                    for (const legacyId of meta.originalConversationIds) {
-                                        try {
-                                            const legacyCtx = { ...dmCtx, conversationId: legacyId };
-                                            displayTxt = decryptDM(row.ciphertext, row.nonce, legacyCtx);
-                                            decrypted = true;
-                                            break;
-                                        } catch (e) {}
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    if (!decrypted) {
-                        displayTxt = '[Unable to decrypt this message]';
-                    }
-                }
-            } else {
-                displayTxt = '[Encrypted — update your app to read]';
-            }
+            displayTxt = '[Encrypted — update your app to read]';
         }
         const outgoing = !!myPubkey && row.author_pubkey === myPubkey;
         const readByPeer = outgoing && !!peerLastReadAt &&
@@ -3939,7 +4100,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
         // If the app died mid-delivery the row would show a clock forever —
         // downgrade stale in-flight sends to 'failed' so the bubble offers resend.
-        let sendState = parsedMeta?.__sendState;
+        // Only my own row has a send state: another person's never does, whatever its metadata says.
+        let sendState = outgoing ? parsedMeta?.__sendState : undefined;
         if (sendState === 'sending' && Date.now() - new Date(row.timestamp).getTime() > 60_000) {
             sendState = 'failed';
         }
@@ -3958,6 +4120,12 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Raw edit timestamp: pins the text content for cheap change detection
             // (chat screen compares (id, editedAt) instead of the decrypted text).
             editedAt: row.edited_at ?? null,
+            // One line under a DM message the node moved or reordered, an old-format line, or the admin page's message.
+            integrityNote,
+            // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
+            unattributed,
+            // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
+            quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,
             timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
@@ -3973,9 +4141,18 @@ const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
     const database = await getDb();
 
+    // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
+    // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
+    const tempId = (reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID()).toLowerCase();
+
     // E2E-encrypt direct messages (NAT-1), or send nothing: DmNotLockedError before anything is written, so the chat
     // can put the words back in the box. A group chat stays plaintext-v1 (lockForConversation).
-    const { ciphertext, nonce } = await lockForConversation(conversationId, text);
+    const { ciphertext, nonce } = await lockForConversation(conversationId, text, {
+        senderPubHex: authorPubkey,
+        messageId: tempId,
+        after: await lineToWriteAfter(conversationId, reuseId),
+        replyToId: replyToIdOf(metadata),
+    });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
@@ -3995,9 +4172,10 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     // A new node keeps it, so the optimistic row below and the server's row are
     // the same row by construction — the WS echo of an own-send upserts onto
     // this row instead of materializing a second bubble that vanishes when the
-    // ack lands (the "duplicate then disappears" flicker). An old node ignores
-    // the field and returns its own id; the ack's rename below covers that.
-    const tempId = reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID();
+    // ack lands (the "duplicate then disappears" flicker). The id (tempId, above) is
+    // also what the DM line is sealed to: every node since client ids keeps it, so the
+    // ack's rename below is a no-op; a node that stored it under another id would leave
+    // a line the other phone can't verify, and shows it so.
     let baseMeta: any = {};
     if (metadata) {
         try { baseMeta = JSON.parse(metadata) || {}; } catch {}
@@ -4090,13 +4268,18 @@ export async function deleteLocalMessage(messageId: string) {
  */
 export async function editMessage(conversationId: string, messageId: string, newText: string) {
     const database = await getDb();
+    const identity = await loadIdentity();
 
-    // New words: locked like a new message, or not sent (DmNotLockedError).
-    const { ciphertext, nonce } = await lockForConversation(conversationId, newText);
+    // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
+    // line it was written after: an edit stays where its line is.
+    const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
+        senderPubHex: identity?.publicKey ?? '',
+        messageId,
+        ...(await sealOfLine(conversationId, messageId)),
+    });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
-    const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
     const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce };
@@ -4126,18 +4309,22 @@ export async function editMessage(conversationId: string, messageId: string, new
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
     if (await isNodeReadableConversation(conversationId)) throw new Error('Photos can only be sent in direct messages.');
-    // The picture and its caption are locked, or neither goes (DmNotLockedError).
+    // The picture and its caption are locked, or neither goes (DmNotLockedError). Both are sealed to the message's own
+    // id, which goes to the node with them, each as its own part, so neither can stand in for the other.
     const dmCtx = await requireDmKeyContext(conversationId);
+    const identity = await loadIdentity();
+    const messageId = Crypto.randomUUID().toLowerCase();
+    const line = { senderPubHex: identity?.publicKey ?? '', messageId, replyToId: replyToIdOf(metadata) };
 
-    const encImg = lockWith(dmCtx, dataUri);   // big blob -> stored as attachment
-    const encCap = lockWith(dmCtx, caption);   // (optional) caption -> message body
+    const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
+    const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
-    const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
     const body = {
+        id: messageId,
         conversationId,
         authorPubkey: identity.publicKey,
         ciphertext: encCap.ciphertext,
@@ -4168,60 +4355,35 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
  */
 export async function getDecryptedAttachment(conversationId: string, messageId: string): Promise<string | null> {
     try {
-        // 1. Local cache first. Lives in the filesystem (survives a DB wipe-and-fetch), so an
+        // 1. The words first, always: the photo is part of its message, never on its own. They are opened bound to the
+        //    author and id this phone holds the message under, in the conversation it is shown in (a local row, cheap).
+        //    Words that don't open leave the photo locked, the cached copy included: the cache is keyed by message id
+        //    alone and survives a wipe-and-fetch, so a photo opened once would otherwise show again under a line the node
+        //    has since re-attributed or moved.
+        const dmCtx = await getDmKeyContext(conversationId);
+        if (!dmCtx) return null;
+        const database = await getDb();
+        const msgRow = await database.getFirstAsync<any>(
+            'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
+        );
+        if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return null;
+        const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
+        const words = openDmLine({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
+
+        // 2. Local cache next. Lives in the filesystem (survives a DB wipe-and-fetch), so an
         //    image is downloaded+decrypted at most once per device and re-opens instantly/offline.
         const cachePath = `${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`;
         const cached = await FileSystem.getInfoAsync(cachePath);
         if (cached.exists) return cachePath;
 
-        // 2. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk).
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (!dmCtx) return null;
+        // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
+        //    in the format they opened in, so neither a photo from another line nor an old-format picture can stand in.
         const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
+        const decrypted = openDmLine({ ciphertext: data, nonce }, dmCtx, { ...ref, part: 'attachment' }, [words.format]).text;
 
-        // Query the message metadata to see if it has an originalConversationId/originalConversationIds
-        let originalConversationId: string | null = null;
-        let originalConversationIds: string[] | null = null;
-        try {
-            const database = await getDb();
-            const msgRow = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id = ?', [messageId]);
-            if (msgRow?.metadata) {
-                const meta = JSON.parse(msgRow.metadata);
-                if (meta) {
-                    if (meta.originalConversationId) {
-                        originalConversationId = meta.originalConversationId;
-                    }
-                    if (Array.isArray(meta.originalConversationIds)) {
-                        originalConversationIds = meta.originalConversationIds;
-                    }
-                }
-            }
-        } catch (e) {}
-
-        let decrypted: string | null = null;
-        try {
-            decrypted = decryptDM(data, nonce, dmCtx);
-        } catch (err) {
-            if (originalConversationId) {
-                try {
-                    const legacyCtx = { ...dmCtx, conversationId: originalConversationId };
-                    decrypted = decryptDM(data, nonce, legacyCtx);
-                } catch (e) {}
-            } else if (originalConversationIds) {
-                for (const legacyId of originalConversationIds) {
-                    try {
-                        const legacyCtx = { ...dmCtx, conversationId: legacyId };
-                        decrypted = decryptDM(data, nonce, legacyCtx);
-                        break;
-                    } catch (e) {}
-                }
-            }
-        }
-        if (!decrypted) return null;
-
-        // 3. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
+        // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline
         //    data URI if it isn't a recognised image payload (don't cache an unknown shape).
         const m = decrypted.match(/^data:image\/\w+;base64,(.*)$/);
@@ -4278,7 +4440,9 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
             let postCredits: number | null = null;
-            const convType = conv.type || type;
+            // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
+            const convType = await heldConversationType(conv.id, type);
+            if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {
@@ -4660,9 +4824,15 @@ async function _signedRequest(endpoint: string, payload: any) {
         // Whether the body carried a JSON `error` field, which is what tells a node ANSWERING from a node
         // that has no such route to answer with — see utils/chat-actions.chatActionErrorMessage.
         let nodeAnswered = false;
+        // The node's sentence for the member, when its body has one beside the code (`{ error: 'not_found', message:
+        // 'That post is not here any more.' }`). Carried as `nodeMessage`, not put in `message`: callers match on the
+        // code in `message` (chatActionErrorMessage's old-node refusals, the profile-photo heal below), so a caller whose
+        // error the member reads puts it there itself (reportAbuse).
+        let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
+            if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
             try {
                 const txt = await res.text();
@@ -4693,6 +4863,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         const err: any = new Error(errorMsg);
         err.status = res.status;
         err.nodeAnswered = nodeAnswered;
+        err.nodeMessage = nodeMessage;
         throw err;
     }
 
@@ -4997,8 +5168,22 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
     return res;
 }
 
+/**
+ * Report a member, a post or an event (and, from the enterprise screen, an enterprise). The post and event screens show
+ * a failure's message to the member, so it is the node's sentence when it sent one ("That post is not here any more."),
+ * never its code (`not_found`), which stays on the error as `code`, with `status`.
+ */
 export async function reportAbuse(reporterPublicKey: string, targetPublicKey: string, reason: string, postId?: string) {
-    return _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    try {
+        return await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    } catch (e: any) {
+        if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
+        const said: any = new Error(e.nodeMessage);
+        said.status = e.status;
+        said.code = e.message;
+        said.nodeAnswered = e.nodeAnswered;
+        throw said;
+    }
 }
 
 

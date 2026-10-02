@@ -33,6 +33,7 @@ import {
     hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { listBrokenBalances, BROKEN_BALANCE_REPAIR } from '../engine/audit.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -57,6 +58,7 @@ import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } f
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
+import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
@@ -92,6 +94,7 @@ import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
+import { likeContains } from '@beanpool/engine';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -549,6 +552,8 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const result = runLedgerAudit();
+        // Which balances aren't a number, and what to do (#1445 re-review): a count alone left the operator to find them.
+        const broken = result.badBalances > 0 ? listBrokenBalances() : null;
         ctx.body = {
             success: true,
             sumBalances: result.sumBalances,
@@ -557,6 +562,7 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
             strandedEscrows: result.strandedEscrows,
             badBalances: result.badBalances,
             ok: result.ok,
+            ...(broken ? { brokenBalances: broken.accounts, ...(broken.total > broken.accounts.length ? { brokenBalancesMore: broken.total - broken.accounts.length } : {}), repair: BROKEN_BALANCE_REPAIR } : {}),
         };
     } catch (e: any) {
         ctx.status = 500;
@@ -583,6 +589,23 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
     const sanitizedReason = String(reason).replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ').trim().slice(0, 500);
     try {
         const result = runLedgerAudit();
+        // A ledger holding a balance that isn't a finite number has no sum to set a baseline at: one of 9e999 makes the
+        // sum Infinity, which this wrote as the baseline and answered "ok". Those rows are mended first (#1445 review).
+        if (result.badBalances > 0 || !Number.isFinite(result.sumBalances)) {
+            // Named, with the way to mend them (#1445 re-review): no route or Settings control mends a balance.
+            const broken = listBrokenBalances();
+            const named = broken.accounts.map((b) => `${b.account}${b.callsign ? ` (${b.callsign})` : ''} holds ${b.holds}`).join('; ');
+            const more = broken.total > broken.accounts.length ? `; and ${broken.total - broken.accounts.length} more` : '';
+            ctx.status = 409;
+            ctx.body = {
+                success: false,
+                error: `${result.badBalances} account balance(s) are not a number, so the ledger has no total to set a new baseline at. `
+                    + `Nothing was changed. ${named ? `They are: ${named}${more}. ` : ''}${BROKEN_BALANCE_REPAIR}`,
+                brokenBalances: broken.accounts,
+                repair: BROKEN_BALANCE_REPAIR,
+            };
+            return;
+        }
         const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
         const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.
@@ -775,8 +798,8 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += ' AND message LIKE ?';
-        params.push(`%${searchQuery}%`);
+        sql += " AND message LIKE ? ESCAPE '\\'";
+        params.push(likeContains(String(searchQuery)));
     }
 
     sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
@@ -1046,7 +1069,7 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): the post needs an open
     // report. A dismissed ('reviewed') or actioned one no longer counts.
     if ((ctx.state as any)?.adminRole === 'moderator'
-        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
+        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
         ctx.status = 403;
         ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
         return;
@@ -1069,8 +1092,8 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
             ? {
                 success: true,
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true };
     } catch (e: any) {
@@ -1513,7 +1536,8 @@ router.get('/api/local/admin/reports', async (ctx) => {
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const reported = db.prepare('SELECT target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        // A Pulse report is about its item, whatever post id it carries (state-engine reportSubjectOf).
+        const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
         if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
@@ -1538,7 +1562,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
-        const report = db.prepare('SELECT status, target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+        const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
         // is a dismissal by another name (G3): a closed report no longer counts towards the 3 that hide it, and its
@@ -1581,8 +1605,8 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                 success: true,
                 message: 'Report actioned successfully',
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {

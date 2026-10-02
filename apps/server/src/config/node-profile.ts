@@ -589,6 +589,15 @@ export class GuestViewAuthOffError extends Error {
     }
 }
 
+/**
+ * A refusal mirrorNodeProfileAtBoot makes on a main server, which stops its boot (index.ts main().catch exits 1): the
+ * database is a global node and NODE_PROFILE is another, or the guest view's escape hatches are set. A promotion in place
+ * (state-engine.ts becomeMainServerInPlace) stops the same way.
+ */
+export function isMainServerBootRefusal(e: unknown): e is NodeProfileMismatchError | GuestViewAuthOffError {
+    return e instanceof NodeProfileMismatchError || e instanceof GuestViewAuthOffError;
+}
+
 function pinnedLine(profile: NodeProfile): string {
     const wanted = DEFAULTS[profile];
     const parts = (Object.keys(NOT_BUILT_YET) as ProfileSwitch[]).map((k) =>

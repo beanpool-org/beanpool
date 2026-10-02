@@ -460,6 +460,13 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
  * Node 22 defaults net.connect to autoSelectFamily: true, which passes { all: true }
  * and expects cb(null, [{ address, family }]). When all is falsy or omitted, the legacy
  * cb(null, address, family) form is expected.
+ *
+ * It must never call back synchronously. dns.lookup always answers on a later tick, and
+ * http/https/net depend on that: the ClientRequest attaches its socket listeners only after the
+ * agent's createConnection returns. A synchronous answer runs connect() inside createConnection,
+ * so a connect that fails at once (EPERM/EACCES from an egress firewall, ENETUNREACH for an IPv6
+ * address with no route, EAFNOSUPPORT) emits its error on a socket nobody listens to yet: an
+ * uncaught exception that takes the whole node down, from the Pulse scheduler every 5 minutes.
  */
 export function createCustomLookup(pinnedIp: string, family: number) {
     return (_host: string, lookupOpts: any, callback?: any) => {
@@ -467,11 +474,13 @@ export function createCustomLookup(pinnedIp: string, family: number) {
         if (typeof cb !== 'function') return;
 
         const isAll = typeof lookupOpts === 'object' && lookupOpts !== null && Boolean(lookupOpts.all);
-        if (isAll) {
-            cb(null, [{ address: pinnedIp, family }]);
-        } else {
-            cb(null, pinnedIp, family);
-        }
+        process.nextTick(() => {
+            if (isAll) {
+                cb(null, [{ address: pinnedIp, family }]);
+            } else {
+                cb(null, pinnedIp, family);
+            }
+        });
     };
 }
 

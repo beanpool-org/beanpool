@@ -11,7 +11,7 @@
 import type Koa from 'koa';
 import type Router from '@koa/router';
 import { getPeerOrigins, getConnectorsByLevel } from './connector-manager.js';
-import { getMembers, getPosts, createConversation, sendMessage, registerVisitor, getCommunityInfo, getActivePostCount } from './state-engine.js';
+import { getMembers, getPosts, createConversation, sendMessage, registerVisitor, communityCountsCached } from './state-engine.js';
 import { getLocalConfig } from './config/local-config.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './engine/member-key.js';
 
@@ -67,13 +67,15 @@ export function mountFederationRoutes(router: Router): void {
                 publicUrl: c.publicUrl || null,
             }));
 
+        const counts = communityCountsCached();
         ctx.body = {
             name: config.communityName || 'BeanPool Node',
-            // ⚡ O(1) SQL counts instead of materialising every member + post row to count
-            // them. postCount keeps the original semantics (active + status active/pending,
-            // i.e. excludes paused) — getCommunityInfo().postCount would wrongly include paused.
-            memberCount: getCommunityInfo().memberCount,
-            postCount: getActivePostCount(),
+            // The node-wide counts from communityCountsCached, as GET /api/community/info: members not pruned, and the
+            // live public listings (getActivePostCount, the count it caches). This read is public and counted both
+            // afresh on every hit, and the member count reads every inline photo (the global load rehearsal). Counted
+            // again once a member or a listing changes (the version counters), else at most COMMUNITY_COUNTS_TTL_MS old.
+            memberCount: counts.memberCount,
+            postCount: counts.postCount,
             peerNodes: peers,
         };
     });

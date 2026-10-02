@@ -127,7 +127,11 @@ async function startApp() {
 const net = {
     up: true,
     hold: null as Promise<void> | null,
+    /** The status the node answers with (200 unless a test says otherwise). */
+    status: 200,
     answer: { success: true } as Record<string, unknown>,
+    /** When set, the body is this raw text (not JSON), in place of `answer`. */
+    raw: null as string | null,
     sent: [] as { url: string; headers: Record<string, string>; body: string | undefined }[],
 };
 
@@ -151,7 +155,9 @@ beforeEach(async () => {
     rn.emit.mockClear();
     net.up = true;
     net.hold = null;
+    net.status = 200;
     net.answer = { success: true };
+    net.raw = null;
     net.sent = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         net.sent.push({ url: String(input), headers: (init?.headers ?? {}) as Record<string, string>, body: init?.body as string | undefined });
@@ -162,7 +168,14 @@ beforeEach(async () => {
         }
         if (!net.up) throw new TypeError('Network request failed');
         const answer = net.answer;
-        return { ok: true, status: 200, json: async () => answer, text: async () => JSON.stringify(answer) } as unknown as Response;
+        const status = net.status;
+        const raw = net.raw;
+        return {
+            ok: status >= 200 && status < 300,
+            status,
+            json: async () => (raw !== null ? JSON.parse(raw) : answer),
+            text: async () => raw ?? JSON.stringify(answer),
+        } as unknown as Response;
     }));
     const { draftIdentity } = await import('../identity');
     ana = await draftIdentity('Ana');
@@ -582,5 +595,118 @@ describe('the list in memory', () => {
         await app.signOut(ben);
         expect(await app.getBlockedUsers()).toEqual([]);
         await vi.waitFor(() => expect(rn.emit).toHaveBeenLastCalledWith(app.BLOCKLIST_UPDATED_EVENT, []));
+    });
+});
+
+describe('a report the community refuses for good', () => {
+    const gone = { error: 'not_found', message: 'That post is not here any more.' };
+    const queued = (pk: string) => JSON.parse(mem.async.get(reportsKey(pk)) ?? '[]') as unknown[];
+
+    it('a block on a post that is no longer there: the block stays, and the report is not queued to be sent again', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.status = 404;
+        net.answer = gone;
+        expect(await app.blockUser(HARASSER, ana.publicKey, 'Abusive content reported via Post', 'post-gone')).toBe(true);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+        expect(reportsSent()).toHaveLength(1);
+        expect(queued(ana.publicKey)).toEqual([]);
+
+        net.sent = [];
+        await app.retryPendingReports();
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([]);
+    });
+
+    it('a queued report that the community then refuses with 404 is dropped, not retried at every start for 7 days', async () => {
+        const app = await startApp();
+        await app.identity.importIdentity(ana);
+        net.up = false;
+        await app.blockUser(HARASSER, ana.publicKey, 'Abusive content reported via Post', 'post-gone');
+        expect(queued(ana.publicKey)).toHaveLength(1);
+
+        net.up = true;
+        net.sent = [];
+        net.status = 404;
+        net.answer = gone;
+        await app.retryPendingReports();
+        expect(reportsSent()).toHaveLength(1);
+        expect(queued(ana.publicKey)).toEqual([]);
+        net.sent = [];
+        await app.retryPendingReports();
+        expect(reportsSent()).toEqual([]);
+        expect(await app.isUserBlocked(HARASSER)).toBe(true);
+    });
+
+    it('a refusal that asking again can change (the hourly limit, a clock the node could not check, a server error) stays queued', async () => {
+        for (const status of [429, 401, 500]) {
+            mem.async.clear();
+            mem.secure.clear();
+            mem.async.set(ANCHOR, NODE);
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            net.status = status;
+            net.answer = { error: 'try later' };
+            await app.blockUser(SPAMMER, ana.publicKey, 'User Blocked by Member', 'post-up');
+            expect(queued(ana.publicKey)).toHaveLength(1);
+            await app.retryPendingReports();
+            expect(queued(ana.publicKey)).toHaveLength(1);
+        }
+    });
+
+    it('an answer that is not the node\'s own (Cloudflare\'s HTML 403, a bare 404, an unknown code) stays queued and is retried', async () => {
+        const cases: [number, string | null, Record<string, unknown>][] = [
+            [403, '<!DOCTYPE html><html><title>Attention Required! | Cloudflare</title></html>', {}],
+            [404, 'Not Found', {}],
+            [404, '', {}],
+            [404, null, { error: 'something_new' }],
+            [403, null, { message: 'no code here' }],
+        ];
+        for (const [status, raw, answer] of cases) {
+            mem.async.clear();
+            mem.secure.clear();
+            mem.async.set(ANCHOR, NODE);
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            net.status = status;
+            net.raw = raw;
+            net.answer = answer;
+            // At the block: queued, not dropped.
+            await app.blockUser(HARASSER, ana.publicKey, 'Abusive content reported via Post', 'post-x');
+            expect(queued(ana.publicKey)).toHaveLength(1);
+            // At the retry: kept.
+            await app.retryPendingReports();
+            await app.retryPendingReports();
+            expect(queued(ana.publicKey)).toHaveLength(1);
+            expect(await app.isUserBlocked(HARASSER)).toBe(true);
+        }
+    });
+
+    it('the node\'s own 400 refusals are final too, and 408 and 425 stay queued', async () => {
+        const finals: [number, string][] = [[400, 'own_item'], [400, 'pulse_report_names_a_post'], [404, 'not_found']];
+        for (const [status, error] of finals) {
+            mem.async.clear();
+            mem.secure.clear();
+            mem.async.set(ANCHOR, NODE);
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            net.status = status;
+            net.answer = { error };
+            await app.blockUser(HARASSER, ana.publicKey, 'Abusive content reported via Post', 'post-x');
+            expect(queued(ana.publicKey)).toEqual([]);
+        }
+        for (const status of [408, 425]) {
+            mem.async.clear();
+            mem.secure.clear();
+            mem.async.set(ANCHOR, NODE);
+            const app = await startApp();
+            await app.identity.importIdentity(ana);
+            net.status = status;
+            net.answer = { error: 'not_found' };
+            await app.blockUser(SPAMMER, ana.publicKey, 'User Blocked by Member', 'post-up');
+            expect(queued(ana.publicKey)).toHaveLength(1);
+            await app.retryPendingReports();
+            expect(queued(ana.publicKey)).toHaveLength(1);
+        }
     });
 });

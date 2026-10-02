@@ -252,7 +252,10 @@ export function getConversation(db: Db, id: string): Conversation | undefined {
         createdBy: c.created_by,
         createdAt: c.created_at,
         participants: parts.map(p => p.public_key),
-        readCursors: parts.map(p => ({ publicKey: p.public_key, lastReadAt: p.last_read_at || null }))
+        // A DM's two read cursors are its read ticks. A group's, an event's or an enterprise's would be every member's key
+        // and when each last opened the chat — for an event, the Going list the post keeps from all but its hosts — and
+        // no app shows them (FABLE-sec-events-chat F2, 2026-10-01): served for a DM only.
+        ...(c.type === 'dm' ? { readCursors: parts.map(p => ({ publicKey: p.public_key, lastReadAt: p.last_read_at || null })) } : {}),
     } as any;
 }
 

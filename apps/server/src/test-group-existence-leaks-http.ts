@@ -58,6 +58,7 @@ import { resetChatRateLimit } from './chat-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -104,7 +105,7 @@ async function call(method: string, path: string, id: Id | null, body?: unknown)
         headers['X-Nonce'] = nonce;
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
     const text = await res.text();
     let json: any; try { json = JSON.parse(text); } catch { /* not JSON */ }
     return { status: res.status, text, body: json };

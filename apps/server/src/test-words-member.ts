@@ -49,6 +49,7 @@ import { openJoinHash } from './engine/open-join.js';
 import { nodeSha256 } from './services/door-work.js';
 import { lockedDm } from './dm-test-payload.js';
 import { getFunnel } from './engine/funnel.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -94,7 +95,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, path: string, body?: 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: method === 'GET' ? undefined : raw });
     let parsed: any;
     try { parsed = await res.json(); } catch { parsed = undefined; }
     return { status: res.status, body: parsed };

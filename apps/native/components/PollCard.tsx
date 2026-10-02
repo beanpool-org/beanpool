@@ -12,6 +12,11 @@
  * - Author "Close Poll" action for early closure.
  * - On the worldwide community (`informal`), "An informal poll; it decides nothing": anyone may join there with a sign-in,
  *   so a count can be tipped by one person with several accounts (utils/node-profile.ts pollsInformal).
+ * - Once an anonymous poll has closed, where the node says (the worldwide community's public polls), how many votes came
+ *   from new or 12-word accounts (never while it is open, never on an open vote), and
+ *   under each answer how many of its own when the node gives that split (@beanpool/core poll-vote-origins; the count is
+ *   `poll_new_or_words_votes` in the phone's cache). Every vote still counts; the lines say where votes came from, never
+ *   whose they are.
  */
 
 import React, { useState } from 'react';
@@ -27,12 +32,15 @@ import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 export interface PollOption {
     id: string;
     text: string;
     votes?: number;
     percentage?: number;
+    /** Of this option's votes, how many came from new or 12-word accounts, where the node gives the split. */
+    newOrWordsVotes?: number;
 }
 
 export interface PollVoteRecord {
@@ -92,6 +100,10 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
     // showed voters to members, so a list that comes with such a poll is shown as before.
     const openFlag = livePost.pollOpenVote ?? livePost.poll_open_vote;
     const openVote = openFlag === true || openFlag === 1 || (openFlag === undefined && votesList.length > 0);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes) : null;
 
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
@@ -219,6 +231,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                     const isVotingThis = votingOptionId === opt.id;
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
+                    const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
                     return (
                         <Pressable
@@ -232,7 +245,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                             ]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
-                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${isVoted ? ', your vote' : ''}`}
+                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${optionOrigins ? `, ${optionOrigins}` : ''}${isVoted ? ', your vote' : ''}`}
                         >
                             {/* Background percentage fill bar */}
                             <View
@@ -265,6 +278,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                                     </Text>
                                 </View>
                             </View>
+                            {optionOrigins && (
+                                <Text style={styles.optionOrigins} testID="poll-option-origins">
+                                    {optionOrigins}
+                                </Text>
+                            )}
                         </Pressable>
                     );
                 })}
@@ -274,6 +292,13 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
             {informal && (
                 <Text style={styles.informalNote} testID="poll-informal-note">
                     💬 {INFORMAL_POLL_NOTE}
+                </Text>
+            )}
+
+            {/* Where its votes came from, once it has closed, where the node says: all of them still count. */}
+            {originsLine && (
+                <Text style={styles.originsNote} testID="poll-vote-origins">
+                    🌱 {originsLine}
                 </Text>
             )}
 
@@ -534,6 +559,22 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             fontWeight: '700',
             color: colors.text.secondary,
             marginTop: 4,
+        },
+        // Where the votes came from: a wrapping line, never cut short.
+        originsNote: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.secondary,
+            marginTop: 4,
+        },
+        // An answer's own share, on a line of its own under the answer, inside its row.
+        optionOrigins: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.text.secondary,
+            paddingHorizontal: 12,
+            paddingBottom: 8,
+            marginTop: -4,
         },
         turnoutRow: {
             flexDirection: 'row',

@@ -29,7 +29,8 @@ import {
     passesReadGate,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
+import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -42,6 +43,7 @@ import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 
 /**
  * Which pledge `POST /api/(treasury|enterprise)/:treasury/pledge` makes: a keeper's backing, or a crowdfund pledge of
@@ -481,7 +483,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (statusOf(treasury) !== 'active') {
+        // An enterprise that reached its goal is not closed: it says so in the words pledgeToProject uses, on the door both
+        // apps pledge through (#1374 NB, 2026-10-02). Nothing has moved either way.
+        const enterpriseStatus = statusOf(treasury);
+        if (enterpriseStatus === 'funded') {
+            ctx.status = 400;
+            ctx.body = { error: PROJECT_FUNDED_NO_PLEDGES_ERROR };
+            return;
+        }
+        if (enterpriseStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
@@ -513,7 +523,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, txId };
         } catch (err: any) {
             ctx.status = 400;
-            ctx.body = { error: err.message };
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
         }
     };
 
@@ -617,7 +627,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to create enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to create enterprise') };
         }
     };
     router.post('/api/treasury', createEnterpriseHandler);
@@ -651,7 +661,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     }
                 ),
             };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to create treasury') }; }
     });
 
     // docs/the-commons.md §2.4 Rule 7: Working capital ceiling is set at creation and
@@ -681,7 +691,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { pubkey } = ctx.params;
         const { granted } = (ctx as any).requestBody || {};
         try { adminSetOperator(pubkey, !!granted); ctx.body = { success: true }; }
-        catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed' }; }
+        catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed') }; }
     });
 
     // ---- Per-enterprise keepership (#106) ----------------------------------------------
@@ -704,7 +714,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             adminAssignTreasuryOperator(treasury, String(pubkey), 'admin');
             ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to assign keeper' }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to assign keeper') }; }
     });
 
     router.delete('/api/local/admin/treasury/:treasury/operators/:pubkey', async (ctx) => {
@@ -716,7 +726,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
-            ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke keeper' };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to revoke keeper') };
         }
     });
 
@@ -733,7 +743,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
     });
 
     router.post('/api/local/admin/treasury/:treasury/need', async (ctx) => {
@@ -746,7 +756,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
     });
 
     // ---- Operator (signed member with can_operate) --------------------------------------
@@ -772,7 +782,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -794,7 +804,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -827,7 +837,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -844,7 +854,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -856,15 +866,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const { transactionId, finalHours, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
-        const rawHours = finalHours !== undefined ? finalHours : hours;
-        const parsedHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+        // As on the marketplace's completion: a quantity the engine can't read is refused there, not dropped here.
+        const parsedHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
         try {
             const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -881,7 +891,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -949,7 +959,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to pause enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to pause enterprise') };
         }
     };
     router.post('/api/treasury/:treasury/pause', pauseHandler);
@@ -969,7 +979,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to resume enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to resume enterprise') };
         }
     };
     router.post('/api/treasury/:treasury/resume', resumeHandler);
@@ -993,7 +1003,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to initiate wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to initiate wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/initiate', initiateWindUpHandler);
@@ -1013,7 +1023,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only a keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to cancel wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to cancel wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/cancel', cancelWindUpHandler);
@@ -1036,7 +1046,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Not authorised/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to finalise wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to finalise wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/finalise', finaliseWindUpHandler);
@@ -1084,7 +1094,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to update enterprise location' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update enterprise location') };
         }
     };
 
@@ -1124,7 +1134,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to clear enterprise location' };
+            ctx.body = { error: memberErrorText(e, 'Failed to clear enterprise location') };
         }
     };
 
@@ -1173,7 +1183,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = ledgerForReader(ledger, treasury, ctx.state?.actor as string | undefined);
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to retrieve enterprise ledger' };
+            ctx.body = { error: memberErrorText(e, 'Failed to retrieve enterprise ledger') };
         }
     };
     router.get('/api/treasury/:treasury/ledger', getLedgerHandler);
@@ -1224,7 +1234,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to pledge backing' };
+            ctx.body = { error: memberErrorText(e, 'Failed to pledge backing') };
         }
     };
 
@@ -1297,7 +1307,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to release backing' };
+            ctx.body = { error: memberErrorText(e, 'Failed to release backing') };
         }
     };
     router.post('/api/treasury/:treasury/release', releaseHandler);
@@ -1334,7 +1344,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, request: req };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to submit join request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to submit join request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/request', requestJoinHandler);
@@ -1366,7 +1376,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, requests };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to list keeper requests' };
+            ctx.body = { error: memberErrorText(e, 'Failed to list keeper requests') };
         }
     };
     router.get('/api/treasury/:treasury/keepers/requests', listKeeperRequestsHandler);
@@ -1394,7 +1404,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to approve keeper request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to approve keeper request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
@@ -1421,7 +1431,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to decline keeper request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to decline keeper request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/decline', declineKeeperRequestHandler);
@@ -1436,7 +1446,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...data };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to get succession information' };
+            ctx.body = { error: memberErrorText(e, 'Failed to get succession information') };
         }
     };
     router.get('/api/treasury/:treasury/succession', getSuccessionHandler);
@@ -1472,7 +1482,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only an active keeper|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to propose lead succession' };
+            ctx.body = { error: memberErrorText(e, 'Failed to propose lead succession') };
         }
     };
     router.post('/api/treasury/:treasury/succession/propose', proposeSuccessionHandler);
@@ -1510,7 +1520,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only active keepers|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to vote on succession' };
+            ctx.body = { error: memberErrorText(e, 'Failed to vote on succession') };
         }
     };
     router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
@@ -1545,7 +1555,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /Only the lead keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to remove keeper' };
+            ctx.body = { error: memberErrorText(e, 'Failed to remove keeper') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/:pubkey/remove', removeKeeperHandler);
@@ -1561,7 +1571,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...res };
         } catch (e: any) {
             ctx.status = /Only an active keeper|cannot object/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to object' };
+            ctx.body = { error: memberErrorText(e, 'Failed to object') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/changes/:changeId/object', objectKeeperChangeHandler);
@@ -1576,7 +1586,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /not a keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to step down' };
+            ctx.body = { error: memberErrorText(e, 'Failed to step down') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/step-down', stepDownHandler);
@@ -1689,7 +1699,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             // Before the matching below, which would answer a mute as a plain 400.
             if (respondProfileRefusal(ctx, e)) return;
-            const msg = e?.message || 'Failed to post message';
+            const msg = memberErrorText(e, 'Failed to post message');
             if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
                 ctx.status = 409;
                 ctx.body = { error: msg };
@@ -1753,7 +1763,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 message,
             };
         } catch (e: any) {
-            const msg = e?.message || 'Failed to remove message';
+            const msg = memberErrorText(e, 'Failed to remove message');
             if (msg.includes('Enterprise not found')) {
                 ctx.status = 404;
             } else if (msg.includes('Only a keeper')) {

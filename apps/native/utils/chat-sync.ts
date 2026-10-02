@@ -46,6 +46,20 @@ function parseMeta(raw: string | null | undefined): any {
     try { return JSON.parse(raw); } catch { return null; }
 }
 
+/**
+ * A line's metadata as the node sent it, without `__sendState`. Only this phone writes that key, on a line of its own the
+ * node hasn't confirmed yet (utils/db.ts insertMessage); the node's copy of a line never carries it, and one that does
+ * would pose an operator's row as this phone's unsent line, which is exempt from the DM thread marks (#1446 review).
+ */
+export function withoutSendState(metadata: string | null | undefined): string | null {
+    if (typeof metadata !== 'string' || !metadata) return metadata ?? null;
+    let obj: any;
+    try { obj = JSON.parse(metadata); } catch { return metadata; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || !('__sendState' in obj)) return metadata;
+    delete obj.__sendState;
+    return Object.keys(obj).length ? JSON.stringify(obj) : null;
+}
+
 /** A row the node has turned into a tombstone: `type = 'removed'`, or `metadata.removed`. */
 export function isRemovedPayload(m: { type?: string | null; metadata?: string | null }): boolean {
     if (m.type === 'removed') return true;
@@ -66,7 +80,8 @@ export function mergeIncomingMessage(local: LocalMessageRow | null | undefined, 
     const inNonce = incoming.nonce ?? '';
     const inType = incoming.type || 'text';
     const inEditedAt = incoming.editedAt ?? incoming.edited_at ?? null;
-    const inMetadata = incoming.metadata ?? null;
+    // The node's metadata, never this phone's own send state (withoutSendState).
+    const inMetadata = withoutSendState(incoming.metadata ?? null);
 
     if (!local) {
         return { ciphertext: inCiphertext, nonce: inNonce, type: inType, editedAt: inEditedAt, metadata: inMetadata, contentReplaced: true };

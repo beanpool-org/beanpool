@@ -230,7 +230,7 @@ export function showCard(layout: HomeLayout | null, id: HomeCardId, now: number 
 
 /** Reset to defaults (§4.1): the default order, nothing hidden; a dismissal stays (it is a schedule, not a choice of cards). */
 export function resetLayout(layout: HomeLayout | null, now: number = Date.now()): HomeLayout {
-    return stamp({ v: 1, order: [], hidden: [], dismissed: layout?.dismissed ?? {} }, now);
+    return stamp({ v: 1, order: [], hidden: [], dismissed: layout?.dismissed ?? {}, updatedAt: null }, now);
 }
 
 /**
@@ -345,8 +345,14 @@ export const CARD_TITLES: Record<HomeCardId, string> = {
     community: 'Your community',
 };
 
-/** A card's title on this node: the Market card is "Near you" where listings come nearest first (global, §3.1). */
-export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'>): string {
+/**
+ * A card's title on this node: the Market card is "Near you" where listings come nearest first (global, §3.1); a
+ * visitor's are the lobby's words (§9 (c)): "Near you" for the communities, "What people post" for the listings.
+ */
+export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & Partial<Pick<HomeAnswer, 'welcome' | 'me'>>): string {
+    const visitor = !!answer.welcome || answer.me === null;
+    if (visitor && id === 'find') return 'Near you';
+    if (visitor && id === 'market') return 'What people post';
     if (id === 'market' && answer.profile === 'global') return 'Near you';
     if (id === 'events' && answer.profile === 'global') return 'Coming up near you';
     return CARD_TITLES[id];

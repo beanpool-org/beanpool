@@ -18,6 +18,7 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
+import type { HomeAnswer, HomeLayout } from './home-cards';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
 import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
@@ -2349,6 +2350,33 @@ export async function getNotificationPreferences(pubkey: string): Promise<any> {
 
 export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean | number[] | string>): Promise<any> {
     return request<any>('POST', '/api/members/preferences', { publicKey: pubkey, preferences });
+}
+
+// ===================== HOME =====================
+
+/**
+ * The whole Home screen in one read (GET /api/home, routes/home.ts): signed for a member, unsigned in the global lobby.
+ * The node tags each answer and says `private, max-age=0, must-revalidate`, so the browser asks again with the tag and
+ * an unchanged Home costs a 304 (the request's `no-cache`). `cards` is what the member's layout shows; absent, the node
+ * uses the account's own layout.
+ */
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}): Promise<HomeAnswer> {
+    const q = new URLSearchParams();
+    if (params.cards) q.set('cards', params.cards.join(','));
+    if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
+        q.set('lat', String(params.lat));
+        q.set('lng', String(params.lng));
+    }
+    const qs = q.toString();
+    return request<HomeAnswer>('GET', `/api/home${qs ? `?${qs}` : ''}`);
+}
+
+/** What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew. */
+export interface SavedHomePreferences { success: boolean; 'home.layout'?: HomeLayout; interests?: string[] }
+
+/** Save the member's Home layout and/or interests on their account (H1's two preference keys). */
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayout; interests?: string[] }): Promise<SavedHomePreferences> {
+    return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 
 // ===================== DIAGNOSTICS & NODE STATS =====================

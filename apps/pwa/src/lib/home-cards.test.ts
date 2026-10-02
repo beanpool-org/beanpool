@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
     HOME_CARD_IDS, askedCards, beansLines, canTailor, closesWords, communityLine, decideLine, editableCards, effectiveOrder,
     findBody, findPinned, hideCard, joinedLine, moveCard, newerLayout, normalizeLayout, probationSentence, resetLayout,
-    shownCards, showCard, starredFirst, toggleInterest, type HomeAnswer, type HomeCards, type HomeLayout, type HomeMe,
+    shownCards, showCard, starredFirst, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe,
 } from './home-cards';
 
 const NOW = Date.parse('2026-10-02T09:00:00.000Z');

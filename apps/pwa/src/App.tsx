@@ -31,6 +31,7 @@ import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
+import { HomePage } from './pages/HomePage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -93,7 +94,7 @@ function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenP
     );
 }
 
-type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
+type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
 // Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
 // Each tab's share of the row follows its label length, with a floor for the emoji above it.
@@ -138,7 +139,8 @@ export function App() {
             });
         return () => { cancelled = true; };
     }, [loading, identity, visitorView.kind]);
-    const [activeTab, setActiveTab] = useState<Tab>('marketplace');
+    // Members land on Home (DESIGN-home-dashboard-fable.md §8): the Market is one tap away, and every link into it still opens it.
+    const [activeTab, setActiveTab] = useState<Tab>('home');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
     const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed'>('menu');
@@ -283,6 +285,17 @@ export function App() {
         }
         if (tab === 'enterprise' || tab === 'treasury') {
             if (contextId) setOpenTreasuryPubkey(contextId);
+            return;
+        }
+        // From Home's cards: People's community list or its invites, and Settings at the profile.
+        if (tab === 'people-community' || tab === 'people-invites') {
+            setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
+            setActiveTab('people');
+            return;
+        }
+        if (tab === 'settings-profile') {
+            setSettingsInitialMode('profile');
+            setShowSettings(true);
             return;
         }
         setActiveTab(tab as Tab);
@@ -567,9 +580,10 @@ export function App() {
         );
     }
 
+    // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
     const TABS: { id: Tab; label: string; emoji: string }[] = [
+        { id: 'home', label: 'Home', emoji: '🏠' },
         { id: 'marketplace', label: 'Market', emoji: '🤝' },
-        { id: 'pulse', label: 'Pulse', emoji: '📡' },
         { id: 'map', label: 'Map', emoji: '🗺️' },
         { id: 'projects', label: 'Commons', emoji: '🌱' },
         { id: 'messages', label: 'Chat', emoji: '💬' },
@@ -595,7 +609,7 @@ export function App() {
                     <div 
                         className="flex items-center gap-2 cursor-pointer"
                         onClick={() => {
-                            setActiveTab('marketplace');
+                            setActiveTab('home');
                             setShowSettings(false);
                             setOpenProfilePubkey(null);
                         }}
@@ -747,7 +761,7 @@ export function App() {
                                 style={{ marginTop: '8px' }}
                                 onClick={toggleCommunityStatus}
                             >
-                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label === 'Pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
+                                {activeTab === 'marketplace' ? 'Marketplace' : activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
                             </span>
                         ) : (
                             <div 
@@ -865,8 +879,9 @@ export function App() {
                                     {isGuest === false && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
                                     )}
-                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. */}
-                                    {isGuest === false && (
+                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. On Home it is
+                                        the `safety` card, in its place among the cards (pages/HomePage.tsx). */}
+                                    {isGuest === false && activeTab !== 'home' && (
                                         <OneWayBackCard
                                             identity={identity}
                                             placement="landing"
@@ -894,6 +909,13 @@ export function App() {
                                         onEditEventHandled={clearEditEventPost}
                                     />
                                 </Suspense>
+                            )}
+                            {activeTab === 'home' && (
+                                <HomePage
+                                    identity={identity}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                />
                             )}
                             {activeTab === 'marketplace' && (
                                 <MarketplacePage

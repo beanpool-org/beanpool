@@ -32,6 +32,8 @@ import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { parsePoint } from './distance-query.js';
 import { buildHome, homeReaderStanding, parseAskedCards } from './home-answer.js';
+import { VIEW_HEADER } from './viewer.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
 
 /** The answer's tag: the reader and the answer, never the moment it was made. */
@@ -70,6 +72,8 @@ export function createHomeRoutes(_deps: RouteDeps): Router {
         ctx.set('ETag', etag);
         // `private`: the answer is the reader's own, so no shared cache (a CDN or proxy in front of the node) may store it.
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        // A node with two views says which this is, as the listing does (viewer.ts VIEW_HEADER). Elsewhere nothing is said.
+        if (getProfileSwitches().guestListingsOnly) ctx.set(VIEW_HEADER, body.welcome ? 'guest' : 'member');
         const inm = ctx.get('If-None-Match');
         if (inm && inm.split(',').some(t => t.trim().replace(/^W\//, '') === etag.replace(/^W\//, ''))) {
             ctx.status = 304;

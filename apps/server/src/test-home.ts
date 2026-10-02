@@ -112,6 +112,8 @@ async function get(urlPath: string, id?: Id | null, extra: Record<string, string
     return { status: res.status, text, body, etag: res.headers.get('etag'), headers: res.headers, ms };
 }
 const gz = (s: string) => zlib.gzipSync(Buffer.from(s)).length;
+/** A balance as a JSON number anywhere in an answer: a bare substring also matches part of a distance or a time. */
+const hasNumber = (text: string, n: number) => new RegExp(`[:\\[,]${String(n).replace('.', '\\.')}[,\\]}]`).test(text);
 /** The request's own header bytes, as a client sends them (no Cloudflare in front): the floor of what any request costs. */
 const headerBytes = (h: Record<string, string>) => Object.entries(h).reduce((n, [k, v]) => n + k.length + v.length + 4, 0);
 
@@ -229,7 +231,8 @@ async function main(): Promise<void> {
         const mine = await get('/api/home', alice);
         assert(mine.status === 200 && mine.body?.me?.joinedAt && mine.body?.profile === 'local' && typeof mine.body?.features?.beans === 'boolean',
             `Alice gets her Home: me, profile, features (got ${mine.status} ${mine.text.slice(0, 120)})`);
-        assert(mine.body?.welcome === undefined, 'a member\'s Home is no visitor\'s welcome');
+        assert(mine.body?.welcome === undefined && mine.headers.get('x-beanpool-view') === null,
+            'a member\'s Home is no visitor\'s welcome, and a node with one view says nothing of views');
         assert(mine.headers.get('cache-control') === 'private, max-age=0, must-revalidate' && /^W\/"home-[0-9a-f]{24}"$/.test(mine.etag ?? ''),
             `private, revalidated, a weak tag (${mine.headers.get('cache-control')} ${mine.etag})`);
         const bad = await get('/api/home?lat=nope&lng=1', alice);
@@ -284,10 +287,10 @@ async function main(): Promise<void> {
     console.log('\n── 3. nobody else\'s deal, notice, balance or vote ──');
     {
         const a = await get(`/api/home?${ALL}`, alice);
-        assert(!a.text.includes('tx-home-carol') && !a.text.includes('HomeSentinel carol notice') && !a.text.includes('7.25') && (a.text.match(/"balance":/g) ?? []).length === 1 && a.body?.cards?.beans?.balance === 42.5,
+        assert(!a.text.includes('tx-home-carol') && !a.text.includes('HomeSentinel carol notice') && !hasNumber(a.text, 7.25) && (a.text.match(/"balance":/g) ?? []).length === 1 && a.body?.cards?.beans?.balance === 42.5,
             "Alice's answer holds no deal, notice or balance of anyone else's");
         const b = await get(`/api/home?${ALL}&publicKey=${alice.pk}`, bob);
-        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !b.text.includes('42.5') && !b.text.includes(aliceNotice ?? 'none'),
+        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !hasNumber(b.text, 42.5) && !b.text.includes(aliceNotice ?? 'none') && b.body?.cards?.notices === undefined,
             `Bob naming Alice's key in the query gets his own Beans and none of her things (${b.body?.cards?.beans?.balance})`);
         assert(b.body?.cards?.deals?.open === 2 && !b.body?.cards?.needs?.items?.some((i: any) => i.kind === 'message'),
             `Bob's deals are his two, and Alice's unread is not his (${JSON.stringify(b.body?.cards?.deals)})`);
@@ -457,6 +460,7 @@ async function main(): Promise<void> {
             const cards = cardsOf(r);
             assert(r.status === 200 && r.body?.welcome === true && r.body?.me === null && r.body?.layout === null,
                 `${who}: 200, welcome, no me, no layout (got ${r.status} ${r.text.slice(0, 100)})`);
+            assert(r.headers.get('x-beanpool-view') === 'guest', `${who}: the answer says it is the visitors' view (${r.headers.get('x-beanpool-view')})`);
             assert(cards.every(k => ['find', 'market', 'events', 'community'].includes(k)) && cards.includes('community') && cards.includes('find'),
                 `${who}: only the visitors' cards, though every card was asked for (${cards.join(',')})`);
             assert(names(r.text).length === 0 && !r.text.includes('/api/avatar/') && !r.text.includes('HomeSentinel Town Hall'),
@@ -472,6 +476,7 @@ async function main(): Promise<void> {
         const a = await get(`/api/home?${ALL}`, alice);
         const c = a.body?.cards ?? {};
         assert(a.status === 200 && a.body?.welcome === undefined && a.body?.me?.area?.lat === BYRON.lat, `a member gets their own Home, measured from their area (${a.status})`);
+        assert(a.headers.get('x-beanpool-view') === 'member', `and the answer says it is a member's view (${a.headers.get('x-beanpool-view')})`);
         assert(c.joined?.count7d === 1 && c.joined?.radiusKm === 50 && c.joined?.names === undefined && !a.text.includes('HomeCarol'),
             `joined: a count within 50 km, no names (${JSON.stringify(c.joined)})`);
         assert(c.beans === undefined && c.deals === undefined && !c.needs?.items?.some((i: any) => i.kind === 'deal'),
@@ -485,7 +490,7 @@ async function main(): Promise<void> {
         const s = getProfileSwitches();
         const gated = await get(`/api/home?${ALL}`, alice);
         assert(!s.beans && !s.escrow && se.getBalance(alice.pk).balance === 42.5, 'setup: Beans and escrow still off, Alice holding 42.5 and asked for a deal');
-        assert(gated.status === 200 && gated.body?.cards?.beans === undefined && !gated.text.includes('42.5'),
+        assert(gated.status === 200 && gated.body?.cards?.beans === undefined && !hasNumber(gated.text, 42.5),
             `Beans off: no Beans card and her balance nowhere in her answer (${cardsOf(gated).join(',')})`);
         assert(gated.body?.cards?.deals === undefined && !gated.body?.cards?.needs?.items?.some((i: any) => i.kind === 'deal') && !gated.text.includes('tx-home-global'),
             'escrow off: no deals card and no deal line, though a deal waits on her');
@@ -505,13 +510,13 @@ async function main(): Promise<void> {
     async function openReadsRun(): Promise<void> {
         console.log('── ENFORCE_READ_AUTH=false: the route holds its own line ──');
         const unsigned = await get(`/api/home?publicKey=${alice.pk}`);
-        assert(unsigned.status === 401 && !unsigned.text.includes('42.5'), `an unsigned call is still refused, 401 (got ${unsigned.status})`);
+        assert(unsigned.status === 401 && !hasNumber(unsigned.text, 42.5), `an unsigned call is still refused, 401 (got ${unsigned.status})`);
         const stranger = await get(`/api/home?publicKey=${alice.pk}`, outsider);
-        assert(stranger.status === 403 && !stranger.text.includes('42.5'), `a non-member is still refused, 403 (got ${stranger.status})`);
+        assert(stranger.status === 403 && !hasNumber(stranger.text, 42.5), `a non-member is still refused, 403 (got ${stranger.status})`);
         const a = await get(`/api/home?${ALL}`, alice);
         assert(a.status === 200 && a.body?.cards?.beans?.balance === 42.5, `Alice's Beans are her own 42.5 (${JSON.stringify(a.body?.cards?.beans)})`);
         const b = await get(`/api/home?${ALL}&publicKey=${alice.pk}`, bob);
-        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !b.text.includes('42.5'),
+        assert(b.status === 200 && b.body?.cards?.beans?.balance === 50 && !hasNumber(b.text, 42.5),
             `Bob naming Alice's key gets his own 50, never her 42.5 (${JSON.stringify(b.body?.cards?.beans)})`);
     }
 }

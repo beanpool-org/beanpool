@@ -18,7 +18,8 @@
  *   earlier save is out waits for it, a save overtaken by a newer star is never sent, and a save that lands after a
  *   newer star was tapped leaves the newer one owed. The mirror case (review 4166559374): an answer asked while a save was
  *   waiting or out, or before one was begun, may be older than a save the node has taken since, so it never overwrites
- *   the phone's stars; the next landing agrees.
+ *   the phone's stars; the next landing agrees. That is judged by when the read was sent, and the answer carries it: a
+ *   landing that joins a read already out goes by that read's moment, not its own (review 4168250992).
  * - **Nothing is written for an account that has left the phone** (review 4166559191): every read and save takes the
  *   account it is for as it begins (home-account.ts), and each write here (the answer, the layout, the stars, the owed
  *   save, the reveal and hint) is made only while that account is still the one on the phone. Sign Out and Replace wipe
@@ -87,8 +88,12 @@ async function keep(stored: StoredHome, whose: HomeAccount): Promise<void> {
 }
 
 export type HomeRead =
-    /** A 200, or a 304 that confirmed the copy (then `stored` is the copy, its time renewed). */
-    | { kind: 'answer'; stored: StoredHome; confirmed: boolean }
+    /**
+     * A 200, or a 304 that confirmed the copy (then `stored` is the copy, its time renewed). `since`: where the interests
+     * stood as this read was sent ({@link interestsTurnNow}); every landing that gets this answer, the one that sent the
+     * read or one that joined it, judges the answer's interests by it (review 4168250992).
+     */
+    | { kind: 'answer'; stored: StoredHome; confirmed: boolean; since: InterestsTurn }
     /** 401 or 403: this key is no member here (a guest, or an account the community removed). */
     | { kind: 'members_only' }
     /** No answer, a server error, or a body that isn't one: Home keeps what it had. */
@@ -107,6 +112,8 @@ export async function readHomeFromNode(
 ): Promise<HomeRead> {
     const now = options.now ?? Date.now;
     const whose = options.whose ?? homeAccount(identity.publicKey);
+    // Taken as the read is sent: the node builds its answer after this, so a save begun or out now may land before it.
+    const since = interestsTurnNow();
     const askedKey = asked.join(',');
     const copy = cached && cached.publicKey === identity.publicKey && norm(cached.url) === norm(url) && cached.asked === askedKey ? cached : null;
     const stop = new AbortController();
@@ -118,7 +125,7 @@ export async function readHomeFromNode(
             if (!stillOnPhone(whose)) return { kind: 'left' };
             const stored = { ...copy, at: now() };
             await keep(stored, whose);
-            return { kind: 'answer', stored, confirmed: true };
+            return { kind: 'answer', stored, confirmed: true, since };
         }
         if (res.status === 401 || res.status === 403) return { kind: 'members_only' };
         if (!res.ok) return { kind: 'failed' };
@@ -127,7 +134,7 @@ export async function readHomeFromNode(
         if (!stillOnPhone(whose)) return { kind: 'left' };
         const stored: StoredHome = { url, publicKey: identity.publicKey, asked: askedKey, etag: res.headers.get('ETag'), answer, at: now() };
         await keep(stored, whose);
-        return { kind: 'answer', stored, confirmed: false };
+        return { kind: 'answer', stored, confirmed: false, since };
     } catch {
         return { kind: 'failed' };
     } finally {
@@ -149,7 +156,8 @@ onHomeAccountChange(() => {
 
 /**
  * Home's read, shared: a second call while one for the same account, community and cards is out gets that one's
- * promise, so a focus, a doorbell and a pull that meet cost one request.
+ * promise, so a focus, a doorbell and a pull that meet cost one request. The answer carries the mark of the read that
+ * was sent (`since`), never the second call's: a star saved while that read was out is newer than its answer.
  */
 export function loadHome(
     url: string, identity: BeanPoolIdentity, asked: readonly HomeCardId[], cached: StoredHome | null,
@@ -403,7 +411,8 @@ function saveInTurn<T>(job: () => Promise<T>): Promise<T> {
 
 /**
  * Where the interests stand as Home asks the node: the changes made, the saves begun and how many were waiting or out,
- * and the account's generation (home-account.ts). Home takes it as it asks, and gives it to {@link reconcileInterests}.
+ * and the account's generation (home-account.ts). Each read takes it as it is sent ({@link readHomeFromNode}) and
+ * carries it with its answer; each landing gives that to {@link reconcileInterests}.
  */
 export interface InterestsTurn {
     readonly changes: number;
@@ -451,9 +460,10 @@ export async function saveInterests(url: string | null, identity: BeanPoolIdenti
  * At a landing, the account's interests (from the answer's `me`) and the phone's made one: an owed save is sent; the
  * stars a member made in the Market before Home existed are sent once to an account that has none; otherwise, or when
  * the node refuses the phone's, the account's win and the phone's copy follows. `since` is where the interests stood as
- * the answer was asked ({@link interestsTurnNow}): a star tapped since, or a save waiting, out or begun since, means the
- * answer may be older than what the phone has, so the phone's list is left as it is (its own save carries it) and the
- * next landing agrees. Nothing is written or sent once the account has left the phone. Returns the list Home draws with.
+ * the answer's read was sent (its own mark, {@link HomeRead}): a star tapped since, or a save waiting, out or begun
+ * since, means the answer may be older than what the phone has, so the phone's list is left as it is (its own save
+ * carries it) and the next landing agrees. Nothing is written or sent once the account has left the phone. Returns the
+ * list Home draws with.
  */
 export async function reconcileInterests(
     url: string, identity: BeanPoolIdentity, account: readonly string[], since: InterestsTurn = interestsTurnNow(),

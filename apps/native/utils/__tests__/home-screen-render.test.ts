@@ -164,6 +164,8 @@ const node = {
     homeGate: null as Promise<void> | null,
     /** The reader's role, as GET /api/node-admin/me says it (routes/node-admin.ts). */
     role: null as string | null,
+    /** While set, a save of the interests is kept in the member's row, and Home's answer says what the row holds. */
+    keepsRow: false,
 };
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
@@ -186,6 +188,7 @@ beforeEach(async () => {
     node.requests = [];
     node.homeGate = null;
     node.role = null;
+    node.keepsRow = false;
     manage.start.mockClear();
     vi.mocked(goToNeedsTarget).mockClear();
     vi.mocked(db.getMarketplaceTransactions).mockImplementation(async () => []);
@@ -217,6 +220,9 @@ beforeEach(async () => {
         if (u.pathname === '/api/members/preferences') {
             if (node.refuse) { record(node.refuse); return new Response('{"error":"Only a member of this community keeps a Home here."}', { status: node.refuse }); }
             const body = JSON.parse(req.body);
+            if (node.keepsRow && node.answer.me && 'interests' in body.preferences) {
+                node.answer = { ...node.answer, me: { ...node.answer.me, interests: body.preferences.interests } };
+            }
             record(200);
             return new Response(JSON.stringify({ success: true, ...body.preferences }), { status: 200 });
         }
@@ -853,6 +859,91 @@ describe('the account leaves the phone while Home\'s read is out: the screen wri
         await settle();
         expect(homeKeys()).toEqual([]);
         expect(node.requests.filter(r => r.method === 'POST')).toEqual([]);
+    });
+});
+
+// ── A landing that joins Home's read already out (PR #1483 review 4168250992) ─────────────────────────────────────────
+
+describe('a landing that joins the read already out judges its answer by when that read was sent', () => {
+    const phoneStars = () => JSON.parse(mem.store.get('bp_fav_categories') ?? '[]');
+    const interestPosts = () => node.requests.filter(r => r.method === 'POST' && 'interests' in JSON.parse(r.body).preferences)
+        .map(r => JSON.parse(r.body).preferences.interests);
+    const tap = async (testId: string) => {
+        await act(async () => { (document.querySelector(`[data-testid="${testId}"]`) as HTMLElement).click(); });
+        await settle();
+    };
+
+    /** Home is in front and a focus sends a read, held at the node: its answer says what the row held as it arrived. */
+    async function focusWithReadHeld(): Promise<() => void> {
+        let release!: () => void;
+        node.homeGate = new Promise<void>(r => { release = r; });
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        return release;
+    }
+
+    it('the review\'s run: Food saved while the read is out, then a second landing joins it; Food stays, and the next star keeps it', async () => {
+        node.keepsRow = true;
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const release = await focusWithReadHeld();
+        // The member taps Food; its save lands: the row, the phone and the flag all say ['food'].
+        await tap('home-interest-food');
+        expect(node.answer.me!.interests).toEqual(['food']);
+        expect(phoneStars()).toEqual(['food']);
+        // Home gets focus again while the read is still out (the app back to the front, back from the Market): it joins it.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        release();
+        await settle();
+        expect(homeReads()).toHaveLength(2);
+        // The read was sent before the save landed: neither landing takes its list over the phone's.
+        expect(document.querySelector('[data-testid="home-interest-food"]')!.getAttribute('aria-selected')).toBe('true');
+        expect(marketOrder()).toEqual(['p3', 'p1', 'p2']);
+        expect(phoneStars()).toEqual(['food']);
+        // The member stars Labour: the row keeps both (the review measured ["labour"]).
+        await tap('home-interest-labour');
+        expect(interestPosts()).toEqual([['food'], ['food', 'labour']]);
+        expect(node.answer.me!.interests).toEqual(['food', 'labour']);
+        // The next landing agrees with the row, and sends nothing.
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeReads()).toHaveLength(3);
+        expect(phoneStars()).toEqual(['food', 'labour']);
+        expect(interestPosts()).toHaveLength(2);
+    });
+
+    it('the control: the same run without the second landing keeps Food too', async () => {
+        node.keepsRow = true;
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const release = await focusWithReadHeld();
+        await tap('home-interest-food');
+        release();
+        await settle();
+        expect(homeReads()).toHaveLength(2);
+        expect(document.querySelector('[data-testid="home-interest-food"]')!.getAttribute('aria-selected')).toBe('true');
+        expect(phoneStars()).toEqual(['food']);
+    });
+
+    it('the control: a read sent with no save out, joined by a second landing, is the account\'s word (Food cleared in the web app)', async () => {
+        node.keepsRow = true;
+        node.answer = { ...localMember(), me: { ...localMember().me!, interests: ['food'] } };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(phoneStars()).toEqual(['food']);
+        expect(marketOrder()).toEqual(['p3', 'p1', 'p2']);
+        // The web app clears Food; then a focus sends a read, and a second landing joins it. No star is tapped.
+        node.answer = { ...node.answer, me: { ...node.answer.me!, interests: [] } };
+        const release = await focusWithReadHeld();
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        release();
+        await settle();
+        expect(homeReads()).toHaveLength(2);
+        expect(phoneStars()).toEqual([]);
+        expect(marketOrder()).toEqual(['p1', 'p2', 'p3']);
+        expect(interestPosts()).toEqual([]);
     });
 });
 

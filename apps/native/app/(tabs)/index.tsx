@@ -28,7 +28,7 @@ import {
     type HomeCardId, type HomeLayout, type HomeRole, type LocalNeeds, type StepLine,
 } from '../../utils/home-cards';
 import {
-    SAVE_REFUSED, interestsTurnNow, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
+    SAVE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
     saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, yieldPhoneLayout, type StoredHome,
 } from '../../utils/home-store';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
@@ -220,8 +220,6 @@ export default function HomeScreen() {
             setStatus(copy ? 'ok' : 'loading');
         }
         const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout);
-        // A star tapped while the node answers is newer than the answer's interests (home-store.ts reconcileInterests).
-        const since = interestsTurnNow();
         const read = await loadHome(u, id, asked, cached, { whose });
         // Another account on the screen, or this one gone from the phone while the read was out (Sign Out, Replace).
         if (identityRef.current?.publicKey !== id.publicKey || read.kind === 'left' || !stillOnPhone(whose)) return;
@@ -240,7 +238,9 @@ export default function HomeScreen() {
                 void writePhoneLayout(id.publicKey, u, pick.layout, whose);
             }
             if (read.stored.answer.me) {
-                const drawn = await reconcileInterests(u, id, read.stored.answer.me.interests, since);
+                // A star tapped while the node answered is newer than the answer's interests. Judged by when the read was
+                // sent, not by this landing: one that joined a read already out gets that read's mark (home-store.ts).
+                const drawn = await reconcileInterests(u, id, read.stored.answer.me.interests, read.since);
                 if (stillOnPhone(whose)) setInterests(drawn);
             }
             if (member) void maybeReveal(whose);

@@ -55,6 +55,9 @@ const node = {
     held: [] as (() => void)[],
     /** A preferences save refused with this status (the node keeps a Home only for its members). */
     refuse: 0,
+    /** While set, GET /api/home is answered (as it was when it arrived) only once released. */
+    holdHome: false,
+    homeHeld: [] as (() => void)[],
 };
 
 function answer(over: Partial<HomeAnswer> = {}): HomeAnswer {
@@ -87,6 +90,8 @@ beforeEach(async () => {
     node.saves = [];
     node.held = [];
     node.refuse = 0;
+    node.holdHome = false;
+    node.homeHeld = [];
     me = await draftIdentity();
     globalThis.fetch = vi.fn(async (input: any, init: any = {}) => {
         const url = String(input);
@@ -100,9 +105,11 @@ beforeEach(async () => {
             if (node.status !== 200) { record(node.status); return new Response('{"code":"members_only"}', { status: node.status }); }
             if (node.body !== null) { record(200); return new Response(node.body, { status: 200 }); }
             const tag = etagOf(me.publicKey, node.answer!);
+            const body = JSON.stringify(node.answer);
+            if (node.holdHome) await new Promise<void>(r => { node.homeHeld.push(r); });
             if (headers['If-None-Match'] === tag) { record(304); return new Response(null, { status: 304, headers: { ETag: tag } }); }
             record(200);
-            return new Response(JSON.stringify(node.answer), { status: 200, headers: { ETag: tag, 'Cache-Control': 'private, max-age=0, must-revalidate' } });
+            return new Response(body, { status: 200, headers: { ETag: tag, 'Cache-Control': 'private, max-age=0, must-revalidate' } });
         }
         if (u.pathname === '/api/members/preferences' && req.method === 'POST') {
             if (node.refuse) { record(node.refuse); return new Response('{"error":"Only a member of this community keeps a Home here."}', { status: node.refuse }); }
@@ -466,6 +473,50 @@ describe('an answer older than a save that has landed never overwrites it (PR #1
         expect(await saveInterests(NODE, me, ['food'])).toBe(true);
         const since = interestsTurnNow();
         expect(await reconcileInterests(NODE, me, [], since)).toEqual([]);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual([]);
+    });
+});
+
+describe('a landing that joins the read already out takes that read\'s mark, not its own (PR #1483 review 4168250992)', () => {
+    const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise(r => setTimeout(r, 0)); expect(done()).toBe(true); };
+
+    it('the review\'s cross-check: a star saved while the read is out stands at both landings, and the next star keeps it', async () => {
+        node.holdHome = true;
+        // Landing 1 (a focus) sends the read; the node builds its answer as it arrives: nothing starred.
+        const first = loadHome(NODE, me, asked, null);
+        await until(() => node.homeHeld.length === 1);
+        // The member taps Food; its save lands.
+        expect(await saveInterests(NODE, me, ['food'])).toBe(true);
+        expect(node.kept.interests).toEqual(['food']);
+        // Landing 2 (the app back to the front) joins the read already out.
+        const second = loadHome(NODE, me, asked, null);
+        expect(second).toBe(first);
+        node.homeHeld.shift()!();
+        const read = await second;
+        if (read.kind !== 'answer') throw new Error('no answer');
+        expect(homeReads()).toHaveLength(1);
+        expect(read.stored.answer.me!.interests).toEqual([]);
+        // Each landing reconciles with the mark of the read it got (app/(tabs)/index.tsx): the phone's Food stands.
+        expect(await reconcileInterests(NODE, me, read.stored.answer.me!.interests, read.since)).toEqual(['food']);
+        expect(await reconcileInterests(NODE, me, read.stored.answer.me!.interests, read.since)).toEqual(['food']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food']);
+        // The next star keeps it (the review measured ["garden"]).
+        expect(await saveInterests(NODE, me, ['food', 'garden'])).toBe(true);
+        expect(node.kept.interests).toEqual(['food', 'garden']);
+    });
+
+    it('the control: a read sent with no save out, and none since, is the account\'s word at both landings', async () => {
+        expect(await saveInterests(NODE, me, ['food'])).toBe(true);
+        node.holdHome = true;
+        const first = loadHome(NODE, me, asked, null);
+        await until(() => node.homeHeld.length === 1);
+        const second = loadHome(NODE, me, asked, null);
+        expect(second).toBe(first);
+        node.homeHeld.shift()!();
+        const read = await second;
+        if (read.kind !== 'answer') throw new Error('no answer');
+        // The node's answer says none (cleared in the web app, say): it wins.
+        expect(await reconcileInterests(NODE, me, read.stored.answer.me!.interests, read.since)).toEqual([]);
         expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual([]);
     });
 });

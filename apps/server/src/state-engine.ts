@@ -1341,8 +1341,12 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // is a trade's step, which changes its listing on the board (spoken for, back up, or done and gone), so
 // every other socket gets the listings' doorbell for it instead (ringListingDoorbell).
 //
+// `ownCard`: a `profile_updated` for a member's edit of their own card (engine/members.ts updateProfile). Where profiles
+// are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
+// and to the members who share a conversation with them (cardCircle); the versions move all the same.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1401,6 +1405,17 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     const row = db.prepare('SELECT audience_scope FROM posts WHERE id = ?').get(postId) as { audience_scope: string | null } | undefined;
     if (!row) return false;
     return row.audience_scope === null || row.audience_scope === 'public';
+}
+
+/**
+ * Who hears a member's card edit where profiles are not announced (BroadcastOptions.ownCard): the member, on their other
+ * devices, and everyone who shares a conversation with them (a direct one or a group's), whose chats show that card.
+ */
+function cardCircle(pubkey: string): Set<string> {
+    const rows = db.prepare(`SELECT DISTINCT o.public_key FROM conversation_participants mine
+        JOIN conversation_participants o ON o.conversation_id = mine.conversation_id
+        WHERE mine.public_key = ?`).all(pubkey) as { public_key: string }[];
+    return new Set([pubkey, ...rows.map(r => r.public_key)]);
 }
 
 /** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
@@ -1473,6 +1488,10 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
     // own sockets only, which it still makes member sockets below. The versions above moved all the same.
     const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
+    // Where profiles are not announced (the global node, node-profile.ts announceProfiles), a member's card edit goes to
+    // their circle only (cardCircle). The versions above moved all the same.
+    const toCircle = event?.type === 'profile_updated' && opts?.ownCard && typeof event.publicKey === 'string'
+        && !getProfileSwitches().announceProfiles ? cardCircle(event.publicKey) : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1511,6 +1530,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             }
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
+        if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -4639,7 +4659,10 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
-    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
+    // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
+    // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
+        .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -4663,7 +4686,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
+    // profile_updated_at too, for the directory's delta (vouchMember).
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
+        .run(new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -7041,7 +7066,9 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
 export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
     const granted = grantedCreditForTier(tier);
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
+    // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
+    // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
+    db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }

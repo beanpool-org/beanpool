@@ -16,7 +16,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import * as path from 'node:path';
 import {
-    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance,
+    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance, POLLS_HEADING,
     NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, NEAREST_FIRST_HEADING,
     postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, type PostFormState,
 } from '../market-global';
@@ -149,6 +149,21 @@ describe('nearest first', () => {
         const sections = marketFeedSections(posts, GLOBAL, here, Date.parse('2026-09-26T12:00:00Z'));
         expect(sections.map(s => s.title)).toEqual(['Upcoming events', NEAREST_FIRST_HEADING]);
         expect(sections[1].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
+    });
+
+    it('polls have no place: on the nearest-first feed they get their own heading after events, in feed order, not sunk below every listing', () => {
+        const withPolls = [
+            ...posts,
+            { id: 'poll-new', type: 'poll', lat: null, lng: null, created_at: '2026-09-26T09:00:00Z' },
+            { id: 'poll-old', type: 'poll', lat: null, lng: null, created_at: '2026-09-20T09:00:00Z' },
+        ];
+        const sections = marketFeedSections(withPolls, GLOBAL, here, Date.parse('2026-09-26T12:00:00Z'));
+        expect(sections.map(s => s.title)).toEqual(['Upcoming events', POLLS_HEADING, NEAREST_FIRST_HEADING]);
+        expect(sections[1].posts.map(p => p.id)).toEqual(['poll-new', 'poll-old']);
+        expect(sections[2].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
+        // polls only (a feed filtered to Polls): no empty "Nearest first" heading
+        const onlyPolls = marketFeedSections(withPolls.filter(p => p.type === 'poll'), GLOBAL, here);
+        expect(onlyPolls.map(s => s.title)).toEqual([POLLS_HEADING]);
     });
 
     it('a local community, or no location yet: the day headings, as before', () => {

@@ -78,6 +78,10 @@ const NODE = 'https://pictures.example';
 const GROUP_KEY = 'GrOuPkEyGrOuPkEyGrOu_-';
 const FACE_KEY = 'AbCdEfGhIjKlMnOpQrSt_-';
 const SHOP = 'e'.repeat(64);
+const DAY = 24 * 3600_000;
+/** Fixture stamps, relative to the run: made a month ago, one of them changed a day later. */
+const MADE = new Date(Date.now() - 30 * DAY).toISOString();
+const CHANGED = new Date(Date.now() - 29 * DAY).toISOString();
 
 const root = fs.mkdtempSync(path.join(process.env.TMPDIR || os.tmpdir(), 'bp-group-pictures-'));
 afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
@@ -117,11 +121,11 @@ describe("a group's own picture is the node's URL, in the phone's copy and offli
     const seeds = groupPictureUrlOf('g-seeds', '1a2b3c4d')!;
     const groups = [
         { id: 'g-seeds', name: 'Seed Savers', slug: 'seed-savers', category: 'social', createdBy: SHOP, joinPolicy: 'open',
-          createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z', avatarUrl: seeds },
+          createdAt: MADE, updatedAt: CHANGED, avatarUrl: seeds },
         { id: 'g-leaf', name: 'Leaf', slug: 'leaf', category: 'guild', createdBy: SHOP, joinPolicy: 'open',
-          createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', avatarUrl: 'bundled://leaf' },
+          createdAt: MADE, updatedAt: MADE, avatarUrl: 'bundled://leaf' },
         { id: 'g-none', name: 'Plain', slug: 'plain', category: 'general', createdBy: SHOP, joinPolicy: 'open',
-          createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' },
+          createdAt: MADE, updatedAt: MADE },
     ];
 
     it('the node makes the URL the phone is given: relative, versioned, keyed', () => {
@@ -150,7 +154,7 @@ describe("a group's own picture is the node's URL, in the phone's copy and offli
         expect(byId.get('g-seeds')).toBe(seeds);
         expect(byId.get('g-leaf')).toBe('bundled://leaf');
         expect(byId.get('g-none')).toBeNull();
-        const drawn = avatarUri(byId.get('g-seeds'), 'g-seeds', '2026-01-02T00:00:00.000Z', NODE)!;
+        const drawn = avatarUri(byId.get('g-seeds'), 'g-seeds', CHANGED, NODE)!;
         const u = new URL(drawn);
         expect(`${u.origin}${u.pathname}`).toBe(`${NODE}/api/groups/g-seeds/picture`);
         expect(u.searchParams.get('v')).toBe('1a2b3c4d');
@@ -172,8 +176,8 @@ describe("a crowdfund's photo is its enterprise photo's URL in the phone's copy"
         await getDb();
         const applied = await applyDelta({
             projects: [
-                { id: SHOP, creatorPubkey: SHOP, title: 'Tool Library', description: 'Tools', photos: [face], goalAmount: 500, currentAmount: 0, status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z' },
-                { id: 'f'.repeat(64), creatorPubkey: SHOP, title: 'No photo', description: '', photos: [], goalAmount: 100, currentAmount: 0, status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z' },
+                { id: SHOP, creatorPubkey: SHOP, title: 'Tool Library', description: 'Tools', photos: [face], goalAmount: 500, currentAmount: 0, status: 'ACTIVE', createdAt: MADE },
+                { id: 'f'.repeat(64), creatorPubkey: SHOP, title: 'No photo', description: '', photos: [], goalAmount: 100, currentAmount: 0, status: 'ACTIVE', createdAt: MADE },
             ],
         });
         expect(applied).toBe(true);

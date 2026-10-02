@@ -124,7 +124,8 @@ const KINDS: [string, string | null, 'moved' | 'none'][] = [
     ['no picture', null, 'none'],
 ];
 const FILLER = 600; // groups with a 30 KB picture, enough for a kill to land inside the move
-const STAMP = '2025-06-01T00:00:00.000Z';
+// Every planted row's stamp: four months before the run (only this process plants and reads it).
+const STAMP = new Date(Date.now() - 120 * 24 * 3600_000).toISOString();
 const CREATOR = 'c'.repeat(64);
 type Planted = { id: string; label: string; value: string | null; kind: 'moved' | 'none'; rowid: number };
 

@@ -450,7 +450,7 @@ async function main(): Promise<void> {
     }
     {
         const id = 'manifest-picture-stamp';
-        const old = '2000-01-01T00:00:00.000Z';
+        const old = new Date(Date.now() - 365 * 24 * 3600_000).toISOString(); // a year before the run
         const stampOf = () => (db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(id) as { updated_at: string }).updated_at;
         const reset = () => db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(old, id);
         db.prepare(`INSERT INTO groups (id, name, slug, created_by, updated_at) VALUES (?, 'Manifest Stamp', ?, 'manifest-in-row', ?)`).run(id, id, old);

@@ -1222,7 +1222,7 @@ export const NAMES_COPY = {
     // §9, exact.
     who: 'Only this community’s owners and admins can read these names, on their own phones. The server keeps them scrambled: '
         + 'a backup, a copy or a stolen database holds nothing readable. This phone gives the list’s keys only to admins whose phones '
-        + 'were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can’t protect: '
+        + 'were checked, on a call or in person, by you or by an admin you trust, and takes a new key only from them. What it can’t protect: '
         + 'a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an '
         + 'admin’s phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin’s '
         + 'keys can read. Each admin’s phone learns of a removal when it opens the list, unless the server hides it. '
@@ -1234,8 +1234,8 @@ export const NAMES_COPY = {
         + `Nothing this phone writes from now on can be read with the keys ${both(who)} had.`,
     /** A key removed by hand ("Remove @X's old key"): the node still lists the admin, so not "no longer an admin". */
     newKeyRemoved: (who: string[]) => (who.length > 1
-        ? `The list has a new key that the old phones of ${both(who)} can’t read. If they get new phones, check them in person and this phone will send the keys.`
-        : `The list has a new key that ${at(who[0] ?? '')}’s old phone can’t read. If ${at(who[0] ?? '')} gets a new phone, check it in person and this phone will send the keys.`),
+        ? `The list has a new key that the old phones of ${both(who)} can’t read. If they get new phones, check their codes and this phone will send the keys.`
+        : `The list has a new key that ${at(who[0] ?? '')}’s old phone can’t read. If ${at(who[0] ?? '')} gets a new phone, check its code and this phone will send the keys.`),
     /** Whom the new key reached, and whom it will reach on the next open; nothing when there is nobody to send it to. */
     newKeySent: (sent: string[], unsent: string[]) => {
         if (!unsent.length) return sent.length ? 'This phone has sent the new key to the admins it trusts.' : '';
@@ -1255,14 +1255,15 @@ export const NAMES_COPY = {
     compareListKey: 'When you check each other, compare this line too. If it differs, open the list again on both phones. '
         + 'If it still differs, the server is showing your phones different things: add no names until it matches, and tell your admins.',
     removeKey: (who: string) => `Remove ${at(who)}’s old key? The list gets a new key that ${at(who)}’s old phone can’t read. `
-        + `If ${at(who)} gets a new phone, check it in person and this phone will send the keys.`,
-    checkIntro: (who: string) => `Meet ${at(who)}. Open the names list on both phones, and scan each other’s code (or compare and type the `
-        + `20 digits). Only do this with ${at(who)} in front of you: your phone will trust this key, send it the names, and take new keys it makes.`,
+        + `If ${at(who)} gets a new phone, check its code and this phone will send the keys.`,
+    checkIntro: (who: string) => `Check ${at(who)}’s code. Open the names list on both phones, and check each other’s code: read the 20 digits out `
+        + `on a call and type them in, or scan the QR code if you’re together. Only do this when you know it’s ${at(who)} you’re talking to: your `
+        + 'phone will trust this key, send it the names, and take new keys it makes.',
     mismatch: (who: string) => `The key you scanned isn’t the one the server lists for ${at(who)}. Your phone trusts the key you scanned and `
         + `nothing is sent to the server’s key. Either the server has put ${at(who)}’s name on another key, or this isn’t ${at(who)}’s phone. Tell your other admins.`,
     // The design addendum's (e): rule 1b gives a way forward through any admin whose phone opens the list.
     refusedUntrusted: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and no admin this phone trusts has `
-        + `checked them. Nothing was read or written. Meet ${at(who)}, or an admin whose phone already opens the list, and check each other’s phones.`,
+        + `checked them. Nothing was read or written. Check codes with ${at(who)}, or with an admin whose phone already opens the list, on a call or in person.`,
     refusedRolledBack: (n: number, m: number) => `The server offers an older key history (up to key ${n}) than this phone has (key ${m}). `
         + 'A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; '
         + 'entries written since the copy are gone and must be typed again from your paper copy.',
@@ -1277,19 +1278,19 @@ export const NAMES_COPY = {
         + 'written. Ask your admins what happened. You can follow the server’s history: this phone keeps the keys it holds.',
     wait: (holders: string[]) => (holders.length
         ? `You don’t hold the list’s keys yet. ${either(holders)} will send them the next time they open the names list.`
-        : 'Nobody this phone trusts holds the list’s keys. Meet an admin who does and check each other’s phones.'),
+        : 'Nobody this phone trusts holds the list’s keys. Check codes with an admin who does, on a call or in person.'),
     lockedEntry: (n: number | null, who: string, holders: string[], notTrusting: string[] = [], checkedHere: string[] = []) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
         + 'This phone doesn’t hold it. '
         + (holders.length
             ? `${either(holders)} ${holders.length > 1 ? 'hold' : 'holds'} it and will send it on their next open.`
             : checkedHere.length
             ? (checkedHere.length > 1
-                ? `${either(checkedHere)} hold it. Their phones send it once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, meet one of them and check each other’s phones.`
-                : `${at(checkedHere[0])} holds it. Their phone sends it once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, meet them and check each other’s phones.`)
+                ? `${either(checkedHere)} hold it. Their phones send it once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, check codes with one of them, on a call or in person.`
+                : `${at(checkedHere[0])} holds it. Their phone sends it once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, check codes with them, on a call or in person.`)
             : notTrusting.length
             ? (notTrusting.length > 1
-                ? `${either(notTrusting)} hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
-                : `${at(notTrusting[0])} holds it, but their phone doesn’t trust this one yet: meet ${at(notTrusting[0])} and check each other’s phones.`)
+                ? `${either(notTrusting)} hold it, but their phones don’t trust this one yet: check codes with one of them, on a call or in person.`
+                : `${at(notTrusting[0])} holds it, but their phone doesn’t trust this one yet: check codes with ${at(notTrusting[0])}, on a call or in person.`)
             : 'Nobody who is an admin now holds it: type it again from your paper copy, or delete it.'),
     startAgain: (count: number) => 'Nobody who is an admin now holds the list’s keys. You can start a new key; the '
         + `${count} ${count === 1 ? 'entry' : 'entries'} written before stay locked until an admin who held a key comes back, or they are typed again from your paper copy.`,
@@ -1300,21 +1301,21 @@ export const NAMES_COPY = {
     /** Holders whose phones don't trust this one (round 9): nothing comes until a check in person. */
     /** Holders this phone checked in person whose phones haven't said yet whether they trust it (round 12): both ways. */
     holdersJustChecked: (holders: string[]) => (holders.length > 1
-        ? `${either(holders)} hold the list’s keys. Their phones send them once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, meet one of them and check each other’s phones.`
-        : `${at(holders[0] ?? '')} holds the list’s keys. Their phone sends them once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, meet them and check each other’s phones.`),
+        ? `${either(holders)} hold the list’s keys. Their phones send them once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, check codes with one of them, on a call or in person.`
+        : `${at(holders[0] ?? '')} holds the list’s keys. Their phone sends them once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, check codes with them, on a call or in person.`),
     /** Holders whose phones don't trust this one (the reviewer's :851, design Addendum 4): a check comes first. */
     holdersNoTrust: (holders: string[]) => (holders.length > 1
-        ? `${either(holders)} hold the list’s keys, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
-        : `${at(holders[0] ?? '')} holds the list’s keys, but their phone doesn’t trust this one yet: meet ${at(holders[0] ?? '')} and check each other’s phones.`),
+        ? `${either(holders)} hold the list’s keys, but their phones don’t trust this one yet: check codes with one of them, on a call or in person.`
+        : `${at(holders[0] ?? '')} holds the list’s keys, but their phone doesn’t trust this one yet: check codes with ${at(holders[0] ?? '')}, on a call or in person.`),
     // Design Addendum 4 (§4), exact.
     /** `removedAny`: this phone stands by a removal (round 12, J10: otherwise it makes no new key, and the words don't say so). */
     followFromHere: (n: number, removedAny = true) => `If none of them can be reached, follow the server’s history: this phone takes key ${n} for its place only, `
         + (removedAny ? 'with no new trust and no new key, and before it writes it makes a new key without any admin it had removed.' : 'with no new trust and no new key.'),
     refusedRemoved: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and this phone had removed ${at(who)}’s key; `
-        + `the server’s history hasn’t. Nothing was read or written. Check ${at(who)}’s phone in person only if ${at(who)} is an admin again: `
+        + `the server’s history hasn’t. Nothing was read or written. Check ${at(who)}’s code only if ${at(who)} is an admin again: `
         + `this phone then trusts them again. Or check an admin whose phone already opens the list: this phone then takes key ${n} for its `
         + `place only and makes a new key without ${at(who)} before it writes. If none of them can be reached, follow the server’s history: `
-        + 'the same, without a meeting.',
+        + 'the same, without a check.',
     refusedRemovedGone: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, who is no longer an admin, and this `
         + `phone had removed ${at(who)}’s key. Nothing was read or written. Check an admin whose phone already opens the list, or follow `
         + `the server’s history: either way this phone takes key ${n} for its place only and makes a new key without ${at(who)} before it writes.`,
@@ -1332,7 +1333,7 @@ export const NAMES_COPY = {
         + 'them back; the phones still hold their keys. Otherwise type them again from your paper copy.',
     waitNewKey: (holders: string[]) => (holders.length
         ? `The list needs a new key before anything more is written. ${either(holders)} will make it the next time they open the names list.`
-        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
+        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Check codes with an admin who does, on a call or in person.'),
     /**
      * The wait when the new key is this phone's own drop (a removal by hand, or one on a key history it has left): the
      * holder only sends the current key; this phone then makes the new one (round 7).
@@ -1340,12 +1341,12 @@ export const NAMES_COPY = {
     waitOwnKey: (holders: string[], own: string[]) => (holders.length
         ? `The list needs a new key without ${both(own)} before anything more is written. This phone makes it once it holds the list’s `
             + `current key: ${either(holders)} will send that the next time they open the names list.`
-        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
+        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Check codes with an admin who does, on a call or in person.'),
     nobodyHoldsKey: (n: number, count: number, maker: string) => `Nobody who is an admin now holds key ${n}. You can make a new key; the `
         + `${count} ${count === 1 ? 'name sealed under it stays' : 'names sealed under it stay'} locked unless ${at(maker)}’s phone is found.`,
     droppedMe: (who: string) => `${at(who)} made a key without this phone. This phone still trusts them; ask them why, and tell your other admins if you didn’t expect it.`,
     differentKeys: (n: number) => `Two admins sent different keys for key ${n}: tell your admins. This phone kept the first one.`,
-    otherHistory: (who: string) => `${at(who)}’s phone is on a different key history: meet ${at(who)}.`,
+    otherHistory: (who: string) => `${at(who)}’s phone is on a different key history: check codes with ${at(who)}, on a call or in person.`,
     newKeyBy: (maker: string, who: string[]) => `${at(maker)} made the list a new key without ${both(who)}.`,
     tooMany: 'The server sent more of the list’s history than this phone reads. Ask whoever runs the server.',
     lostSinceCopy: (count: number) => `${count} ${count === 1 ? 'entry this phone saw is' : 'entries this phone saw are'} gone from the server: restore them from the paper copy.`,
@@ -1356,13 +1357,13 @@ export const NAMES_COPY = {
     /** While a reload runs with the list on screen. */
     reloading: 'Opening the list again…',
     openAgainButton: 'Open the list again',
-    checkFirst: (who: string) => `Check ${at(who)}’s phone in person first: the server’s word that a key is ${at(who)}’s isn’t enough.`,
-    toCheck: (who: string) => `${at(who)} is an admin, and this phone hasn’t checked their phone. Meet them and check each other’s phones: then this phone sends them the keys.`,
+    checkFirst: (who: string) => `Check ${at(who)}’s code first, on a call or in person: the server’s word that a key is ${at(who)}’s isn’t enough.`,
+    toCheck: (who: string) => `${at(who)} is an admin, and this phone hasn’t checked their phone. Check codes with them, on a call or in person: then this phone sends them the keys.`,
     notShownToMembers: 'Members don’t see these names. Showing real names to members isn’t available yet.',
     // Buttons and titles.
     checkEachOtherTitle: 'Check each other',
-    checkButton: (who: string) => `Check ${at(who)} in person`,
-    checkSomeone: 'Check an admin in person',
+    checkButton: (who: string) => `Check ${at(who)}’s code`,
+    checkSomeone: 'Check an admin’s code',
     removeKeyButton: (who: string) => `Remove ${at(who)}’s old key`,
     removeKeyTitle: (who: string) => `Remove ${at(who)}’s old key?`,
     putBackButton: 'Put the key history back',
@@ -1381,7 +1382,7 @@ export const NAMES_COPY = {
         + 'them. An admin this phone had removed stays removed: before it writes, it makes a key without them.',
     sendAgainButton: (who: string) => `Send the keys to ${at(who)} again`,
     myKeyTitle: 'Your phone’s key',
-    myKey: 'The other admin scans this QR code, or compares the 20 digits with what their phone shows. Show it only to someone you’re with.',
+    myKey: 'On a call, read these 20 digits out for the other admin to type in. If you’re together, they can scan the QR code instead.',
     myCode: (code: string) => `Your code: ${code}`,
     showMyKey: 'Show my phone’s key',
     hideMyKey: 'Hide my phone’s key',
@@ -1391,8 +1392,8 @@ export const NAMES_COPY = {
     codeLabel: 'THEIR CODE (20 DIGITS)',
     compareButton: 'Compare',
     unreadable: 'That isn’t a phone key code. Scan the QR code on their names list, or type the 20 digits shown under it.',
-    codeMismatch: (who: string) => `Those digits aren’t ${at(who)}’s key as the server lists it. Nothing was trusted. Scan their QR code instead, and tell your other admins.`,
-    noMatch: 'Those digits aren’t the key of any admin the server lists. Scan their QR code instead.',
+    codeMismatch: (who: string) => `Those digits aren’t ${at(who)}’s key as the server lists it. Nothing was trusted. Scan their QR code instead, on a video call or together, and tell your other admins.`,
+    noMatch: 'Those digits aren’t the key of any admin the server lists. Scan their QR code instead, on a video call or together.',
     self: 'That is this phone’s own key.',
     matched: (who: string) => `Checked: this phone now trusts ${at(who)}’s phone.`,
     /** A check whose pin couldn't be read or saved (round 15): nothing was trusted, and nothing kept was changed. */

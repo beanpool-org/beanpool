@@ -672,8 +672,8 @@ describe('C. Drops and removal', () => {
         const e = openEntries({ current: k2, entries: [{ ...node.entries[0], keyId: k2 }], confirmations: [] }, z)[0];
         expect(e.holders).toEqual([]);
         expect(e.notTrusting).toEqual(['Owen', 'Bea']);
-        expect(NAMES_COPY.lockedEntry(2, 'Owen', e.holders, e.notTrusting)).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen or @Bea hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.');
-        expect(NAMES_COPY.lockedEntry(2, 'Owen', [], ['Owen'])).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen holds it, but their phone doesn’t trust this one yet: meet @Owen and check each other’s phones.');
+        expect(NAMES_COPY.lockedEntry(2, 'Owen', e.holders, e.notTrusting)).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen or @Bea hold it, but their phones don’t trust this one yet: check codes with one of them, on a call or in person.');
+        expect(NAMES_COPY.lockedEntry(2, 'Owen', [], ['Owen'])).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen holds it, but their phone doesn’t trust this one yet: check codes with @Owen, on a call or in person.');
         await meet(node, owen, zed);
         await open(owen);
         expect((await open(zed)).plan.kind).toBe('ready');
@@ -693,7 +693,7 @@ describe('C. Drops and removal', () => {
 
     it('C8 "Remove @Ada\'s old key" while the server still lists it: no write until the new key lands; the new key leaves her out; her new phone needs a check', async () => {
         const { node, phones: [owen, ada] } = await community();
-        expect(NAMES_COPY.removeKey('Ada')).toBe("Remove @Ada’s old key? The list gets a new key that @Ada’s old phone can’t read. If @Ada gets a new phone, check it in person and this phone will send the keys.");
+        expect(NAMES_COPY.removeKey('Ada')).toBe("Remove @Ada’s old key? The list gets a new key that @Ada’s old phone can’t read. If @Ada gets a new phone, check its code and this phone will send the keys.");
         const adaOld = await keyOf(ada, node.current()!.id);
         await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
         // The open makes the new key before anything else is sent.
@@ -2346,7 +2346,7 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
     it('each sentence exactly', () => {
         // The design addendum's (e), exact, then what an admin can do about it (the fifth deciding review's BLOCKING finding, 52e1a759).
         // Addendum 2 (§3): the removal check is Remove by hand; the comparison only says two phones are shown different things.
-        expect(plain(NAMES_COPY.who)).toBe("Only this community's owners and admins can read these names, on their own phones. The server keeps them scrambled: a backup, a copy or a stolen database holds nothing readable. This phone gives the list's keys only to admins whose phones were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can't protect: a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an admin's phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin's keys can read. Each admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, look at this phone's admins: if it still shows them, tap Remove @X's old key. Whatever the server says, this phone then makes a key without them or writes nothing.");
+        expect(plain(NAMES_COPY.who)).toBe("Only this community's owners and admins can read these names, on their own phones. The server keeps them scrambled: a backup, a copy or a stolen database holds nothing readable. This phone gives the list's keys only to admins whose phones were checked, on a call or in person, by you or by an admin you trust, and takes a new key only from them. What it can't protect: a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an admin's phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin's keys can read. Each admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, look at this phone's admins: if it still shows them, tap Remove @X's old key. Whatever the server says, this phone then makes a key without them or writes nothing.");
         // Design Addendum 3 (§5), exact.
         expect(plain(NAMES_COPY.follow)).toBe("This phone follows the key history the server shows, from the last key both share. It keeps the keys it holds, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin this phone had removed stays removed: before it writes, it makes a key without them.");
         expect(plain(NAMES_COPY.followButton)).toBe("Follow the server's history");
@@ -2357,17 +2357,17 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: this phone had removed their key on a key history it has since left.");
         expect(plain(NAMES_COPY.checkAgain('X', 4))).toBe("Key 4 removed @X's key. If @X is an admin again, check each other's phones again: a check made before this phone took key 4 doesn't count past it.");
         expect(plain(`${NAMES_COPY.newKeyMade(['X'])} ${NAMES_COPY.newKeySent(['A'], [])}`)).toBe('The list has a new key because @X is no longer an admin. Nothing this phone writes from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');
-        expect(plain(NAMES_COPY.newKeyRemoved(['X']))).toBe("The list has a new key that @X's old phone can't read. If @X gets a new phone, check it in person and this phone will send the keys.");
+        expect(plain(NAMES_COPY.newKeyRemoved(['X']))).toBe("The list has a new key that @X's old phone can't read. If @X gets a new phone, check its code and this phone will send the keys.");
         expect(plain(NAMES_COPY.newKeySent([], ['C']))).toBe('This phone will send the new key to @C the next time the list opens on it.');
         expect(plain(NAMES_COPY.newKeySent(['A'], ['C', 'D']))).toBe('This phone has sent the new key to @A. It will send it to @C and @D the next time the list opens on it.');
         expect(NAMES_COPY.newKeySent([], [])).toBe('');
         expect(plain(NAMES_COPY.listKey(3, '1234 5678 9012 3456 7890'))).toBe('This phone adds names under list key 3, code 1234 5678 9012 3456 7890.');
         expect(plain(NAMES_COPY.compareListKey)).toBe('When you check each other, compare this line too. If it differs, open the list again on both phones. If it still differs, the server is showing your phones different things: add no names until it matches, and tell your admins.');
-        expect(plain(NAMES_COPY.removeKey('X'))).toBe("Remove @X's old key? The list gets a new key that @X's old phone can't read. If @X gets a new phone, check it in person and this phone will send the keys.");
-        expect(plain(NAMES_COPY.checkIntro('X'))).toBe("Meet @X. Open the names list on both phones, and scan each other's code (or compare and type the 20 digits). Only do this with @X in front of you: your phone will trust this key, send it the names, and take new keys it makes.");
+        expect(plain(NAMES_COPY.removeKey('X'))).toBe("Remove @X's old key? The list gets a new key that @X's old phone can't read. If @X gets a new phone, check its code and this phone will send the keys.");
+        expect(plain(NAMES_COPY.checkIntro('X'))).toBe("Check @X's code. Open the names list on both phones, and check each other's code: read the 20 digits out on a call and type them in, or scan the QR code if you're together. Only do this when you know it's @X you're talking to: your phone will trust this key, send it the names, and take new keys it makes.");
         expect(plain(NAMES_COPY.mismatch('X'))).toBe("The key you scanned isn't the one the server lists for @X. Your phone trusts the key you scanned and nothing is sent to the server's key. Either the server has put @X's name on another key, or this isn't @X's phone. Tell your other admins.");
         // The design addendum's (e): the vouched history gives a way forward through any admin whose phone opens the list.
-        expect(plain(NAMES_COPY.refusedUntrusted(4, 'X'))).toBe("The list's key number 4 was made by @X, and no admin this phone trusts has checked them. Nothing was read or written. Meet @X, or an admin whose phone already opens the list, and check each other's phones.");
+        expect(plain(NAMES_COPY.refusedUntrusted(4, 'X'))).toBe("The list's key number 4 was made by @X, and no admin this phone trusts has checked them. Nothing was read or written. Check codes with @X, or with an admin whose phone already opens the list, on a call or in person.");
         expect(plain(NAMES_COPY.refusedRolledBack(2, 5))).toBe('The server offers an older key history (up to key 2) than this phone has (key 5). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.');
         expect(plain(NAMES_COPY.refusedDifferentNone)).toBe("The server shows a key history this phone didn't take. A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Nothing was read or written. Ask your admins what happened. You can follow the server's history: this phone keeps the keys it holds.");
         expect(plain(NAMES_COPY.followFromHere(3, false))).toBe("If none of them can be reached, follow the server's history: this phone takes key 3 for its place only, with no new trust and no new key.");
@@ -2377,18 +2377,29 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         expect(plain(NAMES_COPY.wait(['A', 'B']))).toBe("You don't hold the list's keys yet. @A or @B will send them the next time they open the names list.");
         // Design Addendum 4 (§4), exact.
         expect(plain(NAMES_COPY.followFromHere(3))).toBe("If none of them can be reached, follow the server's history: this phone takes key 3 for its place only, with no new trust and no new key, and before it writes it makes a new key without any admin it had removed.");
-        expect(plain(NAMES_COPY.refusedRemoved(3, 'X'))).toBe("The list's key number 3 was made by @X, and this phone had removed @X's key; the server's history hasn't. Nothing was read or written. Check @X's phone in person only if @X is an admin again: this phone then trusts them again. Or check an admin whose phone already opens the list: this phone then takes key 3 for its place only and makes a new key without @X before it writes. If none of them can be reached, follow the server's history: the same, without a meeting.");
+        expect(plain(NAMES_COPY.refusedRemoved(3, 'X'))).toBe("The list's key number 3 was made by @X, and this phone had removed @X's key; the server's history hasn't. Nothing was read or written. Check @X's code only if @X is an admin again: this phone then trusts them again. Or check an admin whose phone already opens the list: this phone then takes key 3 for its place only and makes a new key without @X before it writes. If none of them can be reached, follow the server's history: the same, without a check.");
         expect(plain(NAMES_COPY.refusedRemovedGone(3, 'X'))).toBe("The list's key number 3 was made by @X, who is no longer an admin, and this phone had removed @X's key. Nothing was read or written. Check an admin whose phone already opens the list, or follow the server's history: either way this phone takes key 3 for its place only and makes a new key without @X before it writes.");
         expect(plain(NAMES_COPY.waitRemovedHolder(['X'], 3))).toBe("The server says @X holds key 3, and this phone had removed @X's key. Nobody else can make a new key until an owner removes @X or moves their account to a new key.");
         expect(plain(NAMES_COPY.askForShare('X'))).toBe("The server says @X holds the current key, so only their phone can make the next one. Ask @X to open the names list; if their phone is lost, have an owner remove them.");
         expect(plain(NAMES_COPY.lostEntries(3))).toBe("3 entries this phone saw aren't on the server now, and no admin deleted them. A server put back to an older copy does that. Whoever runs the server may still have them on the other copy and can put them back; the phones still hold their keys. Otherwise type them again from your paper copy.");
-        expect(plain(NAMES_COPY.holdersJustChecked(['A']))).toBe("@A holds the list's keys. Their phone sends them once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, meet them and check each other's phones.");
-        expect(plain(NAMES_COPY.holdersNoTrust(['A']))).toBe("@A holds the list's keys, but their phone doesn't trust this one yet: meet @A and check each other's phones.");
-        expect(plain(NAMES_COPY.holdersNoTrust(['A', 'B']))).toBe("@A or @B hold the list's keys, but their phones don't trust this one yet: meet one of them and check each other's phones.");
-        expect(plain(NAMES_COPY.wait([]))).toBe("Nobody this phone trusts holds the list's keys. Meet an admin who does and check each other's phones.");
+        expect(plain(NAMES_COPY.holdersJustChecked(['A']))).toBe("@A holds the list's keys. Their phone sends them once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, check codes with them, on a call or in person.");
+        expect(plain(NAMES_COPY.holdersNoTrust(['A']))).toBe("@A holds the list's keys, but their phone doesn't trust this one yet: check codes with @A, on a call or in person.");
+        expect(plain(NAMES_COPY.holdersNoTrust(['A', 'B']))).toBe("@A or @B hold the list's keys, but their phones don't trust this one yet: check codes with one of them, on a call or in person.");
+        expect(plain(NAMES_COPY.wait([]))).toBe("Nobody this phone trusts holds the list's keys. Check codes with an admin who does, on a call or in person.");
         expect(plain(NAMES_COPY.lockedEntry(3, 'X', ['A']))).toBe("Sealed with key 3 (made by @X). This phone doesn't hold it. @A holds it and will send it on their next open.");
         expect(plain(NAMES_COPY.lockedEntry(3, 'X', []))).toBe("Sealed with key 3 (made by @X). This phone doesn't hold it. Nobody who is an admin now holds it: type it again from your paper copy, or delete it.");
         expect(plain(NAMES_COPY.startAgain(7))).toBe("Nobody who is an admin now holds the list's keys. You can start a new key; the 7 entries written before stay locked until an admin who held a key comes back, or they are typed again from your paper copy.");
+        // Round 15: checks at a distance (Marty, 2026-10-03): the code is read out on a call, or scanned when together.
+        expect(plain(NAMES_COPY.myKey)).toBe("On a call, read these 20 digits out for the other admin to type in. If you're together, they can scan the QR code instead.");
+        expect(plain(NAMES_COPY.checkButton('X'))).toBe("Check @X's code");
+        expect(plain(NAMES_COPY.checkSomeone)).toBe("Check an admin's code");
+        expect(plain(NAMES_COPY.checkFirst('X'))).toBe("Check @X's code first, on a call or in person: the server's word that a key is @X's isn't enough.");
+        expect(plain(NAMES_COPY.toCheck('X'))).toBe("@X is an admin, and this phone hasn't checked their phone. Check codes with them, on a call or in person: then this phone sends them the keys.");
+        expect(plain(NAMES_COPY.otherHistory('X'))).toBe("@X's phone is on a different key history: check codes with @X, on a call or in person.");
+        expect(plain(NAMES_COPY.waitNewKey([]))).toBe("The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Check codes with an admin who does, on a call or in person.");
+        expect(plain(NAMES_COPY.codeMismatch('X'))).toBe("Those digits aren't @X's key as the server lists it. Nothing was trusted. Scan their QR code instead, on a video call or together, and tell your other admins.");
+        expect(plain(NAMES_COPY.noMatch)).toBe("Those digits aren't the key of any admin the server lists. Scan their QR code instead, on a video call or together.");
+        expect(plain(NAMES_COPY.checkNotKept)).toBe("This phone couldn't read or save its names list keys just now, so nothing was checked and nothing was changed. Try again.");
     });
 
     it('none of the old promises are said', () => {
@@ -2400,6 +2411,9 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
             return '';
         };
         const all = Object.values(NAMES_COPY).map(said).join('\n') + fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        // Round 15: no sentence the app says asks admins to meet; a check is on a call or in person.
+        const copy = Object.values(NAMES_COPY).map(said).join('\n');
+        for (const gone of [/\bmeet/i, /meeting/i, /(?<!on a call or )in person/i, /in front of you/i, /someone you.re with/i]) expect(copy).not.toMatch(gone);
         for (const gone of [/Take @/, /take their history/i, /an admin whose phone has the server.s history can check yours/i, /only at a meeting/i,
             /To be sure, meet another admin and compare the list key/i, /they should show the same one/i,
             /Admins check for that by meeting and comparing their phones/i, /for reading only/i, /remembers it/i, /first use/i, /whoever (first )?shares/i, /carried over/i, /sealed again/i, /seals? (them|every entry) again/i, /any admin can start a new key/i, /working with (whoever runs|the operator)/i]) {

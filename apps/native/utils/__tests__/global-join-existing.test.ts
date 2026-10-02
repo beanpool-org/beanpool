@@ -231,9 +231,11 @@ describe('through the door with the key on the phone', () => {
         const { answer, deps } = await joinAsTheAccount();
 
         expect(answer.kind).toBe('joined');
-        // Every signed request to the door is the account's, and the node would take each as signed by it.
+        // Every signed request to the door is the account's, and the node would take each as signed by it. The name check
+        // is signed too (S4): the door's limiter counts it per key, not against the 15 a minute a network's unsigned
+        // checks share.
         const signed = signedTo(GLOBAL);
-        expect(signed.map(s => s.path)).toEqual(['/api/join/sso-nonce', '/api/join']);
+        expect(signed.map(s => s.path)).toEqual(['/api/join/sso-nonce', '/api/members/callsign-available/Sam', '/api/join']);
         for (const req of signed) {
             expect(req.headers['X-Public-Key']).toBe(account.publicKey);
             expect(boundSignatureValid({ url: req.url, method: req.method, headers: req.headers, body: req.raw }, account.publicKey)).toBe(true);

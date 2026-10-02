@@ -15,7 +15,7 @@
  */
 
 import {
-    door, matchAuthReturn, providerAuthUrl, providerLabel, refusalMessage, tryAgainIn, DoorUnreachableError,
+    door, isWrongClock, matchAuthReturn, providerAuthUrl, providerLabel, refusalMessage, tryAgainIn, DoorUnreachableError, WRONG_CLOCK,
     type AuthReturn, type DoorAnswer, type JoinNonce,
 } from './web-join';
 import { recoveryStored, sealJoinRecovery } from './join-recovery';
@@ -66,6 +66,7 @@ export function clearPendingLink(): void {
 export function linkRefusalMessage(answer: DoorAnswer, provider: JoinProvider | null): string {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
     const label = provider ? providerLabel(provider) : 'sign-in';
+    if (isWrongClock(answer)) return WRONG_CLOCK;
     switch (answer.body.code) {
         case 'already_joined':
             return `This ${label} account already has another BeanPool account here, so it can't be added to this one. Choose another sign-in.`;

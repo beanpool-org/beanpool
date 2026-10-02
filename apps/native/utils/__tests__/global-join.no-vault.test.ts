@@ -799,7 +799,8 @@ describe('the name step at the door: never a spinner for good, and it can always
         stalledDoor();
         const leave = new AbortController();
         const pending = checkNameAtDoor(NODE, 'Sam', doorKey(), { signal: leave.signal });
-        await Promise.resolve();
+        // Out once it is sent: signed by the joining key (S4), it leaves a few ticks after the call.
+        await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
         leave.abort();
         expect(await pending).toEqual({ kind: 'cancelled' });
         const init = vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit;

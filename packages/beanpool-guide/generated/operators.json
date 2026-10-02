@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 94,
-  "hash": "1cb522f9e478299a38bea9daed6f2bbfbbc3adfaaf6393ec7d56a0b2a30c6af6",
+  "version": 95,
+  "hash": "5248639b94058b16a1c96ac965202c3b324f1ea77673ef87e8cfc2528adfb086",
   "sections": [
     {
       "id": "setup",
@@ -188,7 +188,7 @@
         },
         {
           "type": "p",
-          "text": "**On the global community** there is no first invite and no Admin member, because invites are switched off there (see Members and invites). The first owner joins like everyone else: in the BeanPool app, through the open door, with a sign-in. Then, as the password holder, open People & Safety, open that member and choose **👑 Grant Owner**. From then on their phone opens Settings as owner from the app's Manage button."
+          "text": "**On the global community** there is no first invite and no Admin member, because invites are switched off there (see Members and invites). The first owner joins like everyone else: in the BeanPool app, through the open door, with 12 secret words or a sign-in. Owners have no new-account limits, whichever way they joined. Then, as the password holder, open People & Safety, open that member and choose **👑 Grant Owner**. From then on their phone opens Settings as owner from the app's Manage button."
         },
         {
           "type": "h2",
@@ -936,6 +936,36 @@
         },
         {
           "type": "h2",
+          "text": "What the open door keeps"
+        },
+        {
+          "type": "p",
+          "text": "For each member who joined through the open door, your server keeps a small record beside their account:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**How they came in**: 12 words, Google, Apple or Facebook. It sets which new-account limits they have (see A member's page, below), and adding a sign-in later changes it (below). The Onboarding Funnel counts joins by the way people first came in, which never changes.",
+            "**For a sign-in, a scrambled reference to that sign-in account**: never its email, its name or the provider's id for it. It is made with a key kept in a file beside the database, data/open-join.key, never in the database. It is what makes one sign-in account one member, and what turns a removed member's sign-in away. **For 12 words there is nothing like it**: the person is only their key and the name they chose.",
+            "**When they joined.** Their new-account limits are counted from it.",
+            "**A scrambled reference to the internet connection they joined from**, for a day, never the address. It sets how much setting up a join from that connection asks, and the ceilings (see Rate limits). For a member you remove within a day of their joining it is kept for 7 days from the join (below), and never longer for someone who deleted their own account. A standby never copies it.",
+            "**A random label shared by everyone who joined from one connection within a day of the first of them**: not the address, and not worked out from it. It makes their reports count as one, and shows you who joined together (see Reports and takedowns). It is cleared when a member who is not suspended or removed deletes their own account."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The setting up itself is not kept. The server checks it, and remembers only that it was used, until it runs out 10 minutes after it was handed out. The key it is checked with lives in memory: a restart, or a standby taking over, makes any setting up still in progress start again, which the apps do by themselves."
+        },
+        {
+          "type": "p",
+          "text": "A standby copies these records (all but the connection's reference), and so does the take-over bundle, so a server that takes over still knows who joined which way. A 12-words join needs no door key: a server without data/open-join.key turns sign-ins away and still takes 12-words joins."
+        },
+        {
+          "type": "p",
+          "text": "**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from any phone or browser where they are in their account, not only the one they joined on: the app and the web page ask the server how the account joined, and offer it while the account has only its 12 words. They can't while they are suspended or once their account is closed. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does."
+        },
+        {
+          "type": "h2",
           "text": "Who may invite"
         },
         {
@@ -1085,7 +1115,35 @@
         },
         {
           "type": "p",
-          "text": "**Removing someone from a community with an open door is a speed bump, not a wall.** Their key is shut out for good, and if they had joined within a day, new 12-words accounts from their network take longer to set up for a week. But anyone can make a new account in about a minute with new 12 words, and someone removed with their Google account can come back that way too. So what protects the community is how little a new account can do: someone who joined with 12 words has new-account limits for their first 7 days (2 posts, 4 photos and 3 new people a day), and one report from an established member hides their post until a moderator looks. Adding a sign-in puts them on the usual new-account limits."
+          "text": "**Removing someone from a community with an open door is a speed bump, not a wall.** What it does:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Their key is shut out for good: every request it signs is refused, and no door takes it back.",
+            "The sign-in account they joined with, if any, can't join again, and can't be added to another account later.",
+            "If they joined within a day, the scrambled reference to their connection is kept for 7 days from their join, and every 12-words join from that connection meanwhile asks for at least level 4 of setting up, where 5 is the most (see Rate limits). Their neighbours on that connection are asked for the same. A sign-in join from there is not slowed."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "What it does not do:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "It doesn't stop the person coming back. Anyone can make a new account in about a minute with new 12 words, and someone removed with their Google account can come back that way too. There is no way to stop that without knowing who people are, which is what the 12-words door exists to avoid.",
+            "For someone removed more than a day after joining, nothing about their connection is kept: the server had already cleared it.",
+            "A standby that takes over has no connection references, so it remembers no removed connection."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "So what protects the community is how little a new account can do. Someone who joined with 12 words has new-account limits for their first 7 days and until 3 of their posts have stayed up: 2 posts, 4 photos and 3 new people to message a day (someone who joined with a sign-in: 3, 5 and 10, for their first 3 days). One report from an established member hides their post until a moderator looks. Removing them again is one action, and a report shows who joined with them (see Reports and takedowns). Adding a sign-in puts them on the usual new-account limits."
+        },
+        {
+          "type": "p",
+          "text": "A member who deletes their own account is not removed, and nothing about their connection is kept longer. If they were not suspended or removed at the time, the sign-in they joined with is freed and can join again; a suspended or removed member's stays turned away."
         },
         {
           "type": "h2",
@@ -1232,6 +1290,7 @@
           "type": "ul",
           "items": [
             "they were a member for at least **7 days** when they reported it;",
+            "they are **established**: past the new-account limits themselves (see Members and invites), so at least 3 of their posts have stayed up. Owners, admins and moderators have no such limits. So a newcomer's report hides nothing, however long ago they joined;",
             "their **standing** is at least **half the author's**, rounded up. Standing is points: 1 for each full week as a member (up to 26), 1 for each post of theirs that is up and not hidden (up to 3), and 1 for each person they have finished a deal with (up to 3). Trust badges play no part;",
             "no moderator has already dismissed their report on this post;",
             "moderators have not kept **3 or more** posts they reported in the last **30 days** (dismissed their report on a post that is still up)."
@@ -1243,11 +1302,11 @@
         },
         {
           "type": "p",
-          "text": "So three new accounts can hide a newcomer's spam, but not the posts of someone who has been there for months: those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits."
+          "text": "So established members from three circles can hide a newcomer's spam, but not the posts of someone who has been there for months unless they are at least half as established themselves: otherwise those reports wait in the list like any other. A post they hide stops counting towards its author's 3 posts until a moderator keeps it, so it can put someone who has only just passed the new-account limits back on them."
         },
         {
           "type": "p",
-          "text": "A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**. Then a reporter also has to be **established**: past the new-account limits themselves, as well as everything above. So one report from an established member hides it, and a newcomer's report hides nothing, however long ago they joined. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's."
+          "text": "A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**: one report from an established member hides it. Their account cost nothing to make, so what protects the community is how cheaply a real member can hide its spam. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's."
         },
         {
           "type": "p",
@@ -1259,7 +1318,7 @@
         },
         {
           "type": "p",
-          "text": "Anyone can join the global community with a sign-in, so one person can make several accounts in a row from one place and fill the Market with spam. The server notes which accounts joined through the open door from the same internet connection within a day of the first of them (see Privacy and what your server can see). You are shown only that they joined together: never the connection, its address or anything else about the network. On a local community none of this exists."
+          "text": "Anyone can join the global community, with 12 secret words or a sign-in, so one person can make several accounts in a row from one place and fill the Market with spam. The server notes which accounts joined through the open door from the same internet connection within a day of the first of them (see Privacy and what your server can see). You are shown only that they joined together: never the connection, its address or anything else about the network. On a local community none of this exists."
         },
         {
           "type": "p",
@@ -1287,11 +1346,15 @@
         },
         {
           "type": "p",
-          "text": "**Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with can't join again. You type the number of accounts to confirm. A removal can't be undone."
+          "text": "**Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with, if any, can't join again. For those that joined within a day, every 12-words join from their connection asks for much more setting up, for a week from their join (see Members and invites). You type the number of accounts to confirm. A removal can't be undone."
         },
         {
           "type": "p",
-          "text": "What removal can't do: someone determined can come back with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that a few reports hide. Removing it again is one more action."
+          "text": "What removal can't do: someone determined can come back in about a minute with new 12 words, or with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that reports hide (one report, while a 12-words account is new). Removing it again is one more action."
+        },
+        {
+          "type": "p",
+          "text": "Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, when an anonymous poll for everyone on the global community closes, it says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the result, to everyone. It says nothing while the poll is open, since checking after each vote would show each vote's kind of account and its choice. An open vote, a group's poll and a poll for one person never say it."
         },
         {
           "type": "p",
@@ -1733,7 +1796,7 @@
             "**connectors.json**: your links with other communities;",
             "**genesis.json** and **community.key**: the community's founding record and a key kept for later. community.key signs nothing today. Keep both anyway;",
             "**recovery-seal.key**: the key that opens members' sign-in recovery copies. A member who connects Google, Apple or Facebook has a locked copy of their account on the server, so that sign-in can bring it back, and the server locks every such copy again with this key. A main server makes it at its first start; a standby has none of its own. It is never in state.db, so a copy of the database alone opens no member's copy. The server locks the push address of each member's phone with it too, so a copy of the database alone can't send anyone a notification. Lose it and those copies can't be opened: members' 12 words still work, and each member connects their sign-in again. Each phone gets notifications again once its app next opens. A server that took over or was restored may also hold files named **recovery-seal-retired-** and a number: keys it replaced, kept so that nothing they locked is lost. Keep them;",
-            "**open-join.key**: on the global community, the key behind its record of who joined with which sign-in account. The server keeps a scrambled reference to each Google or Apple account that joined, so that one account makes one member; this key does the scrambling. A main server makes it the first time it needs it; a standby has none of its own. It is never in state.db, so a copy of the database alone can't tell anyone which sign-in account is which member. Lose it and the server can't tell a returning account from a new one, so **joining with a sign-in is refused** until the key is back (\"This community can't check sign-ins right now\"); members already in are not affected. A server that took over or was restored may also hold files named **open-join-retired-** and a number: keys it replaced. Keep them. Servers updated to this version move the key out of state.db into this file at their first start, and say so once in the log: \"Open door: moved the key for the door's hashes out of the database\";",
+            "**open-join.key**: on the global community, the key behind its record of who joined with which sign-in account. The server keeps a scrambled reference to each Google or Apple account that joined, so that one account makes one member; this key does the scrambling. A main server makes it the first time it needs it; a standby has none of its own. It is never in state.db, so a copy of the database alone can't tell anyone which sign-in account is which member. Lose it and the server can't tell a returning account from a new one, so **joining with a sign-in is refused** until the key is back (\"This community can't check sign-ins right now\"), and so is adding a sign-in to a 12-words account; members already in are not affected, and joining with 12 words goes on, since it needs no key. A server that took over or was restored may also hold files named **open-join-retired-** and a number: keys it replaced. Keep them. Servers updated to this version move the key out of state.db into this file at their first start, and say so once in the log: \"Open door: moved the key for the door's hashes out of the database\";",
             "**local-config.json**: the admin password, two-factor sign-in, the replication token (a standby's token, or a primary's scrambled copy of it) and other settings;",
             "**takeover-envelope.json**: the server's keys and sign-in settings, locked so that only the community's owners can open them (any one of them alone), or a printed recovery code once one is made. The server makes it and keeps it up to date whenever an owner is added or removed, or those settings change. With no owner and no recovery code there is nobody to lock it to, so the file isn't there. It is a locked copy for taking over on another server later; the server still runs from the files above;",
             "**snapshots**, **logs** and **cache**: the automatic snapshots (none kept past 14 days), old log lines that **Clean Orphaned Media & Compress Logs** moved out of the log (none kept past 30 days), and pictures fetched for the Pulse, which can be fetched again."
@@ -2187,7 +2250,7 @@
             "**How often.** The routine whole copy comes at the **Routine Full Reconcile Interval** (15 minutes unless you change it) while your server's copy fits in one page. Once it takes more than one page, it comes once a day, or sooner if the standby finds its copy differs from your server's, or more has changed than the small changes carry (below).",
             "**Many changes at once.** The small changes carry up to 4 pages of changed rows at a time, and at most 32 MB. Every member's balance comes with them each time, whatever changed, and counts toward neither. When more than that has changed since the standby's last copy (thousands of new rows at once, or a standby switched off for a while), it takes a whole copy instead, by itself, and nobody is told.",
             "**Listing photos come on their own.** A copy names each listing photo instead of carrying it, and the standby fetches only the photos it doesn't have yet, checking each one as it arrives; a routine copy fetches only the new ones. A standby's first copy fetches every photo, about four a second, so a community with 30,000 listing photos takes about two hours before it is swapped in. A photo your server can no longer read is left out, and the standby keeps its own. Update a standby before or with its main server: a main server refuses to copy to an older standby, which says \"primary returned HTTP 426\" at every pull until it is updated.",
-            "**A photo that won't come.** If a photo can't be fetched (your server's photo storage not answering, or the request timing out), the copy isn't taken, and the standby keeps the photos it did fetch, so the next copy asks only for the rest. Small changes are asked for again at the next pull. A whole copy waits: a first copy or a force-resync an hour, a routine one until the next routine time. Each whole copy in a row that fails the same way waits about twice as long as the one before, at most a day, so a broken photo never has your server build whole copies for nothing every hour. **Live Backup Server** on the standby says what it is waiting on, until when, and how many photos it is keeping; **Force Full Resync** asks at once.",
+            "**A photo that won't come.** If a photo can't be fetched (your server's photo storage not answering, or the request timing out), the copy isn't taken, and the standby keeps the photos it did fetch, so the next copy asks only for the rest. Small changes are asked for again at the next pull. A whole copy waits: a first copy or a force-resync an hour; a routine one, in a community small enough to copy in one page, until the next routine time; a routine one in a community that takes more than one page (the big copy that comes once a day), the **Routine Full Reconcile Interval** (15 minutes unless you change it). Each whole copy in a row that fails at the same photo waits about twice as long as the one before, at most a day, so a broken photo never has your server build whole copies for nothing every hour. A copy that fails at a different photo than the ones before it (photos replaced while it was fetching) has made progress, and its wait starts from the first step again. **Live Backup Server** on the standby says what it is waiting on, until when, and how many photos it is keeping; **Force Full Resync** asks at once.",
             "If your main server is gone for good, the standby can take over as the main server. See the next part."
           ]
         },
@@ -2244,7 +2307,7 @@
             "writes the main server's node key (libp2p_key), so it keeps the main server's identity, and its genesis, community key and links with other communities. Its own link to the old main server goes;",
             "writes the key that opens members' sign-in recovery copies (recovery-seal.key). If the standby had a different one of its own, it keeps it as recovery-seal-retired- and a number, and at the next start locks the copies only that key opened again with the community's key. Keys locked before they carried it are still taken over: its log says \"No recovery-seal key in this envelope: members' sign-in copies will not open on this server until they reconnect. Their 12 words still work.\";",
             "installs the community's admin password and two-factor sign-in, and the record of the recovery code;",
-            "on the global community, writes open-join.key, the key its record of who joined with which sign-in account is made with, and brings back the newest of those records (the rest are in the standby's copy). If the standby had a different one of its own, it keeps it as open-join-retired- and a number. Keys that don't carry it are still taken over: the new main server then refuses anyone joining with a sign-in until the key is back, and its log says so in one line starting \"Open door: this server holds …\";",
+            "on the global community, writes open-join.key, the key its record of who joined with which sign-in account is made with, and brings back the newest of those records (the rest are in the standby's copy). If the standby had a different one of its own, it keeps it as open-join-retired- and a number. Keys that don't carry it are still taken over: the new main server then refuses anyone joining with a sign-in until the key is back (joining with 12 words goes on), and its log says so in one line starting \"Open door: this server holds …\";",
             "brings back the owners and admins (their member accounts must be in the standby's copy of the database; any that are not are named on the result screen);",
             "brings back the web address, with its tunnel token;",
             "installs the community's own settings, as the standby last copied them: its name, place and contacts, currency display, thresholds, directory choices (a community that kept its contact email, phone or member count out of the directory still does, whatever the standby chose for its own), service area, ledger audit baseline, pricing guide and snapshot schedule. Nothing of the standby's own comes from them, and it keeps its own admin IP allowlist;",
@@ -2511,6 +2574,10 @@
         {
           "type": "p",
           "text": "Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many \"balances that are not a number\" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up."
+        },
+        {
+          "type": "p",
+          "text": "That includes the Commons pot's own row, COMMONS_POOL. If it holds no number of Beans when the server starts (text, nothing, or Infinity), the server treats the pot as unknown and says so in its log with a 🛑 line. It never writes 0 or anything else over the row, and no Beans move at all until you mend it: no deal, refund, removal, account deletion or payment from the Commons. Members who try are told \"Payments are paused on this community while its admins fix a problem with its accounts.\" A Decision that moves Beans (a grant or a write-off) waits, and is carried out on the first check after the row is mended, and no new grant can be proposed meanwhile. A removal whose grace window ends during the pause waits too, and once the row is mended its grace window opens again for 24 hours, so an admin can still halt it. Everything that moves no Beans still works: other Decisions go ahead, an admin can halt a vote or a removal, and a moderator can take down a listing with no deal on it. Mend it as soon as you see it, as below."
         },
         {
           "type": "p",
@@ -2844,9 +2911,9 @@
         {
           "type": "ul",
           "items": [
-            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.",
+            "**The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.",
             "**Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.",
-            "**The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: from the 10th join an hour from one address, each new account's setting-up takes a little longer, in steps at the 10th, 30th, 100th and 200th, and a step more when the whole community is taking hundreds of 12-words accounts in 10 minutes. A join is refused only past 500 12-words accounts an hour or 2,000 a day from one address (the sign-in way stays open to them), or 1,000 an hour or 5,000 a day by sign-in. Each of these numbers can be changed with a node_config row named doorNumbers. and the number's name (in the server's code, engine/door-signal.ts); there is no Settings screen for them, and a standby does not copy them.",
+            "**The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.",
             "**New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.",
             "**Settings**: 300 requests a minute per internet address.",
             "**Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.",
@@ -2858,6 +2925,53 @@
           "type": "img",
           "src": "images/appliance-gateway.webp",
           "alt": "Gateway switches and rate limits under Gateway & Peers"
+        },
+        {
+          "type": "h2",
+          "text": "The open door's numbers"
+        },
+        {
+          "type": "p",
+          "text": "On a community whose door is open (the global community), a 12-words join asks the person's phone or browser for a moment of setting-up work. It runs while they type their name, so at ordinary times nobody waits. The work has levels from 0 to 5, and each level doubles it. In tests on a phone emulator, levels 0 to 2 took under a second, level 3 about 3 to 6 seconds and level 5 about 6 to 26 seconds; an old phone takes longer, and none has been measured yet. From level 3 the app tells the person about how long it will take on their phone, with the sign-in way beside it. A sign-in join asks no work at all until a connection is very busy. The work never decides who gets in: anyone with a computer can do it quickly. It turns a crowd's wait into seconds instead of a refusal, and makes a flood of joins cost whoever makes them."
+        },
+        {
+          "type": "p",
+          "text": "How the level is set:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A 12-words join**: how many of the connection's steps it has reached, plus how many of the community's, at most 5. From a connection where a newcomer joined in the last 7 days and was removed within a day of joining (see Members and invites), at least removedNetworkLevel.",
+            "**A sign-in join**: no work before the connection's signInWorkFrom-th join in the hour. From there, the connection's steps less signInDiscount, never below 0."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "The numbers, by name, with their defaults:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**networkSteps**, 10,30,100,200: the joins from one connection in the last hour, both ways in and this one included, at which each of the connection's steps starts.",
+            "**nodeSteps**, 500,2000,5000: the 12-words joins on the whole community in the last 10 minutes, this one included, at which each of the community's steps starts. Counted in memory, so a restart starts it again at 0.",
+            "**signInWorkFrom**, 30: the join from one connection in an hour from which a sign-in join asks for any work.",
+            "**signInDiscount**, 2: how many steps less a sign-in join asks for.",
+            "**removedNetworkLevel**, 4: the least a 12-words join asks for from a connection where a newcomer joined in the last 7 days and was removed within a day of joining.",
+            "**wordsPerHour**, 500, and **wordsPerDay**, 2000: past these many 12-words accounts from one connection, a 12-words join from it is refused, with how long to wait. The sign-in way stays open there.",
+            "**signInPerHour**, 1000, and **signInPerDay**, 5000: the same for sign-ins. Each way counts only its own joins."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "To change one, add a row to the server's node_config named doorNumbers. and the name, with a whole number; for networkSteps and nodeSteps, the same number of rising whole numbers, separated by commas. For example, to let up to 1,000 12-words accounts an hour come from one connection, run on the server: docker compose exec -u node beanpool-node node -e \"require('better-sqlite3')('/data/state.db').prepare(\\\"INSERT INTO node_config (key, value) VALUES ('doorNumbers.wordsPerHour', '1000') ON CONFLICT(key) DO UPDATE SET value = excluded.value\\\").run()\""
+        },
+        {
+          "type": "p",
+          "text": "The server reads them at each join, so there is nothing to restart. To go back to the default, delete the row: docker compose exec -u node beanpool-node node -e \"require('better-sqlite3')('/data/state.db').prepare(\\\"DELETE FROM node_config WHERE key = 'doorNumbers.wordsPerHour'\\\").run()\""
+        },
+        {
+          "type": "p",
+          "text": "A value that isn't right (not a whole number, a list of the wrong length or not rising, a name that isn't one of these) is ignored and the default kept, and the log says so once. There is no Settings screen for them. The rows are this server's own: a standby does not copy them and a take-over does not carry them, so after a take-over the door runs on the defaults until you add them again."
         },
         {
           "type": "h2",
@@ -2939,7 +3053,7 @@
         },
         {
           "type": "p",
-          "text": "A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again."
+          "text": "A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal."
         },
         {
           "type": "p",
@@ -2957,7 +3071,8 @@
           "type": "ul",
           "items": [
             "\"Gateway rate limit exceeded\": the gateway.",
-            "\"Too many attempts\": sign-in and recovery attempts, or checking invite codes.",
+            "\"Too many attempts\": sign-in and recovery attempts, checking invite codes, or the open door's 600 requests a minute from one address.",
+            "\"A very large number of 12-words accounts were made from your network\", or \"Too many new accounts have joined from your network\": the open door's ceilings, for 12 words and for sign-ins.",
             "\"Too many administrative requests\": Settings, 300 a minute.",
             "\"You're sending messages too fast\": chats, direct messages included.",
             "\"You have made 5,000 changes today\": the member's changes for the day. \"You have made 50,000 changes today for the enterprises you keep\": one keeper's, for all their enterprises.",
@@ -2998,7 +3113,12 @@
         {
           "type": "ul",
           "items": [
-            "**Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored."
+            "**Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. Each one is also locked to its sender, its message id, its chat and, for a reply, the message it answers: an app refuses one the server shows as the other person's, stores again under a new id, or points at another message; refuses or marks one moved to another chat (marked when it carries the chat it came from, as joining two chats into one leaves it; a line sent before this update that a join moved is marked as from an older app instead); and marks one shown out of order. Keep every message's id, author, metadata and stored text exactly as they are. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it.",
+            "Anything in a direct message that is not locked shows in both apps as nobody's words, never as a member's: in the chat, in a reply's quote of it and in the chat list. The message you send a member from the admin page is not locked, by design: they see it marked as from the community's admins and readable by the server, never as a private message, and a reply quotes it as from the admins.",
+            "Messages an older app sent before this update still open, and every one is marked as sent from an older version of the app, since nothing in them proves who wrote them, and so is a reply's quote of one. Those sent without the lock stay readable as they were stored.",
+            "What the server can still do to a direct message: hold it back, deliver it late, or make it read \"This message was deleted\"; show an edit's earlier words; add or take away an emoji reaction in either member's name (reactions aren't locked); and add its own notices to the chat, which show as notices (in the chat, in a reply's quote and in the chat list), never as a member's words.",
+            "A direct message can't be turned into a group's, an event's or an enterprise's chat: an app that has seen it as a direct message, or holds an encrypted line of it, keeps it one whatever type the server gives it, and ignores the change. An app that has never seen it, and is given none of its encrypted lines, can't tell it from a group's chat. In the web app that includes a browser signed out since, a private window, or one whose site data was cleared; the phone app keeps its list.",
+            "All of this rests on the apps having each member's real key, which they get from this server. In the web app it also rests on the app itself, which this server sends to members' browsers; the phone app comes from the app store."
           ]
         },
         {
@@ -3013,9 +3133,10 @@
           "type": "ul",
           "items": [
             "members' names, profiles, posts, photos, deals, balances and every trade;",
-            "**group chats, event chats and enterprise chats**: these are not encrypted;",
+            "**group chats, event chats and enterprise chats**: these are not encrypted, and the server could write in them in anyone's name;",
             "the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;",
-            "who messaged whom, and when, and their emoji reactions, even for direct messages;",
+            "who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;",
+            "the messages you send members from the admin page;",
             "**how each member voted**."
           ]
         },
@@ -3037,7 +3158,7 @@
         },
         {
           "type": "p",
-          "text": "A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them."
+          "text": "A member who connects Google, Apple or Facebook in the app, and everyone who joins the global community with a sign-in or adds one to a 12-words account, has a locked copy of their account on the server, so that sign-in can bring the account back. The server locks every copy again with data/recovery-seal.key, which is never in the database. So a copy of the database, a snapshot, a backup that is not locked or a standby's disk opens none of them."
         },
         {
           "type": "p",
@@ -3068,7 +3189,7 @@
           "items": [
             "the community's name, its counts and totals (members, posts, trades, the Commons pot), what it has switched on, and its health summary;",
             "the price guide: things and their usual prices, with no people or posts in it;",
-            "what it takes to join or come back: whether an invite code works and who sent it, whether a name is taken here, and whether a key is a member here, but never that member's name. For a sign-in recovery, the one member whose whole name was typed, with their key and no photo. The name checks are limited to 15 a minute from one internet address;",
+            "what it takes to join or come back: whether an invite code works and who sent it, whether a name is taken here, and whether a key is a member here, but never that member's name. For a sign-in recovery, the one member whose whole name was typed, with their key and no photo. The name checks are limited to 15 a minute from one internet address, or, while someone joins through the open door, to the door's own limits (see Rate limits);",
             "the pictures an app shows without signing: a profile picture by the member's key, a post's photos at their own addresses (see below), the locked attachments of direct messages, and the pictures of Pulse items."
           ]
         },

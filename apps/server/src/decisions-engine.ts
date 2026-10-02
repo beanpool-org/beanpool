@@ -684,8 +684,13 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
     return { heldCents, inflowCents, capCents: heldCents + inflowCents };
 }
 
+/** What a member reads when the Commons figures aren't numbers, so there is no cap to quote. */
+export const GRANT_CAP_UNKNOWN = "Grants can't be proposed until the Commons figures are fixed. Nothing has moved.";
+
 /** The sentence a member sees when their grant is over the cap. */
 export function grantCapRefusal(cap: CommonsGrantCap): string {
+    // A cap that isn't a finite number has no figure to quote ("Infinity Beans"); say what is wrong instead.
+    if (!Number.isFinite(cap.capCents)) return GRANT_CAP_UNKNOWN;
     const holds = cap.heldCents < 0 ? `owes ${beansText(cap.heldCents)} Beans` : `holds ${beansText(cap.heldCents)} Beans`;
     return `This grant is bigger than the Commons could pay: it ${holds} and took in ${beansText(cap.inflowCents)} Beans `
         + `over the last ${GRANT_CAP_WINDOW_DAYS} days, so the most you can ask for now is ${beansText(Math.max(0, cap.capCents))} Beans.`;

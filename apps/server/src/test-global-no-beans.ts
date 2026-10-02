@@ -16,7 +16,10 @@
  *      every ledger primitive refuses on its own. The ledger audit is clean and nothing was written.
  *   3. That database, now recorded as global, refuses to boot as local; a standby of it doesn't refuse; started
  *      once with NODE_PROFILE_ALLOW_CHANGE_FROM=global it converts.
- *   4. The local profile: unchanged. Beans switched off and back on at runtime first, before anything moves. A send
+ *      The daily Wash Trading & Sybil metrics audit does not run (no member walk, no system_metrics row), and says
+ *      why once; with no metrics row, no health flag that reads them is raised.
+ *   4. The local profile: unchanged. Beans switched off and back on at runtime first, before anything moves (the
+ *      metrics audit follows the switch at run time: off, it doesn't run; on, it runs and writes its rows). A send
  *      fails for the old reason, a price is kept, the routes answer, and a real escrow opens.
  *   5. Now the ledger has moved: `nodeProfile.beans=false` is refused at runtime, with no reboot (the "never moved"
  *      seen in 4 did not outlive Beans coming back on), and at boot (the log says why), and Beans stay on;
@@ -276,6 +279,19 @@ async function main() {
         'no transaction, no escrow, every balance 0: nothing moved');
     assert(profile.ledgerHistory() === null, 'so this ledger has never moved');
 
+    // The daily Wash Trading & Sybil metrics audit walks every active member synchronously (825 ms at 6,403 members in
+    // the global load rehearsal, the node answering nothing meanwhile). Every number it computes is about Beans, so
+    // where they are off it does not run: no walk, no system_metrics row, and it says why once, not every day.
+    const metricsBefore = count('system_metrics');
+    const metricsRuns = await capture(() => { se.runWashSybilMetricsAudit(); se.runWashSybilMetricsAudit(); });
+    assert(!metricsRuns.error && se.runWashSybilMetricsAudit() === null, `the metrics audit returns nothing on the global profile (${String(metricsRuns.error ?? 'ok')})`);
+    assert(!metricsRuns.logs.some(l => l.includes('Running Wash Trading')), 'it never starts its walk over the members');
+    assert(count('system_metrics') === metricsBefore, `and writes no system_metrics row (${metricsBefore} → ${count('system_metrics')})`);
+    assert(metricsRuns.logs.filter(l => l.includes('Beans are off') && l.includes('metrics audit')).length === 1,
+        `the log says why, once for two runs (${JSON.stringify(metricsRuns.logs)})`);
+    const metricFlags = se.getCommunityHealth().flags.filter(f => ['aggregate_spike', 'cohort_velocity', 'delinquency'].includes(f.type));
+    assert(metricFlags.length === 0, `with no metrics row the health flags that read them raise nothing (${JSON.stringify(metricFlags)})`);
+
     // ── 3. The record now says global ──
     console.log('\n── 3. this database is a global node now ──');
     delete process.env.NODE_PROFILE;
@@ -298,8 +314,15 @@ async function main() {
     // not outlive them, or 5 below would find the ledger "never moved" after it has.
     setOverride('beans', 'false');
     assert(getProfileSwitches().beans === false, 'switched off at runtime on a ledger that has never moved, Beans are off');
+    const metricsOff4 = count('system_metrics');
+    assert(se.runWashSybilMetricsAudit() === null && count('system_metrics') === metricsOff4,
+        'and the metrics audit, reading the switch at run time, does not run: no system_metrics row');
     clearOverrides();
     assert(getProfileSwitches().beans === true, 'and switched back on, they are on');
+    const metricsOn4 = count('system_metrics');
+    const metricsRun4 = await capture(() => se.runWashSybilMetricsAudit());
+    assert(metricsRun4.logs.some(l => l.includes('Running Wash Trading')) && count('system_metrics') === metricsOn4 + 4,
+        `with Beans on, the metrics audit runs again, with no restart, and writes its four rows (${metricsOn4} → ${count('system_metrics')})`);
     const info4 = await call('GET', '/api/community/info', null, alice);
     assert(info4.body.profile === 'local' && info4.body.features?.beans === true && info4.body.features?.escrow === true && info4.body.features?.enterprises === true,
         `info: local, Beans, escrow and enterprises on (${JSON.stringify(info4.body.features)})`);

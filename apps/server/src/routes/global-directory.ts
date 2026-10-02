@@ -95,6 +95,69 @@ function openKnockFor(_actor: string | undefined): null {
     return null;
 }
 
+/** The "Find your community" card's body (GET /api/global/home). */
+export interface LandingCard {
+    /** Where the point came from: the request, the member's own area, or neither (no communities, no count). */
+    point: 'request' | 'area' | null;
+    communities: ReturnType<typeof listCommunities>['communities'];
+    communityCount: number;
+    nearbyPosts: { radiusKm: number; count: number; more: boolean } | null;
+    watches: ReturnType<typeof listPlaceWatches> | null;
+    knock: null;
+    directoryFetchedAt: string | null;
+}
+
+/**
+ * The landing card for this reader at this point: GET /api/global/home's body, and the Home screen's `find` card, which
+ * is "exactly today's card, assembled in-process" (routes/home.ts; DESIGN-home-dashboard §3.1, §5.1). `actor` is the
+ * verified signer or undefined, `guest` whether they read as a guest (viewer.ts viewerTier): a guest's count is the
+ * coarse one, and only a member of this node gets their watches.
+ */
+export function landingCardFor(actor: string | undefined, asked: Point | null, guest: boolean): LandingCard {
+    const member = !!actor && isNodeMember(actor);
+    // The point the phone sent, else the member's own coarse area (G4), which only they can read back anyway.
+    let point: Point | null = asked;
+    let from: 'request' | 'area' | null = point ? 'request' : null;
+    if (!point && member) {
+        const area = readMemberArea(actor!);
+        if (area) {
+            point = { lat: area.lat, lng: area.lng };
+            from = 'area';
+        }
+    }
+    const status = readMirrorStatus();
+    let nearbyPosts: LandingCard['nearbyPosts'] = null;
+    if (point) {
+        // The listing's own read, with the reader's own visibility (hidden, group and paused posts as the Market
+        // shows them), cut at one past the cap: a count, never a second copy of the listing's rules. Anyone who
+        // doesn't read as a member gets the listing's visitors' read: for nobody in particular, and measured from
+        // each post's area (`coarse`). The count then changes only where the circle crosses an area's centre, so
+        // bisecting it from any number of points finds the area, never the post (the deciding review of #1159
+        // found the post to the metre from the exact count). Where visitors don't get the listings' view (a local
+        // community whose operator turned the directory on), its listings are its members' (2026-09-28), and this
+        // public count is the one way left to find them, so a non-member's count is the coarse one there too
+        // (#1286's deciding review, 4125322427). Exact counts are for members.
+        const posts = getPosts({
+            types: ['offer', 'need', 'poll', 'event'], viewerPubkey: guest ? undefined : actor, limit: NEARBY_POSTS_CAP + 1,
+            near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM }, coarse: guest || undefined,
+            // A city's box can hold any number of posts: measured at most this many (DoS review F5), as the listing.
+            measureAtMost: ONE_PASS_MAX_MEASURED,
+        });
+        nearbyPosts = { radiusKm: NEARBY_POSTS_RADIUS_KM, count: Math.min(posts.length, NEARBY_POSTS_CAP), more: posts.length > NEARBY_POSTS_CAP };
+    }
+    return {
+        point: from,
+        // Nearest first puts the communities with a place first: none with no distance is "near you".
+        communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities.filter(c => c.distanceKm !== null) : [],
+        communityCount: listedCommunityCount(),
+        nearbyPosts,
+        // null: not a member's read, so no watches to show; [] a member with none.
+        watches: member ? listPlaceWatches(actor!) : null,
+        knock: openKnockFor(actor),
+        directoryFetchedAt: status.fetchedAt,
+    };
+}
+
 export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
     const router = new Router();
 
@@ -129,51 +192,8 @@ export function createGlobalDirectoryRoutes(_deps: RouteDeps): Router {
     router.get('/api/global/home', async (ctx) => {
         const asked = parsePoint(ctx.query);
         if (!asked.ok) return badRequest(ctx, asked.error);
-        const actor = ctx.state.actor as string | undefined;
-        const member = !!actor && isNodeMember(actor);
-        // The point the phone sent, else the member's own coarse area (G4), which only they can read back anyway.
-        let point: Point | null = asked.value;
-        let from: 'request' | 'area' | null = point ? 'request' : null;
-        if (!point && member) {
-            const area = readMemberArea(actor!);
-            if (area) {
-                point = { lat: area.lat, lng: area.lng };
-                from = 'area';
-            }
-        }
-        const status = readMirrorStatus();
-        let nearbyPosts: { radiusKm: number; count: number; more: boolean } | null = null;
-        if (point) {
-            // The listing's own read, with the reader's own visibility (hidden, group and paused posts as the Market
-            // shows them), cut at one past the cap: a count, never a second copy of the listing's rules. Anyone who
-            // doesn't read as a member gets the listing's visitors' read: for nobody in particular, and measured from
-            // each post's area (`coarse`). The count then changes only where the circle crosses an area's centre, so
-            // bisecting it from any number of points finds the area, never the post (the deciding review of #1159
-            // found the post to the metre from the exact count). Where visitors don't get the listings' view (a local
-            // community whose operator turned the directory on), its listings are its members' (2026-09-28), and this
-            // public count is the one way left to find them, so a non-member's count is the coarse one there too
-            // (#1286's deciding review, 4125322427). Exact counts are for members.
-            const guest = viewerTier(ctx) === 'guest';
-            const posts = getPosts({
-                types: ['offer', 'need', 'poll', 'event'], viewerPubkey: guest ? undefined : actor, limit: NEARBY_POSTS_CAP + 1,
-                near: { ...point, radiusKm: NEARBY_POSTS_RADIUS_KM }, coarse: guest || undefined,
-                // A city's box can hold any number of posts: measured at most this many (DoS review F5), as the listing.
-                measureAtMost: ONE_PASS_MAX_MEASURED,
-            });
-            nearbyPosts = { radiusKm: NEARBY_POSTS_RADIUS_KM, count: Math.min(posts.length, NEARBY_POSTS_CAP), more: posts.length > NEARBY_POSTS_CAP };
-        }
         ctx.set('Cache-Control', 'private, no-store');
-        ctx.body = {
-            point: from,
-            // Nearest first puts the communities with a place first: none with no distance is "near you".
-            communities: point ? listCommunities({ point, limit: HOME_COMMUNITIES, offset: 0 }).communities.filter(c => c.distanceKm !== null) : [],
-            communityCount: listedCommunityCount(),
-            nearbyPosts,
-            // null: not a member's read, so no watches to show; [] a member with none.
-            watches: member ? listPlaceWatches(actor!) : null,
-            knock: openKnockFor(actor),
-            directoryFetchedAt: status.fetchedAt,
-        };
+        ctx.body = landingCardFor(ctx.state.actor as string | undefined, asked.value, viewerTier(ctx) === 'guest');
     });
 
     router.get('/api/global/watches', async (ctx) => {

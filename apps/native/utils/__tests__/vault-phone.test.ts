@@ -765,7 +765,9 @@ describe('the source: only a build without a vault asks a community for a nonce,
             .filter(({ src }) => /signInWith(Provider|Google|Apple|Facebook)\(/.test(src))
             .map(({ rel }) => rel)
             .sort();
-        expect(callers).toEqual(['utils/global-join.ts', 'utils/sso-recovery.ts', 'utils/sso-sheet-connect.ts']);
+        // utils/join-link.ts is the global door's too: adding a sign-in later for a 12-words member (S4), with the link's
+        // own nonce or the vault's ticket, as the door's join does.
+        expect(callers).toEqual(['utils/global-join.ts', 'utils/join-link.ts', 'utils/sso-recovery.ts', 'utils/sso-sheet-connect.ts']);
     });
 });
 

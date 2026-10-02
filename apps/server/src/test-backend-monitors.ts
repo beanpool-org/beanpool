@@ -49,14 +49,14 @@ async function main() {
         adminSetTier(user2, 'Resident'); // floor -200
 
         // Run the audit
-        const metrics1 = runWashSybilMetricsAudit();
+        const metrics1 = runWashSybilMetricsAudit()!;
         assert(metrics1.totalNegative === 150, `Total negative balance metric computed: 150 (got ${metrics1.totalNegative})`);
         assert(metrics1.accountsNearFloor === 0, `No accounts near floor yet (got ${metrics1.accountsNearFloor})`);
 
         // Move user1 closer to their floor (-195, floor is -200)
         db.prepare("UPDATE accounts SET balance = -195 WHERE public_key = ?").run(user1);
         reconcileLedgerFromDb();
-        const metrics2 = runWashSybilMetricsAudit();
+        const metrics2 = runWashSybilMetricsAudit()!;
         assert(metrics2.accountsNearFloor === 1, `1 account near floor detected (got ${metrics2.accountsNearFloor})`);
 
         // --- Test 2: Delinquency report ---
@@ -67,7 +67,7 @@ async function main() {
 
         // Perform a recent transaction for user1 (makes them active, not dormant)
         tx(user1, user2, 5, 0); // 0 days ago (recent)
-        const metrics3 = runWashSybilMetricsAudit();
+        const metrics3 = runWashSybilMetricsAudit()!;
         assert(metrics3.delinquentCount === 0, `0 delinquent accounts after recent transaction (got ${metrics3.delinquentCount})`);
 
         // --- Test 3: Cohort Velocity Report ---
@@ -81,7 +81,7 @@ async function main() {
 
         // Run metrics audit. Since all 4 accounts in the same week cohort reached floor <= -600 in <14 days,
         // cohortAnomalies should be flagged.
-        const metrics4 = runWashSybilMetricsAudit();
+        const metrics4 = runWashSybilMetricsAudit()!;
         assert(metrics4.cohortAnomalies === 1, `Cohort velocity anomaly detected (got ${metrics4.cohortAnomalies})`);
 
         // --- Test 4: getCommunityHealth Alerts ---

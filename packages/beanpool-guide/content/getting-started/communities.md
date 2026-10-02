@@ -23,11 +23,11 @@ Your key, your 12 words and your name come with you. Your posts, chats and trade
 The global community needs no invite, and you join it with the account you already have: the same key and the same 12 words. The app offers it only when the global community is open.
 
 - Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.
-- Sign in once with Google, Apple (on an iPhone) or Facebook. The app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
+- Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.
 - Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.
 - Then choose your photo for the global community, as for any new community.
 
-Nothing changes in your other communities, and your 12 words stay the same. The sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working.
+Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See "Getting your account back". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your account has one way back** card, as for anyone who joins with 12 words (see "Joining a community").
 
 If the app says **This sign-in already joined the global community with a different BeanPool account**, that sign-in has its own account there. Use a different sign-in: one sign-in account makes one account in the global community.
 

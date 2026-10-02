@@ -22,7 +22,7 @@ import {
     recordActivity,
     markConversationRead, getUnreadCounts,
     registerPushToken, removePushToken, applyPushLeave,
-    getMemberPreferences, setMemberPreferences, setHolidayMode,
+    getMemberPreferences, setMemberPreferences, setHolidayMode, homePreferencesNamed,
     getMemberStats,
     dispatchPushNotification,
     exportLedgerFor, canOperateTreasury,
@@ -1829,7 +1829,8 @@ router.get('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'You may only read your own preferences' };
         return;
     }
-    ctx.body = getMemberPreferences(publicKey);
+    // The Home keys (home.layout, interests) only when the verified signer is the member, whatever ENFORCE_READ_AUTH says.
+    ctx.body = getMemberPreferences(publicKey, ctx.state.actor as string | undefined);
 });
 
 router.post('/api/members/preferences', async (ctx) => {
@@ -1848,10 +1849,10 @@ router.post('/api/members/preferences', async (ctx) => {
     // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
     // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
     // saving the rest, so a member never believes they set something they didn't. Holiday mode is
-    // POST /api/members/holiday's alone, below.
+    // POST /api/members/holiday's alone, below. A saved Home key is answered with what was kept of it.
     try {
         const success = setMemberPreferences(activeKey, preferences);
-        ctx.body = { success };
+        ctx.body = success ? { success, ...homePreferencesNamed(activeKey, preferences) } : { success };
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: memberErrorText(e, 'Failed to update preferences') };

@@ -51,13 +51,22 @@
  *
  * ## A phone writes nothing on a branch that hasn't made every drop it stands by (Addendum 2, ruling 2)
  *
- * After "Take @X's history" the drops of the abandoned statements are not on the new chain. They go into the next
+ * After "Follow the server's history" the drops of the abandoned statements are not on the new chain. They go into the next
  * generation this phone makes, before it writes, as a removal by hand does: `toDrop` includes every key in `dropped`
  * whose dropping statement is not on the chain.
  *
  * ## Starting again (design addendum (c), signed off 2026-10-02)
  *
- * A phone with no history, when nobody holds the current key, may start again ({@link startNamesAgain}, asked first): it
+ * ## Following the server's history (design Addendum 3)
+ *
+ * One asked action for a fork and for a start again ({@link followNamesServer}): the chain is cut back to the last
+ * statement it shares with the server's path, and the rest of that path is adopted for its drops and its place only
+ * (every signature checked; no trust, no key, no scan). Before this phone writes again it makes its own statement
+ * dropping every key it stands by that the new path hasn't dropped. The walk never takes an abandoned statement.
+ * A drop this phone stands by is replaced only by a later drop on the same chain or by this phone's own statement (a),
+ * and a removal by hand is done only when this phone's own statement dropping the key lands (b).
+ *
+ * A phone with no history, when nobody holds the current key, may start again (the same follow, asked first): it
  * takes the server's whole path from the first statement to the current one onto its chain, for its drops and its place
  * only (each signature checked; no trust, no key, no notice), then makes an ordinary new key off it. So every chain is a
  * path from a first statement: an old key's holder, checked later, can send the old keys (the locked entries open), a
@@ -335,7 +344,7 @@ export interface NamesPin {
     dropped: Record<string, string>;
     /** The statements this phone accepted, in order; the head is the last. */
     chain: NamesChainLink[];
-    /** Statements accepted, then left behind by "Take @X's history" (design §4.3.9); usually empty. */
+    /** Statements accepted, then left behind by "Follow the server's history" (Addendum 3); usually empty. */
     abandoned: string[];
     /** The keys this phone holds, by generation id (hex): only ids in `chain` or `abandoned`. */
     ring: Record<string, string>;
@@ -359,7 +368,7 @@ function readLink(raw: unknown): NamesChainLink | null {
 /**
  * The pin as this phone saved it, for `me`, or null when it isn't one (another phone's, another version, or damaged:
  * then the phone starts from an empty pin, which trusts nobody but itself). Its chain must link, parent to child,
- * number by number, from a first statement (a start again takes the whole path too: {@link startNamesAgain}).
+ * number by number, from a first statement (a start again takes the whole path too: {@link followNamesServer}).
  */
 export function readNamesPin(raw: unknown, me: string): NamesPin | null {
     if (!raw || typeof raw !== 'object') return null;
@@ -474,6 +483,8 @@ export type NamesPlan =
         canCheck?: boolean;
         /** untrusted_maker on an empty chain: nobody holds the current key, so this phone may start again (asked first). */
         canStartAgain?: boolean;
+        /** different_history: the server's path is whole, so this phone may follow it (asked first; Addendum 3). */
+        canFollow?: boolean;
         /** rolled_back: what the server offers, and this phone's head. */
         offered?: { id: string; n: number } | null;
         newest?: { id: string; n: number };
@@ -544,7 +555,8 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     }
 
     // The records, checked here. A statement already on this chain was checked when it was accepted.
-    const accepted = new Set([...pin0.chain.map((l) => l.id), ...pin0.abandoned]);
+    // Only chain ids skip the signature check; an abandoned statement is checked like any other (Addendum 3, :547).
+    const accepted = new Set(pin0.chain.map((l) => l.id));
     const rawGens = Array.isArray(state.generations) ? state.generations : [];
     if (rawGens.length > NAMES_TRUST_BOUNDS.generations) notices.push({ kind: 'too_many', what: 'generations' });
     const gens = new Map<string, NamesGeneration>();
@@ -583,10 +595,10 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     const droppedOnChain = (k: string) => k in D && position.has(D[k]);
 
     const accept = (g: NamesGeneration) => {
-        if (abandoned.includes(g.id)) abandoned.splice(abandoned.indexOf(g.id), 1);
         chain.push({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
         position.set(g.id, g.n);
-        if (pending && pending.id === g.id) {
+        const mine = !!pending && pending.id === g.id;
+        if (pending && mine) {
             ring[g.id] = pending.key;
             pending = null;
         }
@@ -595,13 +607,15 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
             if (d === me) { notices.push({ kind: 'dropped_me', maker: g.maker, n: g.n }); continue; }
             if (d === g.maker) continue;
             if (T.delete(d)) out.push(d);
-            D[d] = g.id;
+            // (a) A drop this phone stands by is replaced only by a later drop on this chain, or by its own statement.
+            if (!(d in D) || position.has(D[d]) || mine) D[d] = g.id;
         }
         if (out.length && g.maker !== me) {
             notices.push({ kind: 'dropped', maker: g.maker, n: g.n, keys: out });
             for (const d of out) if (listed.has(d)) notices.push({ kind: 'check_again', who: d, n: g.n });
         }
-        manualDrops = manualDrops.filter((k) => !g.drops.includes(k));
+        // (b) A removal by hand is done only when this phone's own statement dropping the key lands.
+        if (mine) manualDrops = manualDrops.filter((k) => !g.drops.includes(k));
     };
 
     const histories = new Map<string, Set<string>>();
@@ -638,9 +652,8 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
             const head = chain[chain.length - 1];
             const want = head ? head.id : '-';
             const n = head ? head.n + 1 : 1;
-            // An abandoned statement is taken again only when it is on the server's current path (the server came back to
-            // the history this phone left, round 7): it passes rule 1/1b like any statement, and re-applies its drops.
-            const cands = (byParent.get(want) ?? []).filter((g) => g.n === n && !position.has(g.id) && (!abandoned.includes(g.id) || onServerPath.has(g.id)))
+            // An abandoned statement is never a candidate: crossing back is Follow, asked (Addendum 3).
+            const cands = (byParent.get(want) ?? []).filter((g) => g.n === n && !position.has(g.id) && !abandoned.includes(g.id))
                 .sort((a, b) => a.id.localeCompare(b.id));
             if (cands.length === 0) break;
             const pick = cands.find((g) => onServerPath.has(g.id)) ?? cands.find((g) => T.has(g.maker)) ?? cands[0];
@@ -702,9 +715,9 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
         if (!ahead) notices.push({ kind: 'other_history', who });
     }
 
-    // A by-hand removal this chain has already made is done. toDrop: trusted keys the server no longer lists, the ones
-    // removed by hand, and every drop this phone stands by that this chain hasn't made (Addendum 2, ruling 2).
-    manualDrops = manualDrops.filter((k) => k !== me && !droppedOnChain(k));
+    // toDrop: trusted keys the server no longer lists, the ones removed by hand (cleared only by this phone's own
+    // statement, (b)), and every drop this phone stands by that this chain hasn't made (Addendum 2, ruling 2).
+    manualDrops = manualDrops.filter((k) => k !== me);
     const standing = Object.keys(D).filter((k) => k !== me && !droppedOnChain(k));
     const toDrop = [...new Set([...[...T].filter((k) => k !== me && !listed.has(k)), ...manualDrops, ...standing])].sort().slice(0, NAMES_TRUST_BOUNDS.keys);
     const pin: NamesPin = {
@@ -746,16 +759,18 @@ export function planNames(pin: NamesPin, state: NamesServerState, toDrop: string
         return { kind: 'wait', keyId: head.id, n: head.n, holders, newKeyNeeded: needNew, canMakeNew: !!state.nobodyHoldsKey || !othersHold, drops: toDrop };
     }
     if (position.has(cur.id)) return { kind: 'refused', reason: 'rolled_back', offered: { id: cur.id, n: cur.n }, newest: { id: head.id, n: head.n } };
-    if (pin.abandoned.includes(cur.id)) return { kind: 'refused', reason: 'different_history' };
-    // The server's current is not on this chain: walk back from it to where it meets this chain.
+    // The server's current is not on this chain: walk back from it to where it meets this chain. A different history
+    // says whether the server's path is whole: then this phone may follow it (asked; Addendum 3).
     const back = pathBack(gens, curId);
+    const different = { kind: 'refused' as const, reason: 'different_history' as const, canFollow: back.complete };
+    if (pin.abandoned.includes(cur.id)) return different;
     const meet = back.ids.findIndex((id) => position.has(id));
     // No statement in common: a different history where the server's path is whole, else a gap in it.
-    if (meet < 0) return { kind: 'refused', reason: back.complete ? 'different_history' : 'missing_record' };
-    if (back.ids[meet] !== head.id) return { kind: 'refused', reason: 'different_history' };
+    if (meet < 0) return back.complete ? different : { kind: 'refused', reason: 'missing_record' };
+    if (back.ids[meet] !== head.id) return different;
     const next = gens.get(back.ids[meet - 1]);
     if (!next) return { kind: 'refused', reason: 'missing_record' };
-    if (pin.trusted.includes(next.maker)) return { kind: 'refused', reason: 'different_history' };
+    if (pin.trusted.includes(next.maker)) return different;
     return { kind: 'refused', reason: 'untrusted_maker', maker: next.maker, n: next.n, canCheck: isAdmin(next.maker) };
 }
 
@@ -763,7 +778,7 @@ export function planNames(pin: NamesPin, state: NamesServerState, toDrop: string
 
 /**
  * A generation this phone makes now (design §4.3.1): the first, or a new one off its head (after a start again, the head
- * is the server's current: {@link startNamesAgain}). The pin keeps it as `pending`, with its key, before anything is
+ * is the server's current: {@link followNamesServer}). The pin keeps it as `pending`, with its key, before anything is
  * sent: save that pin first.
  */
 export function makeNamesGenerationFor(pin: NamesPin, me: NamesSigner, drops: string[]): { generation: NamesGeneration; key: Uint8Array; pin: NamesPin } {
@@ -775,37 +790,52 @@ export function makeNamesGenerationFor(pin: NamesPin, me: NamesSigner, drops: st
     return { generation, key, pin: { ...pin, pending: { statement: generation.statement, signature: generation.signature, id: generation.id, n, key: bytesToHex(key) } } };
 }
 
+/** What a follow did: the pin, and the keys it stopped trusting (with the statement that dropped them), for the words. */
+export interface NamesFollowed {
+    pin: NamesPin;
+    dropped: { key: string; maker: string; n: number }[];
+}
+
 /**
- * "Start again" (design addendum (c); only on an empty chain, when the plan offers it: nobody holds the current key; asked
- * first, with the count): the server's whole path from its first statement to its current one goes onto this phone's
- * chain for its drops and its place only. Each statement's signature is checked for its maker and its drops applied in
- * order (never this phone's own key, never the maker's); no trust is taken, no key, and nothing is said. Its head is then
- * the server's current, and the ordinary new key follows ({@link makeNamesGenerationFor}). The pin as it was when the
- * path isn't whole, or the chain isn't empty.
+ * "Follow the server's history" (design Addendum 3; asked first): offered on a different history whose server path is
+ * whole (`canFollow`), and, on an empty chain, as "Start again" when nobody holds the current key. The chain is cut back
+ * to the last statement it shares with the server's path; the rest of that path is adopted for its drops and its place
+ * only. Every adopted signature is checked; no trust is taken, no key, and no scan is needed. A drop this phone stands by
+ * is kept unless the adopted path drops the key on this chain ((a)), so the next sync makes this phone's own key without
+ * it before anything is written. The ring, `pending`, `manualDrops` and `lastCount` are unchanged. The pin as it was when
+ * the server's path isn't whole.
  */
-export function startNamesAgain(pin: NamesPin, state: Pick<NamesServerState, 'current' | 'generations'>): NamesPin {
+export function followNamesServer(pin: NamesPin, state: Pick<NamesServerState, 'current' | 'generations'>): NamesFollowed {
     const curId = state.current && isNamesKeyId(state.current.id) ? state.current.id : null;
-    if (pin.chain.length > 0 || !curId) return pin;
+    if (!curId) return { pin, dropped: [] };
     const gens = new Map<string, NamesGeneration>();
     for (const r of (Array.isArray(state.generations) ? state.generations : []).slice(0, NAMES_TRUST_BOUNDS.generations)) {
         const g = readNamesGeneration(r, pin.communityId);
         if (g) gens.set(g.id, g);
     }
     const back = pathBack(gens, curId);
-    if (!back.complete) return pin;
+    if (!back.complete) return { pin, dropped: [] };
+    const path = [...back.ids].reverse();
+    let keep = 0;
+    while (keep < pin.chain.length && keep < path.length && pin.chain[keep].id === path[keep]) keep++;
+    const chain = pin.chain.slice(0, keep);
+    const position = new Set(chain.map((l) => l.id));
+    const onPath = new Set(path);
+    const abandoned = [...new Set([...pin.abandoned, ...pin.chain.slice(keep).map((l) => l.id)])].filter((id) => !onPath.has(id));
     const T = new Set([...pin.trusted, pin.me]);
     const D: Record<string, string> = { ...pin.dropped };
-    const chain: NamesChainLink[] = [];
-    for (const id of [...back.ids].reverse()) {
+    const dropped: NamesFollowed['dropped'] = [];
+    for (const id of path.slice(keep)) {
         const g = gens.get(id)!;
         chain.push({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
+        position.add(g.id);
         for (const d of g.drops) {
             if (d === pin.me || d === g.maker) continue;
-            T.delete(d);
-            D[d] = g.id;
+            if (T.delete(d)) dropped.push({ key: d, maker: g.maker, n: g.n });
+            if (!(d in D) || position.has(D[d])) D[d] = g.id; // (a)
         }
     }
-    return { ...pin, chain, trusted: [...T].sort(), dropped: D };
+    return { pin: { ...pin, chain, abandoned, trusted: [...T].sort(), dropped: D }, dropped };
 }
 
 /** The keys this phone holds, as bytes, by generation id. */
@@ -849,26 +879,6 @@ export function namesReplay(pin: NamesPin, state: Pick<NamesServerState, 'curren
     if (!cur) return [...pin.chain];
     const at = pin.chain.findIndex((l) => l.id === cur);
     return at < 0 ? [] : pin.chain.slice(at + 1);
-}
-
-/**
- * "Take @X's history" (§4.3.9; only on a different history, after checking @X at this meeting, asked first): this
- * chain is cut back to the last statement it shares with the server's path, and the statements after it are kept as
- * `abandoned` (their keys too: readable, shared, never sealed under; their drops stay applied). The next sync walks the
- * server's path from there, under rule 1.
- */
-export function takeNamesHistory(pin: NamesPin, state: NamesServerState): NamesPin {
-    const gens = new Map<string, NamesGeneration>();
-    for (const r of (Array.isArray(state.generations) ? state.generations : []).slice(0, NAMES_TRUST_BOUNDS.generations)) {
-        const g = readNamesGeneration(r, pin.communityId);
-        if (g) gens.set(g.id, g);
-    }
-    const curId = state.current && isNamesKeyId(state.current.id) ? state.current.id : null;
-    const path = new Set(pathBack(gens, curId).ids);
-    let keep = pin.chain.length;
-    while (keep > 0 && !path.has(pin.chain[keep - 1].id)) keep--;
-    const left = pin.chain.slice(keep).map((l) => l.id);
-    return { ...pin, chain: pin.chain.slice(0, keep), abandoned: [...new Set([...pin.abandoned, ...left])] };
 }
 
 /** Who made key `id` and its number, where this phone accepted it (on its chain, or abandoned): for a locked entry's words. */

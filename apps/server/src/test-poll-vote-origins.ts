@@ -5,24 +5,27 @@
  * back in time (members.joined_at, a post's created_at), which is all the rules read.
  *
  * A poll on the public board says how many of its votes came from new or 12-word accounts (`pollNewOrWordsVotes`) and,
- * when both sides have at least POLL_ORIGINS_SPLIT_MIN votes, how many of each option's (`newOrWordsVotes`). New is on
- * probation now (engine/probation.ts); 12 words is a member who came in by the words door and added no sign-in. Every
- * vote still counts, and nobody is named.
+ * when both sides have at least POLL_ORIGINS_SPLIT_MIN votes, how many of each option's (`newOrWordsVotes`). Each vote
+ * keeps its voter's kind as they voted (`poll_votes.voter_new_or_words`): new is on probation (engine/probation.ts); 12
+ * words is a member who came in by the words door and added no sign-in. Every vote still counts, and nobody is named.
  *
  *   1. every vote is taken, a new account's and a 12-words account's like anyone's; the poll counts all 12, and says 6
  *      came from new or 12-word accounts, 4 / 1 / 1 by option: a sign-in newcomer, a 12-words newcomer, a 12-words member
  *      past probation and a member of 200 days with no kept post count; an established member, a sign-in member past
  *      probation and a moderator who joined yesterday by 12 words don't. The same on the board, by id, to a visitor, in
- *      the vote's own answer and in the /ws `post_updated`; and each voter is counted as `probationState` says. The poll
- *      is anonymous: nothing in it names a voter
+ *      the vote's own answer and in the /ws `post_updated`; each voter is counted as `probationState` says, and each vote
+ *      keeps that kind. The poll is anonymous: nothing in it names a voter
  *   2. the split needs 3 on each side: 1 and 2 votes from new accounts show the total only, 3 shows the split; 4 against 1
  *      and 2 established show the total only, against 3 the split; 3 and none on the other side, the split. An open vote
- *      names its voters to members as before, with nothing about which kind of account each is
- *   3. at the time of the read, as reports are weighed: a sign-in newcomer four days in with 3 kept posts stops counting;
- *      a 12-words member eight days in still counts, until they add a sign-in
- *   4. where nothing is said: a group's poll on the global node, and every poll on a local community
- *   5. a copy that stored a split (a standby's poll_options) never speaks: the split is read afresh, or absent
- *   6. cost: a poll with 2,000 votes is counted by index searches only, in one query
+ *      names its voters to members as before, with nothing about which kind of account each is. A stored split (a
+ *      standby's poll_options from an old read) shows nothing where none may be shown
+ *   3. at the time of the vote: two voters settling in afterwards (four days and 3 kept posts; eight days, 3 kept posts
+ *      and a sign-in added) move nothing, so the poll never says at a public moment that they voted, or how; a changed vote
+ *      keeps its first kind; a new poll counts them as they are now
+ *   4. where nothing is said: a group's poll on the global node, and every poll on a local community, whose votes keep no kind
+ *   5. copies: a stored split never speaks, the split is counted from the votes; a standby's copy carries each vote's
+ *      kind; a vote with none kept (from before) counts, and not as a new account's
+ *   6. cost: a poll with 2,000 votes is counted in one search of its votes
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-poll-vote-origins.ts
  */
@@ -38,7 +41,7 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { solveDoorWorkSync } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember, grantNodeRole, createPost, createGroup, joinGroup } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, grantNodeRole, createPost, createGroup, joinGroup, exportSyncState } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
@@ -112,6 +115,10 @@ function openSocket(url: string): Promise<{ ws: WebSocket; events: any[] }> {
     });
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+/** A read of what this change adds, so the suite runs to its end on a server without it and counts what fails there. */
+function attempt<T>(fn: () => T): T | undefined {
+    try { return fn(); } catch (e: any) { console.error(`   (${e?.message ?? e})`); return undefined; }
+}
 
 const DAY = 24 * 3600_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -263,6 +270,11 @@ async function main(): Promise<void> {
     }
     const fromRules = OPTIONS.map(o => expected.get(o.id) ?? 0).join('/');
     assert(fromRules === shape(annReads).split, `each voter is counted exactly as probationState says (rules ${fromRules}, served ${shape(annReads).split})`);
+    const stamps = new Map((attempt(() => db.prepare('SELECT voter_pubkey, voter_new_or_words FROM poll_votes WHERE post_id = ?').all(pollA)) as any[] ?? [])
+        .map(r => [r.voter_pubkey as string, r.voter_new_or_words as number | null]));
+    const stampNames = (k: number) => ballot.filter(([v]) => stamps.get(v.pk) === k).map(([v]) => v.name).join(',');
+    assert(stampNames(1) === 'Gus,Hal,Wes,Wyn,Wil,Lou' && stampNames(0) === 'Ann,Ben,Cal,Dee,Mo,Sid',
+        `each vote keeps its voter's kind as they voted (new or 12-word: ${stampNames(1)}; neither: ${stampNames(0)})`);
 
     // Anonymous: nothing in the poll names a voter, to a member or a visitor.
     const names = (poll: any) => {
@@ -279,6 +291,12 @@ async function main(): Promise<void> {
     for (const [v, o] of [[ann, 'opt_yes'], [ben, 'opt_no'], [cal, 'opt_yes'], [dee, 'opt_no'], [gus, 'opt_yes']] as Array<[Id, string]>) await vote(v, pollB, o);
     const b1 = await onBoard(ann, pollB);
     assert(shapeIs(b1, { total: 5, fromNew: 1, votes: '3/2/0', split: '-/-/-' }), `1 vote from a new account: the total says so, no option says whose side it took (${JSON.stringify(shape(b1))})`);
+    // A copy that stored a split (a standby's poll_options from an old read) never speaks for it.
+    const forged = (id: string) => db.prepare('UPDATE posts SET poll_options = ? WHERE id = ?')
+        .run(JSON.stringify(OPTIONS.map(o => ({ ...o, votes: 99, percentage: 99, newOrWordsVotes: 99 }))), id);
+    forged(pollB);
+    const b1f = await onBoard(ann, pollB);
+    assert(shapeIs(b1f, { total: 5, fromNew: 1, votes: '3/2/0', split: '-/-/-' }), `poll_options holding 99s: still no split where none may be shown (${JSON.stringify(shape(b1f))})`);
     await vote(hal, pollB, 'opt_no');
     const b2 = await onBoard(ann, pollB);
     assert(shapeIs(b2, { total: 6, fromNew: 2, votes: '3/3/0', split: '-/-/-' }), `2: still the total only (${JSON.stringify(shape(b2))})`);
@@ -306,22 +324,28 @@ async function main(): Promise<void> {
     assert(d1?.pollOpenVote === true && d1?.pollVotes?.length === 3 && [...voterFields].sort().join(',') === 'createdAt,optionId,voterCallsign,voterPubkey',
         `an open vote names its voters to a member as before, with nothing about which kind of account each is (${[...voterFields].sort().join(',')})`);
 
-    // ── 3. at the time of the read ───────────────────────────────────────────────────────────────
-    console.log('\n── 3. read at the time of the read, as reports are weighed ──');
+    // ── 3. at the time of the vote ───────────────────────────────────────────────────────────────
+    console.log('\n── 3. each vote as its voter was when they voted ──');
     setJoined(gus, 4 * DAY);
     keptPosts(gus, 3);
-    const a2 = await onBoard(ann, pollA);
-    assert(shapeIs(a2, { total: 12, fromNew: 5, votes: '7/3/2', split: '3/1/1' }), `Gus, four days in with 3 kept posts, is past probation: his vote still counts and no longer comes from a new account (${JSON.stringify(shape(a2))})`);
     setJoined(wes, 8 * DAY);
     keptPosts(wes, 3);
-    const a3 = await onBoard(ann, pollA);
-    assert(shapeIs(a3, { total: 12, fromNew: 5, votes: '7/3/2', split: '3/1/1' }) && (await pw(wes))?.onProbation === false,
-        `Wes, eight days in with 3 kept posts, is past probation and still a 12-words account: still counted (${JSON.stringify(shape(a3))})`);
     const linkNonce = (await call('POST', wes, '/api/join/link/sso-nonce', {})).body?.nonce as string;
     const linked = await call('POST', wes, '/api/join/link', { provider: 'google', idToken: mint('wes-google-sub', linkNonce), nonce: linkNonce });
-    assert(linked.status === 200, `Wes adds a Google sign-in (${show(linked)})`);
-    const a4 = await onBoard(ann, pollA);
-    assert(shapeIs(a4, { total: 12, fromNew: 4, votes: '7/3/2', split: '2/1/1' }), `with a sign-in and past probation, his vote no longer counts as one (${JSON.stringify(shape(a4))})`);
+    assert(linked.status === 200 && (await pw(gus))?.onProbation === false && (await pw(wes))?.onProbation === false && (await pw(wes))?.rules === 'ordinary',
+        `setup: Gus is past probation (four days, 3 kept posts); Wes too, and has added a Google sign-in (${show(linked)})`);
+    const a2 = await onBoard(ann, pollA);
+    assert(shapeIs(a2, A1), `the poll says what it said: a voter settling in later, at a moment anyone could see (a third post, the end of the first 72 hours), moves nothing, so it never says they voted, or how (${JSON.stringify(shape(a2))})`);
+    await vote(gus, pollA, 'opt_no');
+    const a3 = await onBoard(ann, pollA);
+    assert(shapeIs(a3, { total: 12, fromNew: 6, votes: '6/4/2', split: '3/2/1' }), `Gus changes his vote: it moves, still as a new account's, as he first voted (${JSON.stringify(shape(a3))})`);
+    // A node holds 5 open polls at most: Ray closes his and asks again.
+    const closedC = await call('POST', ray, `/api/marketplace/posts/${pollC}/close`, { authorPublicKey: ray.pk });
+    if (closedC.status !== 200) throw new Error(`Ray could not close his poll: ${show(closedC)}`);
+    const pollE = await makePoll(ray, 'Swap day: mornings or evenings?');
+    for (const [v, o] of [[gus, 'opt_yes'], [wes, 'opt_yes'], [hal, 'opt_yes'], [wyn, 'opt_no'], [lou, 'opt_no'], [ann, 'opt_no']] as Array<[Id, string]>) await vote(v, pollE, o);
+    const e1 = await onBoard(ann, pollE);
+    assert(shapeIs(e1, { total: 6, fromNew: 3, votes: '3/3/0', split: '1/2/0' }), `a new poll counts Gus and Wes as they are now, settled: 3 of 6 from new or 12-word accounts (Hal, Wyn, Lou) (${JSON.stringify(shape(e1))})`);
 
     // ── 4. where nothing is said ─────────────────────────────────────────────────────────────────
     console.log('\n── 4. a group\'s poll, and a local community ──');
@@ -335,53 +359,55 @@ async function main(): Promise<void> {
     delete process.env.NODE_PROFILE;
     const localInfo = (await call('GET', null, '/api/community/info')).body?.features ?? {};
     const l1 = await onBoard(ann, pollA);
-    assert(localInfo.probation === false && l1?.totalVotes === 12 && !('pollNewOrWordsVotes' in (l1 ?? {})) && (l1?.pollOptions ?? []).every((o: any) => !('newOrWordsVotes' in o)),
-        `a local community (no probation): the counts, and nothing about where they came from (${JSON.stringify(shape(l1))})`);
+    const localVote = await vote(dee, pollE, 'opt_yes');
+    const localStamp = attempt(() => (db.prepare('SELECT voter_new_or_words FROM poll_votes WHERE post_id = ? AND voter_pubkey = ?').get(pollE, dee.pk) as any)?.voter_new_or_words);
+    assert(localInfo.probation === false && l1?.totalVotes === 12 && !('pollNewOrWordsVotes' in (l1 ?? {})) && (l1?.pollOptions ?? []).every((o: any) => !('newOrWordsVotes' in o))
+        && localVote.status === 200 && localStamp === null,
+        `a local community (no probation): the counts, nothing about where they came from, and a vote keeps no kind (${JSON.stringify({ ...shape(l1), stamp: localStamp })})`);
     process.env.NODE_PROFILE = 'global';
 
-    // ── 5. a stored split never speaks ───────────────────────────────────────────────────────────
-    console.log('\n── 5. a copy that stored a split ──');
-    const forged = (id: string) => db.prepare('UPDATE posts SET poll_options = ? WHERE id = ?')
-        .run(JSON.stringify(OPTIONS.map(o => ({ ...o, votes: 99, percentage: 99, newOrWordsVotes: 99 }))), id);
+    // ── 5. copies: a stored split never speaks; a standby's copy carries each vote's kind ──────────
+    console.log('\n── 5. copies ──');
     forged(pollA);
-    forged(pollB);
     db.prepare('UPDATE posts SET poll_options = ? WHERE id = ?').run(JSON.stringify(OPTIONS.map(o => ({ ...o, newOrWordsVotes: 99 }))), pollG);
-    const a5 = await onBoard(ann, pollA), b5 = await onBoard(ann, pollB), g5 = await byId(ann, pollG);
-    assert(shapeIs(a5, { total: 12, fromNew: 4, votes: '7/3/2', split: '2/1/1' }), `poll_options holding 99s (a standby's copy of an old read): the split is read afresh (${JSON.stringify(shape(a5))})`);
-    assert(shapeIs(b5, { total: 7, fromNew: 1, votes: '4/3/0', split: '-/-/-' }), `and where no split may be shown, none is, whatever was stored (Gus and Wes settled since: Hal's is the 1 left) (${JSON.stringify(shape(b5))})`);
-    assert((g5?.pollOptions ?? []).every((o: any) => !('newOrWordsVotes' in o)), `nor on a group's poll (${JSON.stringify(shape(g5))})`);
+    const a5 = await onBoard(ann, pollA), g5 = await byId(ann, pollG);
+    assert(shapeIs(a5, { total: 12, fromNew: 6, votes: '6/4/2', split: '3/2/1' }), `poll_options holding 99s: the split is counted from the votes (${JSON.stringify(shape(a5))})`);
+    assert((g5?.pollOptions ?? []).every((o: any) => !('newOrWordsVotes' in o)), `nor does a group's poll say anything (${JSON.stringify(shape(g5))})`);
+    const payload = await exportSyncState('test');
+    const sentA = (payload.pollVotes ?? []).filter((v: any) => v.postId === pollA);
+    assert(sentA.length === 12 && sentA.filter((v: any) => v.voterNewOrWords === 1).length === 6 && sentA.every((v: any) => v.voterNewOrWords === stamps.get(v.voterPubkey)),
+        `a copy for a standby carries each vote's kind, so a server that takes over says the same (${sentA.filter((v: any) => v.voterNewOrWords === 1).length} of ${sentA.length} new or 12-word)`);
+    // A vote from before the stamp (NULL) is not counted as one: there is nothing to say it was.
+    attempt(() => db.prepare('UPDATE poll_votes SET voter_new_or_words = NULL WHERE post_id = ? AND voter_pubkey = ?').run(pollA, lou.pk));
+    const a6 = await onBoard(ann, pollA);
+    assert(shapeIs(a6, { total: 12, fromNew: 5, votes: '6/4/2', split: '3/2/0' }), `a vote with no kind kept counts, and not as a new account's (${JSON.stringify(shape(a6))})`);
 
     // ── 6. cost ──────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. cost ──');
     const counter = (probation as any).pollVotesFromNewOrWords as ((conn: typeof db, ids: string[]) => Map<string, Map<string, number>> | null) | undefined;
     assert(typeof counter === 'function', 'the counter exists (engine/probation.ts pollVotesFromNewOrWords)');
     if (typeof counter === 'function') {
-        // A node holds 5 open polls at most: Ray closes his.
-        const closed = await call('POST', ray, `/api/marketplace/posts/${pollC}/close`, { authorPublicKey: ray.pk });
-        if (closed.status !== 200) throw new Error(`Ray could not close his poll: ${show(closed)}`);
+        // A node holds 5 open polls at most: Quin closes his.
+        const closedB = await call('POST', quin, `/api/marketplace/posts/${pollB}/close`, { authorPublicKey: quin.pk });
+        if (closedB.status !== 200) throw new Error(`Quin could not close his poll: ${show(closedB)}`);
         const big = await makePoll(ann, 'Two thousand voters');
         const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`);
-        const insertPost = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at, active, status)
-                                       VALUES (?, 'offer', 'other', 'kept', '', 0, ?, ?, ?, 1, 'active')`);
-        const insertVote = db.prepare(`INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at) VALUES (?, ?, ?, '', ?)`);
+        const insertVote = db.prepare(`INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words) VALUES (?, ?, ?, '', ?, ?)`);
         db.transaction(() => {
             for (let i = 0; i < 2000; i++) {
                 const pk = crypto.randomBytes(32).toString('hex');
-                const young = i % 2 === 0;
-                insertMember.run(pk, `Bulk${i}`, ago((young ? 1 : 100) * DAY));
-                if (!young) for (let k = 0; k < 3; k++) insertPost.run(`bulk-${i}-${k}`, pk, ago(50 * DAY), ago(50 * DAY));
-                insertVote.run(big, pk, OPTIONS[i % 3].id, ago(1000));
+                insertMember.run(pk, `Bulk${i}`, ago(DAY));
+                insertVote.run(big, pk, OPTIONS[i % 3].id, ago(1000), i % 2 === 0 ? 1 : 0);
             }
         })();
-        const SQL_PLAN = db.prepare(`EXPLAIN QUERY PLAN ${probation.pollVoteOriginsSql(1)}`).all(big, ago(3 * DAY), 3, 3) as { detail: string }[];
-        // Only the LIMIT-3 count of a voter's kept posts is walked, a co-routine of at most 3 rows; every table is searched.
-        const scans = SQL_PLAN.map(r => r.detail).filter(d => /^SCAN\b/.test(d) && !/^SCAN \(subquery-\d+\)$/.test(d));
-        assert(scans.length === 0, `the query searches indexes only, no table scan (${SQL_PLAN.map(r => r.detail).join(' | ')})`);
+        const SQL_PLAN = db.prepare(`EXPLAIN QUERY PLAN ${probation.pollVoteOriginsSql(1)}`).all(big) as { detail: string }[];
+        const scans = SQL_PLAN.map(r => r.detail).filter(d => /^SCAN\b/.test(d));
+        assert(scans.length === 0, `the count searches the votes by poll, no table scan (${SQL_PLAN.map(r => r.detail).join(' | ')})`);
         const t0 = performance.now();
         const counted = counter(db, [big]);
         const ms = performance.now() - t0;
         const bigNew = [...(counted?.get(big)?.values() ?? [])].reduce((a, b) => a + b, 0);
-        assert(bigNew === 1000, `of 2,000 voters, the 1,000 who joined yesterday are counted (${bigNew})`);
+        assert(bigNew === 1000, `of 2,000 votes, the 1,000 stamped as from new accounts are counted (${bigNew})`);
         console.log(`   (2,000 votes counted in ${ms.toFixed(1)} ms)`);
         assert(ms < 2000, `in well under a couple of seconds on a loaded machine (${ms.toFixed(1)} ms)`);
         const r = await byId(ann, big);

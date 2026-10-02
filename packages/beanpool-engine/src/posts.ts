@@ -25,7 +25,7 @@ export interface PollOption {
     percentage?: number;
     /**
      * Of this option's votes, how many came from new or 12-word accounts (MarketplacePost.pollNewOrWordsVotes). Only on a
-     * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN); never stored, read afresh each time.
+     * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN). Counted from the votes on each read, never from a stored copy.
      */
     newOrWordsVotes?: number;
 }
@@ -96,10 +96,11 @@ export interface MarketplacePost {
     pollOpenVote?: boolean;
     totalVotes?: number;
     /**
-     * How many of `totalVotes` came from new or 12-word accounts (configurePollVoteOrigins): on a poll on the public board
-     * of a node that says (the global profile, where anyone may join, so one person with many cheap accounts could tip a
-     * count). Every vote still counts in `totalVotes` and each option's `votes`; this only says where they came from, as a
-     * count, never who. Absent where the node doesn't say: a local community, a group's poll, a poll for one person.
+     * How many of `totalVotes` came from new or 12-word accounts, each vote as its voter was when they voted
+     * (configurePollVoteOrigins): on a poll on the public board of a node that says (the global profile, where anyone may
+     * join, so one person with many cheap accounts could tip a count). Every vote still counts in `totalVotes` and each
+     * option's `votes`; this only says where they came from, as a count, never who. Absent where the node doesn't say: a
+     * local community, a group's poll, a poll for one person.
      */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
@@ -294,7 +295,7 @@ export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one act
 /**
  * Where a public poll's votes came from: for each poll named, per option id, how many of its votes came from new or 12-word
  * accounts; a poll with none may be left out. Null when the node doesn't say. Installed by the node (apps/server
- * engine/probation.ts installPollVoteOriginsAtBoot), which alone knows who is new there.
+ * engine/probation.ts installPollVoteOriginsAtBoot), which stamps each vote with its voter's kind when it is cast.
  */
 export type PollVoteOriginCounter = (db: Db, pollIds: string[]) => Map<string, Map<string, number>> | null;
 

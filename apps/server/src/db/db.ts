@@ -882,6 +882,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.

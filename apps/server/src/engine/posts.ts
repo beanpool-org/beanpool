@@ -11,6 +11,7 @@ import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -1237,14 +1238,17 @@ export function votePoll(
             throw new Error('This poll is closed');
         }
 
+        // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
+        // A changed vote keeps the first one's: nothing the voter does later moves where the poll says its votes came from.
         db.prepare(`
-            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                 option_id = excluded.option_id,
                 signature = excluded.signature,
-                created_at = excluded.created_at
-        `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+                created_at = excluded.created_at,
+                voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words)
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, pollVoterNewOrWords(voterPublicKey));
     })();
 
     bumpPostsVersion();

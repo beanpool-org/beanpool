@@ -3,8 +3,8 @@
  * node anyone may join, by a sign-in or with 12 words, so one person with many accounts could tip a count. The node says
  * how many of a public poll's votes came from new or 12-word accounts (`pollNewOrWordsVotes`) and, when there are enough
  * on each side to say nobody's choice, how many of each option's (`newOrWordsVotes`): apps/server engine/probation.ts
- * pollVotesFromNewOrWords. New is an account still on its new-account limits; 12-word is one made with 12 words that has
- * added no sign-in. One set of words for both apps.
+ * pollVotesFromNewOrWords. Each vote counts as its account was when it voted: new is an account still on its new-account
+ * limits; 12-word is one made with 12 words that had added no sign-in. One set of words for both apps.
  *
  * Every vote still counts: these lines say where the votes came from, never whose they are, and never leave a vote out.
  * Nothing here is shown where the node says nothing (a local community, a group's poll).

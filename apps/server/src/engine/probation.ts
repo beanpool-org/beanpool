@@ -137,28 +137,36 @@ export function keptPostCount(pubkey: string): number {
 }
 
 /**
- * Where the votes on the public board's polls came from (FABLE-sec-global-abuse LOW-7: many cheap accounts voting): per
- * poll and option, the votes of members who are new or came in with 12 words. New is on probation now (`probationState`):
- * the first 72 hours, or fewer than 3 kept posts. 12 words is an `open_joins` row of provider `words` (no sign-in added),
- * however long ago, because such an account cost nothing to make and a patient person can age a thousand of them. A node
- * role (owner, admin, moderator) is neither, as for probation. Read at the time of the read, as a report is weighed:
- * a vote from someone who has since settled in stops being counted here.
+ * Where the votes on the public board's polls came from (FABLE-sec-global-abuse LOW-7: many cheap accounts voting). Each
+ * vote is stamped when it is cast (`poll_votes.voter_new_or_words`, pollVoterNewOrWords): whether the voter was then new
+ * or a 12-word account. New is on probation (`probationState`): the first 72 hours, or fewer than 3 kept posts. 12 words is
+ * an `open_joins` row of provider `words` (no sign-in added), however long ago, because such an account cost nothing to
+ * make and a patient person can age a thousand of them. A node role (owner, admin, moderator) is neither, as for probation.
+ *
+ * At the vote, never at the read: a voter whose standing changes later at a moment anyone can see (their third post, the
+ * end of their first 72 hours by the join date the People list shows) would otherwise move the poll's count at that
+ * moment, and say that they voted, and with the split which way. A changed vote keeps the stamp of the first.
  *
  * Every vote still counts in the poll's totals: this only says how many came from such accounts, never whose. A new
  * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing).
- *
- * One query per 500 polls, with the same rules as `probationState` (the suite checks each voter against it): a node
- * role that acts (node-roles.ts NODE_ROLE_ACTS), a join time that can't be read counts as old, kept posts as
- * `keptPostCount`. Null where the node's probation switch is off (every local community): nobody is new there.
  */
-export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[], now: number = Date.now()): Map<string, Map<string, number>> | null {
+export function pollVoterNewOrWords(pubkey: string, now: number = Date.now()): 0 | 1 | null {
     if (!getProfileSwitches().probation) return null;
-    const youngSince = iso(now - PROBATION.hours * HOUR_MS);
+    if (nodeRoleOf(pubkey)) return 0;
+    return probationState(pubkey, now).onProbation || probationRuleSet(pubkey) === 'words' ? 1 : 0;
+}
+
+/**
+ * For the public board's polls: per poll and option, the votes stamped as from a new or 12-word account. One query per
+ * 500 polls, by the votes' primary key. Null where the node's probation switch is off (every local community): it says
+ * nothing about where votes came from there. A vote cast before the stamp (NULL) is not counted as one.
+ */
+export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[]): Map<string, Map<string, number>> | null {
+    if (!getProfileSwitches().probation) return null;
     const out = new Map<string, Map<string, number>>();
     for (let i = 0; i < pollIds.length; i += 500) {
         const chunk = pollIds.slice(i, i + 500);
-        const rows = conn.prepare(pollVoteOriginsSql(chunk.length))
-            .all(...chunk, youngSince, PROBATION.keptPosts, PROBATION.keptPosts) as { post_id: string; option_id: string; c: number }[];
+        const rows = conn.prepare(pollVoteOriginsSql(chunk.length)).all(...chunk) as { post_id: string; option_id: string; c: number }[];
         for (const r of rows) {
             let byOption = out.get(r.post_id);
             if (!byOption) out.set(r.post_id, byOption = new Map());
@@ -168,24 +176,11 @@ export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[], now:
     return out;
 }
 
-/**
- * The query pollVotesFromNewOrWords runs for `polls` poll ids; its parameters are the ids, then when the first 72 hours
- * began, then the kept posts needed twice. Each voter is found by key, and each of their rows by index (the suite reads
- * the plan).
- */
+/** The query pollVotesFromNewOrWords runs for `polls` poll ids (its parameters): exported for the suite's look at its plan. */
 export function pollVoteOriginsSql(polls: number): string {
-    return `SELECT pv.post_id, pv.option_id, COUNT(*) AS c
-              FROM poll_votes pv
-              JOIN members m ON m.public_key = pv.voter_pubkey
-             WHERE pv.post_id IN (${Array.from({ length: polls }, () => '?').join(',')})
-               AND NOT (m.status = 'active' AND m.is_visitor = 0
-                        AND EXISTS (SELECT 1 FROM node_roles nr WHERE nr.member_pubkey = m.public_key))
-               AND (EXISTS (SELECT 1 FROM open_joins oj WHERE oj.member_pubkey = m.public_key AND oj.provider = 'words')
-                    OR julianday(m.joined_at) > julianday(?)
-                    OR (SELECT COUNT(*) FROM (SELECT 1 FROM posts p
-                          WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL
-                            AND p.removed_by_moderator_at IS NULL AND p.hidden_by_reports_at IS NULL LIMIT ?)) < ?)
-             GROUP BY pv.post_id, pv.option_id`;
+    return `SELECT post_id, option_id, COUNT(*) AS c FROM poll_votes
+             WHERE post_id IN (${Array.from({ length: polls }, () => '?').join(',')}) AND voter_new_or_words = 1
+             GROUP BY post_id, option_id`;
 }
 
 /** Each public poll says where its votes came from, where the node's probation switch is on (pollVotesFromNewOrWords). */

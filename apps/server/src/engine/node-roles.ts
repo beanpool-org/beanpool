@@ -102,15 +102,20 @@ export function getFirstNodeAdminPubkey(): string {
 /**
  * Lists all active node role assignments with member callsign. A visitor's row's role from before this rule is listed
  * too, though it acts for nothing (NODE_ROLE_ACTS), so an owner sees it and can take it away.
+ *
+ * CROSS JOIN keeps node_roles (a handful of rows) the outer loop, each member found by its key: with a plain JOIN SQLite
+ * walked every member and looked each one up in node_roles (1.5 ms at 30,000 members), on every read of the member
+ * directory (GET /api/members), a phone's delta sync included. Rows with the same granted_at keep the order that walk
+ * gave them (members' rowid).
  */
 export function listNodeRoles(): NodeRoleRecord[] {
     const rows = db.prepare(
         `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, nr.session_epoch,
                 (nr.break_glass_hash IS NOT NULL) as has_break_glass, m.callsign
          FROM node_roles nr
-         JOIN members m ON nr.member_pubkey = m.public_key
+         CROSS JOIN members m ON nr.member_pubkey = m.public_key
          WHERE m.status = 'active'
-         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC`
+         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC, m.rowid ASC`
     ).all() as any[];
     return rows.map(r => ({
         ...r,

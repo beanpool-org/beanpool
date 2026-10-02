@@ -264,19 +264,21 @@ export function memberPhotoColumnsOf(stored: string | null | undefined): MemberP
 /**
  * Sets a member's avatar to `stored` (null, or a value the node does not serve: none): their member_photos row and
  * their row's `avatar_ref` and `avatar_bytes`, together. The ONE writer of a member's avatar, so the reference always
- * names the photo held. Writes nothing when both already hold it, so a row is stamped (members_touch_updated_at, which
- * names avatar_ref and avatar_bytes) only when its avatar changed. Call it inside the caller's transaction when the
- * member's row is written with it. Returns whether anything changed.
+ * names the photo held. Writes nothing when both already hold it. Any change writes the row's two columns, whose touch
+ * trigger (members_touch_updated_at names them, and fires on a column SET even to the value it held) stamps the row,
+ * so a standby's delta carries the change: member_photos travels in the member's row (engine/replication-manifest.ts).
+ * Call it inside the caller's transaction when the member's row is written with it. Returns whether anything changed.
  */
 export function setMemberPhoto(db: Db, publicKey: string, stored: string | null | undefined): boolean {
     const next = memberPhotoColumnsOf(stored);
     const held = db.prepare('SELECT avatar_ref, avatar_bytes FROM members WHERE public_key = ?').get(publicKey) as
         { avatar_ref: string | null; avatar_bytes: number | null } | undefined;
     const heldPhoto = getMemberPhoto(db, publicKey);
+    const setRow = db.prepare('UPDATE members SET avatar_ref = ?, avatar_bytes = ? WHERE public_key = ?');
     if (next === null) {
         if (heldPhoto === null && (!held || (held.avatar_ref === null && held.avatar_bytes === null))) return false;
         db.prepare('DELETE FROM member_photos WHERE public_key = ?').run(publicKey);
-        if (held) db.prepare('UPDATE members SET avatar_ref = NULL, avatar_bytes = NULL WHERE public_key = ?').run(publicKey);
+        setRow.run(null, null, publicKey);
         return true;
     }
     if (heldPhoto === next.photo && held && held.avatar_ref === next.ref && held.avatar_bytes === next.bytes) return false;
@@ -284,9 +286,7 @@ export function setMemberPhoto(db: Db, publicKey: string, stored: string | null 
         db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)
                     ON CONFLICT(public_key) DO UPDATE SET photo = excluded.photo`).run(publicKey, next.photo);
     }
-    if (held && (held.avatar_ref !== next.ref || held.avatar_bytes !== next.bytes)) {
-        db.prepare('UPDATE members SET avatar_ref = ?, avatar_bytes = ? WHERE public_key = ?').run(next.ref, next.bytes, publicKey);
-    }
+    setRow.run(next.ref, next.bytes, publicKey);
     return true;
 }
 

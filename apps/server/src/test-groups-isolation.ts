@@ -48,6 +48,7 @@ import {
 } from './state-engine.js';
 import { listingsForPeer } from './federation-listings.js';
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0;
 let passed = 0;
@@ -67,9 +68,10 @@ function makeMember(baseCallsign: string): { pubKeyHex: string; callsign: string
     const pubKeyHex = crypto.randomBytes(32).toString('hex');
     const callsign = `${baseCallsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, avatar_ref, status, earned_credit, joined_at)
-        VALUES (?, ?, 'bundled://sprout', 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        INSERT INTO members (public_key, callsign, status, earned_credit, joined_at)
+        VALUES (?, ?, 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'bundled://sprout');
 
     // Give member an initial offer to satisfy the contribution covenant
     createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 10, 'fixed', pubKeyHex, undefined, undefined, [], false);

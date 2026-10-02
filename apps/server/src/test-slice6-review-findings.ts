@@ -41,6 +41,7 @@ import { getPricingGuideItems, savePricingGuideItem } from './db/pricing-guide-d
 import { ensureFederationLink } from './federation-link.js';
 import { ledger } from './engine/ledger.js';
 import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -60,9 +61,10 @@ function keypair(): Identity {
 
 function seedMember(callsign: string, balance = 0, extra: { status?: string } = {}): Identity {
     const id = keypair();
-    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_ref, invited_by, invite_code)
-                VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'seed', 'seed')`)
-        .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active', AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
+        .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active');
+    setMemberPhoto(db, id.pub, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(id.pub, balance, ledger.getCurrentEpoch());
     return id;
@@ -417,8 +419,9 @@ async function main() {
     console.log('\n── 9. thread created_at and the delta exporter ──');
     {
         const oldEnt = keypair().pub;
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_ref, is_treasury)
-                    VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', ?, 1)`).run(oldEnt, `Old Mill ${oldEnt.slice(0, 4)}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_treasury)
+                    VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 1)`).run(oldEnt, `Old Mill ${oldEnt.slice(0, 4)}`);
+        setMemberPhoto(db, oldEnt, AVATAR);
         db.prepare('DELETE FROM conversations WHERE id = ?').run(oldEnt);
         const cursor = new Date(Date.now() - 1000).toISOString();
         ensureEnterpriseThread(oldEnt);
@@ -426,8 +429,9 @@ async function main() {
         assert(!!delta.conversations?.some((c: any) => c.id === oldEnt), 'a thread created lazily for an old enterprise ships in the next delta');
 
         const migratedEnt = keypair().pub;
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_ref, is_treasury)
-                    VALUES (?, ?, 'active', '2025-02-01T00:00:00.000Z', ?, 1)`).run(migratedEnt, `Old Kiln ${migratedEnt.slice(0, 4)}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_treasury)
+                    VALUES (?, ?, 'active', '2025-02-01T00:00:00.000Z', 1)`).run(migratedEnt, `Old Kiln ${migratedEnt.slice(0, 4)}`);
+        setMemberPhoto(db, migratedEnt, AVATAR);
         db.prepare('DELETE FROM conversations WHERE id = ?').run(migratedEnt);
         const cursor2 = new Date(Date.now() - 1000).toISOString();
         initSchema(); // the boot backfill

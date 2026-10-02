@@ -30,7 +30,8 @@ const reporterKey = generateTestKeyHex();
 const offenderKey = generateTestKeyHex();
 
 function createTestMember(pubKey: string, callsign: string) {
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pubKey, callsign);
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pubKey, callsign);
+    setMemberPhoto(db, pubKey, 'https://example.com/avatar.jpg');
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pubKey);
     ledger.initializeGenesisAccount(pubKey);
 }
@@ -99,6 +100,7 @@ assert.strictEqual(offenderMember?.status, 'suspended', 'E. Actioning report wit
 
 // G. Verify assertMemberActive rejects suspended member
 import { assertMemberActive } from './state-engine.js';
+import { setMemberPhoto } from '@beanpool/engine';
 assert.throws(
     () => assertMemberActive(offenderKey),
     /Account is suspended or disabled/,

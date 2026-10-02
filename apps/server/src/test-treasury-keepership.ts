@@ -29,7 +29,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, seedTreasuryOperatorsFromLegacyFlag } from './db/db.js';
-import { setMemberPhoto } from '@beanpool/engine';
+import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -421,9 +421,10 @@ async function main() {
     const allMembers = db.prepare('SELECT * FROM members').all() as any[];
     for (const m of allMembers) {
         replicaDb.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_ref, avatar_bytes, joined_at)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(m.public_key, m.callsign, m.avatar_ref, m.avatar_bytes, m.joined_at || new Date().toISOString());
+            INSERT OR REPLACE INTO members (public_key, callsign, joined_at)
+            VALUES (?, ?, ?)
+        `).run(m.public_key, m.callsign, m.joined_at || new Date().toISOString());
+        setMemberPhoto(replicaDb, m.public_key, getMemberPhoto(db, m.public_key));
     }
     for (const rp of fullSync.posts ?? []) {
         replicaDb.prepare(`

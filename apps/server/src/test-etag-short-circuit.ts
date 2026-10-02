@@ -29,6 +29,7 @@ import { createCommunityRoutes } from './routes/community.js';
 import { createActivityRouter } from './routes/activity.js';
 import { recordActivity } from './db/activity-feed-db.js';
 import type { RouteDeps } from './routes/types.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -132,9 +133,8 @@ async function main() {
     // Setup a test member author with a fresh random pubkey and unique callsign
     const authorPk = crypto.randomBytes(32).toString('hex');
     const authorCallsign = 'EtagTester_' + crypto.randomBytes(4).toString('hex');
-    db.prepare("INSERT INTO members (public_key, callsign, joined_at, avatar_ref) VALUES (?, ?, ?, ?)").run(
-        authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed'
-    );
+    db.prepare("INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)").run(authorPk, authorCallsign, new Date().toISOString());
+    setMemberPhoto(db, authorPk, 'bundled://seed');
 
     // Intercept db.prepare to track SQL queries on 'posts', 'members', and 'activity_feed'
     let postsQueries = 0;

@@ -42,6 +42,7 @@ import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { completePostTransaction as completePostTransactionEngine } from './engine/escrow.js';
 import { runLedgerAudit } from './engine/audit.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine,
     createPost,
@@ -106,8 +107,9 @@ function listEscrowAccounts(): string[] {
 
 function makeMember(callsign: string, initialBalance = 0): string {
     const pk = crypto.randomBytes(16).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
+    setMemberPhoto(db, pk, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
     if (initialBalance > 0) transfer('genesis', pk, initialBalance, `seed ${callsign}`, 'direct', true);

@@ -36,6 +36,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -75,9 +76,10 @@ async function child(): Promise<void> {
             se.seedGenesisMember(a.gwen, 'Gwen');
             setReplicationToken(a.replicationToken);
             for (const [key, name] of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-                    .run(key, name, a.gwen, `INV-${name}`, AVATAR);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+                    .run(key, name, a.gwen, `INV-${name}`);
+                setMemberPhoto(db, key, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             return true;

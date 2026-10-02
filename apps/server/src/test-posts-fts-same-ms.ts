@@ -48,6 +48,7 @@ import {
 import { rsvpEvent } from './engine/posts.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -62,8 +63,9 @@ const noop = () => { };
 
 function makeMember(callsign: string, beans = 0): string {
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
+    setMemberPhoto(db, pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
     if (beans > 0) transfer('genesis', pk, beans, `seed ${callsign}`, 'direct', true);

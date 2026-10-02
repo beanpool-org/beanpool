@@ -31,6 +31,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { FEDERATION_SETTLEMENT_ENABLED, isVisitor, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -146,7 +147,7 @@ async function main() {
     };
     // Profile completeness is enforced on post creation; seed avatars directly.
     for (const pk of [local.pubKeyHex, visitor.pubKeyHex, payee.pubKeyHex]) {
-        db.prepare("UPDATE members SET avatar_ref='data:image/png;base64,iVBORw0KGgo=' WHERE public_key=?").run(pk);
+        setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     }
     const localOffer = await mkOffer(local, 'Local fence fixing');
     await mkOffer(visitor, 'Visiting guitar lessons');   // satisfies the visitor's own covenant

@@ -23,6 +23,7 @@
  */
 import { createTreasury, findRecoveryCandidates, initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -43,9 +44,10 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 function seedMember(pk: string, callsign: string, status: string, hasSso = true) {
     db.prepare(
-        `INSERT OR REPLACE INTO members (public_key, callsign, avatar_ref, status, joined_at)
-         VALUES (?, ?, 'a.png', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+        `INSERT OR REPLACE INTO members (public_key, callsign, status, joined_at)
+         VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, callsign, status);
+    setMemberPhoto(db, pk, 'a.png');
     if (hasSso) {
         db.prepare(
             `INSERT OR REPLACE INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)

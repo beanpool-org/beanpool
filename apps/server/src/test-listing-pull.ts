@@ -31,6 +31,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
@@ -66,8 +67,9 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_ref)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
     //
@@ -93,8 +95,9 @@ function makeLocalMember(callsign: string): string {
 function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.KeyObject } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_ref)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
     //

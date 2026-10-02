@@ -106,6 +106,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -140,9 +141,10 @@ function keypair(name: string, holding?: string): Id {
 
 function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: string): Id {
     const id = keypair(name, holding);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status, updated_at)
-                VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-        .run(id.pk, name, ago(joinedDaysAgo * DAY), AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
+                VALUES (?, ?, ?, 'genesis', 'TEST', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(id.pk, name, ago(joinedDaysAgo * DAY));
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
@@ -343,7 +345,8 @@ async function main(): Promise<void> {
     let apiary = '';
     let quinnChange = '';
     asBeforeThisRule(vera, () => {
-        db.prepare("UPDATE members SET callsign = 'Vera', avatar_ref = ? WHERE public_key = ?").run(AVATAR, vera.pk);
+        db.prepare("UPDATE members SET callsign = 'Vera' WHERE public_key = ?").run(vera.pk);
+        setMemberPhoto(db, vera.pk, AVATAR);
         veraOffer = offer(vera, 'Vera honey').id;
         const t = acceptPost(offer(bob, 'Bob jam', 20).id, vera.pk);
         completePostTransaction(t.id, vera.pk);

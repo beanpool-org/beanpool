@@ -47,6 +47,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -96,8 +97,9 @@ function newId(name: string): Id {
 let owner: Id;
 function member(name: string): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }

@@ -30,6 +30,7 @@ import { initStateEngine, getFirstNodeAdminPubkey, getAdminPubkey, seedGenesisMe
 import { recordFunnelEvent, hasNoAvatarYet, getFunnel, pruneFunnel, clampDays } from './engine/funnel.js';
 import { redeemInvite, generateInvite } from './engine/invites.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -168,7 +169,7 @@ async function main(): Promise<void> {
         'asking the question does not itself count — nothing is booked before the write');
 
     recordFunnelEvent('avatar_published');   // the write succeeded
-    db.prepare("UPDATE members SET avatar_ref = ? WHERE public_key = ?").run('stored.png', av);
+    setMemberPhoto(db, av, 'stored.png');
     assert(count('avatar_published') === 1, 'a landed first avatar counts once');
 
     assert(!hasNoAvatarYet(av), 'a member who already has a photo is not a first-avatar case');

@@ -39,6 +39,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { resumeTakeoverAtBoot, getTakeoverProgress, TAKEOVER_JOURNAL_FILE } from './services/takeover.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -61,8 +62,9 @@ function keypair(callsign: string): Id {
 /** A member who can sign, trade (a photo, a name, an Offer listed) and pay. */
 function makeMember(callsign: string, beans: number): Id {
     const id = keypair(callsign);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
     createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);

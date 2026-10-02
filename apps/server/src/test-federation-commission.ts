@@ -55,6 +55,7 @@ import { ensureBridgeAccount, bridgeAccountId } from './federation-bridge.js';
 import { ensureFederationLink, setCommissionCeiling, getFederationLink } from './federation-link.js';
 import { commissionCapacity, fundCommission, originOfCachedPost } from './federation-commission.js';
 import { createFederationCommissionRoutes } from './routes/federation-commission.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -83,9 +84,10 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, avatar_ref, is_visitor)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?, ?)`)
-        .run(pk, callsign, homeNodeUrl ?? null, TINY_PNG, isVisitor ? 1 : 0);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, is_visitor)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?)`)
+        .run(pk, callsign, homeNodeUrl ?? null, isVisitor ? 1 : 0);
+    setMemberPhoto(db, pk, TINY_PNG);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(pk, balance, ledger.getCurrentEpoch());

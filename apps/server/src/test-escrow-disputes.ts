@@ -38,6 +38,7 @@ import {
 import { runLedgerAudit } from './engine/audit.js';
 import { getActivityFeed } from './db/activity-feed-db.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0;
 let passed = 0;
@@ -80,9 +81,10 @@ function makeMember(callsign: string): string {
     const pubkey = 'pk_' + callsign + '_' + crypto.randomBytes(8).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_ref)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, uniqueCallsign);
+    setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     return pubkey;
 }

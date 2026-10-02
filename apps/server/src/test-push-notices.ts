@@ -34,6 +34,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     PUSH_NOTICE_KINDS, PUSH_NOTICE_LIFETIME_SECONDS, ed25519KeyOfPeerId, isPushNoticeKind, pushNoticeWords, verifyPushNotice,
     type PushNoticeKind,
@@ -151,8 +152,9 @@ async function main() {
     se.seedGenesisMember(owner.pk, 'OwnerOlive');
     const member = (name: string): Id => {
         const id = newId(name);
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
-                    VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                    VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * DAY).toISOString(), owner.pk);
+        setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };

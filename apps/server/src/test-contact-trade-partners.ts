@@ -44,6 +44,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const MODE = READ_AUTH_OFF ? '[read auth off]' : '[defaults]';
 let BASE = '';
@@ -107,10 +108,11 @@ async function main() {
 
     const member = (callsign: string, opts: { contact?: { value: string; visibility: string }; status?: string } = {}): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref, contact_value, contact_visibility)
-                    VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?, ?, ?)`)
-            .run(id.pubKeyHex, callsign, opts.status ?? 'active', `INV-${callsign.toUpperCase()}`, AVATAR,
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, contact_value, contact_visibility)
+                    VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?, ?)`)
+            .run(id.pubKeyHex, callsign, opts.status ?? 'active', `INV-${callsign.toUpperCase()}`,
                 opts.contact?.value ?? null, opts.contact?.visibility ?? null);
+        setMemberPhoto(db, id.pubKeyHex, AVATAR);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };

@@ -18,6 +18,7 @@
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine, getAdminPubkey, hasListedOffer, hasLiveOffer, liveOfferCount,
     canVouch, canOperate, canAdministerTreasury, unvouchMember,
@@ -41,9 +42,10 @@ function check(cond: boolean, msg: string) {
 function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(16).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_ref)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, callsign);
+    setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);
     return pubkey;
 }

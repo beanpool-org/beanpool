@@ -59,6 +59,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -80,9 +81,10 @@ function keypair(name: string): Id {
 
 function makeMember(name: string): Id {
     const id = keypair(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
-        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-        .run(id.pk, name, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(id.pk, name);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     transfer('genesis', id.pk, 100, `seed ${name}`, 'direct', true);
     // An offer on the books, so the covenant is never what refuses a trade below.

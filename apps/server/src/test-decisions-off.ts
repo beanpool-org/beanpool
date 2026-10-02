@@ -31,6 +31,7 @@ process.env.NODE_PROFILE = 'global';
 process.env.ADMIN_PASSWORD = 'Decisions-Off-Admin-61!';
 
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -101,9 +102,10 @@ async function main() {
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
-                    VALUES (?, ?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
-            .run(pk, callsign, AVATAR, joined, joined, new Date().toISOString());
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
+                    VALUES (?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
+            .run(pk, callsign, joined, joined, new Date().toISOString());
+        setMemberPhoto(db, pk, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return { pk, privateKey, callsign };
     };

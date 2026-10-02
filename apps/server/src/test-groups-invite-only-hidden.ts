@@ -22,6 +22,7 @@ import {
 } from './state-engine.js';
 import { createGroupRoutes } from './routes/groups.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -33,9 +34,10 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, earned_credit, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-        .run(pub, `${callsign}_${crypto.randomBytes(3).toString('hex')}`, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(pub, `${callsign}_${crypto.randomBytes(3).toString('hex')}`);
+    setMemberPhoto(db, pub, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     // An offer on the books, so posting (the covenant) is never what refuses them.
     createPost('offer', 'other', `${callsign}'s offer`, 'covenant', 10, 'fixed', pub, undefined, undefined, [], false);

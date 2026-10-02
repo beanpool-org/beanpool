@@ -41,6 +41,7 @@ import { db } from './db/db.js';
 import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import type { RouteDeps } from './routes/types.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -113,9 +114,10 @@ async function callRouter(
 function makeMember(callsign: string): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, avatar_ref, updated_at)
-        VALUES (?, ?, ?, 'active', 100, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, updated_at)
+        VALUES (?, ?, ?, 'active', 100, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(pk, callsign, new Date(Date.now() - 60 * 86400_000).toISOString());
+    setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
     return pk;
 }

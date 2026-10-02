@@ -61,6 +61,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Request-Binding-Pw-4471!';
@@ -105,11 +106,12 @@ async function child(): Promise<void> {
         seed: (a: { owner: { pk: string; callsign: string }; members: { pk: string; callsign: string }[]; beans: boolean; trader?: string; partner?: string }) => {
             se.seedGenesisMember(a.owner.pk, a.owner.callsign);
             db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(a.owner.pk);
-            db.prepare('UPDATE members SET avatar_ref = ? WHERE public_key = ?').run(AVATAR, a.owner.pk);
+            setMemberPhoto(db, a.owner.pk, AVATAR);
             for (const m of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-                    .run(m.pk, m.callsign, AVATAR);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+                    .run(m.pk, m.callsign);
+                setMemberPhoto(db, m.pk, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
                 if (a.beans) se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
             }

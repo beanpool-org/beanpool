@@ -34,6 +34,7 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -105,9 +106,10 @@ async function main(): Promise<void> {
 
     const member = (callsign: string): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
-                    VALUES (?, ?, 'active', ?, 'seed', ?, ?)`)
-            .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`, TINY_PNG);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', ?, 'seed', ?)`)
+            .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pk, TINY_PNG);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };

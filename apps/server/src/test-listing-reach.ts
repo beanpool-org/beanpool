@@ -30,6 +30,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -90,9 +91,10 @@ function makeMember(callsign: string): string {
 function makeSigningMember(callsign: string): { pk: string; privateKey: crypto.KeyObject } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_ref)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`)
-        .run(pk, callsign, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`)
+        .run(pk, callsign);
+    setMemberPhoto(db, pk, TINY_PNG);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pk);
     return { pk, privateKey };
 }

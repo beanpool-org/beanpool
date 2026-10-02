@@ -18,6 +18,7 @@ import {
     isOnHoliday, setHolidayMode, getPosts, adminSetTier, getBalance,
 } from './state-engine.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -31,7 +32,8 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 let seq = 0;
 function seedMember(pk: string, balance = 0) {
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_ref, joined_at) VALUES (?, ?, 'a.png', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
+    setMemberPhoto(db, pk, 'a.png');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
 }
 // Insert an Offer row directly. live=false → a paused/soft-deleted offer that still counts for the

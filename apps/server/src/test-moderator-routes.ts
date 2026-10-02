@@ -56,6 +56,7 @@ import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -111,7 +112,7 @@ async function main() {
     addMember(pat, 'Pat', olive.pubKeyHex);
     grantNodeRole(mo.pubKeyHex, 'moderator', olive.pubKeyHex);
     // Posting needs a profile photo.
-    db.prepare(`UPDATE members SET avatar_ref = 'https://example.com/a.jpg' WHERE public_key = ?`).run(oscar.pubKeyHex);
+    setMemberPhoto(db, oscar.pubKeyHex, 'https://example.com/a.jpg');
 
     // Which request reached checkAdminAuth: the sweep tells a refused admin route from a route that never asked.
     const app = new Koa();

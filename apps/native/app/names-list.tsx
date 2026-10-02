@@ -75,6 +75,18 @@ export default function NamesListScreen() {
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
     const loadingRef = useRef(false);
+    /**
+     * One thing at a time on this screen (round 12): no action starts while the list loads, and no load while an action
+     * runs, so a reload never saves the pin over a Remove, a check or a new key (the module also queues every pin save).
+     */
+    const busyRef = useRef(false);
+    const begin = (): boolean => {
+        if (loadingRef.current || busyRef.current) return false;
+        busyRef.current = true;
+        setBusy(true);
+        return true;
+    };
+    const finish = () => { busyRef.current = false; setBusy(false); };
 
     /** What an open, or an action that opens again, came back with. */
     const take = useCallback(async (url: string, result: Awaited<ReturnType<typeof openNamesList>>) => {
@@ -92,7 +104,7 @@ export default function NamesListScreen() {
     }, [identity]);
 
     const load = useCallback(async () => {
-        if (loadingRef.current || !identity) return;
+        if (loadingRef.current || busyRef.current || !identity) return;
         loadingRef.current = true;
         setLoading(true);
         setError(null);
@@ -126,13 +138,12 @@ export default function NamesListScreen() {
 
     /** Runs an action that opens the list again, with the busy spinner and its refusal said. */
     const run = async (fn: (url: string) => Promise<Awaited<ReturnType<typeof openNamesList>>>) => {
-        if (!anchor) return;
-        setBusy(true);
+        if (!anchor || !begin()) return;
         setError(null);
         try {
             await take(anchor, await fn(anchor));
         } finally {
-            setBusy(false);
+            finish();
         }
     };
 
@@ -178,9 +189,9 @@ export default function NamesListScreen() {
 
     const sendAgain = async (admin: NamesAdminRow) => {
         if (!identity || !anchor) return;
-        setBusy(true);
+        if (!begin()) return;
         const done = await sendKeysAgain(anchor, identity, STORE, admin.pubkey);
-        setBusy(false);
+        finish();
         if (!done.ok) { setError(done.message); return; }
         setNotice(`Sent the keys to @${admin.callsign}.`);
     };
@@ -201,9 +212,10 @@ export default function NamesListScreen() {
      */
     const finishCheck = async (text: string) => {
         if (mode.kind !== 'check' || !anchor || !identity || !state) return;
+        if (!begin()) { scanLock.current = false; return; }
         const { picked } = mode;
         setScanning(false);
-        const r = await checkEachOther(STORE, identity, anchor, state, text, picked);
+        const r = await checkEachOther(STORE, identity, anchor, state, text, picked).finally(finish);
         if (!r.ok) {
             const who = picked?.callsign ?? '';
             setCheckError(r.reason === 'mismatch' ? COPY.codeMismatch(who) : r.reason === 'self' ? COPY.self : r.reason === 'no_match' ? COPY.noMatch : COPY.unreadable);
@@ -233,9 +245,9 @@ export default function NamesListScreen() {
 
     const save = async () => {
         if (mode.kind !== 'edit' || !anchor || !identity || !opened || !list) return;
-        setBusy(true);
+        if (!begin()) return;
         const sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id, mode.addId);
-        setBusy(false);
+        finish();
         if (!sent.ok) { setFormError(sent.message); return; }
         const base = sent.value.opened ?? opened;
         const body = base.list ?? list;
@@ -261,9 +273,9 @@ export default function NamesListScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Delete', style: 'destructive', onPress: async () => {
-                    setBusy(true);
+                    if (!begin()) return;
                     const done = await deleteNamesEntry(anchor, identity, entry.id, STORE);
-                    setBusy(false);
+                    finish();
                     if (!done.ok) { setFormError(done.message); return; }
                     setOpened({ ...opened, list: { ...list, entries: list.entries.filter((e) => e.id !== entry.id) } });
                     setMode({ kind: 'list' });
@@ -281,10 +293,10 @@ export default function NamesListScreen() {
 
     const confirmAs = async (entry: OpenedEntry, member: CommunityMember) => {
         if (!anchor || !identity) return;
-        setBusy(true);
+        if (!begin()) return;
         const done = await confirmMember(anchor, identity, member.publicKey, entry.id);
         if (done.ok) await afterConfirmation();
-        setBusy(false);
+        finish();
         if (!done.ok) { setError(done.message); return; }
         setNotice(done.value.status === 'awaiting_second'
             ? `@${member.callsign} is confirmed by you and waits for a second admin.`
@@ -294,10 +306,10 @@ export default function NamesListScreen() {
 
     const second = async (entry: OpenedEntry) => {
         if (!anchor || !identity || !entry.confirmation) return;
-        setBusy(true);
+        if (!begin()) return;
         const done = await secondConfirmation(anchor, identity, entry.confirmation.id);
         if (done.ok) await afterConfirmation();
-        setBusy(false);
+        finish();
         if (!done.ok) setError(done.message);
     };
 
@@ -308,10 +320,10 @@ export default function NamesListScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Revoke', style: 'destructive', onPress: async () => {
-                    setBusy(true);
+                    if (!begin()) return;
                     const done = await revokeConfirmation(anchor, identity, entry.confirmation!.id);
                     if (done.ok) await afterConfirmation();
-                    setBusy(false);
+                    finish();
                     if (!done.ok) setError(done.message);
                 },
             },
@@ -324,7 +336,7 @@ export default function NamesListScreen() {
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Export', onPress: async () => {
-                    setBusy(true);
+                    if (!begin()) return;
                     try {
                         // Fetched for the export, so the node logs it as one: the PDF is made from this answer.
                         const fresh = await fetchNamesList(anchor, identity, true);
@@ -344,7 +356,7 @@ export default function NamesListScreen() {
                     } catch {
                         setError('The PDF couldn’t be made on this phone. Update the app and try again.');
                     } finally {
-                        setBusy(false);
+                        finish();
                     }
                 },
             },
@@ -353,9 +365,9 @@ export default function NamesListScreen() {
 
     const setTwoAdmins = async (on: boolean) => {
         if (!anchor || !identity || !opened) return;
-        setBusy(true);
+        if (!begin()) return;
         const done = await setNamesSettings(anchor, identity, { twoAdminsToConfirm: on });
-        setBusy(false);
+        finish();
         if (!done.ok) { setError(done.message); return; }
         setOpened({ ...opened, state: { ...opened.state, settings: { ...opened.state.settings, twoAdminsToConfirm: done.value.twoAdminsToConfirm } } });
     };
@@ -377,6 +389,8 @@ export default function NamesListScreen() {
         </View>
     );
 
+    /** Buttons are off while an action runs and while the list (re)loads. */
+    const off = busy || loading;
     const BUTTONS = {
         primary: [styles.primaryBtn, styles.primaryBtnText], secondary: [styles.secondaryBtn, styles.secondaryBtnText],
         danger: [styles.dangerBtn, styles.dangerBtnText], small: [styles.smallBtn, styles.smallBtnText],
@@ -384,11 +398,11 @@ export default function NamesListScreen() {
     const btn = (label: string, onPress: () => void, kind: keyof typeof BUTTONS = 'primary', hint?: string) => (
         <Pressable
             key={label}
-            style={[BUTTONS[kind][0], busy && styles.disabled]}
+            style={[BUTTONS[kind][0], off && styles.disabled]}
             onPress={onPress}
-            disabled={busy}
+            disabled={off}
             accessibilityRole="button"
-            accessibilityState={{ disabled: busy, busy }}
+            accessibilityState={{ disabled: off, busy: off }}
             {...(hint ? { accessibilityHint: hint } : {})}
         >
             <Text style={BUTTONS[kind][1]}>{label}</Text>
@@ -437,7 +451,7 @@ export default function NamesListScreen() {
             <>
                 {entry && !entry.text ? (
                     <View style={styles.warn}>
-                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting)}</Text>
+                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting, entry.checkedHere)}</Text>
                     </View>
                 ) : null}
                 <Text style={styles.label}>NAME</Text>
@@ -474,7 +488,7 @@ export default function NamesListScreen() {
                 {candidates.length === 0 ? <Text style={styles.hint}>Nobody here is waiting to be confirmed.</Text> : null}
                 {candidates.slice(0, 100).map((m) => (
                     <Pressable
-                        key={m.publicKey} style={[styles.pickRow, busy && styles.disabled]} disabled={busy}
+                        key={m.publicKey} style={[styles.pickRow, off && styles.disabled]} disabled={off}
                         onPress={() => confirmAs(mode.entry, m)} accessibilityRole="button"
                         accessibilityLabel={`Confirm @${m.callsign} as ${mode.entry.text?.name ?? 'this entry'}`}
                     >
@@ -583,7 +597,7 @@ export default function NamesListScreen() {
                                     {e.text.note ? <Text style={styles.entryNote}>{e.text.note}</Text> : null}
                                 </>
                             ) : (
-                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting)}</Text>
+                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere)}</Text>
                             )}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
                             <View style={styles.buttonRow}>
@@ -601,7 +615,7 @@ export default function NamesListScreen() {
                         <View style={styles.switchRow}>
                             <Text style={styles.switchLabel}>{COPY.twoAdminsLabel}</Text>
                             <Switch
-                                value={state.settings.twoAdminsToConfirm} onValueChange={setTwoAdmins} disabled={busy}
+                                value={state.settings.twoAdminsToConfirm} onValueChange={setTwoAdmins} disabled={off}
                                 accessibilityLabel={COPY.twoAdminsLabel} accessibilityHint={COPY.twoAdminsHelp}
                             />
                         </View>

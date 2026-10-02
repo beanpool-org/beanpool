@@ -35,7 +35,7 @@ import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
-    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare, namesSeenAfterRead,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare, namesSeenAfterRead, namesSelfClaim,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -174,8 +174,10 @@ export const revokeConfirmation = (anchor: string, id: BeanPoolIdentity, confirm
 export async function deleteNamesEntry(anchor: string, id: BeanPoolIdentity, entryId: string, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<{ id: string }>> {
     const done = await call<{ id: string }>(anchor, id, 'DELETE', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}`);
     if (done.ok) {
-        const pin = await readNamesPinFrom(store, id.publicKey, anchor);
-        if (pin && pin.seen.includes(entryId)) await writeNamesPinTo(store, id.publicKey, anchor, { ...pin, seen: pin.seen.filter((x) => x !== entryId) });
+        await withPin(id.publicKey, anchor, async () => {
+            const pin = await readNamesPinFrom(store, id.publicKey, anchor);
+            if (pin && pin.seen.includes(entryId)) await writeNamesPinTo(store, id.publicKey, anchor, { ...pin, seen: pin.seen.filter((x) => x !== entryId) });
+        });
     }
     return done;
 }
@@ -219,6 +221,23 @@ export function namesTrustStoreKey(publicKey: string, anchor: string): string {
 /** The secure store's name for the key that seals that pin (letters, digits, dots, dashes and underscores only). */
 export function namesPinSecretName(label: string): string {
     return `beanpool.names-pin.${namesStatementId(label).slice(0, 40)}`;
+}
+
+/**
+ * One read-modify-write of a pin at a time (round 12): every function here that saves the pin runs its whole body, reads
+ * included, on one promise chain per pin label, after the one before it settles. So an open that reads the pin, waits on
+ * the network and saves it can never write back over a Remove, a check or a new key saved while it waited. A failure in
+ * one link doesn't wedge the chain. The functions on the chain never call each other (no re-entry).
+ */
+const pinChains = new Map<string, Promise<void>>();
+function withPin<T>(publicKey: string, anchor: string, fn: () => Promise<T>): Promise<T> {
+    const label = namesTrustStoreKey(publicKey, anchor);
+    const before = pinChains.get(label) ?? Promise.resolve();
+    const run = before.then(fn);
+    const tail = run.then(() => undefined, () => undefined);
+    pinChains.set(label, tail);
+    void tail.then(() => { if (pinChains.get(label) === tail) pinChains.delete(label); });
+    return run;
 }
 
 /** This phone's pin for the community, or null: none kept, or one that doesn't open (then it starts from an empty pin). */
@@ -305,11 +324,13 @@ export async function checkEachOther(
         key = found.pubkey.toLowerCase();
     }
     if (key === identity.publicKey.toLowerCase()) return { ok: false, reason: 'self' };
-    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-    const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
-    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
-    await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
-    return { ok: true, pinned: key, mismatch };
+    return withPin(identity.publicKey, anchor, async (): Promise<EachOtherCheck> => {
+        const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+        const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
+        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
+        await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
+        return { ok: true, pinned: key, mismatch };
+    });
 }
 
 /**
@@ -347,9 +368,11 @@ async function justCheckedNow(store: NamesPinStore, publicKey: string, anchor: s
 
 /** "Remove @X's old key" (asked first): the next open makes a new key without it. */
 export async function removeOldKey(store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, key: string): Promise<boolean> {
-    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-    if (!pin) return false;
-    return writeNamesPinTo(store, identity.publicKey, anchor, removeNamesKey(pin, key));
+    return withPin(identity.publicKey, anchor, async () => {
+        const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+        if (!pin) return false;
+        return writeNamesPinTo(store, identity.publicKey, anchor, removeNamesKey(pin, key));
+    });
 }
 
 // ── Opening the list, in order ───────────────────────────────────────────────────────────────
@@ -469,6 +492,11 @@ async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: 
         const share = namesSharesToSend(pin, state, identity, to, drops)[0];
         if (share && (await postShare(anchor, identity, share)).ok) landed = true;
     }
+    // Nobody else to tell (the only other holder is the key being dropped): a claim to itself (design Addendum 5).
+    if (!landed) {
+        const self = namesSelfClaim(pin, state, identity, drops);
+        if (self && (await postShare(anchor, identity, self)).ok) landed = true;
+    }
     return landed;
 }
 
@@ -478,7 +506,12 @@ async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: 
  * this phone's own that never landed, sent again; the keys sent to every admin this phone trusts that lacks one; then,
  * only when the plan is ready, the list. A refusal stops before anything is read or written.
  */
-export async function openNamesList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+export function openNamesList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    return withPin(identity.publicKey, anchor, () => openUnlocked(anchor, identity, store));
+}
+
+/** The open, on the pin's chain (the caller holds it). */
+async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
     let l = await look(anchor, identity, store);
     if (!l.ok) return l;
     if (!l.value.kept) return NOT_KEPT;
@@ -572,7 +605,11 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
  * again (design addendum (c)) first takes the node's whole key history onto this phone's, for its drops and its place only
  * (no trust, no key), and saves it; then it is the same new key off the head. Then the list opens again.
  */
-export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+export function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    return withPin(identity.publicKey, anchor, () => makeKeyUnlocked(anchor, identity, store));
+}
+
+async function makeKeyUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
     let l = await look(anchor, identity, store);
     if (!l.ok) return l;
     const first = l.value.plan;
@@ -589,7 +626,7 @@ export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdent
     const sent = await makeAndSend(anchor, identity, store, l.value, plan.drops);
     if (!sent.ok && sent.code === 'ask_for_share') return { ...sent, message: askForShareWords(l.value.state, identity.publicKey) };
     if (!sent.ok) return sent;
-    return openNamesList(anchor, identity, store);
+    return openUnlocked(anchor, identity, store);
 }
 
 /** The 409 `ask_for_share` in words: who the node says holds the current key (design Addendum 4). */
@@ -604,15 +641,17 @@ function askForShareWords(state: NamesState, me: string): string {
  * "Put the key history back" (asked first, design §4.3.6): every statement this phone took after the node's current
  * one, sent again in order (one it has already is fine), then the open sends the keys again.
  */
-export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
-    const l = await look(anchor, identity, store);
-    if (!l.ok) return l;
-    if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'rolled_back')) return openNamesList(anchor, identity, store);
-    for (const link of namesReplay(l.value.pin, l.value.state)) {
-        const sent = await postGeneration(anchor, identity, link, true);
-        if (!sent.ok) return sent;
-    }
-    return openNamesList(anchor, identity, store);
+export function putHistoryBack(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    return withPin(identity.publicKey, anchor, async () => {
+        const l = await look(anchor, identity, store);
+        if (!l.ok) return l;
+        if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'rolled_back')) return openUnlocked(anchor, identity, store);
+        for (const link of namesReplay(l.value.pin, l.value.state)) {
+            const sent = await postGeneration(anchor, identity, link, true);
+            if (!sent.ok) return sent;
+        }
+        return openUnlocked(anchor, identity, store);
+    });
 }
 
 /**
@@ -622,7 +661,11 @@ export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity,
  * person needed. The words say whom it stopped trusting. Then the list opens again: before this phone writes, it makes
  * a key without every admin it had removed that the followed history hadn't.
  */
-export async function followServerHistory(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+export function followServerHistory(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    return withPin(identity.publicKey, anchor, () => followUnlocked(anchor, identity, store));
+}
+
+async function followUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
     const l = await look(anchor, identity, store);
     if (!l.ok) return l;
     const { plan, state } = l.value;
@@ -636,19 +679,21 @@ export async function followServerHistory(anchor: string, identity: BeanPoolIden
     const said = followed.dropped.map((d) => (listed.has(d.key)
         ? NAMES_COPY.checkAgain(callsignIn(state, d.key), d.n)
         : NAMES_COPY.newKeyBy(callsignIn(state, d.maker), [callsignIn(state, d.key)])));
-    const opened = await openNamesList(anchor, identity, store);
+    const opened = await openUnlocked(anchor, identity, store);
     if (!opened.ok) return opened;
     return { ok: true, value: { ...opened.value, notices: [...new Set([...said, ...opened.value.notices])] } };
 }
 
 /** "Send the keys to @X again": the same share the open sends, now, to one admin this phone trusts. */
-export async function sendKeysAgain(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, to: string): Promise<NamesResult<{ to: string }>> {
-    const l = await look(anchor, identity, store);
-    if (!l.ok) return l;
-    if (l.value.plan.kind !== 'ready') return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.notReady };
-    const share = namesSharesToSend(l.value.pin, l.value.state, identity, to)[0];
-    if (!share) return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(callsignIn(l.value.state, to.toLowerCase())) };
-    return postShare(anchor, identity, share);
+export function sendKeysAgain(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, to: string): Promise<NamesResult<{ to: string }>> {
+    return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<{ to: string }>> => {
+        const l = await look(anchor, identity, store);
+        if (!l.ok) return l;
+        if (l.value.plan.kind !== 'ready') return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.notReady };
+        const share = namesSharesToSend(l.value.pin, l.value.state, identity, to)[0];
+        if (!share) return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(callsignIn(l.value.state, to.toLowerCase())) };
+        return postShare(anchor, identity, share);
+    });
 }
 
 // ── Entries ──────────────────────────────────────────────────────────────────────────────────
@@ -668,6 +713,8 @@ export interface OpenedEntry {
     holders: string[];
     /** Trusted admins the node says hold its key whose phones don't trust this one: a check in person comes first. */
     notTrusting: string[];
+    /** Holders checked in person here whose phones haven't said yet whether they trust this one (round 12). */
+    checkedHere: string[];
     /** The live confirmation against it (confirmed or waiting for a second admin), if any. */
     confirmation: ConfirmationRow | null;
 }
@@ -691,9 +738,8 @@ export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'gene
         if (!prev || (gens.get(w.headId)?.n ?? 0) > (gens.get(prev.headId)?.n ?? 0)) newest.set(w.from, w);
     }
     const mine = me.toLowerCase();
+    void justChecked; // round 12: a check here doesn't make a holder one that will send: its phone may not trust this one
     return holders.filter((h) => {
-        // Checked in person here, and their phone has sent no header since: it sends the keys when it next opens.
-        if (justChecked.includes(h.toLowerCase())) return true;
         const w = newest.get(h.toLowerCase());
         if (!w || !w.trusts.includes(mine)) return false;
         // Walk back from the server's current to that header's head: a drop of this phone on the way means they dropped it.
@@ -709,6 +755,29 @@ export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'gene
     });
 }
 
+/**
+ * Of `holders`, the ones this phone checked in person whose phones have sent no header since (round 12): the phone can't
+ * know whether they checked it back, so the words say both ways. Never one whose phone the server's history shows
+ * dropping this phone (a re-admitted admin needs the holder to check them again): then the plain meeting words.
+ */
+export function holdersCheckedHere(state: Pick<NamesState, 'communityId' | 'generations' | 'current'>, me: string, holders: string[], justChecked: string[] = []): string[] {
+    if (!justChecked.length) return [];
+    const mine = me.toLowerCase();
+    const gens = new Map<string, NamesGeneration>();
+    for (const r of Array.isArray(state.generations) ? state.generations : []) {
+        const g = readNamesGeneration(r, state.communityId);
+        if (g) gens.set(g.id, g);
+    }
+    let dropped = false;
+    for (let at: string | null = state.current?.id ?? null, i = 0; at && i <= gens.size; i++) {
+        const g = gens.get(at);
+        if (!g) break;
+        if (g.drops.includes(mine)) { dropped = true; break; }
+        at = g.parentId;
+    }
+    return dropped ? [] : holders.filter((h) => justChecked.includes(h.toLowerCase()));
+}
+
 /** Every entry, opened where this phone can; open ones by name, then the locked ones. */
 export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>>): OpenedEntry[] {
     const live = new Map<string, ConfirmationRow>();
@@ -722,12 +791,14 @@ export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring
         }
         const all = text ? [] : opened.state.admins
             .filter((a) => a.pubkey !== opened.pin.me && opened.pin.trusted.includes(a.pubkey) && (a.keyIds ?? []).includes(e.keyId));
-        const sending = new Set(holdersWhoWillSend(opened.state, opened.pin.me, all.map((a) => a.pubkey), opened.justChecked ?? []));
+        const sending = new Set(holdersWhoWillSend(opened.state, opened.pin.me, all.map((a) => a.pubkey)));
+        const checked = new Set(holdersCheckedHere(opened.state, opened.pin.me, all.filter((a) => !sending.has(a.pubkey)).map((a) => a.pubkey), opened.justChecked ?? []));
         const holders = all.filter((a) => sending.has(a.pubkey)).map((a) => a.callsign);
-        const notTrusting = all.filter((a) => !sending.has(a.pubkey)).map((a) => a.callsign);
+        const checkedHere = all.filter((a) => checked.has(a.pubkey)).map((a) => a.callsign);
+        const notTrusting = all.filter((a) => !sending.has(a.pubkey) && !checked.has(a.pubkey)).map((a) => a.callsign);
         return {
             id: e.id, keyId: e.keyId, createdAt: e.createdAt, updatedAt: e.updatedAt, text, locked,
-            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, notTrusting, confirmation: live.get(e.id) ?? null,
+            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, notTrusting, checkedHere, confirmation: live.get(e.id) ?? null,
         };
     });
     return out.sort((a, b) => {
@@ -761,9 +832,11 @@ export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId
 }
 
 /** Puts an entry id this phone added into its pin's `seen` (ids only; at most NAMES_LIMITS.entries). */
-async function rememberSeen(store: NamesPinStore, publicKey: string, anchor: string, id: string): Promise<void> {
-    const pin = await readNamesPinFrom(store, publicKey, anchor);
-    if (pin && !pin.seen.includes(id) && pin.seen.length < 2000) await writeNamesPinTo(store, publicKey, anchor, { ...pin, seen: [...pin.seen, id] });
+function rememberSeen(store: NamesPinStore, publicKey: string, anchor: string, id: string): Promise<void> {
+    return withPin(publicKey, anchor, async () => {
+        const pin = await readNamesPinFrom(store, publicKey, anchor);
+        if (pin && !pin.seen.includes(id) && pin.seen.length < 2000) await writeNamesPinTo(store, publicKey, anchor, { ...pin, seen: [...pin.seen, id] });
+    });
 }
 
 /** A new entry's id, chosen when the Add form opens and kept until the add is confirmed (design §8: add is idempotent by id). */
@@ -988,13 +1061,21 @@ export const NAMES_COPY = {
         + 'admin’s phone then made a new key, does that; so does whoever runs the server changing the history. Nothing was read or '
         + 'written. Ask your admins what happened. You can follow the server’s history: this phone keeps the keys it holds, and before '
         + 'it writes again it makes a new key without any admin it had removed.',
+    /** refusedDifferent when this phone stands by no removal (round 12, J10): no new key follows, so the words don't say one. */
+    refusedDifferentNone: 'The server shows a key history this phone didn’t take. A standby that took over from an older copy, where an '
+        + 'admin’s phone then made a new key, does that; so does whoever runs the server changing the history. Nothing was read or '
+        + 'written. Ask your admins what happened. You can follow the server’s history: this phone keeps the keys it holds.',
     wait: (holders: string[]) => (holders.length
         ? `You don’t hold the list’s keys yet. ${either(holders)} will send them the next time they open the names list.`
         : 'Nobody this phone trusts holds the list’s keys. Meet an admin who does and check each other’s phones.'),
-    lockedEntry: (n: number | null, who: string, holders: string[], notTrusting: string[] = []) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
+    lockedEntry: (n: number | null, who: string, holders: string[], notTrusting: string[] = [], checkedHere: string[] = []) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
         + 'This phone doesn’t hold it. '
         + (holders.length
             ? `${either(holders)} ${holders.length > 1 ? 'hold' : 'holds'} it and will send it on their next open.`
+            : checkedHere.length
+            ? (checkedHere.length > 1
+                ? `${either(checkedHere)} hold it. Their phones send it once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, meet one of them and check each other’s phones.`
+                : `${at(checkedHere[0])} holds it. Their phone sends it once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, meet them and check each other’s phones.`)
             : notTrusting.length
             ? (notTrusting.length > 1
                 ? `${either(notTrusting)} hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
@@ -1007,13 +1088,18 @@ export const NAMES_COPY = {
     missingRecord: 'The server is missing part of the list’s key history, so this phone can’t check the newest key. Nothing was read or written. '
         + 'Ask whoever runs the server, or an admin.',
     /** Holders whose phones don't trust this one (round 9): nothing comes until a check in person. */
+    /** Holders this phone checked in person whose phones haven't said yet whether they trust it (round 12): both ways. */
+    holdersJustChecked: (holders: string[]) => (holders.length > 1
+        ? `${either(holders)} hold the list’s keys. Their phones send them once they trust this one: if you have just checked each other, that is the next time one of them opens the names list; if not, meet one of them and check each other’s phones.`
+        : `${at(holders[0] ?? '')} holds the list’s keys. Their phone sends them once it trusts this one: if you have just checked each other, that is the next time it opens the names list; if not, meet them and check each other’s phones.`),
     /** Holders whose phones don't trust this one (the reviewer's :851, design Addendum 4): a check comes first. */
     holdersNoTrust: (holders: string[]) => (holders.length > 1
         ? `${either(holders)} hold the list’s keys, but their phones don’t trust this one yet: meet one of them and check each other’s phones.`
         : `${at(holders[0] ?? '')} holds the list’s keys, but their phone doesn’t trust this one yet: meet ${at(holders[0] ?? '')} and check each other’s phones.`),
     // Design Addendum 4 (§4), exact.
-    followFromHere: (n: number) => `If none of them can be reached, follow the server’s history: this phone takes key ${n} for its place only, `
-        + 'with no new trust and no new key, and before it writes it makes a new key without any admin it had removed.',
+    /** `removedAny`: this phone stands by a removal (round 12, J10: otherwise it makes no new key, and the words don't say so). */
+    followFromHere: (n: number, removedAny = true) => `If none of them can be reached, follow the server’s history: this phone takes key ${n} for its place only, `
+        + (removedAny ? 'with no new trust and no new key, and before it writes it makes a new key without any admin it had removed.' : 'with no new trust and no new key.'),
     refusedRemoved: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and this phone had removed ${at(who)}’s key; `
         + `the server’s history hasn’t. Nothing was read or written. Check ${at(who)}’s phone in person only if ${at(who)} is an admin again: `
         + `this phone then trusts them again. Or check an admin whose phone already opens the list: this phone then takes key ${n} for its `
@@ -1022,8 +1108,11 @@ export const NAMES_COPY = {
     refusedRemovedGone: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, who is no longer an admin, and this `
         + `phone had removed ${at(who)}’s key. Nothing was read or written. Check an admin whose phone already opens the list, or follow `
         + `the server’s history: either way this phone takes key ${n} for its place only and makes a new key without ${at(who)} before it writes.`,
-    waitRemovedHolder: (who: string, n: number) => `The server says ${at(who)} holds key ${n}, and this phone had removed ${at(who)}’s key. `
-        + `Nobody else can make a new key until an owner removes ${at(who)} or moves their account to a new key.`,
+    waitRemovedHolder: (who: string[], n: number) => (who.length > 1
+        ? `The server says ${both(who)} hold key ${n}, and this phone had removed their keys. Nobody else can make a new key until an `
+            + 'owner removes them or moves their accounts to new keys.'
+        : `The server says ${at(who[0] ?? '')} holds key ${n}, and this phone had removed ${at(who[0] ?? '')}’s key. `
+            + `Nobody else can make a new key until an owner removes ${at(who[0] ?? '')} or moves their account to a new key.`),
     askForShare: (who: string) => `The server says ${at(who)} holds the current key, so only their phone can make the next one. Ask `
         + `${at(who)} to open the names list; if their phone is lost, have an owner remove them.`,
     lostEntries: (n: number) => (n === 1
@@ -1043,7 +1132,7 @@ export const NAMES_COPY = {
             + `current key: ${either(holders)} will send that the next time they open the names list.`
         : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
     nobodyHoldsKey: (n: number, count: number, maker: string) => `Nobody who is an admin now holds key ${n}. You can make a new key; the `
-        + `${count} ${count === 1 ? 'name' : 'names'} sealed under it stay locked unless ${at(maker)}’s phone is found.`,
+        + `${count} ${count === 1 ? 'name sealed under it stays' : 'names sealed under it stay'} locked unless ${at(maker)}’s phone is found.`,
     droppedMe: (who: string) => `${at(who)} made a key without this phone. This phone still trusts them; ask them why, and tell your other admins if you didn’t expect it.`,
     differentKeys: (n: number) => `Two admins sent different keys for key ${n}: tell your admins. This phone kept the first one.`,
     otherHistory: (who: string) => `${at(who)}’s phone is on a different key history: meet ${at(who)}.`,
@@ -1101,6 +1190,8 @@ export const NAMES_COPY = {
 export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Partial<Pick<NamesOpened, 'justChecked'>>): string | null {
     const { plan, state } = o;
     const name = (k: string) => callsignIn(state, k);
+    // Whether this phone stands by any removal: only then does a follow lead to a new key of its own (J10).
+    const removedAny = Object.keys(o.pin.dropped ?? {}).length > 0 || (o.pin.manualDrops ?? []).length > 0;
     if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
     if (plan.kind === 'wait') {
         if (plan.canMakeNew) {
@@ -1112,15 +1203,18 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Parti
             // owner can unblock it (design Addendum 4).
             const others = (state.admins ?? []).filter((a) => a.pubkey.toLowerCase() !== o.pin.me && (a.keyIds ?? []).includes(plan.keyId));
             if (others.length && others.every((a) => a.pubkey.toLowerCase() in o.pin.dropped || o.pin.manualDrops.includes(a.pubkey.toLowerCase()))) {
-                return NAMES_COPY.waitRemovedHolder(either(others.map((a) => a.callsign)).replace(/^@/, ''), plan.n);
+                return NAMES_COPY.waitRemovedHolder(others.map((a) => a.callsign), plan.n);
             }
         }
-        // "Will send" only for holders whose phones trust this one; the rest get the meeting words (round 9, Addendum 4).
-        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders, o.justChecked ?? []);
-        const noTrust = plan.holders.filter((k) => !sending.includes(k)).map(name);
-        if (!sending.length && noTrust.length) return NAMES_COPY.holdersNoTrust(noTrust);
+        // "Will send" only for holders whose phones trust this one; one checked here but not yet heard from gets both ways;
+        // the rest get the meeting words (round 9, Addendum 4, round 12).
+        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders);
+        const checked = holdersCheckedHere(state, o.pin.me, plan.holders.filter((k) => !sending.includes(k)), o.justChecked ?? []);
+        const noTrust = plan.holders.filter((k) => !sending.includes(k) && !checked.includes(k)).map(name);
+        const restWords = [checked.length ? NAMES_COPY.holdersJustChecked(checked.map(name)) : '', noTrust.length ? NAMES_COPY.holdersNoTrust(noTrust) : ''].filter((w) => w).join(' ');
+        if (!sending.length && restWords) return restWords;
         const holders = sending.map(name);
-        const rest = noTrust.length ? ` ${NAMES_COPY.holdersNoTrust(noTrust)}` : '';
+        const rest = restWords ? ` ${restWords}` : '';
         if (!plan.newKeyNeeded) return NAMES_COPY.wait(holders) + rest;
         // This phone's own drops (by hand, or standing from a history it left): the holder only sends the key.
         const chainIds = new Set(o.pin.chain.map((l) => l.id));
@@ -1130,7 +1224,7 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Parti
     switch (plan.reason) {
         case 'other_community': return NAMES_COPY.otherCommunity;
         case 'missing_record': return NAMES_COPY.missingRecord;
-        case 'different_history': return NAMES_COPY.refusedDifferent;
+        case 'different_history': return removedAny ? NAMES_COPY.refusedDifferent : NAMES_COPY.refusedDifferentNone;
         case 'rolled_back': return NAMES_COPY.refusedRolledBack(plan.offered?.n ?? 0, plan.newest?.n ?? 0);
         case 'untrusted_maker': {
             const n = plan.n ?? 0;
@@ -1140,7 +1234,7 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Parti
             }
             // Addendum 4: a maker this phone had removed on a history it left, and Follow from here.
             if (plan.standing) return plan.canCheck ? NAMES_COPY.refusedRemoved(n, who) : NAMES_COPY.refusedRemovedGone(n, who);
-            return plan.canFollow ? `${NAMES_COPY.refusedUntrusted(n, who)}\n\n${NAMES_COPY.followFromHere(n)}` : NAMES_COPY.refusedUntrusted(n, who);
+            return plan.canFollow ? `${NAMES_COPY.refusedUntrusted(n, who)}\n\n${NAMES_COPY.followFromHere(n, removedAny)}` : NAMES_COPY.refusedUntrusted(n, who);
         }
     }
 }

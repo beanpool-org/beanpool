@@ -80,7 +80,7 @@ import { doorRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
@@ -996,7 +996,7 @@ router.get('/api/community/members', async (ctx) => {
                 publicKey: m.publicKey,
                 callsign: m.callsign,
                 joinedAt: m.joinedAt,
-                avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
+                avatarUrl: avatarUrlOf(m.publicKey, m.avatarRef),
                 profileUpdatedAt: m.profileUpdatedAt,
                 bio: m.bio,
                 contactValue: showContact ? m.contactValue : null,
@@ -2151,7 +2151,9 @@ router.get('/api/members', async (ctx) => {
     //
     // Only the columns below are read, and a delta reads only the rows changed since its cursor (engine members.ts
     // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
-    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal).
+    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
+    // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
+    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
     const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
         .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
@@ -2162,7 +2164,7 @@ router.get('/api/members', async (ctx) => {
         callsign: r.callsign,
         joinedAt: r.joined_at,
         nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url || null),
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         profileUpdatedAt: r.profile_updated_at || null,
         earnedCredit: r.earned_credit ?? 0,
         elderVouchedBy: r.elder_vouched_by || null,

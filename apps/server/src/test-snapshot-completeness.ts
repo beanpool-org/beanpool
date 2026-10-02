@@ -66,6 +66,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -235,8 +236,7 @@ async function main(): Promise<void> {
     const author = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(author, 'Snapper');
     // The marketplace refuses a post from a member with no profile photo, so give them one.
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?')
-        .run(dataUrl(makePhoto('the-author-avatar')), author);
+    setMemberPhoto(db, author, dataUrl(makePhoto('the-author-avatar')));
 
     const keptPhoto = makePhoto('kept');
     const doomedPhoto = makePhoto('doomed-by-a-replacement');

@@ -20,7 +20,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db } from './db/db.js';
 import { initStateEngine, createPost, createTreasury, updateProfile } from './state-engine.js';
-import { avatarUrlFor, clearAvatarVersionCache } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, avatarVersionOf } from '@beanpool/core';
+import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { createAvatarRoutes } from './routes/avatar.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createCommunityRoutes } from './routes/community.js';
@@ -178,20 +179,23 @@ async function main() {
 
     // Member 1: Photographic JPEG data URI
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'AlicePhoto', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
-    `).run(pkPhoto, sampleBase64DataUri);
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'AlicePhoto', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pkPhoto);
+    // Every avatar below goes in by its one writer (member_photos, and the row's avatar_ref), as a profile save puts it.
+    setMemberPhoto(db, pkPhoto, sampleBase64DataUri);
 
     // Member 2: Bundled avatar
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'BobBundled', 'bundled://leaf', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'BobBundled', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
     `).run(pkBundled);
+    setMemberPhoto(db, pkBundled, 'bundled://leaf');
 
     // Member 3: No avatar
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'CharlieNone', NULL, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'CharlieNone', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
     `).run(pkNone);
 
     // Seed marketplace posts for these members
@@ -358,7 +362,7 @@ async function main() {
         'data:application/javascript;base64,' + Buffer.from('alert(1)').toString('base64'),
     ];
     for (const hostile of hostileTypes) {
-        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(hostile, pkPhoto);
+        setMemberPhoto(db, pkPhoto, hostile);
         avatarService.cache.clear();
         const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
         const label = hostile.slice(5, hostile.indexOf(';'));
@@ -367,7 +371,7 @@ async function main() {
     }
 
     // A bundled id must not be able to walk out of the avatars directory.
-    db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run('bundled://../../../../etc/passwd', pkPhoto);
+    setMemberPhoto(db, pkPhoto, 'bundled://../../../../etc/passwd');
     avatarService.cache.clear();
     const traversalRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
     assert(traversalRes.status === 404, 'Bundled avatar path traversal is refused');
@@ -386,7 +390,7 @@ async function main() {
         ['https://example.com/alice.jpg', 'a plain http URL'],
     ];
     for (const [value, label] of notImages) {
-        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(value, pkPhoto);
+        setMemberPhoto(db, pkPhoto, value);
         avatarService.cache.clear();
         const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
         assert(res.status === 404, `${label} answers 404 so clients show the placeholder (got ${res.status})`);
@@ -401,7 +405,7 @@ async function main() {
         [`data:image/jpeg;base64,${smallJpeg.toString('base64').replace(/(.{76})/g, '$1\n')}`, 'image/jpeg', 'line-wrapped base64 JPEG'],
     ];
     for (const [value, type, label] of stillServed) {
-        db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(value, pkPhoto);
+        setMemberPhoto(db, pkPhoto, value);
         avatarService.cache.clear();
         const res = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}`);
         assert(res.status === 200 && res.headers['content-type'] === type, `${label} is still served as ${type} (got ${res.status} ${res.headers['content-type']})`);
@@ -413,8 +417,8 @@ async function main() {
         requestBody: { avatar: eggsSvgAvatar },
     });
     assert(profileRes.status === 400, `POST /api/profile/update refuses a non-base64 SVG data URL (got ${profileRes.status})`);
-    const storedAfter = db.prepare(`SELECT avatar_url FROM members WHERE public_key = ?`).get(pkPhoto) as { avatar_url: string };
-    assert(!storedAfter.avatar_url.startsWith('data:image/svg'), 'Refused profile avatar is not stored');
+    const storedAfter = getMemberPhoto(db, pkPhoto) ?? '';
+    assert(!storedAfter.startsWith('data:image/svg'), 'Refused profile avatar is not stored');
     const goodProfileRes = await dispatchRoute(communityRouter, 'POST', '/api/profile/update', {
         state: { actor: pkPhoto },
         requestBody: { avatar: `data:image/jpeg;base64,${smallJpeg.toString('base64')}` },
@@ -437,7 +441,7 @@ async function main() {
     const newSampleBuffer = createTestJpegBuffer(35 * 1024);
     const newBase64 = `data:image/jpeg;base64,${newSampleBuffer.toString('base64')}`;
 
-    db.prepare(`UPDATE members SET avatar_url = ? WHERE public_key = ?`).run(newBase64, pkPhoto);
+    setMemberPhoto(db, pkPhoto, newBase64);
     avatarService.delete(pkPhoto);
 
     const updatedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkPhoto}?size=thumb`);
@@ -465,9 +469,10 @@ async function main() {
         const pk = 'p' + i.toString().padStart(63, '0');
         photoMembers.push(pk);
         db.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
-        `).run(pk, `PhotoUser${i}`, sampleBase64DataUri);
+            INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+        `).run(pk, `PhotoUser${i}`);
+        setMemberPhoto(db, pk, sampleBase64DataUri);
     }
 
     const bundledMembers: string[] = [];
@@ -475,16 +480,17 @@ async function main() {
         const pk = 'b' + i.toString().padStart(63, '0');
         bundledMembers.push(pk);
         db.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-            VALUES (?, ?, 'bundled://leaf', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+            INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
         `).run(pk, `BundledUser${i}`);
+        setMemberPhoto(db, pk, 'bundled://leaf');
     }
 
     // 1 member without avatar
     const pkEmpty = 'e' + '0'.repeat(63);
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'NoAvatarUser', NULL, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'NoAvatarUser', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
     `).run(pkEmpty);
 
     // 49 posts across these members
@@ -499,7 +505,8 @@ async function main() {
     const membersAfterBytes = Buffer.byteLength(membersAfterPayload, 'utf8');
 
     // Simulate before: members list inlined the full raw base64 data URIs
-    const rawMembers = db.prepare("SELECT * FROM members WHERE status != 'pruned' AND is_treasury = 0").all() as any[];
+    const rawMembers = db.prepare(`SELECT m.*, mp.photo AS avatar_url FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
+                                   WHERE m.status != 'pruned' AND m.is_treasury = 0`).all() as any[];
     const simulatedBeforeMembers = rawMembers.map(m => ({
         publicKey: m.public_key,
         callsign: m.callsign,
@@ -578,9 +585,10 @@ async function main() {
     const firstPhoto = `data:image/jpeg;base64,${createTestJpegBuffer(9 * 1024).toString('base64')}`;
     const secondPhoto = `data:image/jpeg;base64,${createTestJpegBuffer(11 * 1024).toString('base64')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'DamoVersioned', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
-    `).run(pkVer, firstPhoto);
+        INSERT INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'DamoVersioned', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pkVer);
+    setMemberPhoto(db, pkVer, firstPhoto);
 
     const emittedMemberAvatar = async (): Promise<string | null> => {
         const res = await dispatchRoute(communityRouter, 'GET', '/api/community/members');
@@ -608,18 +616,19 @@ async function main() {
 
     // A second emitter — the treasury/keeper reader in state-engine — agrees with the list.
     // Covers "cover the members list and at least one other emitter" without a second fixture.
-    assert(avatarUrlFor(pkVer, firstPhoto) === verUrl1,
+    assert(avatarUrlOf(pkVer, avatarRefOf(firstPhoto)) === verUrl1,
         'The shared helper and the members list produce identical URLs for identical input');
-    assert(avatarUrlFor(pkVer, 'bundled://leaf') === 'bundled://leaf',
+    assert(avatarUrlOf(pkVer, avatarRefOf('bundled://leaf')) === 'bundled://leaf',
         'bundled:// passes through the helper unchanged, with no version appended');
-    assert(avatarUrlFor(pkVer, null) === null && avatarUrlFor(pkVer, '   ') === null,
+    assert(avatarUrlOf(pkVer, avatarRefOf(null)) === null && avatarUrlOf(pkVer, avatarRefOf('   ')) === null,
         'No stored avatar emits null');
 
-    // Memoisation must not be able to serve a stale version: clearing the memo has to produce
-    // the identical hash, and a changed value has to beat the memo.
-    clearAvatarVersionCache();
-    assert(await emittedMemberAvatar() === verUrl1,
-        'The version is the same with a cold memo as with a warm one');
+    // The version is kept with the photo (the row's avatar_ref), not worked out per request: it must be the content hash
+    // of the photo the member holds now, so a list never serves a stale one. (It replaces a memo of versions per request,
+    // which this suite held to the same rule: a cold memo gave the warm one's version.)
+    const heldRef = (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pkVer) as { avatar_ref: string }).avatar_ref;
+    assert(heldRef === avatarVersionOf(firstPhoto.trim()) && getMemberPhoto(db, pkVer) === firstPhoto && verUrl1!.endsWith(`&v=${heldRef}`),
+        'The version in the row is the content hash of the photo held now, and the URL carries it');
 
     // --- 7.2 The route serves with the version parameter present.
     const versionedPath = verUrl1!;
@@ -646,10 +655,10 @@ async function main() {
         ['absolute', `https://mullum.beanpool.org/api/avatar/${pkVer}?size=thumb`],
         ['absolute on another host', `http://192.168.1.10:3000/api/avatar/${pkVer}?size=thumb&v=abcdef12`],
     ] as const) {
-        const before = (db.prepare("SELECT avatar_url FROM members WHERE public_key = ?").get(pkVer) as any).avatar_url;
+        const before = getMemberPhoto(db, pkVer);
         const bio = `bio via ${label}`;
         const profile = updateProfile(pkVer, { avatar: roundTripped, bio });
-        const after = (db.prepare("SELECT avatar_url FROM members WHERE public_key = ?").get(pkVer) as any).avatar_url;
+        const after = getMemberPhoto(db, pkVer);
         assert(after === before,
             `updateProfile with a ${label} /api/avatar/ URL leaves the stored photo untouched`);
         assert(profile !== null && profile.bio === bio,
@@ -659,23 +668,26 @@ async function main() {
     const survivedRes = await dispatchRoute(avatarRouter, 'GET', `/api/avatar/${pkVer}?size=thumb`);
     assert(survivedRes.status === 200, 'The photo is still served after four round-tripped saves');
 
-    // --- 7.4 A row that ALREADY holds such a string reads as "no avatar".
+    // --- 7.4 Such a string, given as an avatar anyway, reads as "no avatar".
     //
-    // Decision (c): no data-rewriting migration in this PR, so rows already damaged on the
-    // test node must degrade to initials, not to a blank ring.
+    // Rows damaged before updateProfile refused to store one must degrade to initials, not to a
+    // blank ring. The photo's one writer stores no such value (the member has none), and the boot's
+    // move of photos out of the members rows leaves one out the same way (db.ts moveMemberPhotosOutOfRows).
     const pkDamaged = 'f'.repeat(64);
     db.prepare("DELETE FROM members WHERE public_key = ?").run(pkDamaged);
     db.prepare(`
-        INSERT INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'AlreadyDamaged', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
-    `).run(pkDamaged, `/api/avatar/${pkDamaged}?size=thumb`);
+        INSERT INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'AlreadyDamaged', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pkDamaged);
+    setMemberPhoto(db, pkDamaged, `/api/avatar/${pkDamaged}?size=thumb`);
+    assert(getMemberPhoto(db, pkDamaged) === null, 'An /api/avatar/ string given as an avatar is not stored as one');
 
     const damagedRes = await dispatchRoute(communityRouter, 'GET', '/api/community/members');
     const damagedList = JSON.parse(typeof damagedRes.body === 'string' ? damagedRes.body : JSON.stringify(damagedRes.body));
     const damagedMember = damagedList.find((m: any) => m.publicKey === pkDamaged);
     assert(damagedMember && damagedMember.avatarUrl === null,
         `A row already holding an /api/avatar/ string is emitted as null (got: ${damagedMember?.avatarUrl})`);
-    assert(avatarUrlFor(pkDamaged, `https://other-node.example/api/avatar/${pkDamaged}?size=thumb`) === null,
+    assert(avatarUrlOf(pkDamaged, avatarRefOf(`https://other-node.example/api/avatar/${pkDamaged}?size=thumb`)) === null,
         'An absolute /api/avatar/ URL on any host is emitted as null too');
 
     // The marketplace photo gate must agree, so the phone's self-heal republishes.

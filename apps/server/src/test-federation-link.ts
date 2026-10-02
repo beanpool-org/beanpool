@@ -31,6 +31,7 @@ import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { loadConnectors } from './connector-manager.js';
 import {
     getFederationLink, getLinkByTreasury, listFederationLinks, reconcileFederationLinks, linkNameFor,
@@ -255,8 +256,9 @@ async function main() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         reader.pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
         reader.priv = privateKey;
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                    VALUES (?, 'Reader', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'TEST', 'https://example.com/r.jpg', 'active')`).run(reader.pk);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                    VALUES (?, 'Reader', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'TEST', 'active')`).run(reader.pk);
+        setMemberPhoto(db, reader.pk, 'https://example.com/r.jpg');
     }
     const treasuries = await signedGet(reader, '/api/treasuries');
     const linkCard = (treasuries.json?.treasuries ?? []).find((t: any) => t.publicKey === link!.treasuryPubkey);
@@ -392,16 +394,17 @@ async function main() {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         her.pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
         her.priv = privateKey;
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                    VALUES (?, 'Rhea', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), ?, 'TEST', 'https://example.com/r.jpg', 'active')`).run(her.pk, operator.pk);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                    VALUES (?, 'Rhea', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), ?, 'TEST', 'active')`).run(her.pk, operator.pk);
+        setMemberPhoto(db, her.pk, 'https://example.com/r.jpg');
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(her.pk);
     }
     const made = await signedPost(her, '/api/enterprise', { name: 'riverbend Link', purpose: 'Our own enterprise' });
     const hers = made.json?.publicKey as string;
     assert(made.status === 200 && !!hers, `12c. setup: Rhea makes "riverbend Link" with no photo through the route (got ${made.status} ${made.json?.error ?? ''})`);
     const herKeepers = keepersOf(hers);
-    const herRow = db.prepare('SELECT callsign, avatar_url FROM members WHERE public_key = ?').get(hers) as any;
-    assert(herRow?.avatar_url === '' && herKeepers.length === 1 && herKeepers[0].member_pubkey === her.pk && herKeepers[0].role === 'lead',
+    const herRow = db.prepare('SELECT callsign, avatar_ref FROM members WHERE public_key = ?').get(hers) as any;
+    assert(herRow?.avatar_ref === null && getMemberPhoto(db, hers) === null && herKeepers.length === 1 && herKeepers[0].member_pubkey === her.pk && herKeepers[0].role === 'lead',
         `12d. setup: it holds no photo and she is its lead keeper, what the old fallback took for a link (${JSON.stringify(herRow)}, ${JSON.stringify(herKeepers)})`);
     // This suite's admin calls so far fill the admin routes' limits for the minute (auth-rate-limit.ts: every window that
     // has closed a minute from now, which is all of them).

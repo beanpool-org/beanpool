@@ -299,7 +299,7 @@ async function main(): Promise<void> {
     console.log(`  ${tables.length} tables looked at`);
 
     console.log('\n— 3. watermarks and payload keys —');
-    const { exportSyncState } = await import('@beanpool/engine');
+    const { exportSyncState, setMemberPhoto } = await import('@beanpool/engine');
     const { PLAIN_TABLES, PLAIN_TABLES_PAYLOAD, plainTableTriggers } = manifest;
     // The export as a main server makes it, with the plain tables the manifest names (engine/sync.ts exportSyncState).
     const payload = exportSyncState(db as any, 'manifest-test', null, 0, PLAIN_TABLES) as unknown as Record<string, unknown>;
@@ -329,6 +329,11 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row', 'Manifest In Row')`).run();
             db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('manifest-in-row', 'notify_chat', 'false')`).run();
             return (x) => x?.publicKey === 'manifest-in-row' && x?.preferences?.notify_chat === 'false';
+        },
+        member_photos: () => {
+            db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-photo', 'Manifest Photo')`).run();
+            setMemberPhoto(db as any, 'manifest-in-row-photo', 'data:image/png;base64,iVBORw0KGgo=');
+            return (x) => x?.publicKey === 'manifest-in-row-photo' && x?.standing?.avatar_url === 'data:image/png;base64,iVBORw0KGgo=';
         },
     };
     const deltaNow = () => exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown>;
@@ -374,6 +379,8 @@ async function main(): Promise<void> {
     db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = 'manifest-whole-set'`).run();
     db.prepare(`DELETE FROM enterprise_pledges WHERE id = 'manifest-or-watermark'`).run();
     db.prepare(`DELETE FROM member_preferences WHERE public_key = 'manifest-in-row'`).run();
+    db.prepare(`DELETE FROM member_photos WHERE public_key = 'manifest-in-row-photo'`).run();
+    db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row-photo'`).run();
     db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row'`).run();
 
     // A delta finds a change only if the write moved the watermark. A touch trigger that stamps it moves it on every
@@ -392,9 +399,13 @@ async function main(): Promise<void> {
     const still: string[] = [];
     const notCopiedOnly: string[] = [];
     const tombstoneCleared: string[] = [];
+    const inParentRow = new Set<string>();
     for (const w of [...serverWrites, ...engineWrites]) {
         const entry = TABLES[w.table];
         if (!entry || (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || entry.watermark === WHOLE_SET) continue;
+        // Rows that travel in their parent's row (`inRowOf`) are found by the parent's watermark, which their writer moves:
+        // not seen here, so held to it by a write, below.
+        if (entry.inRowOf) { inParentRow.add(w.table); continue; }
         if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark) || (!!entry.orWatermark && w.set.includes(entry.orWatermark))) continue;
         const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
         const cleared = entry.clearedByTombstone ?? {};
@@ -406,6 +417,29 @@ async function main(): Promise<void> {
         `every write to a copied table moves its watermark, or writes only columns it doesn't copy or a tombstone clears (moves nothing: ${list(still)})`);
     console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
     console.log(`  writes that move no watermark, of columns a tombstone clears: ${list(tombstoneCleared)}`);
+    // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
+    // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved).
+    assert([...inParentRow].every((t) => t === 'member_photos'),
+        `the only table written in place that travels in its parent's row is member_photos, held to it below (${list(inParentRow)})`);
+    {
+        const pk = 'manifest-photo-stamp';
+        const old = '2000-01-01T00:00:00.000Z';
+        const stampOf = () => (db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as { updated_at: string }).updated_at;
+        const reset = () => db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(old, pk);
+        db.prepare(`INSERT INTO members (public_key, callsign, updated_at) VALUES (?, 'Manifest Stamp', ?)`).run(pk, old);
+        const moves: string[] = [];
+        for (const [label, value] of [['a first photo', ' data:image/png;base64,iVBORw0KGgo='], ['the same photo, its blanks moved (the same version and size)', 'data:image/png;base64,iVBORw0KGgo= '],
+            ['another photo', 'data:image/png;base64,iVBORw0KGgoAAAA='], ['no photo', null]] as const) {
+            reset();
+            setMemberPhoto(db as any, pk, value);
+            if (stampOf() === old) moves.push(label);
+        }
+        reset();
+        setMemberPhoto(db as any, pk, null);
+        assert(moves.length === 0 && stampOf() === old,
+            `member_photos: each change by its writer moves the member's updated_at, and setting what is held moves nothing (did not move: ${list(moves)})`);
+        db.prepare('DELETE FROM members WHERE public_key = ?').run(pk);
+    }
     // The standby makes each such clear itself: the importer's case for that tombstone sets the column to NULL.
     const importerSource = fs.readFileSync(importer, 'utf-8');
     for (const [t, entry] of Object.entries(TABLES)) {

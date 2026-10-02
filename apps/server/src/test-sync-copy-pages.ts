@@ -161,7 +161,9 @@ async function child(): Promise<void> {
             const now = () => a.stamp ?? new Date().toISOString();
             const ids: string[] = [];
             const line = db.prepare(`INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp, updated_at) VALUES (?, ?, ?, ?, ?, 'text', ?, ?)`);
-            const member = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, avatar_url, updated_at) VALUES (?, ?, ?, 'active', 1, ?, ?)`);
+            const member = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor, updated_at) VALUES (?, ?, ?, 'active', 1, ?)`);
+            const { setMemberPhoto } = await import('@beanpool/engine');
+            const stamp = db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
             const post = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, updated_at) VALUES (?, 'offer', 'food', ?, 'a flood', 1, ?, ?, ?)`);
             const trade = db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, ?, 0.01, 'a flood', ?)`);
             db.transaction(() => {
@@ -174,7 +176,9 @@ async function child(): Promise<void> {
                             crypto.randomBytes(24).toString('base64'), now(), now());
                     } else if (a.kind === 'members') {
                         const avatar = a.bytes ? `data:image/png;base64,${crypto.randomBytes(Math.ceil(a.bytes * 3 / 4)).toString('base64').slice(0, a.bytes)}` : null;
-                        member.run(id, `v-${u.slice(0, 18)}`, now(), avatar, now());
+                        member.run(id, `v-${u.slice(0, 18)}`, now(), now());
+                        // By the avatar's one writer, with the row's stamp put back where the touch trigger moved it.
+                        if (avatar) { setMemberPhoto(db, id, avatar); stamp.run(now(), id); }
                     } else if (a.kind === 'posts') {
                         post.run(id, `Flood ${i}`, a.author, now(), now());
                     } else {
@@ -603,7 +607,7 @@ async function main(): Promise<void> {
         const [midLine] = await main.send('flood', { kind: 'messages', n: 1, prefix: 'mid', conversationId, author: ann.pk, bytes: 40_000, ids: true });
         const [bigMember] = await main.send('flood', { kind: 'members', n: 1, prefix: 'big', bytes: 100_000, ids: true });
         const [held] = await main.send('rows', { sql: 'SELECT ciphertext FROM messages WHERE id = ?', args: [bigLine] });
-        const [heldMember] = await main.send('rows', { sql: 'SELECT avatar_url FROM members WHERE public_key = ?', args: [bigMember] });
+        const [heldMember] = await main.send('rows', { sql: 'SELECT photo AS avatar_url FROM member_photos WHERE public_key = ?', args: [bigMember] });
         const bounded = await copy();
         const over: string[] = [];
         const empty: number[] = [];

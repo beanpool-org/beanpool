@@ -74,6 +74,7 @@ import { originOfCachedPost } from './federation-commission.js';
 import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 import { knockRefusal } from './engine/probation.js';
 import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -100,8 +101,9 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago, with a profile photo (posting needs one). */
 function member(name: string, daysAgo: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }

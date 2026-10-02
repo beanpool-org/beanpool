@@ -179,9 +179,10 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
-               m.avatar_url as convenor_avatar_url
+               mp.photo as convenor_avatar_url
         FROM groups g
         LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
+        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE g.id = ? OR g.slug = ?
     `).get(idOrSlug, idOrSlug) as any;
 
@@ -192,8 +193,9 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
     let viewerInvitedBy: { pubkey: string; callsign?: string; avatarUrl?: string } | undefined;
     if (viewerPubkey) {
         const membership = db.prepare(`
-            SELECT gm.role, gm.status, gm.invited_by, inv.callsign AS inviter_callsign, inv.avatar_url AS inviter_avatar
+            SELECT gm.role, gm.status, gm.invited_by, inv.callsign AS inviter_callsign, invp.photo AS inviter_avatar
             FROM group_members gm LEFT JOIN members inv ON inv.public_key = gm.invited_by
+            LEFT JOIN member_photos invp ON invp.public_key = inv.public_key
             WHERE gm.group_id = ? AND gm.member_pubkey = ?
         `).get(row.id, viewerPubkey) as any;
         if (membership) {
@@ -240,9 +242,10 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
-               m.avatar_url as convenor_avatar_url
+               mp.photo as convenor_avatar_url
         FROM groups g
         LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
+        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE 1=1
     `;
     const params: any[] = [];
@@ -325,9 +328,10 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
 
 export function getGroupMembers(db: Db, groupId: string, filter?: { status?: GroupMemberStatus; role?: GroupRole }): GroupMember[] {
     let query = `
-        SELECT gm.*, m.callsign, m.avatar_url
+        SELECT gm.*, m.callsign, mp.photo AS avatar_url
         FROM group_members gm
         LEFT JOIN members m ON m.public_key = gm.member_pubkey
+        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE gm.group_id = ?
     `;
     const params: any[] = [groupId];
@@ -373,9 +377,10 @@ export function getGroupMembers(db: Db, groupId: string, filter?: { status?: Gro
 
 export function getGroupMember(db: Db, groupId: string, memberPubkey: string): GroupMember | null {
     const row = db.prepare(`
-        SELECT gm.*, m.callsign, m.avatar_url
+        SELECT gm.*, m.callsign, mp.photo AS avatar_url
         FROM group_members gm
         LEFT JOIN members m ON m.public_key = gm.member_pubkey
+        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE gm.group_id = ? AND gm.member_pubkey = ?
     `).get(groupId, memberPubkey) as any;
 

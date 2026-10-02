@@ -27,6 +27,7 @@ import { createDecision, executeDecision, getDecision } from './decisions-engine
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -54,7 +55,8 @@ function giveEarnedCredit(pubkey: string, targetEarned: number) {
     while (vNeeded > 0) {
         const tradeAmount = Math.min(vNeeded, 400);
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
-        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at, status) VALUES (?, ?, 'avatar', ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
+        setMemberPhoto(db, peerKey, 'avatar');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
         const pid = `post-ec-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
@@ -69,9 +71,10 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const now = new Date().toISOString();
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status, can_operate, last_active_at)
-        VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', ?, 'active', 1, ?)
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status, can_operate, last_active_at)
+        VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, `${callsign}${++seq}`, now, now);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
     if (earnedCredit > 0) giveEarnedCredit(pubKeyHex, earnedCredit);
     return { pubKeyHex, privateKey };

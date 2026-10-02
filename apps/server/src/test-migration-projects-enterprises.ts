@@ -154,7 +154,9 @@ async function runTests() {
     testAssert(projectEnterprise.lifecycle === 'bounded', 'Project enterprise has lifecycle = bounded');
     testAssert(projectEnterprise.goal_amount === 500, 'Project enterprise has goal_amount = 500');
     testAssert(projectEnterprise.purpose === 'Dry timber with solar heat', 'Project enterprise purpose matches description');
-    testAssert(projectEnterprise.avatar_url === 'https://example.com/kiln.jpg', 'Project enterprise avatar_url matches first photo');
+    const projectPhoto = popDb.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(legacyProjectId) as { photo: string } | undefined;
+    testAssert(projectPhoto?.photo === 'https://example.com/kiln.jpg' && projectEnterprise.avatar_ref !== null,
+        'Project enterprise photo (member_photos, its reference in the row) matches first photo');
 
     // Verify lead keeper in treasury_operators
     const projectKeeper = popDb.prepare('SELECT * FROM treasury_operators WHERE treasury_pubkey = ?').get(legacyProjectId) as any;

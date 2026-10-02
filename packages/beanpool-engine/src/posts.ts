@@ -12,7 +12,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
@@ -470,7 +470,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: forGuest ? null : avatarUrlFor(row.author_pubkey, row.author_avatar),
+        authorAvatarUrl: forGuest ? null : avatarUrlOf(row.author_pubkey, row.author_avatar),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
@@ -698,7 +698,7 @@ export function liveOfferCount(db: Db, publicKey: string): number {
 
 /** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
 const POST_ROW_SELECT = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+        SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (
@@ -719,7 +719,7 @@ const POST_ROW_SELECT = `
 /**
  * POST_ROW_SELECT for a visitor's read (PostFilter.guest): the same rows, with none of the people in them. guestPost puts
  * a neutral value in place of the author's name, face and standing and of who took the listing, and drops the group's
- * name, so none of them is read: not the author's photo (members.avatar_url, a photo stored in the row), nor their two
+ * name, so none of them is read: not the author's photo's reference (members.avatar_ref), nor their two
  * trade counts, nor any name. `m` stays joined for the author's standing in the listing's conditions
  * (ENTERPRISE_ON_BOARD_SQL).
  */

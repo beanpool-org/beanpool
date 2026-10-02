@@ -972,11 +972,11 @@ const photoCommands: Record<string, (args: any) => Promise<unknown>> = {
         if (!cols.storage_key) throw new Error('the attachment stayed inline');
         return sha256(bytes);
     },
-    /** The sha256 of a member's avatar's bytes, as its members row holds them. */
+    /** The sha256 of a member's avatar's bytes, as member_photos holds them. */
     'avatar-sha': async (a: { pk: string }) => {
         const { db } = await import('./db/db.js');
-        const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(a.pk) as { avatar_url: string | null } | undefined;
-        const m = /^data:[^;]+;base64,(.*)$/.exec(row?.avatar_url ?? '');
+        const row = db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(a.pk) as { photo: string } | undefined;
+        const m = /^data:[^;]+;base64,(.*)$/.exec(row?.photo ?? '');
         return m ? sha256(Buffer.from(m[1], 'base64')) : null;
     },
     'access-log': async () => {

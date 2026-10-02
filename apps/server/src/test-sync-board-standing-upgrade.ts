@@ -35,6 +35,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -123,8 +124,15 @@ async function main() {
         d.prepare("DELETE FROM node_config WHERE key = 'migration_board_standing_v1'").run();
         const hasColumn = (d.prepare('PRAGMA table_info(members)').all() as Array<{ name: string }>).some(c => c.name === 'board_standing_changed_at');
         assert(!hasColumn, 'the fixture is a node from before members.board_standing_changed_at');
-        const member = d.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, updated_at, is_treasury, paused, paused_at)
-                                  VALUES (?, ?, 'active', ?, 'seed', ?, 'data:image/png;base64,iVBORw0KGgo=', ?, ?, ?, ?)`);
+        const insertMember = d.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, updated_at, is_treasury, paused, paused_at)
+                                  VALUES (?, ?, 'active', ?, 'seed', ?, ?, ?, ?, ?)`);
+        // Each with a photo, by its one writer, and the row's stamp put back where the touch trigger moved it.
+        const restamp = d.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?');
+        const member = { run: (pk: string, callsign: string, joinedAt: string, code: string | null, stamp: string, treasury: number, paused: number, pausedAt: string | null) => {
+            insertMember.run(pk, callsign, joinedAt, code, stamp, treasury, paused, pausedAt);
+            setMemberPhoto(d, pk, 'data:image/png;base64,iVBORw0KGgo=');
+            restamp.run(stamp, pk);
+        } };
         const joined = ago(365 * 86_400_000);
         member.run(carol.pubKeyHex, 'ReaderCarol', joined, 'INV-CAROL', seeded.carol, 0, 0, null);
         member.run(hana.pubKeyHex, 'HolidayHana', joined, 'INV-HANA', seeded.hana, 0, 0, null);

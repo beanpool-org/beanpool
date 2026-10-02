@@ -45,7 +45,7 @@ An enterprise is not a standalone table or an isolated cryptographic identity; i
 | :--- | :--- | :--- |
 | `public_key` | Client Ed25519 public key hex | Node-generated Ed25519 pubkey hex |
 | `callsign` | User display name | Enterprise name (e.g. Eggs) |
-| `avatar_url` | Uploaded or bundled avatar | Custom image, SVG, or bundled asset |
+| `avatar_ref` (the photo itself is in `member_photos`) | Uploaded or bundled avatar | Custom image or bundled asset |
 | `is_treasury` | `0` | `1` |
 | `can_operate` | `0` or `1` (Master operator switch) | `0` (Enterprise cannot operate) |
 | `can_vouch` | `0` or `1` (Appointed voucher switch) | `0` (Default) |
@@ -77,7 +77,7 @@ An enterprise is instantiated via the function [`createTreasury(name, avatar, cr
 1. **Validation**: Enforces `trimmed.length >= 2` and verifies that `lower(callsign)` is not taken by any active member ([`state-engine.ts#L2903-L2912`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2903-L2912)). Unless `opts.systemCreated` is true, an avatar image is strictly required ([`state-engine.ts#L2905`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2905)).
 2. **Keypair Generation**: Creates a fresh 32-byte Ed25519 keypair on the node server via Node.js [`crypto.generateKeyPairSync('ed25519')`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2915-L2920).
 3. **Database Insertion**: In an atomic SQLite transaction:
-   - Inserts into `members` with `public_key = pubKeyHex`, `callsign = trimmed`, `avatar_url = avatar`, `status = 'active'`, `is_treasury = 1`, and `earned_credit = line` ([`state-engine.ts#L2925-L2927`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2925-L2927)). `invited_by` and `invite_code` remain `NULL`.
+   - Inserts into `members` with `public_key = pubKeyHex`, `callsign = trimmed`, `status = 'active'`, `is_treasury = 1`, and `earned_credit = line` ([`state-engine.ts#L2925-L2927`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2925-L2927)). `invited_by` and `invite_code` remain `NULL`. The avatar goes in by its one writer, `setMemberPhoto` (@beanpool/engine members.ts): the photo into `member_photos`, its version and size into the row's `avatar_ref` and `avatar_bytes`.
    - Inserts into `accounts` with `balance = 0` and `last_demurrage_epoch = 0` ([`state-engine.ts#L2928`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2928)).
    - Writes the private key in plaintext to `node_config` under the key `treasury_privkey_<pubKeyHex>` ([`state-engine.ts#L2929`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2929)).
 4. **Ledger Initialization**: Calls [`ledger.initializeGenesisAccount(pubKeyHex)`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2932) and registers the account as demurrage-exempt via [`ledger.setDecayExempt(pubKeyHex)`](file:///Users/marty/projects/bp-manual/apps/server/src/state-engine.ts#L2933).

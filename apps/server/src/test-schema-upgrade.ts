@@ -27,7 +27,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
 import { OWNERS_WHO_ADDED_AS_FRIEND_SQL, TRADE_PARTNERS_SQL } from '@beanpool/engine';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -148,7 +149,7 @@ function legacyDdl(table: string, withoutColumns: string[]): string {
 
 const legacySettlementsDdl = (withoutColumns: string[]) => legacyDdl('settlements', withoutColumns);
 
-function main() {
+async function main() {
     console.log('Running schema upgrade tests...\n');
 
     // ── 1. A fresh install, for the shape everything else is compared against ────────────────────
@@ -738,7 +739,11 @@ END`;
             'a fresh install has members.is_visitor, and the index of the members\' own keys');
         // As the node runs (db.ts): rows may name an inviter this node has no row for ('genesis', 'open:google').
         d.pragma('foreign_keys = OFF');
+        // And from before members' photos left their rows (member_photos): a photo inline in members.avatar_url, which the
+        // boot moves out before it marks the visitors, so row 24's photo still reads as a sign of use as a member.
         d.exec(`DROP TRIGGER members_touch_updated_at; DROP INDEX idx_members_member_keys; ALTER TABLE members DROP COLUMN is_visitor;
+                DROP TABLE member_photos; ALTER TABLE members DROP COLUMN avatar_ref; ALTER TABLE members DROP COLUMN avatar_bytes;
+                ALTER TABLE members ADD COLUMN avatar_url TEXT;
                 DELETE FROM node_config WHERE key = 'migration_mark_visitors_v1';`);
         assert(!columns(d, 'members').includes('is_visitor'), 'the fixture genuinely lacks the column');
         const OLD = '2025-01-01T00:00:00.000Z';
@@ -1215,8 +1220,8 @@ END`;
             d.pragma('foreign_keys = OFF');
             d.exec('DROP TABLE federation_link_treasuries');
             for (const [key, name] of [['link-treasury', 'eastgippy Link'], ['her-enterprise', 'riverbend Link']]) {
-                d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, is_treasury)
-                           VALUES (?, ?, '2025-01-01T00:00:00.000Z', 'x', 'x', '', 'active', 1)`).run(key, name);
+                d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
+                           VALUES (?, ?, '2025-01-01T00:00:00.000Z', 'x', 'x', 'active', 1)`).run(key, name);
             }
             d.prepare(`INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES ('12D3KooWEastGippy', 'link-treasury')`).run();
             d.close();
@@ -1459,6 +1464,255 @@ END`;
         fs.rmSync(brokenDir, { recursive: true, force: true });
     }
 
+    // ── Members' photos out of their rows (the global node's load rehearsal, 2026-10-02) ─────────────────────────────
+    // A photo sat inline in members.avatar_url (~27 KB of base64), so every scan of members read every one: at ~6,400
+    // photos one full member list ran a 256 MB heap out of memory. A fresh install keeps each in member_photos, with its
+    // reference (the URL's version) and size in the row. A node from before moves them at boot (db.ts
+    // moveMemberPhotosOutOfRows): in batches by rowid, each its own transaction, before it listens; killed part way, the
+    // next boot carries on; no row is stamped; the column goes once every photo is out.
+    await (async () => {
+        console.log('\n— members\' photos: kept out of the row on a fresh install, moved at boot on a node from before, in batches, killed or not —');
+        const f = new Database(path.join(freshDir, 'state.db'), { readonly: true });
+        const freshMembersCols = columns(f, 'members');
+        assert(!freshMembersCols.includes('avatar_url') && freshMembersCols.includes('avatar_ref') && freshMembersCols.includes('avatar_bytes')
+            && JSON.stringify(columns(f, 'member_photos')) === JSON.stringify(['photo', 'public_key']),
+            'a fresh install: members has avatar_ref and avatar_bytes and no avatar_url, and member_photos holds the photo');
+        const freshMembersIdx = indexes(f, 'members');
+        f.close();
+
+        /** The URL's version as @beanpool/core avatarRefOf makes it, worked out here on its own: sha256 of the trimmed value. */
+        const versionOf = (v: string) => crypto.createHash('sha256').update(v.trim(), 'utf8').digest('hex').slice(0, 8);
+        const photo = (n: number, bytes: number) => `data:image/jpeg;base64,${crypto.createHash('sha512').update(`p${n}`).digest().toString('base64').repeat(Math.ceil(bytes / 88)).slice(0, bytes)}`;
+        // Every kind of value a live node's avatar_url can hold, and what the move makes of it: a photo, its reference and
+        // its size, or nothing (a value no app ever saw as a photo: empty, blank, or this node's own avatar address).
+        const KINDS: [string, string | null, 'moved' | 'none'][] = [
+            ['a photo as a data URL', photo(1, 27_000), 'moved'],
+            ['a photo with spaces around it', `  ${photo(2, 9_000)}\n`, 'moved'],
+            ['a legacy bare-base64 photo', photo(3, 5_000).slice('data:image/jpeg;base64,'.length), 'moved'],
+            ['a shipped picture', 'bundled://leaf', 'moved'],
+            ['a link', 'https://example.org/me.jpg', 'moved'],
+            ['this node\'s own avatar address, sent back', '/api/avatar/abc?size=thumb', 'none'],
+            ['an absolute avatar address', 'https://mullum.example/api/avatar/abc?size=thumb&v=0123abcd', 'none'],
+            ['an empty string', '', 'none'],
+            ['blanks', '   ', 'none'],
+            ['no avatar', null, 'none'],
+        ];
+        const FILLER = 3_000; // photos enough that the move takes a while, so a kill lands inside it
+        const STAMP = '2025-06-01T00:00:00.000Z';
+
+        /** A fresh node made into one from before the move: the photo back in the row, its reference, size and table gone. */
+        const plantLegacy = (dir: string): { pk: string; label: string; value: string | null; kind: 'moved' | 'none'; rowid: number }[] => {
+            assert(bootInto(dir).ok, 'a fresh node boots (the fixture starts from the current schema)');
+            const d = new Database(path.join(dir, 'state.db'));
+            d.exec(`DROP TRIGGER members_touch_updated_at; DROP TABLE member_photos;
+                    ALTER TABLE members DROP COLUMN avatar_ref; ALTER TABLE members DROP COLUMN avatar_bytes;
+                    ALTER TABLE members ADD COLUMN avatar_url TEXT;`);
+            const ins = d.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, avatar_url, updated_at) VALUES (?, ?, ?, ?, ?, ?)`);
+            const rows: { pk: string; label: string; value: string | null; kind: 'moved' | 'none'; rowid: number }[] = [];
+            d.transaction(() => {
+                // Each kind among the filler, not only at the start: the batches walk by rowid.
+                for (let i = 0; i < FILLER; i++) {
+                    const k = i % 300 === 0 ? KINDS[(i / 300) % KINDS.length] : null;
+                    const [label, value, kind] = k ?? [`filler ${i}`, photo(100 + i, 30_000), 'moved' as const];
+                    const pk = crypto.createHash('sha256').update(`member ${i}`).digest('hex');
+                    const r = ins.run(pk, `Photo${i}`, STAMP, `INV-${i}`, value, STAMP);
+                    rows.push({ pk, label, value, kind, rowid: Number(r.lastInsertRowid) });
+                }
+            })();
+            d.close();
+            return rows;
+        };
+        type Held = { avatar_ref: string | null; avatar_bytes: number | null; updated_at: string; rowid: number; photo: string | null; inline?: string | null };
+        const heldIn = (dir: string): { cols: string[]; rows: Map<string, Held>; photos: number; order: string[] } => {
+            const d = new Database(path.join(dir, 'state.db'), { readonly: true });
+            const cols = columns(d, 'members');
+            const hasPhotos = !!d.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'member_photos'`).get();
+            const inline = cols.includes('avatar_url') ? ', m.avatar_url AS inline' : '';
+            const refCols = cols.includes('avatar_ref') ? 'm.avatar_ref, m.avatar_bytes' : 'NULL AS avatar_ref, NULL AS avatar_bytes';
+            const rows = new Map((d.prepare(`SELECT m.public_key, m.rowid AS rowid, m.updated_at, ${refCols}${inline}, ${hasPhotos ? 'mp.photo' : 'NULL AS photo'}
+                                              FROM members m ${hasPhotos ? 'LEFT JOIN member_photos mp ON mp.public_key = m.public_key' : ''}
+                                              WHERE m.callsign LIKE 'Photo%'`).all() as (Held & { public_key: string })[]).map((r) => [r.public_key, r]));
+            const photos = hasPhotos ? (d.prepare('SELECT COUNT(*) AS n FROM member_photos').get() as { n: number }).n : 0;
+            const order = (d.prepare(`SELECT public_key FROM members ORDER BY rowid`).all() as { public_key: string }[]).map((r) => r.public_key);
+            d.close();
+            return { cols, rows, photos, order };
+        };
+
+        // 1. Killed part way: the batches done are done, the rest still hold their photo, nothing is half moved.
+        const dir = tmp('legacy-member-photos');
+        const planted = plantLegacy(dir);
+        const orderBefore = heldIn(dir).order;
+        const tsxEsm = path.join(__dirname, '..', '..', '..', 'node_modules', 'tsx', 'dist', 'esm', 'index.mjs');
+        const bootScript = path.join(dir, 'boot-kill.mjs');
+        fs.writeFileSync(bootScript, `
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        // The real node process (node --import tsx, not the tsx wrapper, whose kill leaves its child running), killed
+        // once a batch is in: watched through the database itself, which WAL lets another connection read meanwhile.
+        const child = spawn(process.execPath, ['--import', `file://${tsxEsm}`, bootScript], {
+            cwd: path.join(__dirname, '..'),
+            env: { ...process.env, BEANPOOL_DATA_DIR: dir, MEMBER_PHOTO_MOVE_BATCH: '50' },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let childOut = '';
+        child.stdout!.on('data', (b) => { childOut += b; });
+        child.stderr!.on('data', (b) => { childOut += b; });
+        const exited = new Promise<number | null>((resolve) => child.on('exit', (code) => resolve(code)));
+        let killedAt = -1;
+        const watch = new Database(path.join(dir, 'state.db'), { readonly: true, fileMustExist: true });
+        for (let i = 0; i < 4000 && killedAt < 0 && child.exitCode === null; i++) {
+            try {
+                const n = (watch.prepare('SELECT COUNT(*) AS n FROM member_photos').get() as { n: number }).n;
+                if (n >= 100) { child.kill('SIGKILL'); killedAt = n; }
+            } catch { /* not made yet */ }
+            if (killedAt < 0) await new Promise((r) => setTimeout(r, 2));
+        }
+        watch.close();
+        await exited;
+        const mid = heldIn(dir);
+        const movedMid = planted.filter((p) => p.kind === 'moved' && mid.rows.get(p.pk)?.photo != null);
+        assert(killedAt >= 100 && !childOut.includes('BOOT_OK') && mid.cols.includes('avatar_url')
+            && movedMid.length > 0 && movedMid.length < planted.filter((p) => p.kind === 'moved').length,
+            `a boot killed part way through the move (seen ${killedAt} moved) leaves it part done: ${movedMid.length} photos out, the column still there`);
+        const halfMoved = planted.filter((p) => {
+            const r = mid.rows.get(p.pk)!;
+            const out = r.photo !== null || r.avatar_ref !== null;
+            // Out: the row holds no photo; its reference, size and photo are all there. In: the row still holds it, nothing else.
+            return out ? (r.inline !== null || r.photo !== p.value || r.avatar_bytes !== Buffer.byteLength(p.value ?? '')) : (r.inline !== p.value);
+        });
+        assert(halfMoved.length === 0, `and nothing is half moved: each member either still holds their photo or holds it in member_photos, whole (${halfMoved.length} not)`);
+
+        // 2. The next boot carries on and finishes, in batches.
+        const finish = bootInto(dir, { MEMBER_PHOTO_MOVE_BATCH: '50' }, `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        const done = heldIn(dir);
+        const movable = planted.filter((p) => p.kind === 'moved').length;
+        const finished = /Members' photos are in member_photos now: (\d+) moved, (\d+) that were no photo left out/.exec(finish.output);
+        assert(finish.ok && !!finished && Number(finished[1]) === movable - movedMid.length,
+            `the next boot carries on from where it was killed and moves the rest (${finished?.[1]} of ${movable - movedMid.length}), in batches (${(finish.output.match(/so far/g) || []).length} progress lines)`);
+        assert(!done.cols.includes('avatar_url') && JSON.stringify(done.cols) === JSON.stringify(freshMembersCols),
+            'then the photo column is dropped: members has exactly the columns a fresh install has');
+        const wrong = planted.filter((p) => {
+            const r = done.rows.get(p.pk)!;
+            if (p.kind === 'none') return r.photo !== null || r.avatar_ref !== null || r.avatar_bytes !== null;
+            const ref = p.value!.trim().startsWith('bundled://') ? p.value : versionOf(p.value!);
+            return r.photo !== p.value || r.avatar_ref !== ref || r.avatar_bytes !== Buffer.byteLength(p.value!);
+        });
+        assert(wrong.length === 0, `every photo is in member_photos exactly as it was, with its version and size in the row; no photo is no avatar (${wrong.length} wrong: ${wrong.slice(0, 3).map((p) => p.label).join(', ')})`);
+        for (const [label, , kind] of KINDS) {
+            const p = planted.find((x) => x.label === label)!;
+            const r = done.rows.get(p.pk)!;
+            assert(kind === 'moved' ? r.photo === p.value : r.photo === null && r.avatar_ref === null, `${label}: ${kind === 'moved' ? 'moved as it was' : 'no avatar'}`);
+        }
+        assert(planted.every((p) => done.rows.get(p.pk)!.updated_at === STAMP), 'no member\'s row is stamped by the move: it is no change to send a standby');
+        assert(JSON.stringify(done.order) === JSON.stringify(orderBefore) && planted.every((p) => done.rows.get(p.pk)!.rowid === p.rowid),
+            'every row keeps its rowid, so the member list keeps its order');
+        const after = new Database(path.join(dir, 'state.db'), { readonly: true });
+        const trigger = (after.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'members_touch_updated_at'`).get() as { sql: string } | undefined)?.sql ?? '';
+        assert(/avatar_ref/.test(trigger) && /avatar_bytes/.test(trigger) && !/avatar_url/.test(trigger) && JSON.stringify(indexes(after, 'members')) === JSON.stringify(freshMembersIdx),
+            'the members touch trigger is back, naming the reference and size (so a new photo is sent to a standby), and the indexes are a fresh install\'s');
+        after.close();
+
+        // 3. Once moved, a boot does nothing more.
+        const again = bootInto(dir, {}, `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        assert(again.ok && !/Members' photos/.test(again.output) && heldIn(dir).photos === done.photos, 'booting again is a no-op');
+        fs.rmSync(dir, { recursive: true, force: true });
+
+        // 4. A standby moves its own the same way: its rows are its main server's, and so are its photos, where they now live.
+        const standbyDir = tmp('legacy-member-photos-standby');
+        const standbyPlanted = plantLegacy(standbyDir);
+        assert(bootInto(standbyDir, { NODE_ROLE: 'backup' }).ok, 'a standby from before the move boots');
+        const standby = heldIn(standbyDir);
+        assert(!standby.cols.includes('avatar_url') && standbyPlanted.every((p) => (standby.rows.get(p.pk)!.photo ?? null) === (p.kind === 'moved' ? p.value : null)
+            && standby.rows.get(p.pk)!.updated_at === STAMP),
+            'and it holds every photo in member_photos, its rows unstamped, as its main server will');
+        fs.rmSync(standbyDir, { recursive: true, force: true });
+
+        // 5. A move that STOPS part way (a batch throws: a full disk, an I/O error), and the node runs on. Meanwhile one
+        // member the move had not reached sets a new photo and another removes theirs. The next boot carries on, and must
+        // not put either member's old photo back (#1475's deciding review: measured, it did both).
+        const stopDir = tmp('legacy-member-photos-stopped');
+        const stopPlanted = plantLegacy(stopDir);
+        const STOP_BATCH = 50;
+        // The rows the move walks (a value in avatar_url), in rowid order, and so which batch each is in.
+        const walked = stopPlanted.filter((p) => p.value !== null);
+        const inBatch = (n: number) => walked.slice((n - 1) * STOP_BATCH, n * STOP_BATCH).filter((p) => p.kind === 'moved');
+        const failing = inBatch(2)[10];
+        const [x, y] = [inBatch(3)[20], inBatch(3)[30]];
+        {
+            // The failure: one member's photo in batch 2 can't be written. The move creates member_photos IF NOT EXISTS,
+            // so it is made here first, as the move makes it, to hang the trigger on.
+            const d = new Database(path.join(stopDir, 'state.db'));
+            d.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL);
+                    CREATE TRIGGER injected_failure BEFORE INSERT ON member_photos WHEN NEW.public_key = '${failing.pk}'
+                    BEGIN SELECT RAISE(ABORT, 'injected: database or disk is full'); END;`);
+            d.close();
+        }
+        const NEW_PHOTO = `data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='}`;
+        // Boot 1, then the node runs on: the disk is freed (the trigger goes), and X and Y change their photos by the
+        // profile route's own writer (state-engine updateProfile), as members do on a running node.
+        const boot1 = bootInto(stopDir, { MEMBER_PHOTO_MOVE_BATCH: String(STOP_BATCH) }, `
+            console.error = (...a) => console.log(...a);
+            const se = await import(${JSON.stringify(path.join(__dirname, 'state-engine.ts'))});
+            const { db } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            se.initStateEngine();
+            // The planted members' photos only: the boot also makes the community's own enterprise, with its shipped picture.
+            console.log('COMMITTED=' + db.prepare("SELECT COUNT(*) AS n FROM member_photos mp JOIN members m USING (public_key) WHERE m.callsign LIKE 'Photo%'").get().n);
+            db.exec('DROP TRIGGER injected_failure');
+            se.updateProfile(${JSON.stringify(x.pk)}, { avatar: ${JSON.stringify(NEW_PHOTO)} });
+            se.updateProfile(${JSON.stringify(y.pk)}, { avatar: null });
+            console.log('BOOT_OK');
+            process.exit(0);
+        `);
+        const stopped = /the move out of their rows stopped after (\d+)/.exec(boot1.output);
+        const committed = /COMMITTED=(\d+)/.exec(boot1.output);
+        assert(boot1.ok && !!stopped && boot1.output.includes('injected: database or disk is full'),
+            `a batch that throws stops the move, loudly, and the node runs on (${stopped ? stopped[0] : boot1.output.split('\n').slice(-4).join(' | ')})`);
+        assert(!!stopped && !!committed && Number(stopped[1]) === Number(committed[1]) && Number(committed[1]) === inBatch(1).length,
+            `the count it logs is what was committed: batch 1's ${inBatch(1).length} (logged ${stopped?.[1]}, member_photos holds ${committed?.[1]} of theirs)`);
+        const between = heldIn(stopDir);
+        const xNow = between.rows.get(x.pk)!;
+        assert(between.cols.includes('avatar_url') && xNow.photo !== null && xNow.photo !== x.value && xNow.avatar_ref !== null
+            && between.rows.get(y.pk)!.photo === null && between.rows.get(y.pk)!.avatar_ref === null,
+            'on the running node X holds the new photo and Y none, with the old column still there');
+
+        // Boot 2 carries on and finishes.
+        const boot2 = bootInto(stopDir, { MEMBER_PHOTO_MOVE_BATCH: String(STOP_BATCH) }, `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        const end = heldIn(stopDir);
+        assert(boot2.ok && /Members' photos are in member_photos now/.test(boot2.output) && !end.cols.includes('avatar_url'),
+            'the next boot finishes the move and drops the column');
+        const xEnd = end.rows.get(x.pk)!, yEnd = end.rows.get(y.pk)!;
+        assert(xEnd.photo === xNow.photo && xEnd.avatar_ref === xNow.avatar_ref && xEnd.avatar_bytes === xNow.avatar_bytes,
+            `X keeps the photo they set after the move stopped, not the one from before it (ref ${xEnd.avatar_ref}, set ${xNow.avatar_ref}, old ${versionOf(x.value!)})`);
+        assert(yEnd.photo === null && yEnd.avatar_ref === null && yEnd.avatar_bytes === null,
+            `Y's removal holds: no photo comes back (ref ${yEnd.avatar_ref}, ${yEnd.photo === null ? 'no photo' : `a photo of ${yEnd.photo.length} chars`})`);
+        const untouchedWrong = stopPlanted.filter((p) => p.pk !== x.pk && p.pk !== y.pk).filter((p) => {
+            const r = end.rows.get(p.pk)!;
+            if (p.kind === 'none') return r.photo !== null || r.avatar_ref !== null || r.avatar_bytes !== null;
+            const ref = p.value!.trim().startsWith('bundled://') ? p.value : versionOf(p.value!);
+            return r.photo !== p.value || r.avatar_ref !== ref || r.avatar_bytes !== Buffer.byteLength(p.value!) || r.updated_at !== STAMP;
+        });
+        assert(untouchedWrong.length === 0,
+            `every other member's photo moved whole, the one that failed in batch 2 included, rows unstamped (${untouchedWrong.length} wrong: ${untouchedWrong.slice(0, 3).map((p) => p.label).join(', ')})`);
+        fs.rmSync(stopDir, { recursive: true, force: true });
+    })();
+
     freshDb.close();
     fs.rmSync(freshDir, { recursive: true, force: true });
     fs.rmSync(step3aDir, { recursive: true, force: true });
@@ -1468,11 +1722,9 @@ END`;
     console.log('⭐️ Schema upgrade checks PASSED.');
 }
 
-main();
-
 // Exit explicitly. This suite leaves the engine's timers and handles open, so returning normally
 // keeps the event loop alive and the process never terminates — it prints a pass and then hangs.
 // In CI that is indistinguishable from a slow run and blocks every suite after it (scripts/test-all.sh
-// runs them in sequence), which is how a single test burns hours of Actions time. Reaching here means
-// every assertion above held; a failure throws and exits non-zero long before this line.
-process.exit(0);
+// runs them in sequence), which is how a single test burns hours of Actions time. Reaching the exit 0
+// means every assertion above held; a failure throws, and exits non-zero.
+main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });

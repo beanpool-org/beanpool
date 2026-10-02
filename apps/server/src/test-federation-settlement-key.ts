@@ -63,6 +63,7 @@ import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
 import { beginOutboundSettlement, abandonOutboundSettlement, SettlementError } from './federation-settlement-exchange.js';
 import { getSettlement } from './federation-settlement-state.js';
 import { rotateDailyPulse } from './daily-pulse.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--settlement-key-child';
@@ -125,11 +126,12 @@ async function runChild(): Promise<void> {
     // Seeded once: a restart on the same data finds the rows there and changes nothing.
     const first = !getMember(seed.owner);
     if (first) seedGenesisMember(seed.owner, 'Owner');
-    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                               VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`);
+    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                               VALUES (?, ?, ?, ?, 'TEST', 'active')`);
     if (first) {
         for (const m of seed.members) {
             insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
+            setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
             // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
             db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
         }
@@ -241,8 +243,9 @@ const hasAccount = (pk: string) => !!db.prepare('SELECT 1 FROM accounts WHERE pu
 
 function seedMember(name: string, balance: number, isTreasury = false): string {
     const pk = newId(name).pk;
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury) VALUES (?, ?, ?, 'https://example.com/a.jpg', 'active', ?)`)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury) VALUES (?, ?, ?, 'active', ?)`)
         .run(pk, name, ago(7 * DAY), isTreasury ? 1 : 0);
+    setMemberPhoto(db, pk, 'https://example.com/a.jpg');
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
     return pk;
 }

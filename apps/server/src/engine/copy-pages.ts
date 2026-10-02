@@ -62,7 +62,8 @@ export const COPY_IDLE_MS = 2 * 60_000;
 export const COPY_MAX_MS = 60 * 60_000;
 /**
  * Rows read from the snapshot at once, at most; a slice also ends once its rows add up to what is left of the page's bytes
- * (keyset.ts rowBytes), so a slice of wide rows (members with a photo inline) holds about a page, never 1,000 of them.
+ * (keyset.ts rowBytes, and a member's photo by its size: carriedBytes), so a slice of wide rows (members with photos)
+ * holds about a page, never 1,000 of them.
  * Between slices the event loop is let go.
  */
 const SLICE_ROWS = 1000;
@@ -243,7 +244,7 @@ function readSlice(
     let ended = true;
     for (const row of read) {
         rows.push(row);
-        bytes += rowBytes(row);
+        bytes += rowBytes(row) + carriedBytes(step, row);
         // Leaving the loop closes the statement: nothing else reads on this connection until it has.
         if (rows.length >= limit || bytes >= maxBytes) { ended = false; break; }
     }
@@ -253,6 +254,15 @@ function readSlice(
         return v;
     }));
     return { rows, keys, ended };
+}
+
+/**
+ * What a row of `step` brings into the page that its own columns don't: a member's avatar, which their row carries twice
+ * (`standing.avatar_url` and the named `avatarUrl`, @beanpool/engine sync.ts withPhoto) but no longer holds, counted from
+ * its size in the row (avatar_bytes), so a slice of members with photos still holds about a page.
+ */
+function carriedBytes(step: Step, row: any): number {
+    return step.table === 'members' ? 2 * (Number(row.avatar_bytes) || 0) : 0;
 }
 
 /** Whether any row of this copy is left to send; moves past the tables that have none. */

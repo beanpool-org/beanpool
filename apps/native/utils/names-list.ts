@@ -18,7 +18,7 @@
  *   - a generation is written ahead: the pin keeps it and its key before the request (`pending`), so a phone that dies
  *     after the node took it still has the key, and one whose request never landed sends it again
  *     ({@link openNamesList});
- *   - the asked actions: "Check each other" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKey}), "Put
+ *   - the asked actions: "Check each other" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKeyAndOpen}), "Put
  *     the key history back" ({@link putHistoryBack}), "Start again" / a new key nobody can hand over
  *     ({@link makeKeyOnThisPhone}), "Follow the server's history" ({@link followServerHistory}), "Send the keys to @X again"
  *     ({@link sendKeysAgain});
@@ -405,6 +405,8 @@ export async function checkEachOther(
         const pin = kept.kind === 'pin' ? kept.pin : null;
         const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
         if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'not_kept' };
+        // A check of a key is the admin changing their mind about removing it, as checkNamesKeyInPerson says (round 16).
+        unkeptRemovals.get(namesTrustStoreKey(identity.publicKey, anchor))?.delete(key);
         await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
         return { ok: true, pinned: key, mismatch };
     });
@@ -443,13 +445,44 @@ async function justCheckedNow(store: NamesPinStore, publicKey: string, anchor: s
     }
 }
 
-/** "Remove @X's old key" (asked first): the next open makes a new key without it. */
+/**
+ * Removals the admin tapped that this phone couldn't keep (round 16, :186): its pin couldn't be read or saved, so nothing
+ * was removed, and the next name would go under a key the lost phone holds. Until a Remove of that key is tried again and
+ * kept (or the key is checked, the admin changing their mind), nothing is written ({@link saveNamesEntry}) and the screen
+ * offers the Remove again. In memory only, by pin label: the store just failed, and an app started afresh opens from the
+ * pin as it is.
+ */
+const unkeptRemovals = new Map<string, Set<string>>();
+
+/** The keys whose Remove this phone couldn't keep, still to be tried again (round 16). */
+export function unkeptRemovalsOf(identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string): string[] {
+    return [...(unkeptRemovals.get(namesTrustStoreKey(identity.publicKey, anchor)) ?? [])];
+}
+
+/** "Remove @X's old key" (asked first): the next open makes a new key without it. False when it couldn't be kept. */
 export async function removeOldKey(store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, key: string): Promise<boolean> {
     return withPin(identity.publicKey, anchor, async () => {
         const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-        if (!pin) return false;
-        return writeNamesPinTo(store, identity.publicKey, anchor, removeNamesKey(pin, key));
+        const kept = !!pin && await writeNamesPinTo(store, identity.publicKey, anchor, removeNamesKey(pin, key));
+        const label = namesTrustStoreKey(identity.publicKey, anchor);
+        const unkept = unkeptRemovals.get(label) ?? new Set<string>();
+        if (kept) unkept.delete(key.toLowerCase());
+        else unkept.add(key.toLowerCase());
+        if (unkept.size) unkeptRemovals.set(label, unkept);
+        else unkeptRemovals.delete(label);
+        return kept;
     });
+}
+
+/**
+ * The screen's Remove (round 16, :186): the removal kept, then the list opened again. A Remove whose pin couldn't be read
+ * or saved stops here with its own words (`remove_not_kept`), and the list isn't opened as if it had been removed.
+ */
+export async function removeOldKeyAndOpen(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, admin: Pick<NamesAdminRow, 'pubkey' | 'callsign'>): Promise<NamesResult<NamesOpened>> {
+    if (!(await removeOldKey(store, identity, anchor, admin.pubkey))) {
+        return { ok: false, status: 0, code: 'remove_not_kept', message: NAMES_COPY.removeNotKept([admin.callsign]) };
+    }
+    return openNamesList(anchor, identity, store);
 }
 
 // ── Opening the list, in order ───────────────────────────────────────────────────────────────
@@ -1060,6 +1093,9 @@ export function saveNamesEntry(
             const l = await look(anchor, identity, store);
             if (!l.ok) return l;
             const { pin, plan, state } = l.value;
+            // A Remove this phone couldn't keep (round 16, :186): nothing is written until it is tried again and kept.
+            const unkept = unkeptRemovalsOf(identity, anchor);
+            if (unkept.length) return { ok: false, status: 0, code: 'remove_not_kept', message: NAMES_COPY.removeNotKept(unkept.map((k) => callsignIn(state, k))) };
             const removing = removalsPending(pin);
             if (removing.length) return { ok: false, status: 0, code: 'still_removing', message: NAMES_COPY.stillRemoving(removing.map((k) => callsignIn(state, k))) };
             const head = pin.chain[pin.chain.length - 1];
@@ -1398,6 +1434,9 @@ export const NAMES_COPY = {
     matched: (who: string) => `Checked: this phone now trusts ${at(who)}’s phone.`,
     /** A check whose pin couldn't be read or saved (round 15): nothing was trusted, and nothing kept was changed. */
     checkNotKept: 'This phone couldn’t read or save its names list keys just now, so nothing was checked and nothing was changed. Try again.',
+    /** A Remove whose pin couldn't be read or saved (round 16, :186): nothing was removed, and nothing is written until it is. */
+    removeNotKept: (who: string[]) => `This phone couldn’t read or save its names list keys just now, so ${who.length > 1 ? `the old keys of ${both(who)} weren’t` : `${at(who[0] ?? '')}’s old key wasn’t`} `
+        + `removed and nothing was changed. This phone writes nothing to the list until it is: tap ${who.length > 1 ? 'each Remove' : `Remove ${at(who[0] ?? '')}’s old key`} again.`,
     exportTitle: 'Export the list as a PDF?',
     export: 'The PDF holds every name you can open here. Once it leaves this phone it’s yours to keep safe, like a paper list. '
         + 'The other admins can see that you exported it, and when.',

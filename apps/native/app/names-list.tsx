@@ -33,7 +33,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
+    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
@@ -64,6 +64,8 @@ export default function NamesListScreen() {
      * is; else the removals the pin still stands by, by callsign. The ready list isn't offered from a stale snapshot.
      */
     const [stale, setStale] = useState<string[] | null>(null);
+    /** Round 16 (:186): keys whose Remove this phone couldn't keep. Until each is tried again and kept, the list isn't offered. */
+    const [unkept, setUnkept] = useState<string[]>([]);
     const openedRef = useRef<NamesOpened | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -97,7 +99,10 @@ export default function NamesListScreen() {
     /** What an open, or an action that opens again, came back with. */
     const take = useCallback(async (url: string, result: Awaited<ReturnType<typeof openNamesList>>) => {
         if (!identity) return;
+        setUnkept(unkeptRemovalsOf(identity, url));
         if (!result.ok) {
+            // A Remove this phone couldn't keep (round 16, :186): its own card says so and offers it again, in place of the list.
+            if (result.code === 'remove_not_kept') return;
             setError(result.status === 404 ? 'This community keeps no names list.' : result.message);
             // Show the state the pin is in, not the last list: a Remove whose open failed still stands.
             if (openedRef.current) setStale(await pendingRemovals(STORE, identity, url, openedRef.current.state).catch(() => []));
@@ -179,13 +184,11 @@ export default function NamesListScreen() {
             () => { void run((url) => putHistoryBack(url, identity, STORE)); }, false);
     };
 
-    const removeKey = (admin: NamesAdminRow) => {
+    /** A Remove that couldn't be kept stops with its words, and isn't opened as if it had been (round 16, :186). */
+    const removeKey = (admin: Pick<NamesAdminRow, 'pubkey' | 'callsign'>) => {
         if (!identity || !anchor) return;
         ask(COPY.removeKeyTitle(admin.callsign), COPY.removeKey(admin.callsign), COPY.removeKeyButton(admin.callsign), () => {
-            void run(async (url) => {
-                await removeOldKey(STORE, identity, url, admin.pubkey);
-                return openNamesList(url, identity, STORE);
-            });
+            void run((url) => removeOldKeyAndOpen(url, identity, STORE, admin));
         });
     };
 
@@ -273,6 +276,7 @@ export default function NamesListScreen() {
             // Decided from the pin (round 13): a removal still standing, or the list no longer ready, means the list on
             // screen is stale.
             if (sent.code === 'still_removing' || sent.code === 'not_ready') setStale(await pendingRemovals(STORE, identity, anchor, opened.state).catch(() => []));
+            if (sent.code === 'remove_not_kept') setUnkept(unkeptRemovalsOf(identity, anchor));
             return;
         }
         // Sealed under a key the list on screen doesn't show as its head: open it again.
@@ -575,6 +579,17 @@ export default function NamesListScreen() {
                     {plan.kind === 'refused' && plan.reason === 'other_community' ? null : checkSomeone}
                 </View>
                 {myKeyCard}
+            </>
+        );
+    } else if (plan?.kind === 'ready' && opened && unkept.length) {
+        // A Remove this phone couldn't keep (round 16, :186): nothing is written, and the list isn't offered, until it is.
+        const who = unkept.map((k) => ({ pubkey: k, callsign: callsignOf(k) }));
+        body = (
+            <>
+                <View style={styles.warn} accessibilityLiveRegion="assertive">
+                    <Text style={styles.warnText}>{COPY.removeNotKept(who.map((a) => a.callsign))}</Text>
+                </View>
+                <View style={styles.buttonRow}>{who.map((a) => btn(COPY.removeKeyButton(a.callsign), () => removeKey(a), 'primary'))}</View>
             </>
         );
     } else if (plan?.kind === 'ready' && state && opened && !stale) {

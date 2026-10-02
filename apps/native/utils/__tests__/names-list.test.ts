@@ -41,7 +41,7 @@ import { bytesToHex } from '../crypto';
 import { boundSignatureValid } from './server-signature-check';
 import { lightColors, darkColors } from '../../constants/colors';
 import {
-    writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
+    writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
     planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
@@ -2161,6 +2161,88 @@ describe('U. Round 15: notices kept until said, one limit for a claim, a pin rea
         expect(await checkEachOther(STORE, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey))).toEqual({ ok: true, pinned: cy.publicKey, mismatch: false });
         expect(summary(await pinOf(owen))).toEqual({ chain: 0, ring: 0, trusted: 2, removals: 0 });
         expect((await openNamesList(COMMUNITY, owen, STORE)).ok).toBe(true);
+        void ada;
+    });
+});
+
+describe('V. Round 16: a Remove that isn\'t kept stops; a new key\'s words said where it lands', () => {
+    /** The phone's stores, where the next `failPinReads` reads, or `failPinWrites` saves, of a pin throw. */
+    let failPinReads = 0;
+    let failPinWrites = 0;
+    const FLAKY: NamesPinStore = {
+        ...STORE,
+        getItem: async (k) => {
+            if (failPinReads > 0 && k.startsWith('beanpool:names-trust:')) { failPinReads--; throw new Error('storage busy'); }
+            return mem.get(k) ?? null;
+        },
+        setItem: async (k, v) => {
+            if (failPinWrites > 0 && k.startsWith('beanpool:names-trust:')) { failPinWrites--; throw new Error('storage full'); }
+            mem.set(k, v);
+        },
+    };
+    afterEach(() => { failPinReads = 0; failPinWrites = 0; });
+
+    for (const how of ['the pin read fails once', 'the pin write fails once'] as const) {
+        it(`V1 (the re-review's :186) a Remove whose ${how.replace('the pin ', 'pin ')} stops with its words, opens nothing, and nothing is sealed under key 1 until a Remove is tried again and kept`, async () => {
+            const { node, phones: [owen, ada, abe], k1 } = await community(['Owen', 'Ada', 'Abe']);
+            const onScreen = await open(owen); // the list Owen taps Remove on
+            sent = [];
+            if (how === 'the pin read fails once') failPinReads = 1;
+            else failPinWrites = 1;
+            // The screen's Remove: the removal kept, then the list opened again.
+            const r = await removeOldKeyAndOpen(COMMUNITY, owen, FLAKY, { pubkey: abe.publicKey, callsign: 'Abe' });
+            expect(failPinReads + failPinWrites).toBe(0);
+            // bb0755ec: the false was dropped and the list opened, ready, with notices [].
+            expect(r).toEqual({ ok: false, status: 0, code: 'remove_not_kept', message: NAMES_COPY.removeNotKept(['Abe']) });
+            expect(sent).toEqual([]); // nothing opened, nothing sent
+            expect((await pinOf(owen))!.manualDrops).toEqual([]);
+            expect(unkeptRemovalsOf(owen, COMMUNITY)).toEqual([abe.publicKey]);
+            // The screen shows the Remove's words and offers it again, in place of the list.
+            const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+            expect(screen).toMatch(/run\(\(url\) => removeOldKeyAndOpen\(url, identity, STORE, admin\)\)/);
+            expect(screen).toMatch(/if \(result\.code === 'remove_not_kept'\) return;/);
+            expect(screen).toMatch(/plan\?\.kind === 'ready' && opened && unkept\.length\) \{[\s\S]{0,400}COPY\.removeNotKept\([\s\S]{0,300}removeKey\(a\)/);
+            // Nothing is written under key 1, which Abe's lost phone holds: not from the screen's list, nor after an open.
+            for (const o of [onScreen, await open(owen)]) {
+                expect(o.plan.kind).toBe('ready'); // the pin stands by no removal: the open alone can't tell
+                sent = [];
+                const w = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+                expect(w.ok === false && w.code).toBe('remove_not_kept');
+                expect(w.ok === false && w.message).toBe(NAMES_COPY.removeNotKept(['Abe']));
+                expect(sentAs('POST', '/api/names/entries')).toEqual([]);
+            }
+            expect(node.entries.filter((e) => e.keyId === k1).length).toBe(2);
+            expect(node.current()!.id).toBe(k1);
+            // Tried again with the store working: kept, and the open makes key 2 without Abe; the next name goes under it.
+            const again = await removeOldKeyAndOpen(COMMUNITY, owen, FLAKY, { pubkey: abe.publicKey, callsign: 'Abe' });
+            expect(again.ok && again.value.plan.kind).toBe('ready');
+            expect(unkeptRemovalsOf(owen, COMMUNITY)).toEqual([]);
+            const two = node.current()!;
+            expect(two).toMatchObject({ maker: owen.publicKey, parentId: k1, drops: [abe.publicKey] });
+            const w = await saveNamesEntry(COMMUNITY, owen, STORE, again.ok ? again.value : onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(w.ok && w.value.keyId).toBe(two.id);
+            void ada;
+        });
+    }
+
+    it('V1 (control) a Remove kept opens the list, makes key 2 without Abe, and records nothing to try again', async () => {
+        const { node, phones: [owen, , abe], k1 } = await community(['Owen', 'Ada', 'Abe']);
+        const r = await removeOldKeyAndOpen(COMMUNITY, owen, FLAKY, { pubkey: abe.publicKey, callsign: 'Abe' });
+        expect(r.ok && r.value.plan.kind).toBe('ready');
+        expect(unkeptRemovalsOf(owen, COMMUNITY)).toEqual([]);
+        expect(node.current()!).toMatchObject({ maker: owen.publicKey, parentId: k1, drops: [abe.publicKey] });
+    });
+
+    it('V1 a Remove not kept is let go when its key is checked (the admin changing their mind), as a kept one is', async () => {
+        const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+        failPinWrites = 1;
+        expect((await removeOldKeyAndOpen(COMMUNITY, owen, FLAKY, { pubkey: abe.publicKey, callsign: 'Abe' })).ok).toBe(false);
+        expect(unkeptRemovalsOf(owen, COMMUNITY)).toEqual([abe.publicKey]);
+        expect(await checkEachOther(STORE, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(abe.publicKey))).toMatchObject({ ok: true });
+        expect(unkeptRemovalsOf(owen, COMMUNITY)).toEqual([]);
+        const o = await open(owen);
+        const w = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+        expect(w.ok && w.value.keyId).toBe(node.current()!.id);
         void ada;
     });
 });

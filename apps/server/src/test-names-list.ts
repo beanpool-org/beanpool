@@ -162,12 +162,29 @@ class Phone {
         if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
             const m = makeNamesGenerationFor(this.pin!, this.signer, r.plan.kind === 'make_new' ? r.plan.drops : []);
             this.pin = m.pin;
-            made = await postGen(this.id, m.generation);
+            made = await this.postMine(m.generation, r.state, r.plan.kind === 'make_new' ? r.plan.drops : []);
             r = await this.sync();
         }
         const shares: Res[] = [];
         if (r.plan.kind === 'ready') for (const s of namesSharesToSend(this.pin!, r.state, this.signer)) shares.push(await postShare(this.id, s));
         return { ...r, made, shares };
+    }
+    /**
+     * Sends this phone's own new statement as the app does: refused with `ask_for_share` while the node counts no holder
+     * on this phone's own word (design Addendum 4), it first sends its signed header to the admins it trusts (never to a
+     * key the statement drops), then the statement once more.
+     */
+    async postMine(g: { statement: string; signature: string }, st: any, drops: string[]): Promise<Res> {
+        const first = await postGen(this.id, g);
+        if (first.status !== 409 || first.body?.code !== 'ask_for_share') return first;
+        const head = this.pin!.chain[this.pin!.chain.length - 1];
+        if (!head || !this.pin!.ring[head.id]) return first;
+        for (const a of st.admins ?? []) {
+            if (a.pubkey === this.id.pk || !this.pin!.trusted.includes(a.pubkey) || drops.includes(a.pubkey)) continue;
+            const sh = namesSharesToSend(this.pin!, st, this.signer, a.pubkey)[0];
+            if (sh) await postShare(this.id, sh);
+        }
+        return postGen(this.id, g);
     }
     head(): string { return this.pin!.chain[this.pin!.chain.length - 1].id; }
     key(id = this.head()): Uint8Array { return namesRingKeys(this.pin!)[id]; }
@@ -328,7 +345,7 @@ async function main(): Promise<void> {
         && st2.shares.filter((x: any) => x.box).map((x: any) => x.to).join() === ada.pk,
         '2. every admin sees every share\'s signed header; only its recipient gets the box');
     assert(JSON.stringify(st2.admins.map((a: any) => a.keyIds.length)) === JSON.stringify([1, 1, 0, 0]) && st2.holdersOfCurrent.length === 2,
-        `2. the state says who holds which key, as far as the server can tell (${JSON.stringify(st2.admins.map((a: any) => a.keyIds.length))})`);
+        `2. the state says who holds which key, on each holder's own word (${JSON.stringify(st2.admins.map((a: any) => a.keyIds.length))})`);
 
     // ── 3. Entries ───────────────────────────────────────────────────────────────────────────────
     const plainId = newNamesEntryId();
@@ -337,7 +354,8 @@ async function main(): Promise<void> {
     const zeb = await addEntry(owenP, { name: PLANTED[0], note: PLANTED[3] });
     require_(zeb.status === 201, `3. Owen adds a sealed entry under the head's key (${show(zeb)})`);
     const ott = await addEntry(adaP, { name: PLANTED[1], note: 'Mel’s aunt' });
-    require_(ott.status === 201, `3. Ada adds one from her phone (${show(ott)})`);
+    // K4's other half: a box addressed to her is enough for `no_key` (the loose count: she may hold it).
+    require_(ott.status === 201, `3. Ada adds one from her phone; a box addressed to her counts for no_key (${show(ott)})`);
     const dup = await call(ada, 'POST', '/api/names/entries', { id: zeb.entryId, ciphertext: sealNamesEntry(adaP.key(), zeb.entryId, k1, { name: 'X', note: '' }), keyId: k1 });
     assert(dup.status === 409 && dup.body?.code === 'entry_exists', `3. the same id twice: 409 entry_exists (${show(dup)})`);
     const staleKey = await call(owen, 'POST', '/api/names/entries', { id: newNamesEntryId(), ciphertext: sealNamesEntry(owenP.key(), plainId, k1, { name: 'X', note: '' }), keyId: 'c'.repeat(64) });
@@ -357,6 +375,11 @@ async function main(): Promise<void> {
     const o3 = await owenP.open();
     // Ada too: Owen's phone now trusts two more admins than its last header to her said, so it sends her its vouch again.
     require_(JSON.stringify(sharedTo(o3.shares).sort()) === JSON.stringify([ada.pk, abe.pk, bea.pk].sort()), `3. checked, Abe and Bea get the keys on Owen's next open (${o3.shares.map(show).join(' | ')})`);
+    // K3 (design Addendum 4): a key is held on the holder's own word (made it, or its own signed header lists it). A box
+    // addressed to Bea doesn't make her a holder until her own header says so.
+    const st3k = (await state(owen)).body;
+    assert(!st3k.admins.find((a: any) => a.pubkey === bea.pk).keyIds.includes(k1) && !st3k.holdersOfCurrent.includes(bea.pk),
+        `3. K3 Bea, only sent a box, holds nothing on her own word yet (${JSON.stringify(st3k.admins.find((a: any) => a.pubkey === bea.pk).keyIds)})`);
     for (const p of [abeP, beaP]) require_((await p.open()).plan.kind === 'ready', `3. ${p.id.name}'s phone opens the list`);
     assert(abeP.pin!.trusted.includes(ada.pk) && adaP.pin!.trusted.length === 2, "3. Abe's phone trusts Ada from Owen's signed header (a vouch)");
     await adaP.open();
@@ -371,6 +394,9 @@ async function main(): Promise<void> {
     const deleted = await call(abe, 'DELETE', `/api/names/entries/${extra.entryId}`);
     assert(extra.status === 201 && deleted.status === 200 && count('names_entries', `id = '${extra.entryId}'`) === 0
         && count('tombstones', `table_name = 'names_entries' AND row_key = '${extra.entryId}'`) === 1, `3. an entry deleted, with a tombstone for a standby (${show(deleted)})`);
+    const afterDelete = await entries(ada);
+    assert(Array.isArray(afterDelete.body?.deleted) && afterDelete.body.deleted[0] === extra.entryId && !afterDelete.body.entries.some((e: any) => e.id === extra.entryId),
+        `3. the list says which ids an admin deleted (newest first), so a phone counts no honest delete as a loss (${JSON.stringify(afterDelete.body?.deleted)})`);
 
     // ── 4. The access log ────────────────────────────────────────────────────────────────────────
     const exported = await entries(owen, true);
@@ -434,6 +460,7 @@ async function main(): Promise<void> {
     // ── 6. An admin removed ──────────────────────────────────────────────────────────────────────
     const abeKey1 = abeP.key(k1);
     const logMark = lastLogRow();
+    const abeHeldOwnWord = (await state(owen)).body.admins.find((a: any) => a.pubkey === abe.pk).keyIds.includes(k1);
     const removed = await call(null, 'DELETE', `/api/local/admin/node-roles/${abe.pk}/admin`, undefined, PASSWORD);
     require_(removed.status === 200, `6. Owen removes Abe's admin role (${show(removed)})`);
     const abeNow = await state(abe);
@@ -444,6 +471,8 @@ async function main(): Promise<void> {
     const blockedEdit = await call(owen, 'PUT', `/api/names/entries/${zeb.entryId}`, { ciphertext: sealNamesEntry(owenP.key(), zeb.entryId, k1, { name: 'X', note: '' }), keyId: k1 });
     assert(blockedEdit.status === 409 && blockedEdit.body?.code === 'new_key_first', `6. an edit too (${show(blockedEdit)})`);
     const st6 = (await state(ada)).body;
+    // K4: the freeze keeps the loose count (a box sealed to Abe's key is readable with it), whatever Abe's own word was.
+    assert(!st6.holdersOfCurrent.includes(abe.pk), `6. K4 Abe is no holder now (on his own word he ${abeHeldOwnWord ? 'was' : 'never was'}); the freeze still holds`);
     assert(st6.newKeyNeeded === true && st6.nobodyHoldsKey === false && JSON.stringify(st6.droppedHolders) === JSON.stringify([abe.pk]) && st6.callsigns[abe.pk] === 'Abe',
         `6. the state says a new key is needed, and names whom the server saw go (${JSON.stringify({ n: st6.newKeyNeeded, h: st6.nobodyHoldsKey, d: st6.droppedHolders })})`);
     const o6 = await owenP.open();
@@ -610,10 +639,10 @@ async function main(): Promise<void> {
 
     // ── 11. The only holder out and back (C6), and a rollback (E1) ───────────────────────────────
     // Ada's phone makes key N and dies before sending it: she is its only holder. Then she is made a moderator and an admin again.
-    await state(adaReal);
+    const st11 = (await state(adaReal)).body;
     const mN = makeNamesGenerationFor(adaRealP.pin!, adaRealP.signer, []);
     adaRealP.pin = mN.pin;
-    require_((await postGen(adaReal, mN.generation)).status === 201, "11. Ada's phone makes a new key and its answer lands, but it sends nothing more");
+    require_((await adaRealP.postMine(mN.generation, st11, [])).status === 201, "11. Ada's phone makes a new key and its answer lands (after saying, in her own header, which keys she holds), but it sends nothing more");
     await adaRealP.sync();
     require_(adaRealP.head() === mN.generation.id && !!adaRealP.key(), '11. her phone holds it');
     require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${adaReal.pk}/admin`, undefined, PASSWORD)).status === 200

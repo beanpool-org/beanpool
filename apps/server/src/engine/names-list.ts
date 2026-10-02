@@ -193,8 +193,9 @@ function generationRow(id: unknown): GenerationRow | undefined {
 const idsOf = (s: string | null) => (s ? s.split(',').filter(Boolean) : []);
 
 /**
- * Who holds key `keyId`, as far as this server can tell: whoever made it, and whoever a share to or from names it with,
- * less a holder marked as no longer holding it ({@link reconcileHolders}). A hint for the phones, never trust.
+ * Who MAY hold key `keyId` (design Addendum 4, `mayHold`): whoever made it, and whoever a share to or from names it with,
+ * less a holder marked as no longer holding it ({@link reconcileHolders}). A box sealed to a key is readable by whoever
+ * holds that key, honest phone or not, so this loose count is what the write freeze and `no_key` use. Never trust.
  */
 function holdersOf(keyId: string): Set<string> {
     const out = new Set<string>();
@@ -209,11 +210,27 @@ function holdersOf(keyId: string): Set<string> {
     return out;
 }
 
-/** The key ids `pubkey` holds, as far as this server can tell (see {@link holdersOf}). */
+/**
+ * Who holds key `keyId` on their own word (design Addendum 4, `holds`): whoever made it, and whoever's own signed share
+ * header lists it, less a holder marked as no longer holding it. A box addressed to a phone proves nothing about that
+ * phone: an honest one opens it only from a key it trusts, for a statement on its chain. This count feeds the admins'
+ * `keyIds`, `holdersOfCurrent`, `nobodyHoldsKey`, `counts.locked` and `ask_for_share`. A hint for the phones, never trust.
+ */
+function holdsOf(keyId: string): Set<string> {
+    const out = new Set<string>();
+    const g = generationRow(keyId);
+    if (g) out.add(g.maker);
+    const rows = db.prepare(`SELECT from_pubkey FROM names_shares WHERE instr(',' || key_ids || ',', ',' || ? || ',') > 0`).all(keyId) as { from_pubkey: string }[];
+    for (const r of rows) out.add(r.from_pubkey);
+    for (const r of db.prepare('SELECT holder_pubkey FROM names_dropped_holders WHERE key_id = ?').all(keyId) as { holder_pubkey: string }[]) out.delete(r.holder_pubkey);
+    return out;
+}
+
+/** The key ids `pubkey` holds on its own word (see {@link holdsOf}): made, or listed in its own share headers. */
 function keyIdsHeldBy(pubkey: string): string[] {
     const ids = new Set<string>();
     for (const r of db.prepare('SELECT id FROM names_generations WHERE maker = ?').all(pubkey) as { id: string }[]) ids.add(r.id);
-    for (const r of db.prepare('SELECT key_ids FROM names_shares WHERE from_pubkey = ? OR to_pubkey = ?').all(pubkey, pubkey) as { key_ids: string }[]) {
+    for (const r of db.prepare('SELECT key_ids FROM names_shares WHERE from_pubkey = ?').all(pubkey) as { key_ids: string }[]) {
         for (const id of idsOf(r.key_ids)) ids.add(id);
     }
     for (const r of db.prepare('SELECT key_id FROM names_dropped_holders WHERE holder_pubkey = ?').all(pubkey) as { key_id: string }[]) ids.delete(r.key_id);
@@ -278,7 +295,8 @@ export function addGeneration(actor: string, body: { statement?: unknown; signat
     if ((g.parentId ?? null) !== (current?.id ?? null) || g.n !== (current ? current.n + 1 : 1)) throw new NamesListError(409, 'stale', NAMES_MESSAGES.stale);
     if (g.maker === actor && body.replay !== true && current) {
         const admins = new Set(namesAdmins().map((a) => a.pubkey));
-        const holders = [...holdersOf(current.id)].filter((k) => admins.has(k));
+        // On their own word (Addendum 4): a box addressed to an admin doesn't make them a holder.
+        const holders = [...holdsOf(current.id)].filter((k) => admins.has(k));
         if (holders.length > 0 && !holders.includes(actor)) throw new NamesListError(409, 'ask_for_share', NAMES_MESSAGES.askForShare);
     }
     db.transaction(() => {
@@ -539,7 +557,8 @@ export function namesState(actor: string) {
     const communityId = namesCommunityId();
     const current = currentGeneration();
     const admins = namesAdmins();
-    const holders = current ? holdersOf(current.id) : new Set<string>();
+    // Holders on their own word (Addendum 4); the loose count (holdersOf) is only for the freeze and `no_key`.
+    const holders = current ? holdsOf(current.id) : new Set<string>();
     const adminKeys = new Set(admins.map((a) => a.pubkey));
     const generations = (db.prepare('SELECT * FROM names_generations ORDER BY n ASC').all() as GenerationRow[]).map((g) => ({
         statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parent_id, maker: g.maker, drops: idsOf(g.drops), createdAt: g.created_at,
@@ -600,8 +619,12 @@ export function readEntries(actor: string, purpose: 'read' | 'export') {
         confirmedAt: r.confirmed_at, needsSecond: !!r.needs_second, secondedBy: r.seconded_by, secondedAt: r.seconded_at,
         revokedBy: r.revoked_by, revokedAt: r.revoked_at, revokeReason: r.revoke_reason, status: confirmationStatus(r),
     }));
+    // The ids an admin deleted (the log's `delete` lines, newest 10,000): a phone counts an id it saw that is neither here
+    // nor deleted as lost (design Addendum 4).
+    const deleted = (db.prepare(`SELECT entry_id AS id FROM names_access_log WHERE action = 'delete' AND entry_id IS NOT NULL
+         ORDER BY at DESC, rowid DESC LIMIT 10000`).all() as { id: string }[]).map((r) => r.id);
     log(actor, purpose);
-    return { current: currentGeneration()?.id ?? null, entries, confirmations };
+    return { current: currentGeneration()?.id ?? null, entries, confirmations, deleted };
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
  *
  *   GET    /api/names/state                         → the key history, every share header (the box of one to this admin),
  *                                                     the admins and the key ids each holds, the write freeze, settings
- *   GET    /api/names/entries[?for=export]          → every entry, sealed, and every confirmation (logged: read | export)
+ *   GET    /api/names/entries[?for=export]          → every entry, sealed, every confirmation, and the deleted ids (logged: read | export)
  *   POST   /api/names/entries                       { id, ciphertext, keyId } → 201 { id }
  *   PUT    /api/names/entries/:id                   { ciphertext, keyId }     → { id }
  *   DELETE /api/names/entries/:id                   → { id } (409 entry_confirmed while a member is confirmed against it)

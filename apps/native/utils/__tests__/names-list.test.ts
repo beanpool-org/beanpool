@@ -2024,6 +2024,46 @@ describe('U. Round 15: notices kept until said, one limit for a claim, a pin rea
             expect(node.current()!).toMatchObject({ maker: bea.publicKey, drops: [cy.publicKey] });
         }, 30_000);
     }
+
+    for (const to of ['Ada (a trusted admin)', 'herself (Addendum 5)'] as const) {
+        it(`U3 (the re-review's :574) a claim to ${to} that runs out of time stops the open: one request let go, no second state read; the next open makes the key`, async () => {
+            const names = to === 'herself (Addendum 5)' ? ['Owen', 'Bea', 'Zed'] : ['Owen', 'Ada', 'Bea', 'Zed'];
+            const { node, phones } = await community(names);
+            const [owen, bea, zed] = [phones[0], phones[names.indexOf('Bea')], phones[names.indexOf('Zed')]];
+            const ada = to === 'herself (Addendum 5)' ? null : phones[1];
+            if (to === 'herself (Addendum 5)') await open(bea); // P4: the screen Bea taps Remove on was opened before key 2
+            node.admins = node.admins.filter((a) => a.pubkey !== zed.publicKey);
+            await open(ada ?? owen); // key 2 drops Zed and goes to the others
+            const two = node.current()!.id;
+            await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey); // Bea's open makes key 3 without Owen
+            setNamesRequestTimeout(2000, { stateMs: 2000, listPerEntryMs: 0 });
+            /** Bea's statement, refused `ask_for_share` (she holds key 2 only on a box Ada sent): after it, nothing answers. */
+            let refused: Sent | null = null;
+            const letGo: string[] = [];
+            answer = (req) => {
+                const a = node.answer(req);
+                if (req.headers['X-Public-Key'] === bea.publicKey && req.method === 'POST' && new URL(req.url).pathname === '/api/names/generations' && a.status === 409) refused = req;
+                return a;
+            };
+            hold = (req) => {
+                if (!refused || req === refused || req.headers['X-Public-Key'] !== bea.publicKey) return null;
+                letGo.push(`${req.method} ${new URL(req.url).pathname}${req.method === 'POST' ? ` to ${readNamesShare(JSON.parse(req.body), CID)?.to === bea.publicKey ? 'Bea' : 'Ada'}` : ''}`);
+                return new Promise<void>(() => { /* never answers */ });
+            };
+            const o = await openNamesList(COMMUNITY, bea, STORE);
+            expect(refused).not.toBeNull();
+            expect(letGo).toEqual([`POST /api/names/shares to ${ada ? 'Ada' : 'Bea'}`]); // f8d11de4: then GET /api/names/state
+            expect(o.ok === false && o.code).toBe(NAMES_TIMED_OUT);
+            expect(node.current()!.id).toBe(two);
+            expect((await pinOf(bea))!.pending).toBeNull(); // the 409 said the node didn't store it
+            // The connection is back: the next open claims and makes the key without Owen.
+            answer = (req) => node.answer(req);
+            hold = null;
+            const b = await open(bea);
+            expect(b.plan.kind).toBe('ready');
+            expect(node.current()!).toMatchObject({ maker: bea.publicKey, parentId: two, drops: [owen.publicKey] });
+        }, 30_000);
+    }
 });
 
 describe('E. Rollback, forks', () => {

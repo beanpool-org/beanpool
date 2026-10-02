@@ -563,15 +563,18 @@ async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: Na
     // The node counts a holder on its own word (design Addendum 4): a phone that took the head's key from a box but has
     // sent no header since isn't one, and its own new key is refused (409 `ask_for_share`). It says so by sending its
     // signed header to the admins it trusts (never to a key this statement drops), then sends the statement once more.
-    if (first.code === 'ask_for_share' && (await claimHeldKey(anchor, identity, synced, drops))) {
-        return sendGeneration(anchor, identity, store, made.pin, made.generation);
-    }
+    const claim = first.code === 'ask_for_share' ? await claimHeldKey(anchor, identity, synced, drops) : false;
+    if (claim === true) return sendGeneration(anchor, identity, store, made.pin, made.generation);
     if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...made.pin, pending: null });
-    return first;
+    // A claim that ran out of time (round 15, :574): the open stops on it, as on a statement's own (one limit per open).
+    return claim === false ? first : claim;
 }
 
-/** Sends this phone's ring, under its signed header, to every trusted listed admin but `drops`: true when one landed. */
-async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<boolean> {
+/**
+ * Sends this phone's ring, under its signed header, to every trusted listed admin but `drops`: true when one landed. A
+ * request that ran out of time stops the claim and comes back as it is, so the open stops there too (round 15, :574).
+ */
+async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<boolean | NamesFailure> {
     const { pin, state } = synced;
     const head = pin.chain[pin.chain.length - 1];
     if (!head || !pin.ring[head.id]) return false;
@@ -584,12 +587,14 @@ async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: 
         if (!share) continue;
         const done = await postShare(anchor, identity, share);
         if (done.ok) landed = true;
-        else if (done.code === NAMES_TIMED_OUT) return false; // the connection stopped answering: stop here (round 14)
+        else if (done.code === NAMES_TIMED_OUT) return done; // the connection stopped answering: stop here (round 14)
     }
     // Nobody else to tell (the only other holder is the key being dropped): a claim to itself (design Addendum 5).
-    if (!landed) {
-        const self = namesSelfClaim(pin, state, identity, drops);
-        if (self && (await postShare(anchor, identity, self)).ok) landed = true;
+    const self = landed ? null : namesSelfClaim(pin, state, identity, drops);
+    if (self) {
+        const done = await postShare(anchor, identity, self);
+        if (done.ok) landed = true;
+        else if (done.code === NAMES_TIMED_OUT) return done;
     }
     return landed;
 }

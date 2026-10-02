@@ -44,7 +44,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, followRemovesAny,
+    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -1782,7 +1782,7 @@ describe('Q. Round 13: no request waits for good; a write decides from the pin',
 });
 
 describe('S. Round 14: one check per statement and header per state', () => {
-    it("S1 (the re-review's :812) drawing 1,000 locked entries in a community of 8 admins and 30 keys checks each statement and header once: under 500 ms", async () => {
+    it("S1 (the re-review's :812; round 15: counted, not timed) drawing 1,000 locked entries in a community of 8 admins and 30 keys checks each statement and header once per state, however many entries are drawn", async () => {
         const admins = await Promise.all(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((n) => admin(n)));
         const gens: NamesGeneration[] = [];
         const ring: Record<string, Uint8Array> = {};
@@ -1798,41 +1798,73 @@ describe('S. Round 14: one check per statement and header per state', () => {
             shares.push(makeNamesShare({ communityId: CID, from, to: to.publicKey, headId: head.id, ring, trusts: admins.map((a) => a.publicKey) }));
         }
         const me = admins[0];
-        const state = {
-            communityId: CID, current: { id: head.id, n: head.n },
-            generations: gens.map((g) => ({ statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parentId, maker: g.maker, drops: g.drops })),
-            shares: shares.map((x) => ({ header: x.header, signature: x.signature, from: x.from, to: x.to, headId: x.headId, keyIds: x.keyIds, trusts: x.trusts })),
-            admins: admins.map((a) => ({ pubkey: a.publicKey, callsign: a.callsign, role: 'admin' as const, keyIds: gens.map((g) => g.id), holdsCurrent: true })),
-            holdersOfCurrent: admins.map((a) => a.publicKey), droppedHolders: [], nobodyHoldsKey: false, newKeyNeeded: false, callsigns: {},
-            settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
-            counts: { entries: 1000, confirmed: 0, awaitingSecond: 0, byKey: {}, locked: 0 },
-            me: { pubkey: me.publicKey, role: 'admin' as const, owner: false },
-        } as unknown as NamesState;
+        /**
+         * A fresh state as an open receives it, counting what the draw reads (round 15: a count holds at any load, a
+         * stopwatch doesn't): each record's signature is read once per check of that record (readNamesGeneration and
+         * readNamesShare each read it once), and the state's two lists once per pass over them.
+         */
+        const counted = () => {
+            const reads = { generations: 0, shares: 0, checks: new Map<string, number>() };
+            const tally = <T extends { signature: string }>(r: T, key: string): T => Object.defineProperty({ ...r }, 'signature', {
+                enumerable: true, get: () => { reads.checks.set(key, (reads.checks.get(key) ?? 0) + 1); return r.signature; },
+            });
+            const generations = gens.map((g) => tally({ statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parentId, maker: g.maker, drops: g.drops }, `gen:${g.id}`));
+            const shareRows = shares.map((x) => tally({ header: x.header, signature: x.signature, from: x.from, to: x.to, headId: x.headId, keyIds: x.keyIds, trusts: x.trusts }, `share:${x.from}|${x.to}`));
+            const state = {
+                communityId: CID, current: { id: head.id, n: head.n },
+                get generations() { reads.generations++; return generations; },
+                get shares() { reads.shares++; return shareRows; },
+                admins: admins.map((a) => ({ pubkey: a.publicKey, callsign: a.callsign, role: 'admin' as const, keyIds: gens.map((g) => g.id), holdsCurrent: true })),
+                holdersOfCurrent: admins.map((a) => a.publicKey), droppedHolders: [], nobodyHoldsKey: false, newKeyNeeded: false, callsigns: {},
+                settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
+                counts: { entries: 1000, confirmed: 0, awaitingSecond: 0, byKey: {}, locked: 0 },
+                me: { pubkey: me.publicKey, role: 'admin' as const, owner: false },
+            } as unknown as NamesState;
+            const total = () => ({ generations: reads.generations, shares: reads.shares, checks: [...reads.checks.values()].reduce((a, b) => a + b, 0) });
+            return { state, reads, total };
+        };
         const pin = { ...emptyNamesPin(CID, me.publicKey), trusted: admins.map((a) => a.publicKey).sort() };
         const entries: SealedEntryRow[] = Array.from({ length: 1000 }, (_, i) => ({
             id: newNamesEntryId(), ciphertext: 'sealed', keyId: gens[i % 30].id, createdBy: me.publicKey, createdAt: '2026-10-02', updatedBy: null, updatedAt: '',
         }));
-        const t0 = performance.now();
-        const drawn = openEntries({ current: head.id, entries, confirmations: [] }, { ring: {}, pin, generations: new Map(), state, justChecked: [] });
-        const ms = performance.now() - t0;
+        const draw = (state: NamesState, n: number) => openEntries({ current: head.id, entries: entries.slice(0, n), confirmations: [] }, { ring: {}, pin, generations: new Map(), state, justChecked: [] });
+        // One draw of one entry: every statement and every header checked exactly once.
+        const one = counted();
+        expect(draw(one.state, 1)[0].holders.length).toBe(7);
+        expect(one.reads.checks.size).toBe(gens.length + shares.length); // 30 statements and 56 headers
+        expect([...one.reads.checks.values()].every((c) => c === 1)).toBe(true);
+        // 10 entries, then 1,000, each on a fresh state: the same count, not one per entry (a49088a3: one per entry).
+        const ten = counted();
+        draw(ten.state, 10);
+        expect(ten.total()).toEqual(one.total());
+        const all = counted();
+        const drawn = draw(all.state, 1000);
         expect(drawn.length).toBe(1000);
         expect(drawn.every((e) => e.locked === 'no_key' && e.holders.length === 7)).toBe(true);
-        expect(ms).toBeLessThan(500);
-        // The refusal card's words reuse the same checks.
-        const t1 = performance.now();
-        planWords({ plan: { kind: 'wait', keyId: head.id, n: 30, holders: admins.slice(1).map((a) => a.publicKey), newKeyNeeded: false, canMakeNew: false, drops: [] }, state, pin, justChecked: [] });
-        expect(performance.now() - t1).toBeLessThan(200);
-    }, 20_000);
+        expect(all.total()).toEqual(one.total());
+        // The same state drawn again, and the refusal card's words: nothing is read or checked again.
+        draw(all.state, 1000);
+        planWords({ plan: { kind: 'wait', keyId: head.id, n: 30, holders: admins.slice(1).map((a) => a.publicKey), newKeyNeeded: false, canMakeNew: false, drops: [] }, state: all.state, pin, justChecked: [] });
+        expect(all.total()).toEqual(one.total());
+        expect([...all.reads.checks.values()].every((c) => c === 1)).toBe(true);
+    }, 30_000);
 });
 
 describe('T. Round 14: limits that fit the request, one limit per open, notices kept, a true Follow question', () => {
     const never = () => new Promise<void>(() => { /* never answers */ });
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    /** True once `ok()` holds, checked every 5 ms; false after 5 s (a bound for a failure to read as one, never a measure). */
+    const until = async (ok: () => boolean): Promise<boolean> => {
+        for (let i = 0; i < 1000; i++) { if (ok()) return true; await sleep(5); }
+        return ok();
+    };
     afterEach(() => setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS));
 
     it("T1 (the re-review's :147) a list read slower than a small request's limit but still arriving completes; and a Remove tapped during it isn't held up", async () => {
         const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
-        setNamesRequestTimeout(100, { listPerEntryMs: 300 });
+        // Limits far from what an answered request takes on a busy runner (round 15): 1 s for a small request, and the
+        // list's 1 s + 1.5 s per entry (2 entries: 4 s). The read is held 1.25 s: past the small limit, inside its own.
+        setNamesRequestTimeout(1000, { listPerEntryMs: 1500 });
         let release!: () => void;
         const gate = new Promise<void>((r) => { release = r; });
         let used = false;
@@ -1842,40 +1874,48 @@ describe('T. Round 14: limits that fit the request, one limit per open, notices 
             return gate;
         };
         const opening = openNamesList(COMMUNITY, owen, STORE);
-        await sleep(30);
-        const t0 = performance.now();
-        expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
-        expect(performance.now() - t0).toBeLessThan(100); // the slow read holds no pin operation
-        await sleep(250); // slower than the 100 ms small-request limit
+        expect(await until(() => used)).toBe(true); // the list read is out, and held
+        // The slow read holds no pin operation: the Remove settles while the read is still held (round 15: an order, not
+        // a stopwatch; were the read on the pin's chain, the Remove would wait for the release, and the 5 s bound is only
+        // there so that failure reads as one).
+        const removing = removeOldKey(STORE, owen, COMMUNITY, abe.publicKey);
+        expect(await Promise.race([removing, sleep(5000).then(() => 'still held')])).toBe(true);
+        await sleep(1250); // slower than the 1 s small-request limit
         release();
         const o = await opening;
         expect(o.ok && o.value.plan.kind).toBe('ready');
         expect(o.ok && o.value.list?.entries.length).toBe(2);
         expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]); // the Remove survives the read's save
         void node; void ada;
-    });
+    }, 30_000);
 
-    it("T2 (the re-review's :584) the connection stops answering partway through an open that owes three shares: the open stops at the first request that runs out, and a Remove tapped during it starts after one limit, not four", async () => {
+    it("T2 (the re-review's :584; round 15: counted, not timed) the connection stops answering partway through an open that owes three shares: the open lets go one request (the first share) and reads no list, so a Remove tapped during it waits one limit, not four", async () => {
         const { node, phones: [owen, ada, bea, cy, zed] } = await community(['Owen', 'Ada', 'Bea', 'Cy', 'Zed']);
         node.admins = node.admins.filter((a) => a.pubkey !== zed.publicKey); // Owen's open makes key 2 and owes 3 shares
-        setNamesRequestTimeout(100, { stateMs: 100, listPerEntryMs: 0 });
+        // 2 s limits (round 15): far above what an answered request takes on a busy runner, so only the requests the
+        // connection never answers are let go, and those are counted.
+        setNamesRequestTimeout(2000, { stateMs: 2000, listPerEntryMs: 0 });
         let stateReads = 0;
+        /** Owen's requests the connection never answered, each let go at its limit. */
+        const letGo: string[] = [];
+        const stop = (req: Sent) => { letGo.push(`${req.method} ${new URL(req.url).pathname}`); return never(); };
         hold = (req) => {
             if (req.headers['X-Public-Key'] !== owen.publicKey) return null;
-            if (req.method === 'GET' && new URL(req.url).pathname === '/api/names/state') { stateReads++; return stateReads > 2 ? never() : null; }
-            return stateReads >= 2 && new URL(req.url).pathname !== '/api/names/generations' ? never() : null;
+            if (req.method === 'GET' && new URL(req.url).pathname === '/api/names/state') { stateReads++; return stateReads > 2 ? stop(req) : null; }
+            return stateReads >= 2 && new URL(req.url).pathname !== '/api/names/generations' ? stop(req) : null;
         };
-        const t0 = performance.now();
         const opening = openNamesList(COMMUNITY, owen, STORE);
         await sleep(20);
-        await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
-        const removedAt = performance.now() - t0;
+        expect(await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey)).toBe(true); // queued behind the open's link
         const o = await opening;
         hold = null;
         expect(o.ok === false && o.status).toBe(0);
-        expect(removedAt).toBeLessThan(250); // one 100 ms limit and the open's own work, not three shares and a read
+        expect(letGo).toEqual(['POST /api/names/shares']); // a49088a3: three shares, then GET /api/names/entries
+        expect(o.ok === false && o.code).toBe(NAMES_TIMED_OUT);
+        expect(node.current()!).toMatchObject({ maker: owen.publicKey, drops: [zed.publicKey] }); // key 2 landed first
+        expect((await pinOf(owen))!.manualDrops).toEqual([ada.publicKey]);
         void bea; void cy;
-    });
+    }, 30_000);
 
     it("T3 (the re-review's :890, C7 with a save first) the walk's notices aren't lost when a save is the first to see a new key: the next open says them", async () => {
         const { phones: [owen, ada, bea] } = await community(['Owen', 'Ada', 'Bea']);

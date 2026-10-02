@@ -2443,8 +2443,8 @@ export async function getConversationKind(conversationId: string): Promise<strin
         const database = await getDb();
         const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
         const type = row?.type ?? null;
-        // A known DM is a DM, whatever type its row says (the DM guard above).
-        if (type && type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
+        // A known DM is a DM, whatever type its row says, or with no row (the node dropped it): the DM guard above.
+        if (type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
         return type;
     } catch {
         return null;

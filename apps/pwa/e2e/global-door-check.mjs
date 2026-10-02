@@ -1,7 +1,7 @@
 /**
  * The global node's two doors in the web app (slice S5 of scratch/global-node/DESIGN-global-two-doors-fable.md), in
  * headless Chromium at 320 px with 1.3x text, against a REAL node on the global profile running on this machine
- * (apps/server/src/global-door-web-test-fixture.ts): its signature middleware, the door's routes and their refusals
+ * (apps/server/src/global-door-web-test-harness.ts): its signature middleware, the door's routes and their refusals
  * (#1425), the door work's check, the limiters and the web app's document policy are the server's own code. The web
  * app is built exactly as it ships and served by that node.
  *
@@ -59,7 +59,7 @@ function mintGoogle(aud, nonce, sub) {
 // ---------- the node ----------
 
 async function startNode(root, dataDir) {
-    const child = spawn(process.execPath, ['--import', 'tsx', 'src/global-door-web-test-fixture.ts'], {
+    const child = spawn(process.execPath, ['--import', 'tsx', 'src/global-door-web-test-harness.ts'], {
         cwd: SERVER_DIR,
         env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, FIXTURE_ROOT: root, FIXTURE_JWKS: JSON.stringify({ google: GOOGLE_JWK }) },
         stdio: ['pipe', 'pipe', 'pipe'],

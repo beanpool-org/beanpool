@@ -17,7 +17,7 @@
  *   { op: 'doorNumber', name, value }   a `node_config` row `doorNumbers.<name>` (null deletes it), read per request
  *   { op: 'resetLimits' }               the gateway, auth and door limiters start again
  *
- * Run by the check as: node --import tsx src/global-door-web-test-fixture.ts (cwd apps/server).
+ * Run by the check as: node --import tsx src/global-door-web-test-harness.ts (cwd apps/server).
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -38,7 +38,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     }
     if (!LOOPBACK.has(url.hostname)) {
         console.error(`BLOCKED-FETCH ${url.origin}`);
-        throw new Error(`global-door-web-test-fixture: no requests leave this machine (${url.origin})`);
+        throw new Error(`global-door-web-test-harness: no requests leave this machine (${url.origin})`);
     }
     return realFetch(input, init);
 }) as typeof fetch;
@@ -111,6 +111,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-    console.error('global-door-web-test-fixture failed to start:', e);
+    console.error('global-door-web-test-harness failed to start:', e);
     process.exit(1);
 });

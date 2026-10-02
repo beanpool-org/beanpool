@@ -155,3 +155,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** Interactive user actions and edge cases in `SuggestChangePanel` (`apps/manager/src/components/modules/SuggestChangePanel.tsx`) lacked component test coverage.
 **Learning:** Testing `SuggestChangePanel` required asserting empty validation errors, checking character limit disabling logic using `FEEDBACK_TEXT_MAX`, verifying in-flight submit spinners, testing form cancelation and success view closure, and verifying payload props like `community`.
 **Action:** Continue expanding test coverage for untested manager UI components and utilities.
+
+## 2026-10-02 - [manager tests] ColdStartWizard onCancel and print card unit tests
+**Gap:** `onCancel` callback ("Skip to Dashboard") and `window.print` trigger ("Print Founding Cards") in `ColdStartWizard` (`apps/manager/src/components/modules/ColdStartWizard.tsx`) were untested.
+**Learning:** Testing `ColdStartWizard` `onCancel` and print actions required spying on `window.print` and verifying step 5 card generation flow prior to calling print.
+**Action:** Identify remaining edge cases in module components for complete test coverage.

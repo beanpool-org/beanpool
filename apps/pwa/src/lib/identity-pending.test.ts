@@ -330,8 +330,9 @@ describe('one browser, one identity: nothing writes a different key over the one
     const T = 1_800_000_000_000;
 
     it('completing a join for another key is refused: the stored identity stays, and so does that join, sent mark and all', async () => {
-        await importIdentity(IDENTITY);
+        // Another tab's join went out first (a join is no longer sent beside a held account), then this account arrived.
         await markPendingJoinSent(pending({ identity: OTHER }), T);
+        await importIdentity(IDENTITY);
         const refused = await completePendingJoin(OTHER).then(() => null, (e: unknown) => e);
         expect(refused).toBeInstanceOf(IdentityHeldError);
         expect((refused as IdentityHeldError).held).toMatchObject({ publicKey: IDENTITY.publicKey, callsign: 'Alice' });
@@ -424,8 +425,8 @@ describe('a save told to wait for a sent join decides it in the transaction that
     });
 
     it('with a sent join waiting and another account here, the sent join is named first, as the page settles it first', async () => {
-        await importIdentity(OTHER);
         await markPendingJoinSent(pending({ identity: { ...OTHER, publicKey: 'e'.repeat(64) } }), T);
+        await importIdentity(OTHER);
         await expect(importIdentity(IDENTITY, WAIT)).rejects.toBeInstanceOf(SentJoinWaitingError);
         await expect(importIdentity(IDENTITY)).rejects.toBeInstanceOf(IdentityHeldError);
     });

@@ -273,7 +273,12 @@ interface Journal {
         // `ok` only when the ledger adds up (`addsUp`) AND is the main server's as this server last copied it (`copy`), so
         // the result can say which failed: an all-zero or empty copy adds up. Both are absent from a journal written before.
         audit: {
-            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** `drift` and the counts are null when the record held something that isn't a finite number (finiteOrNull). */
+            ok: boolean; drift: number | null; strandedEscrows: number | null; addsUp?: boolean;
+            /** Balances that are not a finite number; absent from a journal written before (decide N3, 2026-10-02). */
+            badBalances?: number | null;
+            /** The audit could not run: why. Absent when it ran. */
+            error?: string;
             copy?: NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy'] | null;
         } | null;
         announcement: string | null;
@@ -1571,39 +1576,79 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
     if (config.promotionAuditPending) {
         // The copy first: the conservation check writes the demurrage any read has applied since boot, and the rows are
         // held to the main server's as they were copied.
-        const copy = ledgerAgainstLastCopy();
-        const r = promotionSanityCheck();
+        //
+        // Neither check may stop the take-over (#1445 re-review, BLOCKING 1): a check that throws is recorded as an audit
+        // that could not run, which is not "ok", and the take-over goes on to say so.
+        const failed = (e: unknown) => (e instanceof Error ? e.message : String(e));
+        let copy: ReturnType<typeof ledgerAgainstLastCopy> | null = null;
+        let copyError: string | null = null;
+        try { copy = ledgerAgainstLastCopy(); } catch (e) { copyError = failed(e); }
+        let r: ReturnType<typeof promotionSanityCheck> | null = null;
+        let checkError: string | null = null;
+        try { r = promotionSanityCheck(); } catch (e) { checkError = failed(e); }
+        const error = [checkError, copyError && `the copy check: ${copyError}`].filter(Boolean).join('; ') || undefined;
         const record = {
-            at: new Date().toISOString(), ok: r.ok && copy.match, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows,
-            copy: {
+            at: new Date().toISOString(), ok: !!r?.ok && !!copy?.match && !error,
+            sumBalances: finiteOrNull(r?.sumBalances), drift: finiteOrNull(r?.drift),
+            strandedEscrows: r ? finiteOrNull(r.strandedEscrows) : null, badBalances: r ? finiteOrNull(r.badBalances) : null,
+            ...(error ? { error } : {}),
+            copy: copy ? {
                 match: copy.match,
                 here: { accounts: copy.here.accounts, holdings: copy.here.holdings },
                 lastCopy: copy.lastCopy ? { accounts: copy.lastCopy.accounts, holdings: copy.lastCopy.holdings, generatedAt: copy.lastCopy.generatedAt } : null,
-            },
+            } : null,
         };
-        if (!copy.match) logger.error('SYS', `[Takeover] ${ledgerCopyTrouble(record.copy)}`);
+        if (error) logger.error('SYS', `[Takeover] The ledger audit could not run: ${error}`);
+        if (record.copy && !record.copy.match) logger.error('SYS', `[Takeover] ${ledgerCopyTrouble(record.copy)}`);
         updateLocalConfig({ promotionAuditPending: false, lastPromotionAudit: record });
         ran = true;
     }
     const recorded = getLocalConfig().lastPromotionAudit;
     if (j && j.steps.restart && !j.steps.audit && recorded) {
-        const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0;
-        j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows, addsUp: adds, copy: recorded.copy ?? null };
+        // A balance that is not a finite number is the conservation check failing too (engine audit.ts), so it is counted
+        // here and named, as the boot log names it: a promotion that failed only for such rows read "adds up" (N3).
+        //
+        // The record is read back from local-config.json, where a drift of Infinity (one balance of 9e999) is null: every
+        // figure from it is taken as it may be, never assumed a number. `null.toFixed` threw here and stalled the
+        // take-over at `restarting` (#1445 review, BLOCKING 1).
+        const badBalances = recorded.badBalances === undefined ? 0 : finiteOrNull(recorded.badBalances);
+        const stranded = finiteOrNull(recorded.strandedEscrows);
+        const drift = finiteOrNull(recorded.drift);
+        const howMany = (n: number | null) => (n === null ? 'an unknown number of' : String(n));
+        const adds = drift !== null && Math.abs(drift) < 0.01 && stranded === 0 && badBalances === 0;
+        const error = typeof recorded.error === 'string' ? recorded.error : null;
+        j.result.audit = {
+            ok: recorded.ok === true && adds && !error, drift, strandedEscrows: stranded, addsUp: adds && !error,
+            ...(recorded.badBalances === undefined ? {} : { badBalances }), copy: recorded.copy ?? null,
+            ...(error ? { error } : {}),
+        };
         const troubles = [
-            ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s))`]),
+            ...(error ? [`the ledger audit could not run (${error}), so it can't say the ledger adds up`]
+                : adds ? [] : [`the ledger does NOT add up (drift ${auditFigure(drift, 4)}, ${howMany(stranded)} stranded escrow(s)`
+                + `${badBalances !== 0 ? `, ${howMany(badBalances)} balance(s) that are not a finite number` : ''})`]),
             ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),
         ];
-        mark(j, 'audit', recorded.ok
+        mark(j, 'audit', j.result.audit.ok
             ? 'the ledger adds up'
             : `${troubles.join('; ') || 'the ledger does NOT add up'}: check before members trade`);
     }
     return ran;
 }
 
+/** A figure from the audit record, which JSON may have turned into null: the number, or null when it isn't a finite one. */
+function finiteOrNull(v: unknown): number | null {
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** A figure for the audit's words: to `digits` places, or "not a number". Never throws. */
+function auditFigure(v: unknown, digits: number): string {
+    return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'not a number';
+}
+
 /** What a take-over's audit says when the ledger isn't the main server's as this server last copied it. */
 function ledgerCopyTrouble(copy: NonNullable<NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy']>): string {
     if (!copy.lastCopy) return "this server has no record of the main server's ledger, so it can't say the ledger is the main server's";
-    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${s.holdings.toFixed(2)} Beans`;
+    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${auditFigure(s.holdings, 2)} Beans`;
     return `the ledger is NOT the main server's as this server last copied it (here ${held(copy.here)}; `
         + `the main server's ${held(copy.lastCopy)}${copy.lastCopy.generatedAt ? `, as of ${copy.lastCopy.generatedAt}` : ''})`;
 }

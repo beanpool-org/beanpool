@@ -2468,22 +2468,27 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             if (followedRekeys.length > 0) dropMovedRecoveryCopies(followedRekeys);
 
             if (remote.pollVotes) {
+                // The vote's kind (new or 12-word account) as the main server stamped it; a main server from before the
+                // stamp sends none (NULL), as it holds none.
                 const importVote = db.prepare(`INSERT INTO poll_votes
-                    (post_id, voter_pubkey, option_id, signature, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                         option_id = excluded.option_id,
                         signature = excluded.signature,
-                        created_at = excluded.created_at
+                        created_at = excluded.created_at,
+                        voter_new_or_words = excluded.voter_new_or_words
                     WHERE excluded.created_at IS NOT NULL
                       AND (poll_votes.created_at IS NULL OR excluded.created_at >= poll_votes.created_at)`);
                 for (const pv of remote.pollVotes) {
+                    const kind = pv.voterNewOrWords === 1 || pv.voterNewOrWords === 0 ? pv.voterNewOrWords : null;
                     importVote.run(
                         pv.postId,
                         pv.voterPubkey,
                         pv.optionId,
                         pv.signature || '',
-                        pv.createdAt || new Date().toISOString()
+                        pv.createdAt || new Date().toISOString(),
+                        kind
                     );
                 }
             }

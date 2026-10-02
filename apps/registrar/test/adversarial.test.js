@@ -508,30 +508,39 @@ test('Ed25519 - Invalid signatures and header formatting', async () => {
 test('Ed25519 - Expired and future timestamps (Clock skew)', async () => {
     const env = mockEnv();
     const { keyPair, pubHex } = await generateKeypair();
-    const now = Math.floor(Date.now() / 1000);
+    // The worker reads the clock again for each request. Held still, each edge below is exactly its distance from `now`;
+    // a second ticking over between here and the worker's read made now + 301 a 300 s skew, let in (CI run 36892303461).
+    const realNow = Date.now;
+    const frozenMs = realNow();
+    Date.now = () => frozenMs;
+    try {
+        const now = Math.floor(Date.now() / 1000);
 
-    // Past expired (> 300s)
-    const reqExpired = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now - 301);
-    assert.equal((await worker.fetch(reqExpired, env)).status, 401);
+        // Past expired (> 300s)
+        const reqExpired = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now - 301);
+        assert.equal((await worker.fetch(reqExpired, env)).status, 401);
 
-    // Future expired (> 300s)
-    const reqFuture = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now + 301);
-    assert.equal((await worker.fetch(reqFuture, env)).status, 401);
+        // Future expired (> 300s)
+        const reqFuture = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now + 301);
+        assert.equal((await worker.fetch(reqFuture, env)).status, 401);
 
-    // Valid edge (299s past)
-    const reqValidPast = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now - 299);
-    assert.equal((await worker.fetch(reqValidPast, env)).status, 200);
+        // Valid edge (299s past)
+        const reqValidPast = await makeSignedRequest('https://beanpool.org/api/registrar/status', 'GET', keyPair, pubHex, null, now - 299);
+        assert.equal((await worker.fetch(reqValidPast, env)).status, 200);
 
-    // Malformed non-numeric timestamp
-    const reqMalformedTs = new Request('https://beanpool.org/api/registrar/status', {
-        method: 'GET',
-        headers: {
-            'x-bp-pubkey': pubHex,
-            'x-bp-timestamp': 'not-a-number',
-            'x-bp-signature': '00'.repeat(64)
-        }
-    });
-    assert.equal((await worker.fetch(reqMalformedTs, env)).status, 401);
+        // Malformed non-numeric timestamp
+        const reqMalformedTs = new Request('https://beanpool.org/api/registrar/status', {
+            method: 'GET',
+            headers: {
+                'x-bp-pubkey': pubHex,
+                'x-bp-timestamp': 'not-a-number',
+                'x-bp-signature': '00'.repeat(64)
+            }
+        });
+        assert.equal((await worker.fetch(reqMalformedTs, env)).status, 401);
+    } finally {
+        Date.now = realNow;
+    }
 });
 
 test('Ed25519 - Body tampering and request mismatch', async () => {

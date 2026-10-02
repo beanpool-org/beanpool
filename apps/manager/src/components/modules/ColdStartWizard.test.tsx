@@ -698,4 +698,26 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(src).not.toMatch(/operator_key/);
         expect(src).not.toMatch(/Paired Admin Key/);
     });
+
+    it('triggers onCancel when Skip to Dashboard button is clicked', async () => {
+        const handleCancel = vi.fn();
+        await renderWizard({ onCancel: handleCancel });
+
+        const skipButton = screen.getByRole('button', { name: /Skip to Dashboard/i });
+        await click(skipButton);
+
+        expect(handleCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it('triggers window.print when Print Founding Cards is clicked in Step 5', async () => {
+        const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {});
+        await goToStep5();
+
+        await click(screen.getByRole('button', { name: /Generate 3 Founding Invites/i }));
+        const printButton = screen.getByRole('button', { name: /Print Founding Cards/i });
+        await click(printButton);
+
+        expect(printSpy).toHaveBeenCalledTimes(1);
+        printSpy.mockRestore();
+    });
 });

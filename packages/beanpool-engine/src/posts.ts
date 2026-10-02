@@ -14,7 +14,8 @@ import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
-import { postPhotoUrl } from './photo-url.js';
+import { onPublicBoard, postPhotoUrl } from './photo-url.js';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -23,6 +24,11 @@ export interface PollOption {
     text: string;
     votes?: number;
     percentage?: number;
+    /**
+     * Of this option's votes, how many came from new or 12-word accounts (MarketplacePost.pollNewOrWordsVotes). Only on a
+     * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN). Counted from the votes on each read, never from a stored copy.
+     */
+    newOrWordsVotes?: number;
 }
 
 export interface PollVoteRecord {
@@ -90,6 +96,15 @@ export interface MarketplacePost {
      */
     pollOpenVote?: boolean;
     totalVotes?: number;
+    /**
+     * How many of `totalVotes` came from new or 12-word accounts, each vote as its voter was when they voted
+     * (configurePollVoteOrigins): on a poll on the public board of a node that says (the global profile, where anyone may
+     * join, so one person with many cheap accounts could tip a count), once the poll has closed (pollOriginsMayShow).
+     * Every vote still counts in `totalVotes` and each option's `votes`; this only says where they came from, as a count,
+     * never who. Absent where the node doesn't say: a local community, a group's poll, a poll for one person, an open vote,
+     * and every poll still open.
+     */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
     // Audience scoping (docs/the-commons.md §9, Item 10)
@@ -191,6 +206,14 @@ export interface PostFilter {
      */
     coarse?: boolean;
     /**
+     * The reader gets each post as guestPost gives it (a visitor on a node that shows them the listings but not the
+     * people, apps/server routes/marketplace.ts). guestPost puts a neutral value in place of the author's name, face,
+     * standing and trade count, so the read neither reads nor works out any of them (GUEST_POST_ROW_SELECT, rowToPost):
+     * no trust profile per post, no photo. Which posts there are, their order and everything else are as without it.
+     * Set only where every post read is then passed through guestPost.
+     */
+    guest?: boolean;
+    /**
      * The most posts a read with a point measures in its one pass (postRowsNear), for a read a request from outside makes
      * (apps/server routes/marketplace.ts sets ONE_PASS_MAX_MEASURED). Without it the one pass (a filter circles don't
      * take, a radius, a reader far from every post, a page deeper than circles go) measures and sorts every post the
@@ -208,6 +231,14 @@ export interface PostFilter {
      * still open for those reads.
      */
     measureAtMost?: number;
+    /**
+     * "Coming up" (apps/server routes/home-answer.ts, the Home screen's events card): events that haven't ended and
+     * start by this moment (an ISO time), a cancelled one left out, in START order, soonest first, so `limit` keeps the
+     * soonest few. Without it a read of events is the most recently updated first, and an event posted weeks ahead
+     * falls behind a hundred newer ones. Searched on idx_posts_event_start (type = 'event' is in the SQL as a literal,
+     * so the planner may use that partial index), which walks the events in start order and stops at the limit.
+     */
+    upcomingUntil?: string;
 }
 
 /**
@@ -239,14 +270,14 @@ export function isEventHost(
 ): boolean {
     if (!pubkey) return false;
     if (row.author_pubkey === pubkey) return true;
-    const keeper = db.prepare(`
+    const keeper = prepared(db, `
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).get(pubkey, row.author_pubkey);
     if (keeper) return true;
     if (row.audience_scope === 'group' && row.target_group_id) {
-        return !!db.prepare(`
+        return !!prepared(db, `
             SELECT 1 FROM group_members gm
             JOIN members m ON m.public_key = gm.member_pubkey
             WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.role = 'convenor' AND gm.status = 'active'
@@ -278,6 +309,47 @@ export const MAX_PHOTO_BASE64_CHARS = 600_000;
 
 export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
 export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
+
+/**
+ * Where a public poll's votes came from: for each poll named, per option id, how many of its votes came from new or 12-word
+ * accounts; a poll with none may be left out. Null when the node doesn't say. Installed by the node (apps/server
+ * engine/probation.ts installPollVoteOriginsAtBoot), which stamps each vote with its voter's kind when it is cast.
+ */
+export type PollVoteOriginCounter = (db: Db, pollIds: string[]) => Map<string, Map<string, number>> | null;
+
+let pollVoteOrigins: PollVoteOriginCounter | null = null;
+
+/** Installs (or, with null, removes) what says where a public poll's votes came from (MarketplacePost.pollNewOrWordsVotes). */
+export function configurePollVoteOrigins(counter: PollVoteOriginCounter | null): void {
+    pollVoteOrigins = counter;
+}
+
+/**
+ * The fewest votes on each side, from new or 12-word accounts and from the rest, for a closed poll to show each option's
+ * split (PollOption.newOrWordsVotes). Below it a poll shows only how many of its votes came from them: split per option,
+ * one or two votes on a side would say how those one or two people chose, and an anonymous poll says nobody's choice. A
+ * side with no votes says nothing about anyone, so 0 is fine on the other side.
+ */
+export const POLL_ORIGINS_SPLIT_MIN = 3;
+
+/**
+ * Whether a poll may say where its votes came from (MarketplacePost.pollNewOrWordsVotes and each option's split): only an
+ * anonymous poll, and only once it has closed for good (Marty's privacy defaults, 2026-09-28, decided for #1458).
+ *
+ * - Never on an open vote. It names its voters to members, so a count of kinds beside the names says which kind each
+ *   named voter is: which members are new, and which have no sign-in and only their 12 words to get back in.
+ * - Never while a poll is open, the floor above notwithstanding. A reader who re-reads after each vote sees the count of
+ *   kinds move beside the option counts, and so learns each vote's kind with its choice: with few settled voters, whose
+ *   vote it was. Closed, nothing moves any more, and the result is what the count is for.
+ *
+ * Closed is for good: closed by its author (`completed`, which nothing reopens) or past its closing time. A poll its
+ * author paused is not closed: it can be put back up and voted on again.
+ */
+export function pollOriginsMayShow(row: { poll_open_vote?: unknown; status?: unknown; poll_closes_at?: unknown }, nowIso: string): boolean {
+    if (row.poll_open_vote === 1 || row.poll_open_vote === true) return false;
+    if (row.status === 'completed') return true;
+    return typeof row.poll_closes_at === 'string' && row.poll_closes_at !== '' && row.poll_closes_at <= nowIso;
+}
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
     if (ids.length === 0) return [];
@@ -349,15 +421,21 @@ export function generateSearchKeywords(title: string, description: string, categ
     return [...expanded].join(' ');
 }
 
-export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): MarketplacePost {
+/**
+ * A post row as the reader gets it. `forGuest`: a visitor's read (PostFilter.guest), whose copy guestPost makes with a
+ * neutral value for the author's standing and face, so neither is worked out here: they stand as guestPost leaves them.
+ */
+export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards.
     let trustPoints = 0;
-    try {
-        trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
-    } catch (e) {
-        trustPoints = 0;
+    if (!forGuest) {
+        try {
+            trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
+        } catch (e) {
+            trustPoints = 0;
+        }
     }
 
     return {
@@ -392,7 +470,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: avatarUrlFor(row.author_pubkey, row.author_avatar),
+        authorAvatarUrl: forGuest ? null : avatarUrlFor(row.author_pubkey, row.author_avatar),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
@@ -638,6 +716,24 @@ const POST_ROW_SELECT = `
         LEFT JOIN members a ON p.accepted_by = a.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id`;
 
+/**
+ * POST_ROW_SELECT for a visitor's read (PostFilter.guest): the same rows, with none of the people in them. guestPost puts
+ * a neutral value in place of the author's name, face and standing and of who took the listing, and drops the group's
+ * name, so none of them is read: not the author's photo (members.avatar_url, a photo stored in the row), nor their two
+ * trade counts, nor any name. `m` stays joined for the author's standing in the listing's conditions
+ * (ENTERPRISE_ON_BOARD_SQL).
+ */
+const GUEST_POST_ROW_SELECT = `
+        SELECT p.*, NULL as author_callsign, NULL as author_avatar, NULL as accepted_callsign,
+               NULL as target_group_name, 0 as author_earned_credit, 0 as author_trade_count
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key`;
+
+/** The row select a read uses: a visitor's (GUEST_POST_ROW_SELECT) or everyone else's (POST_ROW_SELECT). */
+function postRowSelect(filter: PostFilter | undefined): string {
+    return filter?.guest ? GUEST_POST_ROW_SELECT : POST_ROW_SELECT;
+}
+
 const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
 /**
  * RECENT_ORDER for a delta read (`updatedAfter`). The unary plus stops the ORDER BY from choosing idx_posts_updated_at:
@@ -649,8 +745,11 @@ const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
 
 /** The newest-first order: DELTA_ORDER for a delta read, RECENT_ORDER for every other. */
 function recentOrder(filter: PostFilter | undefined): string {
+    if (filter?.upcomingUntil) return START_ORDER;
     return filter?.updatedAfter ? DELTA_ORDER : RECENT_ORDER;
 }
+/** Soonest start first (PostFilter.upcomingUntil), ending on p.id so the order is total. */
+const START_ORDER = " ORDER BY p.event_start_at ASC, p.id ASC";
 // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
 const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
 
@@ -713,8 +812,11 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     category: f => f.category === 'all',
     // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
     coarse: () => true,
+    // What is read of each post, not which posts.
+    guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
+    upcomingUntil: null,
     id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -800,7 +902,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [near.lat, near.lng];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
@@ -810,11 +912,12 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             inner += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
             params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
         }
-        inner += where + ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
+        // "Coming up" keeps the soonest `cap` (PostFilter.upcomingUntil), every other read the newest.
+        inner += where + (filter.upcomingUntil ? START_ORDER : ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC') + ' LIMIT ?';
         params.push(...whereParams, cap);
         let sql = `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, ${km('q')} AS distance_km FROM (${inner}
+            SELECT q.id, q.updated_at, q.created_at, q.event_start_at, ${km('q')} AS distance_km FROM (${inner}
             ) q
         )
         SELECT p.id, p.distance_km FROM measured p`;
@@ -843,7 +946,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         ? rankBounded(near.radiusKm, filter.limit, offset, Math.floor(cap))
         : rank(near.radiusKm, filter.limit, offset, false);
 
-    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));
     return ranked.flatMap(r => {
         const row = byId.get(r.id);
@@ -906,7 +1009,7 @@ export function getPostsForPhotoHeal(db: Db, filter: PostFilter, heal: PhotoHeal
 }
 
 /** The rows of one heal page, in heal order, with `heal.next` set (getPostsForPhotoHeal). */
-function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: PhotoHealRead): any[] {
+function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: PhotoHealRead, filter: PostFilter | undefined): any[] {
     const limit = Math.max(0, Math.floor(heal.limit));
     let sql = `
         SELECT id, photo, live, upd, cre FROM (
@@ -931,7 +1034,7 @@ function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: Ph
     const last = page[page.length - 1];
     heal.next = !beyond || beyond.photo !== 1 ? null
         : last ? JSON.stringify([last.photo, last.live, last.upd, last.cre, last.id]) : (heal.after ?? '');
-    const full = selectInChunks(db, page.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const full = selectInChunks(db, page.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));
     return page.flatMap(r => byId.get(r.id) ?? []);
 }
@@ -984,6 +1087,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.upcomingUntil) {
+        // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
+        where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"
+            + " AND COALESCE(p.event_end_at, p.event_start_at) > ? AND COALESCE(p.event_state, '') != 'cancelled'";
+        params.push(filter.upcomingUntil, new Date().toISOString());
+    }
     if (filter?.category && filter.category !== 'all') { where += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { where += " AND p.status = ?"; params.push(filter.status); }
     if (filter?.authorPubkey) { where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }
@@ -1096,11 +1205,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
     let rows: any[];
     if (heal) {
-        rows = postRowsForHeal(db, where, params, heal);
+        rows = postRowsForHeal(db, where, params, heal, filter);
     } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
     } else {
-        let query = `${POST_ROW_SELECT}
+        let query = `${postRowSelect(filter)}
         WHERE 1=1${where}${recentOrder(filter)}`;
         if (filter?.limit) {
             query += " LIMIT ? OFFSET ?";
@@ -1143,6 +1252,16 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         } catch {
             // Safe fallback if poll_votes table does not exist in testing handle
         }
+    }
+    // Where the votes on the public board's closed anonymous polls came from, where the node says
+    // (configurePollVoteOrigins, pollOriginsMayShow). A failure reads as a node that doesn't say: the counts themselves
+    // never depend on it.
+    const originsNowIso = new Date().toISOString();
+    const mayShowOrigins = (r: any) => onPublicBoard(r.audience_scope) && pollOriginsMayShow(r, originsNowIso);
+    let originsByPost: Map<string, Map<string, number>> | null = null;
+    const publicPollIds = pollRows.filter(mayShowOrigins).map(r => r.id as string);
+    if (pollVoteOrigins && publicPollIds.length > 0) {
+        try { originsByPost = pollVoteOrigins(db, publicPollIds); } catch { originsByPost = null; }
     }
 
     // #143 step 4. `reachPeers` names WHICH NEIGHBOURING COMMUNITIES a member singled out, and that is the
@@ -1189,7 +1308,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     const nowMs = Date.now();
     const out: MarketplacePost[] = [];
     for (const r of rows) {
-        const post = rowToPost(db, r, photosByPost);
+        const post = rowToPost(db, r, photosByPost, !!filter?.guest);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
             // A removal says nothing of where the post was, so it carries no distance either.
@@ -1211,7 +1330,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
-            const mine = viewer ? rsvps.find(v => v.member_pubkey === viewer) : undefined;
+            // ⚡ Bolt: single-pass RSVP loop to compute going/interested counts and locate viewer's RSVP without extra .find() array scan
+            let goingCount = 0;
+            let interestedCount = 0;
+            let mine: any | undefined;
+            for (const v of rsvps) {
+                if (v.status === 'going') goingCount++;
+                else if (v.status === 'interested') interestedCount++;
+                if (viewer && v.member_pubkey === viewer) mine = v;
+            }
             // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
             // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
             const host = !viewerIsVisitor && isEventHost(db, r, viewer);
@@ -1232,13 +1359,6 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
-            }
-            // ⚡ Bolt: single-pass RSVP counting to avoid double .filter() scans and array allocations
-            let goingCount = 0;
-            let interestedCount = 0;
-            for (const v of rsvps) {
-                if (v.status === 'going') goingCount++;
-                else if (v.status === 'interested') interestedCount++;
             }
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;
@@ -1271,11 +1391,26 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 }
             }
             post.userVotedOptionId = userVotedOptionId;
+            // Where its votes came from, once an anonymous poll has closed (pollOriginsMayShow): the total, and each
+            // option's share only when both sides are big enough to say nobody's choice (POLL_ORIGINS_SPLIT_MIN). A vote
+            // for an option since edited away counts in the total, as it does in `totalVotes`. Read from the row as stored,
+            // before anything below shows it paused for its author's sake.
+            const origins = originsByPost && mayShowOrigins(r) ? (originsByPost.get(post.id) ?? new Map<string, number>()) : null;
+            let split = false;
+            if (origins) {
+                let fromNew = 0;
+                for (const c of origins.values()) fromNew += c;
+                const rest = totalVotes - fromNew;
+                post.pollNewOrWordsVotes = fromNew;
+                split = fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
+            }
             if (post.pollOptions) {
-                post.pollOptions = post.pollOptions.map((opt: any) => {
+                post.pollOptions = post.pollOptions.map((stored: any) => {
+                    // Read afresh every time: a copy that stored one (a standby's, an app's) never speaks for now.
+                    const { newOrWordsVotes: _stored, ...opt } = stored;
                     const count = voteCounts.get(opt.id) || 0;
                     const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-                    return { ...opt, votes: count, percentage };
+                    return split ? { ...opt, votes: count, percentage, newOrWordsVotes: origins!.get(opt.id) ?? 0 } : { ...opt, votes: count, percentage };
                 });
             }
             // Only an open vote names its voters, and only to a member (includeVoters). An anonymous poll names nobody,
@@ -1350,7 +1485,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
-    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep',
+    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).

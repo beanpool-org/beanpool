@@ -293,7 +293,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',
@@ -635,6 +635,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },
     image_store_evacuation_vacuumed_v1: { kind: 'per-server', reason: 'a one-shot marker of this server' },
+    'doorNumbers.*': { kind: 'per-server', reason: "the open door's numbers, this server's own and never copied (engine/door-signal.ts)" },
     'migration_*': { kind: 'per-server', reason: "one-shot boot markers of this server's own database" },
 };
 

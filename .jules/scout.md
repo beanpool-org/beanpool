@@ -82,3 +82,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 ## 2026-08-20 - [Monorepo Test Isolation & PWA Dependency Boundary]
 **Gotcha:** Do NOT open component test PRs in `apps/pwa` that independently bootstrap `setupTests.ts`, add `@testing-library` packages, modify `pnpm-lock.yaml`, or edit `resolve.alias` in `vite.config.ts`.
 **Reason:** `apps/pwa` has no test harness on `main`. Ad-hoc bootstrapping attempts in multiple PRs churned the lockfile, downgraded React from 19.2.0 to 19.1.0 across the repo, and pointed production bundle aliases at testing-library's nested React. Test suites must only be added after a dedicated, unified test harness PR is approved on `main`.
+
+## 2026-10-01 - [Owner Lock Open Check Coverage]
+**Gap found:** `POST /api/node/owner/lock-open-check` in `apps/server/src/routes/owner-unlock.ts` had no corresponding test file.
+**Learning:** Testing lock open check endpoint requires validating signature auth middleware behavior (401 for unsigned/stale timestamp, 403 for non-owners) and verifying that valid owner requests record report data into `owner_lock_opens` database table.
+**Action:** Created `test-owner-lock-open-check.ts` and registered it in `scripts/server-suites.mjs`.

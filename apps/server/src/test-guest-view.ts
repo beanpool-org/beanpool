@@ -469,7 +469,7 @@ async function main(): Promise<void> {
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
     /** The other reads that take a point (2b), each read with one as well. */
-    const withPoint = new Set(['/api/global/home', '/api/global/communities']);
+    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home']);
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
@@ -532,6 +532,7 @@ async function main(): Promise<void> {
         [POSTS]: "section 7: each place, distance, order, radius and page is its area's",
         '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
         '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
+        '/api/home': "section 7d: the find card is the landing card's own body (7b), and each listing's and event's distance the listing's visitors' read (7)",
     };
     /** The People lists take a point from a member only (routes/community.ts peoplePoint): gated, refused to every guest. */
     const PEOPLE_POINT_READS = ['/api/community/members', '/api/members'];
@@ -575,6 +576,7 @@ async function main(): Promise<void> {
         const KNOWN: Record<string, number> = {
             [path.join('routes', 'marketplace.ts')]: 1, // the listing (POSTS)
             [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
+            [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
         };
         assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
@@ -1208,6 +1210,7 @@ async function main(): Promise<void> {
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
+            'GET /api/home',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
             'POST /api/join', 'POST /api/join/knock',
@@ -1279,10 +1282,6 @@ async function main(): Promise<void> {
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',
             'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling', 'POST /api/local/reset',
             'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
-            'GET /api/manager/backups/download-db', 'GET /api/manager/backups/download-history', 'GET /api/manager/backups/download-identity',
-            'GET /api/manager/backups/history', 'POST /api/manager/backups/replication-config', 'POST /api/manager/backups/snapshots/create',
-            'POST /api/manager/backups/snapshots/delete', 'POST /api/manager/backups/snapshots/list', 'GET /api/manager/backups/status',
-            'POST /api/manager/backups/trigger',
             'GET /api/map/enterprises',
             'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
@@ -1575,6 +1574,32 @@ async function main(): Promise<void> {
         }
         assert(off.length === 0 && listed > 100, `50 points × 2 reads, ${listed} communities: each at the place it publishes, each distance from that `
             + `place and in its order${off.length ? ` — ${off.slice(0, 5).join(' | ')}` : ''}`);
+
+        console.log('\n── 7d. /api/home, the visitors\' Home: the landing card\'s own body, and each distance the listing\'s own visitors\' read ──');
+        const homeOff: string[] = [];
+        let homeItems = 0;
+        for (let i = 0; i < points.length; i += 4) {
+            const q = points[i];
+            const [, id] = guests[i % guests.length];
+            const at = `lat=${q.lat}&lng=${q.lng}`;
+            const r = await call('GET', id, `/api/home?${at}&cards=find,market,events,community,joined,pulse`);
+            const cards = r.body?.cards ?? {};
+            if (r.status !== 200 || r.body?.welcome !== true || cards.joined || cards.pulse) homeOff.push(`#${i}: ${r.status} ${Object.keys(cards).join(',')}`);
+            // The landing card, which 7b measures: the same body, for the same reader at the same point.
+            const landing = await call('GET', id, `${HOME}?${at}`);
+            if (cards.find && JSON.stringify(cards.find) !== JSON.stringify(landing.body)) homeOff.push(`#${i}: the find card is not the landing card's body`);
+            // Each listing and event: no place of its own, and the distance the listing's visitors' read gives (section 7).
+            for (const item of [...(cards.market?.items ?? []), ...(cards.events?.items ?? [])] as any[]) {
+                homeItems++;
+                if ('lat' in item || 'lng' in item) homeOff.push(`#${i}: ${item.id} carries a place`);
+                if (item.distanceKm === undefined) continue;
+                const own = await call('GET', id, `${POSTS}?id=${item.id}&${ALL_TYPES}&${at}`);
+                const theirs = ((Array.isArray(own.body) ? own.body : []) as any[]).find(p => p.id === item.id)?.distanceKm;
+                if (theirs !== item.distanceKm) homeOff.push(`#${i}: ${item.id} distanceKm ${item.distanceKm}, the listing's read ${theirs}`);
+            }
+        }
+        assert(homeOff.length === 0 && homeItems > 0, `50 points, ${homeItems} listings and events: the visitors' cards only, the find card the landing card's, `
+            + `each distance the listing's visitors' read${homeOff.length ? ` — ${homeOff.slice(0, 5).join(' | ')}` : ''}`);
     }
 
     async function localChecks(): Promise<void> {

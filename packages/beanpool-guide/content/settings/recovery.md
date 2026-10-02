@@ -63,7 +63,7 @@ If you would rather nobody but you could get in, use only your 12 words: keep th
 
 ## If someone else tries
 
-If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password.
+If someone starts recovering your account, Settings shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in with your linked sign-in account, you get an alert that your account was just restored on another device, and they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password.
 
 ## If the phone already has an account
 

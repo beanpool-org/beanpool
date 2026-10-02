@@ -1,6 +1,7 @@
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { bumpMembersVersion } from './versions.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
@@ -21,6 +22,16 @@ export interface NodeRoleRecord {
  * holds from before that rule (heldNodeRoleOf) opens no Settings session and passes no role test here (4111202677).
  */
 export const NODE_ROLE_ACTS = "m.status = 'active' AND m.is_visitor = 0";
+
+/**
+ * The member directory (GET /api/members) names each member's node role. A role that changes moves the member's
+ * profile_updated_at (here), so a phone's delta read carries the row, and the members' version (grantNodeRole and
+ * revokeNodeRole, after their transaction), so a phone holding the old list isn't answered 304. Neither moved before,
+ * and a phone kept the old role until its hourly full read.
+ */
+function noteRoleChanged(pubkey: string): void {
+    db.prepare("UPDATE members SET profile_updated_at = ? WHERE public_key = ?").run(new Date().toISOString(), pubkey);
+}
 
 /**
  * Returns the primary node role of a member, or null if they hold none.
@@ -102,15 +113,20 @@ export function getFirstNodeAdminPubkey(): string {
 /**
  * Lists all active node role assignments with member callsign. A visitor's row's role from before this rule is listed
  * too, though it acts for nothing (NODE_ROLE_ACTS), so an owner sees it and can take it away.
+ *
+ * CROSS JOIN keeps node_roles (a handful of rows) the outer loop, each member found by its key: with a plain JOIN SQLite
+ * walked every member and looked each one up in node_roles (1.5 ms at 30,000 members), on every read of the member
+ * directory (GET /api/members), a phone's delta sync included. Rows with the same granted_at keep the order that walk
+ * gave them (members' rowid).
  */
 export function listNodeRoles(): NodeRoleRecord[] {
     const rows = db.prepare(
         `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, nr.session_epoch,
                 (nr.break_glass_hash IS NOT NULL) as has_break_glass, m.callsign
          FROM node_roles nr
-         JOIN members m ON nr.member_pubkey = m.public_key
+         CROSS JOIN members m ON nr.member_pubkey = m.public_key
          WHERE m.status = 'active'
-         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC`
+         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC, m.rowid ASC`
     ).all() as any[];
     return rows.map(r => ({
         ...r,
@@ -272,7 +288,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
              VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)`
         ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass);
+        if (currentRole !== role) noteRoleChanged(targetPubkey);
     })();
+    bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role granted`);
 }
 
@@ -324,8 +342,11 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             }
         }
 
-        db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
+        if (db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role).changes > 0) {
+            noteRoleChanged(targetPubkey);
+        }
     })();
+    bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role revoked`);
 }
 

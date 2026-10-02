@@ -355,7 +355,7 @@ describe('P4: the door refuses the ticket: one more sheet, by itself, with the d
 
     it('the screen shows the notice under the joining spinner, and passes it to the join', () => {
         const welcome = fs.readFileSync(path.resolve(__dirname, '../../app/welcome.tsx'), 'utf8');
-        expect(welcome).toMatch(/submitJoin\(GLOBAL_NODE_URL, identity, name, signin, \{ onSignInAgain: setDoorNotice \}\)/);
+        expect(welcome).toMatch(/submitJoin\(GLOBAL_NODE_URL, identity, name, signin, \{ onSignInAgain: setDoorNotice, work: doorWork\.runFor\('sign-in'\) \}\)/);
         const joining = welcome.slice(welcome.indexOf("{globalPhase === 'joining' && ("));
         expect(joining.slice(0, 600)).toMatch(/\{doorNotice \?\? 'Joining the global community…'\}/);
     });

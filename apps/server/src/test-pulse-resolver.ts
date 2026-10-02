@@ -475,46 +475,35 @@ async function main(): Promise<void> {
     }
     assert(publicHttpOk, `ssrfSafeFetch succeeds on public HTTP domain with real socket connection${publicHttpError ? ` (failed: ${publicHttpError.message || publicHttpError})` : ''}`);
 
-    // CustomLookup callback interface tests (Node 22 all:true vs legacy single-result form)
+    // CustomLookup callback interface tests (Node 22 all:true vs legacy single-result form). The
+    // lookup answers on a later tick, as dns.lookup does (see test-ssrf-fetch-timeout.ts section 8),
+    // so each call is awaited.
     const lookup = createCustomLookup('93.184.216.34', 4);
-
-    let allTrueResult: any = null;
-    lookup('example.com', { all: true }, (_err: any, addresses: any) => {
-        allTrueResult = addresses;
+    const lookupArgs = (opts?: unknown): Promise<any[]> => new Promise((resolve) => {
+        const cb = (...args: any[]) => resolve(args);
+        if (opts === undefined) (lookup as any)('example.com', cb);
+        else (lookup as any)('example.com', opts, cb);
     });
+
+    const [, allTrueResult] = await lookupArgs({ all: true });
     assert(
         Array.isArray(allTrueResult) && allTrueResult.length === 1 && allTrueResult[0].address === '93.184.216.34' && allTrueResult[0].family === 4,
         'createCustomLookup returns array [{ address, family }] when options.all is true (Node 22 autoSelectFamily)'
     );
 
-    let allFalseAddr: any = null;
-    let allFalseFamily: any = null;
-    lookup('example.com', { all: false }, (_err: any, address: any, family: any) => {
-        allFalseAddr = address;
-        allFalseFamily = family;
-    });
+    const [, allFalseAddr, allFalseFamily] = await lookupArgs({ all: false });
     assert(
         allFalseAddr === '93.184.216.34' && allFalseFamily === 4,
         'createCustomLookup returns (address, family) when options.all is false'
     );
 
-    let numericFamilyAddr: any = null;
-    let numericFamilyVal: any = null;
-    lookup('example.com', 4, (_err: any, address: any, family: any) => {
-        numericFamilyAddr = address;
-        numericFamilyVal = family;
-    });
+    const [, numericFamilyAddr, numericFamilyVal] = await lookupArgs(4);
     assert(
         numericFamilyAddr === '93.184.216.34' && numericFamilyVal === 4,
         'createCustomLookup returns (address, family) when options is a numeric family'
     );
 
-    let legacyAddr: any = null;
-    let legacyFamily: any = null;
-    lookup('example.com', (_err: any, address: any, family: any) => {
-        legacyAddr = address;
-        legacyFamily = family;
-    });
+    const [, legacyAddr, legacyFamily] = await lookupArgs();
     assert(
         legacyAddr === '93.184.216.34' && legacyFamily === 4,
         'createCustomLookup returns (address, family) when called without options'

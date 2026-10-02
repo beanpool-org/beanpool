@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -18,6 +18,7 @@ import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -34,6 +35,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
+import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
@@ -173,6 +175,7 @@ export {
 };
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
+    CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
@@ -210,6 +213,7 @@ import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
+    getMemberDirectoryRows as getMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -231,6 +235,7 @@ import {
     rowToMember,
     rowToProfile,
     type Member,
+    type DirectoryRow,
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
@@ -325,6 +330,7 @@ import {
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
     closePoll as closePollEngine,
+    closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
@@ -413,6 +419,11 @@ export {
     dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
     type MyEvent,
 } from './engine/event-reminders.js';
+import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
+export {
+    HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
+    type HomeLayout, type HomeCardId,
+} from './engine/home-preferences.js';
 
 /** "Your events" and the per-event reminder write, wired to this node's db. */
 export const listMyEvents = (memberPubkey: string, nowMs?: number) => listMyEventsEngine(memberPubkey, nowMs);
@@ -631,6 +642,10 @@ export function initStateEngine(): void {
     // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
     // here, once, as the faces are.
     installPhotoKeysAtBoot(READ_AUTH_ON);
+    // Each anonymous poll on the public board says, once it has closed, how many of its votes came from new or 12-word
+    // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
+    // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
+    installPollVoteOriginsAtBoot();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -699,11 +714,28 @@ export function initStateEngine(): void {
     // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
     // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
     // empty. It has to survive a restart to mean anything.
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && typeof commonsRow.balance === 'number') {
-        setCommonsBalance(commonsRow.balance);
-        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
+    //
+    // A row that holds no number (NULL, or text such as 'NaN') makes the pot UNKNOWN in memory: NaN, never 0 (#1445
+    // confirmation, NB-1). Left at the module's 0, the boot's own flush wrote 0 over the row, the audit then found no
+    // broken pot, a take-over reported the old pot as drift, and a rebaseline accepted it. As NaN it is the non-finite pot
+    // every path already handles: nothing writes it (engine/audit.ts persistCommonsBalance), the audit counts the row as
+    // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
+    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
+    //
+    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
+    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
+    if (restoredPot !== null && !Number.isFinite(restoredPot)) {
+        setCommonsBalance(restoredPot);
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+            + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
+            + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
+            + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
+    } else if (restoredPot !== null) {
+        setCommonsBalance(restoredPot);
+        const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -815,6 +847,11 @@ export function initStateEngine(): void {
     // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
     startPruningUnusedInvites();
 
+    // Recovery sessions that released nothing, past their window or stopped, for every owner: a pile of strangers' opens
+    // against a member who never opens the app is retired too (engine/recovery-release.ts sweepRecoveryCollections).
+    // Every role: the sessions are each server's own.
+    startSweepingRecoveryCollections();
+
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
@@ -879,6 +916,9 @@ function armMainServerTimers(): void {
         // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
         // itself is bounded by one indexed range scan over events starting inside the next week.
         try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+        // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
+        // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
+        try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
     }), 60 * 1000);
 }
 
@@ -1122,7 +1162,11 @@ function sweepSettledEscrowAccounts(): void {
           )
     `).get(DUST_THRESHOLD) as { dustSum: number };
 
-    if (dustSumRow && dustSumRow.dustSum !== 0) {
+    // Not while the pot is unknown or not finite (its row holds no number, or ±Infinity): the absorb below is a raw
+    // `balance + ?` on the pot's row, which SQLite reads as 0 + dust for text and would write over it (NB-1 on #1445), and
+    // zeroing the dust without crediting a pot would destroy it. The dust stays where it is until the pot is mended.
+    const potKnown = Number.isFinite(COMMONS_BALANCE);
+    if (potKnown && dustSumRow && dustSumRow.dustSum !== 0) {
         setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
         db.prepare(`
             UPDATE accounts 
@@ -1132,7 +1176,7 @@ function sweepSettledEscrowAccounts(): void {
         `).run(dustSumRow.dustSum);
     }
 
-    db.prepare(`
+    if (potKnown) db.prepare(`
         UPDATE accounts 
         SET balance = 0,
             last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -1303,8 +1347,12 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // is a trade's step, which changes its listing on the board (spoken for, back up, or done and gone), so
 // every other socket gets the listings' doorbell for it instead (ringListingDoorbell).
 //
+// `ownCard`: a `profile_updated` for a member's edit of their own card (engine/members.ts updateProfile). Where profiles
+// are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
+// and to the members who share a conversation with them (cardCircle); the versions move all the same.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1363,6 +1411,17 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     const row = db.prepare('SELECT audience_scope FROM posts WHERE id = ?').get(postId) as { audience_scope: string | null } | undefined;
     if (!row) return false;
     return row.audience_scope === null || row.audience_scope === 'public';
+}
+
+/**
+ * Who hears a member's card edit where profiles are not announced (BroadcastOptions.ownCard): the member, on their other
+ * devices, and everyone who shares a conversation with them (a direct one or a group's), whose chats show that card.
+ */
+function cardCircle(pubkey: string): Set<string> {
+    const rows = db.prepare(`SELECT DISTINCT o.public_key FROM conversation_participants mine
+        JOIN conversation_participants o ON o.conversation_id = mine.conversation_id
+        WHERE mine.public_key = ?`).all(pubkey) as { public_key: string }[];
+    return new Set([pubkey, ...rows.map(r => r.public_key)]);
 }
 
 /** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
@@ -1435,6 +1494,10 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
     // own sockets only, which it still makes member sockets below. The versions above moved all the same.
     const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
+    // Where profiles are not announced (the global node, node-profile.ts announceProfiles), a member's card edit goes to
+    // their circle only (cardCircle). The versions above moved all the same.
+    const toCircle = event?.type === 'profile_updated' && opts?.ownCard && typeof event.publicKey === 'string'
+        && !getProfileSwitches().announceProfiles ? cardCircle(event.publicKey) : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1473,6 +1536,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             }
         }
         if (joinToJoinerOnly && !joinersOwn) continue;
+        if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -1579,6 +1643,11 @@ export function getMembers(): Member[] {
 
 export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
+}
+
+/** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
+export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
+    return getMemberDirectoryRowsEngine(db, updatedAfter);
 }
 
 // ===================== INVITE CODES =====================
@@ -2480,6 +2549,21 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
+ * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ */
+function commonsPotFromRow(balance: unknown): number {
+    return typeof balance === 'number' ? balance : NaN;
+}
+
+/** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
+function describeRowBalance(balance: unknown): string {
+    if (balance === null || balance === undefined) return 'NULL';
+    if (Buffer.isBuffer(balance)) return 'a BLOB';
+    return typeof balance === 'string' ? `text '${balance}'` : String(balance);
+}
+
+/**
  * Put the in-memory ledger back to what the rows say, or halt.
  *
  * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
@@ -2505,8 +2589,9 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
         if (commonsSnapshot !== null) {
             setCommonsBalance(commonsSnapshot);
         } else {
-            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+            // A row holding no number makes the pot unknown (NaN), as at boot: memory never keeps a pot the rows don't hold.
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+            if (row) setCommonsBalance(commonsPotFromRow(row.balance));
         }
     } catch (resyncError: any) {
         // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
@@ -2616,7 +2701,7 @@ export function moveToCommons(
  *
  * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
  * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
- * null if the pot cannot cover it — the Commons never goes into debt.
+ * null if the pot cannot cover it (unless `allowDeficit`), and always when the pot is not a finite number: nothing moves.
  */
 export function payFromCommons(
     to: string,
@@ -2641,48 +2726,59 @@ export function payFromCommons(
     // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
     const recipientNow = ledger.getAccount(to).balance;
     if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
-    if (!ledger.deductFromCommons(amount)) {
-        if (!opts?.allowDeficit) return null;
-        setCommonsBalance(getCommonsBalanceExact() - amount);
-        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    // A pot that is unknown (its row held no number at boot, so it is NaN) or not finite pays nothing, `allowDeficit` or
+    // not, and nothing moves (#1445 confirmation, NB-3). `allowDeficit` used to go on to credit the recipient and write the
+    // history row, and only the flush at the end refused the pot: called outside a conservingTransaction, the credit stayed
+    // and the pot's debit was never written, Beans minted (measured, test-commons-pot-edges: 1 Bean per call). Before
+    // anything moves, so a caller inside a conservingTransaction gets a plain refusal, not a throw and a ledger resync.
+    if (!Number.isFinite(getCommonsBalanceExact())) {
+        console.warn(`[Commons] Refused to pay ${amount} from a Commons pot that is not a number (${String(getCommonsBalanceExact())}). Memo: ${memo}`);
+        return null;
     }
+    // The pot can't cover it and no deficit is allowed: refused here, before anything moves (deductFromCommons's own test).
+    if (!opts?.allowDeficit && getCommonsBalanceExact() < amount) return null;
 
-    const toAcc = ledger.getAccount(to);
-    toAcc.balance += amount;
+    // THE WHOLE MOVE IN ONE conservingTransaction (NB-3): the pot drawn down and the recipient credited in memory, the
+    // history row, the recipient's row and the pot's row all commit together or not at all, and a failure puts memory back
+    // to the rows. It used to be the history row and the recipient's row as separate autocommits, then the pot's row in
+    // the flush: only a caller that held a conservingTransaction itself was safe. Nested in one (a prune, a settlement
+    // reversal, an escrow write-off), it is a savepoint, as transfer() is.
+    const txn = conservingTransaction((): Transaction | null => {
+        if (!ledger.deductFromCommons(amount)) {
+            if (!opts?.allowDeficit) return null;
+            setCommonsBalance(getCommonsBalanceExact() - amount);
+            console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from: 'COMMONS_POOL', to, amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-        authSigner: opts?.authSigner ?? null,
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+        const toAcc = ledger.getAccount(to);
+        toAcc.balance += amount;
 
-    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
-    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
-    // them and this must too (review finding).
-    //
-    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
-    // to land separately, or a crash between them destroys beans on disk.
-    //
-    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
-    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
-    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
-    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
-    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
-    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
-    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
-    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
-    persistDecayAndCommons();
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from: 'COMMONS_POOL', to, amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(built.id, built.from, built.to, built.amount, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, built.timestamp);
+
+        // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this they are
+        // stranded and the transactions table drifts from account balances — `moveToCommons` persists them and this must
+        // too (review finding). The decay debits and the pot's row, which carries both their credit and this payment's
+        // debit, land in the same commit as everything above.
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the pot's debit durable
+        return built;
+    });
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
@@ -4569,7 +4665,10 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
-    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
+    // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
+    // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
+        .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -4593,7 +4692,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
+    // profile_updated_at too, for the directory's delta (vouchMember).
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
+        .run(new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -5422,6 +5523,8 @@ export function getEnterpriseLedger(
 export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
     return closePollEngine(broadcast, postId, authorPublicKey);
 }
+
+export { closeExpiredPolls };
 
 export function votePoll(
     postId: string,
@@ -6435,6 +6538,19 @@ export function actionReport(
  * post: each author hears once, with the count, that this was routine tidying, not a takedown.
  */
 export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfall?: (s: EscrowRefundShortfall) => void }): number {
+    // While the Commons pot isn't a number, a listing holding a deal can't be removed (its refund moves Beans). Checked for
+    // every listing BEFORE any is removed, so a mixed batch is refused whole in the pause words, naming the held ones,
+    // rather than taking some down silently and then failing (#1465 follow-up, A).
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        const held = postIds.filter(id => db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(id));
+        if (held.length > 0) {
+            const names = held.map(id => {
+                const t = (db.prepare('SELECT title FROM posts WHERE id = ?').get(id) as { title?: string } | undefined)?.title;
+                return t ? `"${t}"` : id;
+            });
+            throw new CommonsPotUnknownError(`${held.length === 1 ? 'This listing holds a deal' : 'These listings hold deals'} that can't be refunded yet: ${names.join(', ')}. None of the listings you chose were removed; take those out of the list and try again.`);
+        }
+    }
     const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
     const reportersByPost = new Map<string, string[]>();
     for (const postId of postIds) {
@@ -6543,7 +6659,9 @@ function countHealth(t: ReturnType<typeof getThresholds>): HealthCounts {
 function healthBody(counts: HealthCounts, reportCount: number, watchdog: WatchdogStatus): Omit<CommunityHealth, 'flags'> {
     const config = getLocalConfig();
     return {
-        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
+        // The name alone (directoryName): getDirectoryInfo also counts the members, a scan this read threw away, and every
+        // phone asks it every 30 s (members' photos are inline, so the count read them all: the global load rehearsal).
+        nodeName: directoryName(),
         version: getVersion(),
         // The app reads both of these. `minAppVersion` is this node's floor — below it
         // the app says so and will not let you dismiss it. `appVersions` is what the
@@ -6967,7 +7085,9 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
 export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
     const granted = grantedCreditForTier(tier);
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
+    // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
+    // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
+    db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }
@@ -7657,10 +7777,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
     // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
-    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts). Marked so (core
+    // dm-crypto DM_FROM_ADMINS_KEY): both apps show it as the community admins' message, which the server can read, and
+    // never as a private one; a readable line in a DM without the mark is shown as nobody's words.
     if (conv) {
         sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
-            'text', undefined, undefined, undefined, { nodeAuthored: true });
+            'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
 
@@ -7820,6 +7942,12 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     return host ? `https://${host}` : null;
 }
 
+/** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */
+export function directoryName(): string {
+    const localConfig = getLocalConfig();
+    return localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node';
+}
+
 /**
  * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
  * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
@@ -7830,7 +7958,7 @@ export function getDirectoryInfo(): any {
     const config = getNodeConfig();
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: directoryName(),
         publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
         communityName: localConfig.communityName || null,
     };
@@ -7842,7 +7970,10 @@ export function getDirectoryInfo(): any {
     }
 
     if (config.publishMembers) {
-        info.memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
+        // The same count (members not pruned) from communityCountsCached: GET /api/directory/info is public and ran the
+        // scan on every hit. Counted afresh once a member changes (the members version), else at most
+        // COMMUNITY_COUNTS_TTL_MS old.
+        info.memberCount = communityCountsCached().memberCount;
     } else {
         info.memberCount = null;
     }
@@ -8510,10 +8641,10 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
 }
 
 /**
- * The preferences a member sets (setMemberPreferences), and the only ones they set: which pushes reach their phone, one per
- * dispatchPushNotification category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is
- * not one of them; setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too
- * (visitor-allowlist.ts).
+ * The push settings a member sets (setMemberPreferences): which pushes reach their phone, one per dispatchPushNotification
+ * category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is not one of them;
+ * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
+ * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
@@ -8525,8 +8656,9 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+/** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
-    `Only your notification settings are saved here: ${PUSH_PREFERENCE_KEYS.join(', ')}, each sent by name.`;
+    `Only your notification settings and your Home are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS].join(', ')}, each sent by name.`;
 export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
 
 /**
@@ -8538,10 +8670,13 @@ export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send tr
  * toggles are booleans-as-strings because that is all they have ever needed, while a reminder choice is a
  * list of minutes (docs/events-on-the-map.md §2.2). Serving it here rather than as a raw `pref_value` means
  * the client never has to know it is stored as JSON, and never has to guess the `[1440]` default.
+ *
+ * `reader`, the verified signer: when it is the member, their Home's keys too (engine/home-preferences.ts), each one they
+ * have saved. Nobody else is ever served them, whatever ENFORCE_READ_AUTH says: a layout says what someone cares about.
  */
-export function getMemberPreferences(publicKey: string): Record<string, string | number[]> {
+export function getMemberPreferences(publicKey: string, reader?: string): Record<string, string | number[] | string[] | HomeLayout> {
     const rows = db.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?`).all(publicKey) as any[];
-    const prefs: Record<string, string | number[]> = {
+    const prefs: Record<string, string | number[] | string[] | HomeLayout> = {
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
@@ -8552,45 +8687,59 @@ export function getMemberPreferences(publicKey: string): Record<string, string |
         if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
+    if (reader === publicKey) Object.assign(prefs, ownHomePreferences(publicKey));
     return prefs;
 }
 
 /**
- * THROWS on a body it refuses: a key that isn't one of PUSH_PREFERENCE_KEYS (holiday mode among them, which only
- * setHolidayMode switches, after its open-trades check), a notification toggle that isn't true or false, or a rejected
- * `eventReminderOffsets`. Still returns false for a storage failure — the route turns the throw into a 400 and the false
- * into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid toggles and dropping
- * a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * THROWS on a body it refuses: a key that is neither one of PUSH_PREFERENCE_KEYS nor one of HOME_PREFERENCE_KEYS
+ * (holiday mode among them, which only setHolidayMode switches, after its open-trades check), a notification toggle that
+ * isn't true or false, a rejected `eventReminderOffsets`, a Home key engine/home-preferences.ts refuses, or a Home key
+ * from a key that isn't a member here. Still returns false for a storage failure — the route turns the throw into a 400
+ * and the false into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid
+ * toggles and dropping a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * A Home layout older than the one kept is not a refusal: the rest of the body is written and the newer layout stays.
  */
 export function setMemberPreferences(publicKey: string, preferences: unknown): boolean {
     // Validated BEFORE the transaction opens: anything refused here refuses the whole write.
     if (!!preferences && typeof preferences === 'object' && Object.prototype.hasOwnProperty.call(preferences, 'holiday_mode')) {
         throw new Error(HOLIDAY_NOT_A_PREFERENCE_MESSAGE);
     }
-    if (!namesOnlyPushSettings(preferences)) throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
-    for (const [key, value] of Object.entries(preferences)) {
-        if (key !== 'eventReminderOffsets' && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    const isHomeKey = (key: string) => HOME_PREFERENCE_KEYS.includes(key);
+    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
+        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key))) {
+        throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
     }
-    const hasOffsets = Object.prototype.hasOwnProperty.call(preferences, 'eventReminderOffsets');
-    const offsets = hasOffsets ? parseReminderOffsets(preferences.eventReminderOffsets) : undefined;
+    const body = preferences as Record<string, unknown>;
+    for (const [key, value] of Object.entries(body)) {
+        if (key !== 'eventReminderOffsets' && !isHomeKey(key) && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    }
+    const hasOffsets = Object.prototype.hasOwnProperty.call(body, 'eventReminderOffsets');
+    const offsets = hasOffsets ? parseReminderOffsets(body.eventReminderOffsets) : undefined;
     if (hasOffsets && offsets === null) {
         // There is no "my default" above a default. `[]` is how a member turns reminders off.
         throw new Error(BAD_OFFSETS_MESSAGE);
     }
+    // A Home is a member's: a key with no row here, or a visitor's row, keeps none (the visitor gate refuses it first).
+    const namesHome = Object.keys(body).some(isHomeKey);
+    if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
+    const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
         const tx = db.transaction(() => {
-            for (const [key, value] of Object.entries(preferences)) {
-                if (key === 'eventReminderOffsets') continue;
+            for (const [key, value] of Object.entries(body)) {
+                if (key === 'eventReminderOffsets' || isHomeKey(key)) continue;
                 stmt.run(publicKey, key, String(value));
             }
+            for (const [key, value] of homeWrites) stmt.run(publicKey, key, value);
             // A preference is on no column of the member's row, so the row is stamped here, as setHolidayMode does: delta
             // sync carries a member's preferences with their row, to a standby (engine sync.ts exportSyncState).
             db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
             if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();
-        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}:`, preferences);
+        // Keys only: a Home layout and interests say what someone cares about, and stay out of the log.
+        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}: ${Object.keys(body).join(', ')}`);
         return true;
     } catch (e) {
         console.error('[Prefs] Failed to set preferences:', e);

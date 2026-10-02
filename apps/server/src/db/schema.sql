@@ -116,6 +116,11 @@ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 -- the index alone.
 CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+-- The member directory's delta (GET /api/members?updatedAfter=, engine members.ts getMemberDirectoryRows): who joined, or
+-- changed their profile, since a phone's cursor, from these alone. Without them every phone's sync read every member's
+-- row (at 26,000 members: ~76 ms of CPU for a 513-byte answer, found in the global node's load rehearsal).
+CREATE INDEX IF NOT EXISTS idx_members_joined_at ON members(joined_at);
+CREATE INDEX IF NOT EXISTS idx_members_profile_updated_at ON members(profile_updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
 -- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
@@ -276,6 +281,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     option_id TEXT NOT NULL,
     signature TEXT NOT NULL,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
+    -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
+    voter_new_or_words INTEGER,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
@@ -317,6 +325,9 @@ CREATE TABLE IF NOT EXISTS event_reminders_sent (
     PRIMARY KEY (post_id, member_pubkey, offset_min)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
+-- "Coming up" on Home (engine posts.ts PostFilter.upcomingUntil): the events in start order, so the soonest few are read
+-- without sorting every event the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
@@ -814,6 +825,9 @@ CREATE TABLE IF NOT EXISTS recovery_collections (
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner ON recovery_collections(owner_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_updated_at ON recovery_collections(updated_at);
+-- The prune and the node-wide sweep (engine/recovery-release.ts sweepRecoveryCollections) walk one owner's sessions
+-- newest first, a batch at a time: without this each batch sorted the owner's whole pile (PR #1456 re-review).
+CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner_created ON recovery_collections(owner_pubkey, status, created_at);
 
 -- One fragment released into one collection. The unique constraint is what makes a release
 -- idempotent rather than cumulative: a keeper tapping Approve twice, or a client retrying a

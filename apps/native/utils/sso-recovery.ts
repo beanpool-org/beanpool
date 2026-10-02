@@ -34,7 +34,8 @@
  * 4. Signs in with Apple/Google/Facebook to obtain the id_token.
  * 5. Releases the SSO fragment via POST /api/recovery/collect/sso, with the id_token and nonce.
  * 6. Releases the Hub fragment via POST /api/recovery/collect/hub (instant under SSO tier, D7 bypassed).
- * 7. Fetches the released fragments via POST /api/recovery/collect/fragments.
+ * 7. Fetches the released fragments via POST /api/recovery/collect/fragments, sealed to the ephemeral key, and opens
+ *    them with it ({@link fetchReleasedFragments}; a community from before the seal sends them as stored).
  * 8. Decrypts the SSO share (B) via openShareFromSso(sealed, provider, sub).
  * 9. Reads the Hub share (A) via readHubShare(hub).
  * 10. Reconstructs seed = combineHubAndWhole(A, B) and derives the Ed25519 keypair.
@@ -53,6 +54,8 @@ import {
     combineHubAndWhole,
     isSingleBlobSso,
     recoveryWordsMatchPublicKey,
+    openListedFragment,
+    KEEPER_ALG_RELEASE,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
@@ -107,6 +110,37 @@ function parseJwtSub(idToken: string): string {
         }
     } catch {}
     throw new Error('Sign-in token does not contain a valid subject claim (sub).');
+}
+
+/** Why a restore stopped when the community's copy didn't open with this restore's own key. Nothing was saved. */
+export const RELEASED_COPY_NOT_OPENED = "Your community's copy didn't open on this phone, so nothing was changed. "
+    + 'Start again, or use your 12 words.';
+
+/**
+ * The fragments released to this restore, each as the account deposited it (POST /api/recovery/collect/fragments).
+ *
+ * Asked for sealed to the restore's throwaway key (`seal`, defence review FABLE-sec-sso finding 2): what crosses the
+ * wire, or lands in a log, opens only with that key, which never leaves this phone; core's `openListedFragment` opens
+ * it. A community from before the seal ignores the request and lists them as stored, and those are taken as they come,
+ * so a restore there works as it always did. A sealed one that doesn't open stops the restore with nothing saved.
+ */
+async function fetchReleasedFragments(anchorUrl: string, collectionId: string, eph: BeanPoolIdentity): Promise<any[]> {
+    const res = await signedPost(anchorUrl, '/api/recovery/collect/fragments', {
+        collectionId,
+        seal: KEEPER_ALG_RELEASE,
+    }, eph);
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to fetch fragments (${res.status})`);
+    }
+    const body = await res.json();
+    const listed: any[] = Array.isArray(body?.fragments) ? body.fragments.filter((f: unknown) => !!f && typeof f === 'object') : [];
+    try {
+        return listed.map(f => openListedFragment(f, eph.privateKey, collectionId));
+    } catch (e) {
+        console.log(`[SSO-RECOVERY] a released copy sealed to this restore did not open: ${(e as Error)?.message}`);
+        throw new Error(RELEASED_COPY_NOT_OPENED);
+    }
 }
 
 /** Why {@link recoverAccountWithSso} refused in a build with a vault: never met by a member (the screen doesn't offer it). */
@@ -232,19 +266,9 @@ export async function recoverAccountWithSso(options: {
         throw new Error(err.error || `Sign-in verification failed (${ssoRes.status})`);
     }
 
-    // 6. Retrieve Released Fragments
+    // 6. Retrieve Released Fragments, sealed to the throwaway key, and open them with it
     options.onProgress?.({ step: 'fetching-fragments', message: 'Downloading recovery fragments...' });
-    let fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
-        collectionId,
-    }, ephIdentity);
-
-    if (!fragsRes.ok) {
-        const err = await fragsRes.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
-    }
-
-    let fragsBody = await fragsRes.json();
-    let fragments: any[] = fragsBody.fragments || [];
+    let fragments = await fetchReleasedFragments(finalAnchorUrl, collectionId, ephIdentity);
     const ssoFrag = fragments.find(f => f.holderType === 'sso');
 
     if (!ssoFrag) {
@@ -295,17 +319,7 @@ export async function recoverAccountWithSso(options: {
             throw new Error(err.error || `Hub release failed (${hubRes.status})`);
         }
 
-        fragsRes = await signedPost(finalAnchorUrl, '/api/recovery/collect/fragments', {
-            collectionId,
-        }, ephIdentity);
-
-        if (!fragsRes.ok) {
-            const err = await fragsRes.json().catch(() => ({}));
-            throw new Error(err.error || `Failed to fetch fragments (${fragsRes.status})`);
-        }
-
-        fragsBody = await fragsRes.json();
-        fragments = fragsBody.fragments || [];
+        fragments = await fetchReleasedFragments(finalAnchorUrl, collectionId, ephIdentity);
         const hubFrag = fragments.find(f => f.holderType === 'hub');
         if (!hubFrag) {
             throw new Error('Hub recovery piece was not returned by the node.');

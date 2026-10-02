@@ -161,6 +161,21 @@ function openFilesNamed(pid: number, name: string): string[] {
     return r.stdout.split('\n').filter((l) => l.startsWith('n') && l.includes(name)).map((l) => l.slice(1));
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/**
+ * openFilesNamed once nothing is on its way to closing: the stager closes its references file with an fs.ReadStream's
+ * destroy(), which closes the descriptor a moment later, not before the pull answers (CI run 36929089868 read 1 still
+ * open). Waits up to `withinMs` for none; a file never closed (one per failed copy, before review 4148896385) is still
+ * open then.
+ */
+async function openFilesNamedSettled(pid: number, name: string, withinMs = 5000): Promise<string[]> {
+    const until = Date.now() + withinMs;
+    let open = openFilesNamed(pid, name);
+    while (open.length > 0 && Date.now() < until) {
+        await sleep(50);
+        open = openFilesNamed(pid, name);
+    }
+    return open;
+}
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 5).join(' | ')}`);
 /** Every copied table S and M both hash, where they differ (engine/replica-hashes.ts). */
 function hashDiff(s: Record<string, { rows: number; hash: string }>, m: Record<string, { rows: number; hash: string }>): string[] {
@@ -438,7 +453,7 @@ async function main(): Promise<void> {
             await main.send('add-photos', { posts: listings.slice(LISTINGS - EXTRA_LISTINGS), perPost: EXTRA_PER_LISTING, from: 10, bytes: 100 });
             const w3more: { ok: boolean; error?: string }[] = [];
             for (let i = 0; i < 3; i++) w3more.push(await standby.send('pull', { whole: true }));
-            const refsOpen = openFilesNamed(standby.proc.pid!, 'photo-references.jsonl');
+            const refsOpen = await openFilesNamedSettled(standby.proc.pid!, 'photo-references.jsonl');
             assert(w3more.every((p) => p.ok === false && /no longer on the main server/.test(p.error ?? '')) && refsOpen.length === 0,
                 `three staged copies that failed in their fetch leave no descriptor open on the references file each read from `
                 + `(${refsOpen.length} open${refsOpen.length ? `: ${refsOpen.slice(0, 3).join(' | ')}` : ''}; before: one more for each; `

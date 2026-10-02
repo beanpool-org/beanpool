@@ -8,6 +8,7 @@
 import type Database from 'better-sqlite3';
 import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -252,7 +253,7 @@ export function clearWashTradingCache(db: Db): void {
 export function qualifiedTradeValue(db: Db, publicKey: string): number {
     const { flaggedPairs, flaggedClusters } = getWashTradingEnforcement(db);
 
-    const rows = db.prepare(`
+    const rows = prepared(db, `
         SELECT counterparty, COALESCE(SUM(credits), 0) as v FROM (
             SELECT seller_pubkey AS counterparty, credits FROM marketplace_transactions
                 WHERE buyer_pubkey = ? AND status = 'completed' AND seller_pubkey != ?
@@ -287,11 +288,11 @@ export function getMemberTrustStats(db: Db, publicKey: string): TrustStats {
     // Inlined member lookup: the node's rowToMember maps joined_at → joinedAt with
     // no transformation, so reading joined_at directly is behaviour-identical and
     // keeps this module free of the Member domain type.
-    const member = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(publicKey) as { joined_at: string } | undefined;
+    const member = prepared(db, "SELECT joined_at FROM members WHERE public_key = ?").get(publicKey) as { joined_at: string } | undefined;
     if (!member) return { tradeCount: 0, uniquePartners: 0, ageDays: 0 };
 
     // Trade count: completed transactions (direct and marketplace completed)
-    const tradeCountRow = db.prepare(`
+    const tradeCountRow = prepared(db, `
         SELECT (
             SELECT COUNT(*) FROM transactions
             WHERE (from_pubkey = ? OR to_pubkey = ?)
@@ -308,7 +309,7 @@ export function getMemberTrustStats(db: Db, publicKey: string): TrustStats {
     `).get(publicKey, publicKey, publicKey, publicKey) as any;
 
     // Unique trade partners: distinct counterparties (direct and marketplace completed)
-    const uniquePartnersRow = db.prepare(`
+    const uniquePartnersRow = prepared(db, `
         SELECT COUNT(DISTINCT partner) as count FROM (
             SELECT to_pubkey as partner FROM transactions
             WHERE from_pubkey = ?
@@ -448,7 +449,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
 } {
     const stats = getMemberTrustStats(db, publicKey);
 
-    const memberRow = db.prepare("SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
+    const memberRow = prepared(db, "SELECT earned_credit, elder_vouched_by, vouch_credit, COALESCE(credit_frozen, 0) as credit_frozen, is_treasury FROM members WHERE public_key = ?").get(publicKey) as any;
     const isTreasury = memberRow?.is_treasury === 1;
 
     // Enterprise Derived Floor model (docs/the-commons.md §2.4, §6 Slice 4)
@@ -492,7 +493,7 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     const rawEarned = earnedCreditFromValue(value);
 
     // Star rating scales EARNED value only (0.5–1.0×); granted credit passes through intact.
-    const ratingsRow = db.prepare(`
+    const ratingsRow = prepared(db, `
         SELECT AVG(stars) as avg, COUNT(*) as cnt
         FROM ratings
         WHERE target_pubkey = ?

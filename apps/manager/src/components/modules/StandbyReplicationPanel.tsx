@@ -12,6 +12,12 @@ export interface BackupStatusData {
     role?: 'primary' | 'backup' | string;
     primaryUrl?: string | null;
     intervalMs?: number;
+    /** What the node sends (routes/backup.ts backup-status, services/backup-puller.ts getBackupStatus). */
+    lastSuccessAt?: number | null;
+    consecutiveFailures?: number;
+    /** What the next whole copy, first copy or force-resync waits on, in words; null when none waits. */
+    copyWait?: { until?: number; waitingOn?: string } | null;
+    /** Older names, read when the node sends no others. */
     lastSuccess?: number | string | null;
     failStreak?: number;
     lastError?: string | null;
@@ -178,10 +184,17 @@ export function StandbyReplicationPanel({
 
     const role = typeof statusData?.role === 'string' ? statusData.role.toLowerCase() : 'primary';
     const isStandby = role === 'backup';
-    const lastSuccessStr = statusData?.lastSuccess
-        ? new Date(statusData.lastSuccess).toLocaleString()
+    // The node sends lastSuccessAt and consecutiveFailures; lastSuccess and failStreak were never sent, so this read
+    // "Never" and "Idle" on every standby.
+    const lastSuccess = typeof statusData?.lastSuccessAt === 'number' ? statusData.lastSuccessAt : statusData?.lastSuccess;
+    const lastSuccessStr = lastSuccess && !Number.isNaN(new Date(lastSuccess).getTime())
+        ? new Date(lastSuccess).toLocaleString()
         : 'Never';
-    const failStreak = typeof statusData?.failStreak === 'number' ? statusData.failStreak : 0;
+    const hasLastSuccess = lastSuccessStr !== 'Never';
+    const failStreak = typeof statusData?.consecutiveFailures === 'number' ? statusData.consecutiveFailures
+        : typeof statusData?.failStreak === 'number' ? statusData.failStreak : 0;
+    const copyWait = isStandby && statusData?.copyWait && typeof statusData.copyWait.waitingOn === 'string' ? statusData.copyWait : null;
+    const copyWaitUntil = typeof copyWait?.until === 'number' ? new Date(copyWait.until).toLocaleString() : null;
     const intervalSec = statusData?.intervalMs ? Math.round(statusData.intervalMs / 1000) : 60;
 
     return (
@@ -229,14 +242,14 @@ export function StandbyReplicationPanel({
                         <span
                             id="backup-health-badge"
                             className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                failStreak === 0 && statusData?.lastSuccess
+                                failStreak === 0 && hasLastSuccess
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                     : failStreak > 0
                                         ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                                         : 'bg-nature-800 text-nature-400'
                             }`}
                         >
-                            {failStreak === 0 && statusData?.lastSuccess ? '🟢 Healthy' : failStreak > 0 ? `⚠️ Diverged (${failStreak} fails)` : 'Idle'}
+                            {failStreak === 0 && hasLastSuccess ? '🟢 Healthy' : failStreak > 0 ? `⚠️ Diverged (${failStreak} fails)` : 'Idle'}
                         </span>
                     </div>
                 </div>
@@ -259,6 +272,18 @@ export function StandbyReplicationPanel({
                     </span>
                 </div>
             </div>
+
+            {/* What the next whole copy waits on, in the node's words */}
+            {copyWait && (
+                <div
+                    role="status"
+                    id="standby-copy-wait"
+                    className="p-3 rounded-xl border bg-amber-950 border-amber-800 text-amber-200 text-xs font-semibold space-y-1"
+                >
+                    <p className="m-0 font-bold">⏳ {copyWaitUntil ? `Waiting until ${copyWaitUntil}` : 'Waiting'}</p>
+                    <p className="m-0 font-normal">{copyWait.waitingOn}</p>
+                </div>
+            )}
 
             {/* Resync Status Messages */}
             {resyncMsg && (

@@ -82,6 +82,24 @@ An escrow holds a buyer's Beans while a deal is open, and is empty once the deal
 
 Only an owner can write off an escrow, and only on the main server. A standby picks up the change with its next sync.
 
+### A balance that isn't a number
+
+Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many "balances that are not a number" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up.
+
+That includes the Commons pot's own row, COMMONS_POOL. If it holds no number of Beans when the server starts (text, nothing, or Infinity), the server treats the pot as unknown and says so in its log with a 🛑 line. It never writes 0 or anything else over the row, and no Beans move at all until you mend it: no deal, refund, removal, account deletion or payment from the Commons. Members who try are told "Payments are paused on this community while its admins fix a problem with its accounts." A Decision that moves Beans (a grant or a write-off) waits, and is carried out on the first check after the row is mended, and no new grant can be proposed meanwhile. A removal whose grace window ends during the pause waits too, and once the row is mended its grace window opens again for 24 hours, so an admin can still halt it. Everything that moves no Beans still works: other Decisions go ahead, an admin can halt a vote or a removal, and a moderator can take down a listing with no deal on it. Mend it as soon as you see it, as below.
+
+The audit's own answer names each one: POST /api/local/admin/ledger-audit lists the account, the member's or enterprise's name, and what it holds, under brokenBalances. The Commons pot shows as COMMONS_POOL. Setting a new baseline is refused while any balance isn't a number, and the refusal names them too.
+
+To mend one:
+
+- stop the server: docker compose stop beanpool-node
+- open data/state.db with any SQLite tool, and work out what the account should hold from its transactions table: every payment into it (to_pubkey) less the community fee on each (tax_fee), less every payment out of it (from_pubkey). For COMMONS_POOL, add every fee in the table too. For any one account, with its key in place of KEY: SELECT COALESCE((SELECT SUM(amount - COALESCE(tax_fee, 0)) FROM transactions WHERE to_pubkey = 'KEY'), 0) - COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = 'KEY'), 0);
+- set it, putting that number in place of AMOUNT and the account in place of KEY: UPDATE accounts SET balance = AMOUNT WHERE public_key = 'KEY';
+- start the server again: docker compose up -d
+- run the audit again. Once every balance is a number, set a new baseline for any difference that's left, with a written reason.
+
+Take a backup of the data folder before you change anything in it.
+
 ## When a background job fails
 
 Sometimes a job the server started in the background fails on its own — a peer answers oddly, a lookup times out. The server used to stop and start again when that happened, which signed everybody out of the app for about a minute. It no longer does: it writes the failure down and keeps serving.

@@ -13,11 +13,11 @@ import {
 } from '../state-engine.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
-    getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
+    getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
     getGatewayConfig, isBreakGlassMode,
 } from '../config/local-config.js';
 import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
@@ -445,11 +445,18 @@ router.post('/api/admin/thresholds', async (ctx) => {
     const { password, totpCode, ...updates } = (ctx as any).requestBody || {};
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its thresholds')) return;
-    // Only allow known threshold keys
+    // Only allow known threshold keys. A number out of its range (negative, Infinity, a fraction of a day) is refused
+    // and nothing is saved; anything that isn't a number (an emptied field arrives as null) is left out, as before.
     const allowed = Object.keys(DEFAULT_THRESHOLDS);
     const filtered: Record<string, number> = {};
     for (const [k, v] of Object.entries(updates)) {
         if (allowed.includes(k) && typeof v === 'number') {
+            const problem = thresholdProblem(k, v);
+            if (problem) {
+                ctx.status = 400;
+                ctx.body = { error: problem };
+                return;
+            }
             filtered[k] = v;
         }
     }
@@ -653,6 +660,10 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
             return;
         }
     }
+
+    // The code that confirmed the new authenticator is spent like any accepted code (totp.ts useTotpCode): once this
+    // secret is the node's, it signs nobody in during the 90 seconds it stays right. Checked as right above.
+    useTotpCode(String(code).trim(), secretToVerify);
 
     // Promote pending secret & backup code hashes to active configuration
     // #135 CR2 fix: Check array length (Boolean([]) is truthy in JS, so [] would overwrite active hashes!)

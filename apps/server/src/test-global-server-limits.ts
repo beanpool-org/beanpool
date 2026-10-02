@@ -41,6 +41,7 @@ for (const name of ['WS_MAX_SOCKETS', 'WS_MAX_STRANGER_SOCKETS', 'WS_MAX_SOCKETS
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -175,7 +176,7 @@ async function main() {
     };
 
     const call = async (method: string, path: string, ip: string, headers: Record<string, string> = {}) => {
-        const r = await fetch(`${BASE}${path}`, { method, headers: { ...via(ip), ...headers } });
+        const r = await localFetch(`${BASE}${path}`, { method, headers: { ...via(ip), ...headers } });
         await r.arrayBuffer();
         return r.status;
     };

@@ -108,7 +108,7 @@ describe('the welcome screen', () => {
         const door = s.slice(start, end);
         expect(door).toMatch(/signInAtDoor\(provider, GLOBAL_NODE_URL, key\.identity/);
         // With the screen's notice for the backstop's second sheet (V5: a door that refuses the vault's ticket).
-        expect(door).toMatch(/commitJoinKey\(key, name\)[\s\S]*submitJoin\(GLOBAL_NODE_URL, identity, name, signin, \{ onSignInAgain: setDoorNotice \}\)/);
+        expect(door).toMatch(/commitJoinKey\(key, name\)[\s\S]*submitJoin\(GLOBAL_NODE_URL, identity, name, signin, \{ onSignInAgain: setDoorNotice, work: doorWork\.runFor\('sign-in'\) \}\)/);
         expect(door).toMatch(/setEnrolment\(joinEnrolment\)/);
         expect(door).not.toMatch(/setShowSsoSheet|connectAndDeposit|enrolSsoKeeper/);
     });

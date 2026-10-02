@@ -80,7 +80,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { getDb, getMessages, syncMessages, syncSingleConversation } from '../db';
-import { encryptDM } from '../e2e-crypto';
+import { encryptDmFormat2 } from '../e2e-crypto';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 
 const sql = (globalThis as any).__phoneSql as import('node:sqlite').DatabaseSync;
@@ -152,7 +152,9 @@ function write(conv: Conv, author: Person, text: string, opts: { type?: string; 
     let nonce: string;
     if (conv.type === 'dm') {
         const peer = conv.participants.find((p) => p !== author.publicKey)!;
-        ({ ciphertext, nonce } = encryptDM(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id }));
+        // Lines already on the node, as written before the line format took the sender and id in (format 2): what a
+        // member's history is made of, and what this phone must still read and blank.
+        ({ ciphertext, nonce } = encryptDmFormat2(text, { myEdPrivHex: author.privateKey, peerEdPubHex: peer, conversationId: conv.id }));
     } else {
         ciphertext = b64(text);
         nonce = 'plaintext-v1';

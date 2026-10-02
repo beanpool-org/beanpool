@@ -14,7 +14,7 @@ import {
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
 import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
-import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
+import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
 import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 import { getLocalConfig } from '../config/local-config.js';
@@ -276,6 +276,8 @@ router.post('/api/messages/send', async (ctx) => {
 
                             // Fire-and-forget over secure Libp2p mesh
                             federatedRelayMessage(p2pNode, targetConnector.peerId, {
+                                // The line's id, carried verbatim: the line is sealed to it (relayedMessageId).
+                                id: msg.id,
                                 senderPublicKey: authorPubkey,
                                 senderCallsign: localMember?.callsign,
                                 senderNodeUrl: localUrl,
@@ -567,6 +569,12 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by
     // reports) is an id nobody has, before the participant check below could say "not a participant".
     else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, ctx.state.actor as string | undefined)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
+    }
+    // An enterprise's discussion reads like its own route's: gone with a pruned or deleted enterprise, for everyone.
+    else if (conv.type === 'enterprise_thread' && isEnterpriseThreadGone(conversationId)) {
         ctx.status = CONVERSATION_NOT_FOUND.status;
         ctx.body = { error: CONVERSATION_NOT_FOUND.error };
         return;

@@ -58,6 +58,7 @@ export const SUITES = [
     'test-keeper-routes',
     'test-keeper-release',
     'test-recovery-collect',
+    'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     'test-recovery-seal',
     'test-recovery-seal-rollback',
@@ -79,10 +80,14 @@ export const SUITES = [
     'test-distance-search',
     'test-distance-query-parsing',
     'test-guest-view',
+    'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-home',
     'test-knock',
     'test-commons-conservation',
+    'test-commons-pot-edges',
+    'test-commons-pot-unknown',
     'test-ledger-rollback',
     'test-treasury-keepership',
     'test-treasury-eggs',
@@ -91,12 +96,14 @@ export const SUITES = [
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',
+    'test-money-followups',
     'test-admin-password-query',
     'test-cors-policy',
     'test-gateway-config',
     'test-gateway-real-client',
     'test-dos-hardening',
     'test-global-server-limits',
+    'test-profile-fanout',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',
     'test-password-brake-fairness',
@@ -146,6 +153,7 @@ export const SUITES = [
     'test-offbox-backups',
     'test-takeover-envelope',
     'test-owner-words-check',
+    'test-owner-lock-open-check',
     'test-backup-topology',
     'test-standby-token-only',
     'test-standby-envelopes',
@@ -155,6 +163,7 @@ export const SUITES = [
     'test-takeover-crash-then-fails',
     'test-takeover-by-phone',
     'test-takeover-keeps-app-addresses',
+    'test-takeover-infinite-balance',
     'test-takeover-split-brain',
     'test-takeover-two-standbys',
     'test-sync-reads-carry-epoch',
@@ -188,6 +197,7 @@ export const SUITES = [
     'test-standby-swap-at-boot',
     'test-standby-paged-copies-pacing',
     'test-standby-photos-by-reference',
+    'test-standby-copy-retries',
     'test-recovery-tombstones',
     'test-github-sign-in-removed',
     'test-unlock-cancel',
@@ -223,6 +233,7 @@ export const SUITES = [
     'test-privacy-defaults',
     'test-activity-feed-members-only',
     'test-members-contact-visibility',
+    'test-members-directory-cost',
     'test-contact-trade-partners',
     'test-sync-signature',
     'test-trust-value-curve',
@@ -243,8 +254,8 @@ export const SUITES = [
     'test-offline-ticket-check',
     'test-request-body',
     'test-admin-thresholds',
-    'test-manager-backups',
     'test-push-preferences',
+    'test-home-preferences',
     'test-push-token-own-rows',
     'test-push-leave-statement',
     'test-push-access-token',
@@ -307,6 +318,7 @@ export const SUITES = [
     'test-blocks-on-beans',
     'test-polls',
     'test-poll-voters-members-only',
+    'test-poll-vote-origins',
     'test-suspended-and-visitor-reads',
     'test-visitors-cant-act',
     'test-doors-key-case',
@@ -351,6 +363,8 @@ export const SUITES = [
     'test-groups-chat',
     'test-chat-parity',
     'test-dm-never-plaintext',
+    'test-dm-line-relay',
+    'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',
     'test-groups-succession',
@@ -369,6 +383,7 @@ export const SUITES = [
     'test-slice6-review-findings',
     'test-security-followups-0919',
     'test-security-followups-1001',
+    'test-storm-smalls',
 ];
 
 /**
@@ -399,6 +414,9 @@ export const VARIANTS = [
     // The plain run makes those 403 assertions; this covers the operator opt-out, where they are skipped and the
     // push-token and preference round-trips must still work.
     { name: 'test-push-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's Home layout and interests (H1) are served to their owner alone whatever ENFORCE_READ_AUTH says: under the
+    // opt-out, another member's read and an unsigned one get the push settings without them.
+    { name: 'test-home-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Distance search (G4) with read enforcement opted out. Nothing stands in front of the People list, so its own
     // refusal of a distance to an unsigned caller or a key that is not a member is what holds.
@@ -434,6 +452,9 @@ export const VARIANTS = [
  * ms) stay in the pool.
  */
 export const SERIAL = {
+    // Compares a visitor's board read with a member's by CPU time, alternating rounds in one process (generous bound, ~2x
+    // the head's ratio): a neighbour's burst of CPU can still skew one round.
+    'test-guest-board-cost': 'relative CPU-time ratio inside one process',
     // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
     // during one of the pair and not the other is a failure that says nothing about the code.
     'test-distance-search-perf': 'relative timings, 2x slack',

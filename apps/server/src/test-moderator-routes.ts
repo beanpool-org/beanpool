@@ -45,7 +45,6 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
@@ -150,7 +149,7 @@ async function main() {
         createTakeoverEnvelopeRoutes(deps), createMarketplaceRoutes(deps), createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps), createFederationCommissionRoutes(deps), createMessagingRoutes(deps),
         createCommonsRoutes(deps), createTreasuryRoutes(deps), createPublicAddressRoutes(deps),
-        createManagerBackupsRoutes(deps), createKeeperRoutes(deps), createChannelRoutes(deps),
+        createKeeperRoutes(deps), createChannelRoutes(deps),
         createNodeAdminRoutes(deps), createSettingsSigninRoutes(deps), createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps), createPricingGuideRoutes(deps), createActivityRouter(deps), createPulseRoutes(deps),
         createPulseSubmitRoutes(deps), createAvatarRoutes(deps),

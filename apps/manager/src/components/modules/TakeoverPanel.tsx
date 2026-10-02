@@ -49,7 +49,12 @@ export interface TakeoverProgressData {
         tunnel?: { source: string; message: string } | null;
         /** `addsUp` and `copy` are absent on servers before the ledger copy was checked; `ok` is both. */
         audit?: {
-            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** `drift` (and a count) is null when it wasn't a finite number: a balance of Infinity makes the sum Infinity. */
+            ok: boolean; drift: number | null; strandedEscrows: number | null; addsUp?: boolean;
+            /** Balances that are not a finite number; absent on servers before they were counted here. */
+            badBalances?: number | null;
+            /** The audit could not run: why (a server from #1445's fix round on). */
+            error?: string;
             copy?: { match: boolean; here: LedgerHeld; lastCopy: (LedgerHeld & { generatedAt: string | null }) | null } | null;
         } | null;
         announcement?: string | null;
@@ -138,15 +143,28 @@ interface LedgerHeld { accounts: number; holdings: number }
  */
 function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>): string {
     if (audit.ok) return 'The ledger adds up.';
-    const held = (h: LedgerHeld) => `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`;
+    // Every figure as the server sent it, which may not be a number (JSON writes Infinity as null): never assumed one.
+    const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const held = (h: LedgerHeld) => (finite(h.holdings)
+        ? `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`
+        : `${h.accounts} account(s) holding an amount that is not a number`);
+    const difference = finite(audit.drift) ? `difference ${audit.drift}` : 'the difference is not a number';
     const reasons: string[] = [];
-    if (audit.addsUp !== true) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    if (audit.error) reasons.push(`The ledger audit could not run (${audit.error}), so it can't say the ledger adds up.`);
+    // Balances that are not a number leave the difference at 0 or make it not a number, so they are said as themselves,
+    // as the copy is.
+    const bad = audit.badBalances ?? 0;
+    if (audit.addsUp !== true && bad > 0) reasons.push(`${bad} account balance(s) are not a number, so the ledger can't add up.`);
+    const stranded = finite(audit.strandedEscrows) ? audit.strandedEscrows : 0;
+    if (!audit.error && audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && Math.abs(audit.drift) >= 0.01) || stranded > 0)) {
+        reasons.push(`The ledger does NOT add up (${difference}).`);
+    }
     if (audit.copy && !audit.copy.match) {
         reasons.push(audit.copy.lastCopy
             ? `The ledger is not the main server's as this server last copied it: here ${held(audit.copy.here)}, the main server's ${held(audit.copy.lastCopy)}.`
             : "This server has no record of the main server's ledger, so it can't say the ledger is the main server's.");
     }
-    if (reasons.length === 0) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    if (reasons.length === 0) reasons.push(`The ledger does NOT add up (${difference}).`);
     return `${reasons.join(' ')} Check it before members trade.`;
 }
 

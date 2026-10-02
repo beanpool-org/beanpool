@@ -39,6 +39,12 @@ export interface NodeFeatures {
     /** Members make invites here, and an invite joins someone. Off on the worldwide community (Marty, 2026-10-01). */
     invites?: boolean;
     /**
+     * The 12-words door (two-doors design §2): anyone may join with 12 words and a moment of the phone's work, beside a
+     * sign-in. Only the worldwide community, and only while its operator hasn't made a sign-in required. A node that
+     * doesn't say has no 12-words door: its door looks exactly as before.
+     */
+    wordsDoor?: boolean;
+    /**
      * Who may invite here (the door, apps/server config/door.ts): `members` (any member, every community until now),
      * `admins` (only its owners and admins, the community's choice) or `open` (the worldwide community: anyone joins with
      * a sign-in, and nobody makes invites). A node from before the door says nothing: any member, as before.
@@ -51,7 +57,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
-    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites',
+    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
 ];
 
 export interface NodeProfile {
@@ -195,6 +201,14 @@ export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
     not_global: "The global community isn't available right now. You can still join a community with an invite.",
     door_closed: "The global community isn't taking new members right now. You can still join a community with an invite.",
 };
+
+/**
+ * Whether the door offers the 12-words way in beside a sign-in. Only a node that says so outright: a node from before
+ * the 12-words door says nothing, and its door stays exactly as it was (the sign-in alone).
+ */
+export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.wordsDoor === true;
+}
 
 /** The tabs a node hides. Only a node that says outright that Beans are off hides any. */
 export type HideableTab = 'projects' | 'ledger';

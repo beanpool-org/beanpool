@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
-    registerMember, getMembers, getAllMembers, getMember,
+    registerMember, getMembers, getAllMembers, getMember, getMemberDirectoryRows,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     getCommunityInfo, getPublicCommunityInfo,
@@ -22,7 +22,7 @@ import {
     recordActivity,
     markConversationRead, getUnreadCounts,
     registerPushToken, removePushToken, applyPushLeave,
-    getMemberPreferences, setMemberPreferences, setHolidayMode,
+    getMemberPreferences, setMemberPreferences, setHolidayMode, homePreferencesNamed,
     getMemberStats,
     dispatchPushNotification,
     exportLedgerFor, canOperateTreasury,
@@ -45,7 +45,7 @@ import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
 } from '../config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from '../totp.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -85,6 +85,7 @@ import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -162,7 +163,9 @@ router.post('/api/local/verify-password', async (ctx) => {
             return;
         }
         const cleanCode = String(totpCode).trim();
-        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, config.totpSecret);
+        let totpValid = totpUse === 'ok';
 
         // Check backup codes if TOTP didn't match
         const backupHashes = config.totpBackupCodesHashes || [];
@@ -179,7 +182,7 @@ router.post('/api/local/verify-password', async (ctx) => {
         if (!totpValid) {
             notePasswordFailure(clientLimiterKey(ctx));
             ctx.status = 401;
-            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
             return;
         }
         notePasswordSuccess(clientLimiterKey(ctx));
@@ -1297,7 +1300,7 @@ router.post('/api/member/purge', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to purge account' };
+        ctx.body = { error: memberErrorText(e, 'Failed to purge account') };
     }
 });
 
@@ -1354,7 +1357,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to complete re-enrolment' };
+        ctx.body = { error: memberErrorText(e, 'Failed to complete re-enrolment') };
     }
 });
 
@@ -1494,7 +1497,7 @@ router.post('/api/profile/vouch', async (ctx) => {
         ctx.body = { success: true, level: lvl };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Vouch failed' };
+        ctx.body = { error: memberErrorText(e, 'Vouch failed') };
     }
 });
 
@@ -1519,7 +1522,7 @@ router.post('/api/profile/unvouch', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Withdraw failed' };
+        ctx.body = { error: memberErrorText(e, 'Withdraw failed') };
     }
 });
 
@@ -1606,7 +1609,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
         // A visitor's row sends Beans only to a key that has a row here (transfer()): refused as the act test refuses.
         if (e?.code !== NOT_A_MEMBER_CODE) throw e;
         ctx.status = 403;
-        ctx.body = { error: e.message, code: e.code };
+        ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT), code: e.code };
         return;
     }
     if (!txn) {
@@ -1826,7 +1829,8 @@ router.get('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'You may only read your own preferences' };
         return;
     }
-    ctx.body = getMemberPreferences(publicKey);
+    // The Home keys (home.layout, interests) only when the verified signer is the member, whatever ENFORCE_READ_AUTH says.
+    ctx.body = getMemberPreferences(publicKey, ctx.state.actor as string | undefined);
 });
 
 router.post('/api/members/preferences', async (ctx) => {
@@ -1845,13 +1849,13 @@ router.post('/api/members/preferences', async (ctx) => {
     // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
     // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
     // saving the rest, so a member never believes they set something they didn't. Holiday mode is
-    // POST /api/members/holiday's alone, below.
+    // POST /api/members/holiday's alone, below. A saved Home key is answered with what was kept of it.
     try {
         const success = setMemberPreferences(activeKey, preferences);
-        ctx.body = { success };
+        ctx.body = success ? { success, ...homePreferencesNamed(activeKey, preferences) } : { success };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update preferences' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update preferences') };
     }
 });
 
@@ -1870,7 +1874,7 @@ router.post('/api/members/holiday', async (ctx) => {
         ctx.body = { success: true, enabled: !!enabled, openTrades: result.openTrades };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update holiday mode', openTrades: e?.openTrades };
+        ctx.body = { error: memberErrorText(e, 'Failed to update holiday mode'), openTrades: e?.openTrades };
     }
 });
 
@@ -1909,7 +1913,7 @@ router.post('/api/ratings', async (ctx) => {
     } catch (err: any) {
         console.error('❌ Server Error adding rating:', err);
         ctx.status = 500;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 
@@ -2137,35 +2141,32 @@ router.get('/api/members', async (ctx) => {
         }
     }
 
-    // Use getMembers() (excludes pruned) so the directory matches the count reported by
-    // /api/community/info — otherwise clients keep pruned members locally and read as
-    // permanently "out of sync" against the node's pruned-excluding member count.
-    let allMembers = getMembers()
-        .filter(m => !m.publicKey.startsWith('escrow_') && !m.publicKey.startsWith('project_') && !m.isTreasury);
-
-    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members
-    // who joined or changed their profile (avatar/callsign/bio) since that cursor. This lets
-    // the client pick up new members and avatar changes every sync cycle instead of waiting
-    // for the hourly full-directory snapshot. No param => full directory (unchanged behaviour).
-    const updatedAfter = ctx.query.updatedAfter as string | undefined;
-    if (updatedAfter) {
-        allMembers = allMembers.filter(m =>
-            (m.joinedAt && m.joinedAt > updatedAfter) ||
-            (m.profileUpdatedAt != null && String(m.profileUpdatedAt) > updatedAfter)
-        );
-    }
+    // Pruned members are left out (as getMembers) so the directory matches the count reported by /api/community/info —
+    // otherwise clients keep pruned members locally and read as permanently "out of sync" against the node's
+    // pruned-excluding member count.
+    //
+    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members who joined or changed their
+    // profile (avatar/callsign/bio) since that cursor. This lets the client pick up new members and avatar changes every
+    // sync cycle instead of waiting for the hourly full-directory snapshot. No param => full directory.
+    //
+    // Only the columns below are read, and a delta reads only the rows changed since its cursor (engine members.ts
+    // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
+    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal).
+    const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
+        .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
     const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    const members = allMembers.map(m => ({
-        publicKey: m.publicKey,
-        callsign: m.callsign,
-        joinedAt: m.joinedAt,
-        nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-        avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-        profileUpdatedAt: m.profileUpdatedAt,
-        earnedCredit: m.earnedCredit ?? 0,
-        elderVouchedBy: m.elderVouchedBy || null,
-        archetype: m.archetype || null,
+    // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
+    const members = rows.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        nodeRole: rolesByPubkey.get(r.public_key) ?? null,
+        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url || null),
+        profileUpdatedAt: r.profile_updated_at || null,
+        earnedCredit: r.earned_credit ?? 0,
+        elderVouchedBy: r.elder_vouched_by || null,
+        archetype: r.archetype || null,
     }));
 
     const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);

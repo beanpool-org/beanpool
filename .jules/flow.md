@@ -111,3 +111,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-22 - Add loading state indicator for ReplicationAccessPanel
 **Learning:** `ReplicationAccessPanel.tsx` displayed unpopulated default metrics ("0 pulls / token not set") while replication settings were fetching asynchronously.
 **Action:** Render an explicit loading indicator and spinner when `loading && !accessData` before data arrives.
+
+## 2026-11-23 - Add loading indicators for EconomySection enterprises and proposals
+**Learning:** `EconomySection.tsx` fell through to "No pending proposals." while `loadingCommons` was `true`, misleading operators into thinking no proposals existed before data finished loading.
+**Action:** Render explicit loading indicators with `animate-spin` spinners when `loadingTreasuries` or `loadingCommons` is `true`.

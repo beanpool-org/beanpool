@@ -46,6 +46,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -115,7 +116,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    const res = await localFetch(`${BASE}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty (304) */ }

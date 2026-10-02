@@ -98,6 +98,8 @@ Anyone can join the global community, with 12 secret words or a sign-in, so one 
 
 What removal can't do: someone determined can come back in about a minute with new 12 words, or with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that reports hide (one report, while a 12-words account is new). Removing it again is one more action.
 
+Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, when an anonymous poll for everyone on the global community closes, it says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the result, to everyone. It says nothing while the poll is open, since checking after each vote would show each vote's kind of account and its choice. An open vote, a group's poll and a poll for one person never say it.
+
 If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 
 ## Be fair

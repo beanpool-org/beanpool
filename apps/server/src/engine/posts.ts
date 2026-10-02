@@ -2,7 +2,7 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { isSyntheticAccount, isBeanAmount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
 import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
@@ -11,6 +11,7 @@ import { bumpPostsVersion } from './versions.js';
 import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
 import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -1120,6 +1121,20 @@ export function rsvpEvent(
     return { success: true, post: updatedPost };
 }
 
+/**
+ * Closes, for good, every poll past its closing time (status `completed`, with a new updated_at), so a phone's delta sync
+ * and a cached board read (the posts version in the ETag) get its closed result: an anonymous poll says where its votes
+ * came from only once it has closed (@beanpool/engine pollOriginsMayShow), and a read before this ran was answered open.
+ * Run each minute on a main server (state-engine armMainServerTimers). One pass over the open posts' index.
+ */
+export function closeExpiredPolls(nowIso: string = new Date().toISOString()): number {
+    const res = db.prepare(
+        "UPDATE posts SET status = 'completed', updated_at = ? WHERE status = 'active' AND type = 'poll' AND poll_closes_at IS NOT NULL AND poll_closes_at <= ?"
+    ).run(nowIso, nowIso);
+    if (res.changes > 0) bumpPostsVersion();
+    return res.changes;
+}
+
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
     // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
@@ -1237,14 +1252,19 @@ export function votePoll(
             throw new Error('This poll is closed');
         }
 
+        // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
+        // A changed vote keeps the first one's: nothing the voter does later moves where the poll says its votes came from.
+        // Not on an open vote: it names its voters, so it never says where its votes came from, and keeps no kind to say it
+        // with (whether a poll is an open vote can't change once a vote is in).
         db.prepare(`
-            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                 option_id = excluded.option_id,
                 signature = excluded.signature,
-                created_at = excluded.created_at
-        `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+                created_at = excluded.created_at,
+                voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words)
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, post.pollOpenVote === true ? null : pollVoterNewOrWords(voterPublicKey));
     })();
 
     bumpPostsVersion();
@@ -1305,15 +1325,26 @@ type ConservingTxnFn = <T>(fn: () => T) => T;
  * whole when the post was removed. Reported rather than swallowed: the shortfall is a real discrepancy
  * between the deal rows and the ledger, and the only honest thing to do is refund what is actually there
  * and say so. See `ESCROW_FLOOR` in @beanpool/core for how the node got into that state.
+ *
+ * Also reported, with `owed: null`, for a trade row that holds no valid amount (text struck from a listing priced
+ * "abc" before #1379): nobody can say what it owed, so the buyer gets everything its escrow held and the moderator is
+ * told (describeRefundShortfall).
  */
 export interface EscrowRefundShortfall {
     transactionId: string;
     postId: string;
     buyerPubkey: string;
-    /** What the trade row said the buyer paid in. */
-    owed: number;
+    /** What the trade row said the buyer paid in; null when the row holds no valid amount of Beans. */
+    owed: number | null;
     /** What the escrow actually held, and therefore all that could be returned. */
     refunded: number;
+}
+
+/** A shortfall in words, for the moderator who made the removal. */
+export function describeRefundShortfall(s: EscrowRefundShortfall): string {
+    return s.owed === null
+        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${s.refunded}`
+        : `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`;
 }
 
 /** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */
@@ -1343,7 +1374,11 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
     // Same audience as removePost: a group or direct post's removal goes to the people who could see it.
     const audienceRow = db.prepare('SELECT audience_scope, target_group_id, author_pubkey, target_pubkey, assigned_to FROM posts WHERE id = ?').get(postId) as any;
-    const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    // The conservingTransaction only when a pending deal's escrow may be refunded: that is the one Bean move here. A
+    // listing with none is rows alone, so a moderator can take it down while the Commons pot is unknown, when every
+    // conservingTransaction refuses at its pre-flush (#1465 re-review, NB-3). One with a held deal still refuses then.
+    const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
+    const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
@@ -1354,21 +1389,29 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                 // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
                 // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
                 // ever recorded against it. A removal is a tidy-up; it must never create Beans.
-                const held = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : tx.credits;
-                const refund = Math.max(0, Math.min(tx.credits, held));
+                //
+                // Every figure here is a number of Beans or treated as none (isBeanAmount). A row holding text ("abc",
+                // struck before #1379) made Math.min NaN, so `refund > 0` was false and nothing went back: the buyer's
+                // Beans stayed in an escrow of a cancelled deal, which nothing else can reach (sync check F1,
+                // 2026-10-02). Nobody can say what such a row owed, so its buyer gets everything the escrow holds. An
+                // escrow that isn't a number of Beans itself (NaN, NULL, below 0) gives back nothing.
+                const owed = isBeanAmount(tx.credits) ? tx.credits : null;
+                const rawHeld = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : owed ?? 0;
+                const held = isBeanAmount(rawHeld) ? rawHeld : 0;
+                const refund = owed === null ? held : Math.min(owed, held);
                 if (refund > 0) {
                     const refunded = transferFn(escrowAccount, tx.buyer_pubkey, refund, `Escrow refund for removed post`, 'escrow', true);
                     // Inside the caller's conservingTransaction, so this unwinds the whole removal rather
                     // than leaving a cancelled trade beside an escrow that never paid out.
                     if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
                 }
-                if (refund < tx.credits) {
-                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${tx.credits}, escrow held ${held}, refunded ${refund}`);
+                if (owed === null || refund < owed) {
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.credits)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
                     hooks?.onRefundShortfall?.({
                         transactionId: tx.id,
                         postId,
                         buyerPubkey: tx.buyer_pubkey,
-                        owed: tx.credits,
+                        owed,
                         refunded: refund,
                     });
                 }

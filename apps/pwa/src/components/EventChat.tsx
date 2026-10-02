@@ -326,12 +326,12 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder="Message everyone going…"
                         aria-label="Message everyone going"
-                        className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white"
+                        className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     />
                     <button
                         type="submit"
                         disabled={posting || !draft.trim()}
-                        className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-violet-700 text-white font-bold text-sm disabled:opacity-60"
+                        className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-violet-700 text-white font-bold text-sm disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                     >
                         {posting ? 'Sending…' : 'Send'}
                     </button>

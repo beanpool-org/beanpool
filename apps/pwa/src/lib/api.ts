@@ -256,7 +256,7 @@ export interface CommunityInfo {
      * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
      * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean };
+    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**
@@ -347,6 +347,11 @@ export interface CommunityStanding {
         limits: { posts: NewAccountLimit; photos: NewAccountLimit; new_dm_recipients: NewAccountLimit };
         /** The rule as data: the limits end once the first `hours` are over AND `keptPosts` posts have stayed up. */
         endsWhen?: { hours: number; keptPosts: number };
+        /**
+         * Which rules: `words` for a member who came in with 12 words and has added no sign-in (they have one way back,
+         * and a sign-in can be added), else `ordinary`. Absent on a node from before the 12-words door.
+         */
+        rules?: 'words' | 'ordinary';
     };
     mute: { muted: boolean; until: string | null };
 }
@@ -812,8 +817,10 @@ export async function sendMessageApi(
     type?: 'text' | 'image',
     attachment?: MessageAttachment,
     metadata?: string,
+    /** The message's own id (a lower-case UUID v4), which a DM line is sealed to: the node stores the line under it. */
+    id?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
 }
 
 export async function editMessageApi(
@@ -968,11 +975,13 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
     pollOpenVote?: boolean;
     totalVotes?: number;
+    /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)
@@ -2265,25 +2274,56 @@ export interface RecoverySessionInfo {
 }
 
 /**
- * Owner side: Checks active recovery sessions against the member's account.
+ * Owner side: the recovery sessions live against the member's account. `count` is how many; `collections` the newest
+ * few, never all of them (strangers can open any number, PR #1456 deciding review). A node from before the count lists
+ * every one, and the count is that list's length. Nothing, on no answer.
  */
-export async function getMyActiveRecoveryCollections(): Promise<RecoverySessionInfo[]> {
+export async function getMyActiveRecoveryCollections(): Promise<{ count: number; collections: RecoverySessionInfo[] }> {
     try {
-        const res = await request<{ collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
-        return res?.collections || [];
+        const res = await request<{ count?: number; collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
+        const collections = res?.collections || [];
+        return { count: typeof res?.count === 'number' ? res.count : collections.length, collections };
     } catch {
-        return [];
+        return { count: 0, collections: [] };
     }
 }
 
 /**
- * Owner side: Cancels an active recovery session.
+ * Owner side: Cancels an active recovery session. On a node with one Stop (stopEveryRecoveryCollection), naming one
+ * stops them all.
  */
 export async function cancelRecoveryCollection(collectionId: string): Promise<boolean> {
     const res = await request<{ cancelled: boolean }>('POST', '/api/recovery/collect/cancel', {
         collectionId,
     });
     return !!res?.cancelled;
+}
+
+/**
+ * Owner side: Stop It Now. Stops every live recovery session against the account and returns how many are still live,
+ * by the node's own count, so "all cancelled" is said only when it is true.
+ *
+ * One request: the node stops them all however many there are, and answers with `live`. A node from before that
+ * refuses a Stop naming no session: then one request per listed session (such a node lists every one, at most ten),
+ * and what is left is the number that failed.
+ */
+export async function stopEveryRecoveryCollection(listed: { collectionId: string }[]): Promise<number> {
+    try {
+        const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
+        if (typeof res?.live === 'number') return res.live;
+    } catch {
+        // An older node ('Which session?'), or no answer: one by one below.
+    }
+    let failed = 0;
+    for (const session of listed) {
+        try {
+            await cancelRecoveryCollection(session.collectionId);
+        } catch (e) {
+            failed++;
+            console.warn(`[RecoveryAlert] Failed to cancel ${session.collectionId}:`, (e as Error).message);
+        }
+    }
+    return failed;
 }
 
 /**

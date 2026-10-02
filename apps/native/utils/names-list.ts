@@ -20,7 +20,7 @@
  *     ({@link openNamesList});
  *   - the asked actions: "Check each other" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKey}), "Put
  *     the key history back" ({@link putHistoryBack}), "Start again" / a new key nobody can hand over
- *     ({@link makeKeyOnThisPhone}), "Take @X's history" ({@link takeHistoryOf}), "Send the keys to @X again"
+ *     ({@link makeKeyOnThisPhone}), "Follow the server's history" ({@link followServerHistory}), "Send the keys to @X again"
  *     ({@link sendKeysAgain});
  *   - the entries: opened with the key of each one's generation from this phone's ring, or said to be locked with the
  *     key's number, its maker and who holds it ({@link openEntries}); written only under the head's key
@@ -34,8 +34,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
-    makeNamesGenerationFor, namesSharesToSend, namesReplay, takeNamesHistory, namesRingKeys, namesKeyLabel, readNamesGeneration,
-    sealNamesPinBlob, openNamesPinBlob, namesStatementId, startNamesAgain, namesListKeyCode,
+    makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -412,6 +412,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     const notices: NamesNotice[] = [...l.value.notices];
     let made: string[] | null = null;
     let carried: string[] = [];
+    let madeN = 0;
     const pend = l.value.pin.pending;
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
@@ -425,6 +426,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
         // Drops this phone stands by that the history it took hadn't made (their statement is abandoned).
         const before = l.value.pin;
+        madeN = (before.chain[before.chain.length - 1]?.n ?? 0) + 1;
         const chainIds = new Set(before.chain.map((x) => x.id));
         carried = drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k]));
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
@@ -463,6 +465,8 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         words.unshift(...[
             carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
             gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
+            // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
+            ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
         ].filter((w) => w));
     }
     if (plan.kind === 'refused' && plan.reason === 'rolled_back') {
@@ -492,7 +496,8 @@ export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdent
     if (!l.ok) return l;
     const first = l.value.plan;
     if (first.kind === 'refused' && first.reason === 'untrusted_maker' && first.canStartAgain && l.value.pin.chain.length === 0) {
-        const taken = startNamesAgain(l.value.pin, l.value.state);
+        // Start again is a follow on an empty chain (design Addendum 3).
+        const taken = followNamesServer(l.value.pin, l.value.state).pin;
         if (taken.chain.length === 0) return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.missingRecord };
         if (!(await writeNamesPinTo(store, identity.publicKey, anchor, taken))) return NOT_KEPT;
         l = await look(anchor, identity, store);
@@ -521,18 +526,28 @@ export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity,
 }
 
 /**
- * "Take @X's history" (asked first, only on a different history, only for an admin checked at this meeting: design
- * §4.3.9). This phone's chain goes back to the last statement it shares with the node's, the rest kept as abandoned
- * keys, and the open walks the node's history from there under rule 1.
+ * "Follow the server's history" (asked first; design Addendum 3): offered on a different history whose server path is
+ * whole (`canFollow`). This phone's chain goes back to the last statement it shares with the server's, and the rest of
+ * the server's path is taken for its drops and its place only: every signature checked, no trust, no key, no check in
+ * person needed. The words say whom it stopped trusting. Then the list opens again: before this phone writes, it makes
+ * a key without every admin it had removed that the followed history hadn't.
  */
-export async function takeHistoryOf(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, checkedHere: string): Promise<NamesResult<NamesOpened>> {
+export async function followServerHistory(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
     const l = await look(anchor, identity, store);
     if (!l.ok) return l;
-    if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'different_history') || !l.value.pin.trusted.includes(checkedHere.toLowerCase())) {
-        return { ok: false, status: 0, code: 'no_plan', message: 'Meet the admin first, and check each other’s phones.' };
+    const { plan, state } = l.value;
+    if (!(plan.kind === 'refused' && plan.reason === 'different_history' && plan.canFollow)) {
+        return { ok: false, status: 0, code: 'no_plan', message: 'There is no key history to follow here.' };
     }
-    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, takeNamesHistory(l.value.pin, l.value.state)))) return NOT_KEPT;
-    return openNamesList(anchor, identity, store);
+    const followed = followNamesServer(l.value.pin, state);
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, followed.pin))) return NOT_KEPT;
+    const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
+    const said = followed.dropped.map((d) => (listed.has(d.key)
+        ? NAMES_COPY.checkAgain(callsignIn(state, d.key), d.n)
+        : NAMES_COPY.newKeyBy(callsignIn(state, d.maker), [callsignIn(state, d.key)])));
+    const opened = await openNamesList(anchor, identity, store);
+    if (!opened.ok) return opened;
+    return { ok: true, value: { ...opened.value, notices: [...new Set([...said, ...opened.value.notices])] } };
 }
 
 /** "Send the keys to @X again": the same share the open sends, now, to one admin this phone trusts. */
@@ -808,7 +823,7 @@ export const NAMES_COPY = {
             : `This phone will send the new key to ${both(unsent)} ${later}`;
     },
     /** A key this phone had removed, carried into the history it took (Addendum 2, ruling 2): the forced drop landed. */
-    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: this phone had removed their key, and the history it took hadn’t.`,
+    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: this phone had removed their key, and the history it followed hadn’t.`,
     /** The walk dropped a key this phone trusted that the server still lists (Addendum 2, ruling 5). */
     checkAgain: (who: string, n: number) => `Key ${n} removed ${at(who)}’s key. If ${at(who)} is an admin again, check each other’s phones again: `
         + `a check made before this phone took key ${n} doesn’t count past it.`,
@@ -827,8 +842,11 @@ export const NAMES_COPY = {
     refusedRolledBack: (n: number, m: number) => `The server offers an older key history (up to key ${n}) than this phone has (key ${m}). `
         + 'A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; '
         + 'entries written since the copy are gone and must be typed again from your paper copy.',
-    refusedDifferent: 'The server shows a key history this phone didn’t take. Whoever runs the server changed it. Nothing was read or written. '
-        + 'Ask your admins; an admin whose phone has the server’s history can check yours and send the keys.',
+    // Design Addendum 3, exact.
+    refusedDifferent: 'The server shows a key history this phone didn’t take. A standby that took over from an older copy, where an '
+        + 'admin’s phone then made a new key, does that; so does whoever runs the server changing the history. Nothing was read or '
+        + 'written. Ask your admins what happened. You can follow the server’s history: this phone keeps the keys it holds, and before '
+        + 'it writes again it makes a new key without any admin it had removed.',
     wait: (holders: string[]) => (holders.length
         ? `You don’t hold the list’s keys yet. ${either(holders)} will send them the next time they open the names list.`
         : 'Nobody this phone trusts holds the list’s keys. Meet an admin who does and check each other’s phones.'),
@@ -878,12 +896,11 @@ export const NAMES_COPY = {
     startAgainTitle: 'Start the list again?',
     makeNewButton: 'Make a new key',
     makeNewTitle: 'Make a new key?',
-    takeHistoryButton: (who: string) => `Take ${at(who)}’s history`,
-    takeHistoryTitle: (who: string) => `Take ${at(who)}’s history?`,
-    takeHistory: (who: string) => `This phone follows the key history ${at(who)}’s phone has, from the last key both share. It keeps the `
-        + 'other history’s keys for reading and passes them on with the rest, but never writes under them again unless the server’s history '
-        + 'comes back to them. An admin this phone had '
-        + 'removed stays removed: before it writes, it makes a key without them.',
+    followButton: 'Follow the server’s history',
+    followTitle: 'Follow the server’s history?',
+    follow: 'This phone follows the key history the server shows, from the last key both share. It keeps the keys it holds, reads with '
+        + 'them and passes them on to the admins it trusts, but never writes under them again unless the server’s history comes back to '
+        + 'them. An admin this phone had removed stays removed: before it writes, it makes a key without them.',
     sendAgainButton: (who: string) => `Send the keys to ${at(who)} again`,
     myKeyTitle: 'Your phone’s key',
     myKey: 'The other admin scans this QR code, or compares the 20 digits with what their phone shows. Show it only to someone you’re with.',

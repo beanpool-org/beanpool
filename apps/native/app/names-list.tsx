@@ -7,7 +7,7 @@
  * openNamesList): it takes a new key only from an admin it trusts, gives the keys only to admins it trusts (without a
  * tap, every send logged on the node), and reads or writes only when it holds the newest key the server names. When it
  * refuses, it says why and offers the one way forward: check an admin in person, put the key history back, start again,
- * make a new key nobody can hand over, or take a checked admin's history. Each of those asks first. Every name is
+ * make a new key nobody can hand over, or follow the server's history. Each of those asks first. Every name is
  * sealed here before it is sent, and opened here: the community's server keeps scrambled text.
  *
  * Admins trust each other by checking each other in person: both phones show their key as a QR code and 20 digits, and
@@ -34,7 +34,7 @@ import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
-    putHistoryBack, makeKeyOnThisPhone, takeHistoryOf, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
+    putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
@@ -72,8 +72,6 @@ export default function NamesListScreen() {
     const [checkError, setCheckError] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
     const [showMyKey, setShowMyKey] = useState(false);
-    /** Keys checked in person on this screen, this time: only these may be offered "Take @X's history". */
-    const [checkedHere, setCheckedHere] = useState<string[]>([]);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
     const loadingRef = useRef(false);
@@ -170,11 +168,11 @@ export default function NamesListScreen() {
         });
     };
 
-    const takeHistory = (pubkey: string) => {
+    /** "Follow the server's history" (design Addendum 3): asked first; no check in person needed. */
+    const follow = () => {
         if (!identity) return;
-        const who = callsignOf(pubkey);
-        ask(COPY.takeHistoryTitle(who), COPY.takeHistory(who), COPY.takeHistoryButton(who), () => {
-            void run((url) => takeHistoryOf(url, identity, STORE, pubkey));
+        ask(COPY.followTitle, COPY.follow, COPY.followButton, () => {
+            void run((url) => followServerHistory(url, identity, STORE));
         });
     };
 
@@ -212,7 +210,6 @@ export default function NamesListScreen() {
             setTimeout(() => { scanLock.current = false; }, 600);
             return;
         }
-        setCheckedHere((was) => [...new Set([...was, r.pinned])]);
         if (r.mismatch && picked) setError(COPY.mismatch(picked.callsign));
         else setNotice(COPY.matched(callsignOf(r.pinned) || picked?.callsign || ''));
         setMode({ kind: 'list' });
@@ -517,7 +514,6 @@ export default function NamesListScreen() {
     } else if (plan && plan.kind !== 'ready' && opened) {
         const words = planWords(opened);
         const maker = plan.kind === 'refused' ? plan.maker ?? null : null;
-        const takeFrom = plan.kind === 'refused' && plan.reason === 'different_history' ? checkedHere.filter((k) => trusted(k)) : [];
         body = (
             <>
                 {words ? (
@@ -532,7 +528,7 @@ export default function NamesListScreen() {
                         ? btn(COPY.startAgainButton, startAgain, 'danger') : null}
                     {plan.kind === 'wait' && plan.canMakeNew ? btn(COPY.makeNewButton, startAgain, 'danger') : null}
                     {plan.kind === 'refused' && plan.reason === 'rolled_back' ? btn(COPY.putBackButton, putBack, 'primary') : null}
-                    {takeFrom.map((k) => btn(COPY.takeHistoryButton(callsignOf(k)), () => takeHistory(k), 'danger'))}
+                    {plan.kind === 'refused' && plan.reason === 'different_history' && plan.canFollow ? btn(COPY.followButton, follow, 'danger') : null}
                     {plan.kind === 'refused' && plan.reason === 'other_community' ? null : checkSomeone}
                 </View>
                 {myKeyCard}

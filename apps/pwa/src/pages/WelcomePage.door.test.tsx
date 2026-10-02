@@ -314,7 +314,10 @@ describe('a key restored here on the open door', () => {
     async function restoreWithWords(words: string[]) {
         await screen.findByTestId('join-screen-lobby');
         fireEvent.click(screen.getByRole('button', { name: 'Already have BeanPool?' }));
-        fireEvent.click(await screen.findByRole('button', { name: 'Use my 12 words' }));
+        // Disabled until WebJoin's browserKeyProblem() answers: wait for it, or a slow runner clicks a disabled button.
+        const useWords = await screen.findByRole('button', { name: 'Use my 12 words' });
+        await waitFor(() => expect(useWords).not.toBeDisabled());
+        fireEvent.click(useWords);
         fireEvent.change(await screen.findByLabelText('Recovery word 1'), { target: { value: words.join(' ') } });
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));
     }

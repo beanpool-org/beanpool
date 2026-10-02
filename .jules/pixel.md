@@ -158,3 +158,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-02 - Add dynamic accessibilityLabel and hint to InvitePeopleSheet submit button
 **Learning:** In invite sheets, action buttons whose text is replaced by an `ActivityIndicator` while sending leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided.
 **Action:** Provide dynamic `accessibilityLabel` and `accessibilityHint` on invite submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-08 - Add explicit accessibilityLabel and hint to fresh listings banner
+**Learning:** Banner elements containing special characters ('🔥', '•') and dynamic count text can be confusing to screen readers when unlabelled.
+**Action:** Provide explicit dynamic `accessibilityLabel` and concise `accessibilityHint` on dismissible banner Pressable elements.

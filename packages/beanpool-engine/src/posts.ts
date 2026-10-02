@@ -14,7 +14,7 @@ import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlFor } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
-import { postPhotoUrl } from './photo-url.js';
+import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -23,6 +23,11 @@ export interface PollOption {
     text: string;
     votes?: number;
     percentage?: number;
+    /**
+     * Of this option's votes, how many came from new or 12-word accounts (MarketplacePost.pollNewOrWordsVotes). Only on a
+     * poll whose split may be shown (POLL_ORIGINS_SPLIT_MIN). Counted from the votes on each read, never from a stored copy.
+     */
+    newOrWordsVotes?: number;
 }
 
 export interface PollVoteRecord {
@@ -90,6 +95,15 @@ export interface MarketplacePost {
      */
     pollOpenVote?: boolean;
     totalVotes?: number;
+    /**
+     * How many of `totalVotes` came from new or 12-word accounts, each vote as its voter was when they voted
+     * (configurePollVoteOrigins): on a poll on the public board of a node that says (the global profile, where anyone may
+     * join, so one person with many cheap accounts could tip a count), once the poll has closed (pollOriginsMayShow).
+     * Every vote still counts in `totalVotes` and each option's `votes`; this only says where they came from, as a count,
+     * never who. Absent where the node doesn't say: a local community, a group's poll, a poll for one person, an open vote,
+     * and every poll still open.
+     */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
     // Audience scoping (docs/the-commons.md §9, Item 10)
@@ -278,6 +292,47 @@ export const MAX_PHOTO_BASE64_CHARS = 600_000;
 
 export const CONTRIBUTION_REQUIRED_ERROR = 'CONTRIBUTION_REQUIRED: list at least one Offer before you can post Needs or accept Offers.';
 export const COVENANT_REQUIRED_ERROR = 'COVENANT_REQUIRED: keep at least one active Offer posted to spend on community credit (a negative balance).';
+
+/**
+ * Where a public poll's votes came from: for each poll named, per option id, how many of its votes came from new or 12-word
+ * accounts; a poll with none may be left out. Null when the node doesn't say. Installed by the node (apps/server
+ * engine/probation.ts installPollVoteOriginsAtBoot), which stamps each vote with its voter's kind when it is cast.
+ */
+export type PollVoteOriginCounter = (db: Db, pollIds: string[]) => Map<string, Map<string, number>> | null;
+
+let pollVoteOrigins: PollVoteOriginCounter | null = null;
+
+/** Installs (or, with null, removes) what says where a public poll's votes came from (MarketplacePost.pollNewOrWordsVotes). */
+export function configurePollVoteOrigins(counter: PollVoteOriginCounter | null): void {
+    pollVoteOrigins = counter;
+}
+
+/**
+ * The fewest votes on each side, from new or 12-word accounts and from the rest, for a closed poll to show each option's
+ * split (PollOption.newOrWordsVotes). Below it a poll shows only how many of its votes came from them: split per option,
+ * one or two votes on a side would say how those one or two people chose, and an anonymous poll says nobody's choice. A
+ * side with no votes says nothing about anyone, so 0 is fine on the other side.
+ */
+export const POLL_ORIGINS_SPLIT_MIN = 3;
+
+/**
+ * Whether a poll may say where its votes came from (MarketplacePost.pollNewOrWordsVotes and each option's split): only an
+ * anonymous poll, and only once it has closed for good (Marty's privacy defaults, 2026-09-28, decided for #1458).
+ *
+ * - Never on an open vote. It names its voters to members, so a count of kinds beside the names says which kind each
+ *   named voter is: which members are new, and which have no sign-in and only their 12 words to get back in.
+ * - Never while a poll is open, the floor above notwithstanding. A reader who re-reads after each vote sees the count of
+ *   kinds move beside the option counts, and so learns each vote's kind with its choice: with few settled voters, whose
+ *   vote it was. Closed, nothing moves any more, and the result is what the count is for.
+ *
+ * Closed is for good: closed by its author (`completed`, which nothing reopens) or past its closing time. A poll its
+ * author paused is not closed: it can be put back up and voted on again.
+ */
+export function pollOriginsMayShow(row: { poll_open_vote?: unknown; status?: unknown; poll_closes_at?: unknown }, nowIso: string): boolean {
+    if (row.poll_open_vote === 1 || row.poll_open_vote === true) return false;
+    if (row.status === 'completed') return true;
+    return typeof row.poll_closes_at === 'string' && row.poll_closes_at !== '' && row.poll_closes_at <= nowIso;
+}
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
     if (ids.length === 0) return [];
@@ -1144,6 +1199,16 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // Safe fallback if poll_votes table does not exist in testing handle
         }
     }
+    // Where the votes on the public board's closed anonymous polls came from, where the node says
+    // (configurePollVoteOrigins, pollOriginsMayShow). A failure reads as a node that doesn't say: the counts themselves
+    // never depend on it.
+    const originsNowIso = new Date().toISOString();
+    const mayShowOrigins = (r: any) => onPublicBoard(r.audience_scope) && pollOriginsMayShow(r, originsNowIso);
+    let originsByPost: Map<string, Map<string, number>> | null = null;
+    const publicPollIds = pollRows.filter(mayShowOrigins).map(r => r.id as string);
+    if (pollVoteOrigins && publicPollIds.length > 0) {
+        try { originsByPost = pollVoteOrigins(db, publicPollIds); } catch { originsByPost = null; }
+    }
 
     // #143 step 4. `reachPeers` names WHICH NEIGHBOURING COMMUNITIES a member singled out, and that is the
     // poster's business, not the board's — in a community small enough to know everyone, "she offers this to
@@ -1271,11 +1336,26 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 }
             }
             post.userVotedOptionId = userVotedOptionId;
+            // Where its votes came from, once an anonymous poll has closed (pollOriginsMayShow): the total, and each
+            // option's share only when both sides are big enough to say nobody's choice (POLL_ORIGINS_SPLIT_MIN). A vote
+            // for an option since edited away counts in the total, as it does in `totalVotes`. Read from the row as stored,
+            // before anything below shows it paused for its author's sake.
+            const origins = originsByPost && mayShowOrigins(r) ? (originsByPost.get(post.id) ?? new Map<string, number>()) : null;
+            let split = false;
+            if (origins) {
+                let fromNew = 0;
+                for (const c of origins.values()) fromNew += c;
+                const rest = totalVotes - fromNew;
+                post.pollNewOrWordsVotes = fromNew;
+                split = fromNew >= POLL_ORIGINS_SPLIT_MIN && (rest === 0 || rest >= POLL_ORIGINS_SPLIT_MIN);
+            }
             if (post.pollOptions) {
-                post.pollOptions = post.pollOptions.map((opt: any) => {
+                post.pollOptions = post.pollOptions.map((stored: any) => {
+                    // Read afresh every time: a copy that stored one (a standby's, an app's) never speaks for now.
+                    const { newOrWordsVotes: _stored, ...opt } = stored;
                     const count = voteCounts.get(opt.id) || 0;
                     const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-                    return { ...opt, votes: count, percentage };
+                    return split ? { ...opt, votes: count, percentage, newOrWordsVotes: origins!.get(opt.id) ?? 0 } : { ...opt, votes: count, percentage };
                 });
             }
             // Only an open vote names its voters, and only to a member (includeVoters). An anonymous poll names nobody,
@@ -1350,7 +1430,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // 'pending' stays: "spoken for", without saying by whom.
     status: 'keep',
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
-    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep',
+    pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).

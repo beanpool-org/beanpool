@@ -12,6 +12,7 @@ import {
 } from '../lib/identity';
 import { generateMnemonic } from '../lib/mnemonic';
 import { resetCapturedAuthReturn } from '../lib/web-join';
+import { loadPendingLink } from '../lib/link-signin';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
 type Handler = (body: any, path: string) => Response;
@@ -192,6 +193,95 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
         expect(screen.getByText(/way to recover your identity if you lose this device\./)).toBeInTheDocument();
         expect(within(wordsIntro()).getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
+    });
+});
+
+describe('a 12-words member who adds a sign-in from Safety Backup (review 4161723815)', () => {
+    afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+
+    it('leaves for the provider only after the tour, with the photo saved and the browser asked to keep the key', async () => {
+        const t0 = Date.now();
+        // A 12-words join that went out; the node says member (the same steps follow as after the answer).
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        const order: string[] = [];
+        const calls = stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/profile/update': (body) => { order.push(`profile:${body.avatar}`); return json(200, { success: true, profile: {} }); },
+            '/api/join/link/sso-nonce': () => json(200, {
+                nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null,
+            }),
+        });
+        const persist = vi.fn(async () => { order.push('persist'); return true; });
+        Object.defineProperty(navigator, 'storage', { value: { persist, persisted: vi.fn(async () => false) }, configurable: true });
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
+
+        // The tour comes first, as for every new member; the sign-in is offered on it.
+        expect(await screen.findByRole('button', { name: "Let's Begin! 🚀" })).toBeInTheDocument();
+        fireEvent.click(await screen.findByTestId('add-sign-in-google'));
+
+        // Only once the photo is on the node and the browser was asked to keep the key does the page leave.
+        await waitFor(() => expect(loadPendingLink()).not.toBeNull());
+        expect(order).toEqual(['profile:bundled://bean-green', 'persist']);
+        expect(persist).toHaveBeenCalledTimes(1);
+        expect(calls.filter((c) => c.path === '/api/join/link/sso-nonce')).toHaveLength(1);
+        expect(calls.some((c) => c.path.startsWith('/api/join') && c.path !== '/api/join/link/sso-nonce')).toBe(false);
+    });
+
+    // Review 4162062917: the guide's count went out as the page left, and was lost about 1 time in 8.
+    it('the guide is counted before the page leaves, its answer waited for', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        const order: string[] = [];
+        stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/profile/update': () => json(200, { success: true, profile: {} }),
+            // The count's answer takes a moment, as a real request does.
+            '/api/funnel-event': ((body: any) => {
+                order.push(`funnel sent:${body.event}`);
+                return new Promise((r) => setTimeout(() => {
+                    // Answered with the page still here, or after it had left for the provider (the link saved).
+                    order.push(`funnel answered:${body.event}:${loadPendingLink() ? 'after leaving' : 'before leaving'}`);
+                    r(json(200, { ok: true }));
+                }, 80));
+            }) as unknown as Handler,
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        Object.defineProperty(navigator, 'storage', { value: { persist: vi.fn(async () => true), persisted: vi.fn(async () => false) }, configurable: true });
+        render(<WelcomePage onComplete={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
+        fireEvent.click(await screen.findByTestId('add-sign-in-google'));
+        await waitFor(() => expect(order.some((o) => o.startsWith('funnel answered:guide_complete'))).toBe(true));
+        await waitFor(() => expect(loadPendingLink()).not.toBeNull());
+        expect(order).toContain('funnel answered:guide_complete:before leaving');
+    });
+
+    it('"Let\'s Begin!" still goes in without the sign-in: nothing is lost by changing their mind', async () => {
+        const t0 = Date.now();
+        await savePendingJoin({ identity, provider: null, nonce: null, startedAt: t0, expiresAt: t0 + PENDING_JOIN_TTL_MS, restored: false, sentAt: t0, door: 'words' });
+        const calls = stubNode({ ...GLOBAL_OPEN, features: { openJoin: true, wordsDoor: true } }, {
+            '/api/community/membership/': () => json(200, { isMember: true, callsign: 'Alice' }),
+            '/api/join/link/sso-nonce': () => json(200, { nonce: 'link-n', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null }),
+        });
+        const onComplete = vi.fn();
+        render(<WelcomePage onComplete={onComplete} />);
+        fireEvent.click(await screen.findByTitle('Green Bean'));
+        fireEvent.click(screen.getByRole('button', { name: 'Next →' }));
+        await screen.findByTestId('backup-words-only');
+        fireEvent.click(within(screen.getByTestId('backup-add-sign-in')).getByRole('button', { name: 'Add a sign-in as a second way back' }));
+        await screen.findByTestId('add-sign-in-google');
+        fireEvent.click(screen.getByRole('button', { name: "Let's Begin! 🚀" }));
+        await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
+        expect(calls.find((c) => c.path === '/api/profile/update')?.body.avatar).toBe('bundled://bean-green');
+        expect(loadPendingLink()).toBeNull();
     });
 });
 

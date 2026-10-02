@@ -294,6 +294,7 @@ async function _doInitDB() {
             poll_options TEXT,
             poll_closes_at DATETIME,
             poll_open_vote INTEGER DEFAULT 0,
+            poll_new_or_words_votes INTEGER,
             audience_scope TEXT DEFAULT 'public',
             target_group_id TEXT,
             target_pubkey TEXT,
@@ -544,6 +545,9 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
         // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
+        // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
+        // polls; NULL where it says nothing). The split by answer travels inside poll_options.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -796,6 +800,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
                 r.pollOptions = [];
             }
             r.pollClosesAt = r.poll_closes_at || r.pollClosesAt;
+            if (typeof r.poll_new_or_words_votes === 'number') r.pollNewOrWordsVotes = r.poll_new_or_words_votes;
             if (localVotes.has(r.id)) {
                 r.userVotedOptionId = localVotes.get(r.id);
             }
@@ -1883,9 +1888,10 @@ export async function votePoll(postId: string, optionId: string) {
         try {
             const database = await waitForInit();
             await database.runAsync(
-                `UPDATE posts SET poll_options = ?, status = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE posts SET poll_options = ?, poll_new_or_words_votes = ?, status = ?, updated_at = ? WHERE id = ?`,
                 [
                     JSON.stringify(json.post.pollOptions || []),
+                    pollNewOrWordsVotesColumn(json.post),
                     json.post.status,
                     json.post.updatedAt || new Date().toISOString(),
                     postId
@@ -2734,6 +2740,15 @@ function emitOwnProfileUpdated(pubkey: string): void {
     emitAppEvent('profile_updated', { pubkey });
 }
 
+/**
+ * The `poll_new_or_words_votes` column for a poll as the node sent it: how many of its votes came from new or 12-word
+ * accounts (@beanpool/core poll-vote-origins), or NULL where the node says nothing (a local community, a group's poll).
+ */
+function pollNewOrWordsVotesColumn(p: any): number | null {
+    const n = p?.pollNewOrWordsVotes ?? p?.poll_new_or_words_votes;
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
 /** The `photos` column writeSyncedPost stores for a listing from the node: its URLs, never a local file's. */
 function syncedPhotosColumn(p: any): string | null {
     return p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null;
@@ -2749,7 +2764,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2782,6 +2797,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.poll_closes_at || p.pollClosesAt || null,
             // Every column is written here (INSERT OR REPLACE), so the ballot too: an open vote only when the node says so.
             (p.pollOpenVote ?? p.poll_open_vote) === true || (p.pollOpenVote ?? p.poll_open_vote) === 1 ? 1 : 0,
+            pollNewOrWordsVotesColumn(p),
             // The node sends 'public' for a row with no scope (rowToPost); the table's default says the same.
             p.audienceScope || p.audience_scope || 'public',
             p.targetGroupId || p.target_group_id || null,

@@ -284,6 +284,11 @@ let wholeRetryAt = 0;
 let resyncRetryAt = 0;
 // Whole copies in a row whose pages came and whose listing photos' objects could not all be fetched (photosRetryWait).
 let photoFailuresInRow = 0;
+// The listing photos (`post_id|order_num`) those copies failed at, since a whole copy last landed. A copy that fails at one
+// not in it made progress (the copy before it kept what it fetched, and the main server's answer for that photo changed it:
+// a 404 for one replaced since the snapshot, which the next copy names anew), so its wait starts over. Only a copy that fails
+// at a photo an earlier one failed at lengthens it.
+const photosFailedOn = new Set<string>();
 /**
  * What the wait above is for, for Settings (getBackupStatus copyWait): the kind of copy that waits, why the last failed,
  * and, for one whose photos could not all be fetched, how many in a row have. Null once a whole copy lands.
@@ -912,6 +917,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             // next whole copy whose photos can't all be fetched waits from the first wait again.
             releaseFetchedObjects();
             photoFailuresInRow = 0;
+            photosFailedOn.clear();
             lastCopyWait = null;
             // Landed, as far as this process goes: the next start swaps it in, and the standby's record in it already says so.
             lastSuccessAt = Date.now();
@@ -1061,6 +1067,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
             wholeRetryAt = 0;
             releaseFetchedObjects();
             photoFailuresInRow = 0;
+            photosFailedOn.clear();
             lastCopyWait = null;
             lastWholeLeftOut = leftOut.length > 0;
             lastWholePages = 1;
@@ -1097,7 +1104,17 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         // to a cap, so one photo the main server can't send has it build and send the whole copy ever more rarely, not
         // every RESYNC_RETRY_MS for as long as it can't (photosRetryWait). A refused one waits as it always has (N2).
         const photosFailed = came && stage === 'fetch' && !isDelta;
-        if (photosFailed) photoFailuresInRow++;
+        if (photosFailed) {
+            // Doubling is for a photo that stays broken. A try that failed at another photo than any before it made progress
+            // (404 churn on a busy community: each try keeps what it fetched and fails at a photo replaced since): its wait is
+            // the first step again, as it would be had the last one landed. `stored` can't tell: one persistent 503 still has
+            // the other workers' in-flight objects stored at each try. No photo named (a pull stopped) counts as a repeat.
+            const at = photos.failedOn ?? '';
+            if (photosFailedOn.has(at) || photosFailedOn.size === 0) photoFailuresInRow++;
+            else photoFailuresInRow = 1;
+            if (photosFailedOn.size >= 10_000) photosFailedOn.clear();
+            photosFailedOn.add(at);
+        }
         if (came && !isDelta) {
             const now = Date.now();
             const draw = Math.random();

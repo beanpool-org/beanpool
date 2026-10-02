@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     clearPendingRestore,
-    loadIdentity,
+    loadIdentityStrict,
     loadPendingRestore,
     savePendingRestore,
     takePendingRestore,
@@ -137,7 +137,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
      */
     const hand = useCallback(async (identity: BeanPoolIdentity) => {
         opened.current = identity;
-        const held = await loadIdentity();
+        const held = await loadIdentityStrict();
         if (!mounted.current) return;
         if (held?.publicKey && held.publicKey === identity.publicKey) {
             opened.current = null;
@@ -335,7 +335,7 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
         setBusy(true);
         setNotice(null);
         try {
-            const held = await loadIdentity();
+            const held = await loadIdentityStrict();
             if (!mounted.current) return;
             if (held?.publicKey === account.publicKey) {
                 setScreen({ name: 'already_here', identity: held });

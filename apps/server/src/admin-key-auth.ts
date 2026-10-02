@@ -44,7 +44,7 @@ import {
     type MemberNodeRole,
 } from './engine/node-roles.js';
 import { getLocalConfig, isBreakGlassMode, updateLocalConfig } from './config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
 import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
@@ -384,7 +384,9 @@ export function authorizeKeySigner(params: {
             return { ok: false, error: '2FA code required', totpRequired: true };
         }
         const cleanCode = String(totpCode).trim();
-        let totpOk = verifyTotpCode(cleanCode, config.totpSecret);
+        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, config.totpSecret);
+        let totpOk = totpUse === 'ok';
         const backupHashes = config.totpBackupCodesHashes || [];
         if (!totpOk && backupHashes.length > 0) {
             const idx = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
@@ -398,7 +400,7 @@ export function authorizeKeySigner(params: {
         }
         if (!totpOk) {
             noteKeySigninFailure(memberPubkey, source, `${member.callsign ? `@${member.callsign} ` : ''}(key ${memberPubkey.slice(0, 12)}…)`);
-            return { ok: false, error: 'Invalid 2FA code', totpRequired: true, wrongTotp: true };
+            return { ok: false, error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true, wrongTotp: true };
         }
         noteKeySigninSuccess(memberPubkey, source);
     }

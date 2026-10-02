@@ -23,6 +23,7 @@ Two-factor sign-in asks for a 6-digit code from an authenticator app as well as 
 - Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.
 - There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.
 - Once you have typed a code, the browser does not ask again for **4 hours** of use.
+- Each code works once. A code the server has already taken, from anyone, is refused with "That 2FA code was already used. Wait for the next one from your authenticator app." The next code comes within 30 seconds. So someone who saw a code over your shoulder can't use it after you, and two people signing in together need a code each.
 - Only an owner can switch it on or off.
 
 Know its limits:

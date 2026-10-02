@@ -39,6 +39,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import WebSocket from 'ws';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -161,7 +162,7 @@ async function call(method: 'GET' | 'POST' | 'DELETE', id: Id | null, urlPath: s
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${urlPath}`, { method, headers, body: method === 'POST' ? raw : undefined });
+    const res = await localFetch(`${BASE}${urlPath}`, { method, headers, body: method === 'POST' ? raw : undefined });
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty (304) */ }

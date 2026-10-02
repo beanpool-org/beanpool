@@ -57,8 +57,12 @@ function base32Decode(base32: string): Buffer {
  * Generate a 6-digit TOTP token for a given Base32 secret and time counter.
  */
 export function generateTotpCode(secretBase32: string, timeStepWindow = 0, stepSeconds = 30): string {
+    return totpCodeAt(secretBase32, Math.floor(Date.now() / 1000 / stepSeconds) + timeStepWindow);
+}
+
+/** The 6-digit code for time step `counter`. */
+function totpCodeAt(secretBase32: string, counter: number): string {
     const key = base32Decode(secretBase32);
-    const counter = Math.floor(Date.now() / 1000 / stepSeconds) + timeStepWindow;
 
     const buffer = Buffer.alloc(8);
     buffer.writeBigInt64BE(BigInt(counter), 0);
@@ -79,22 +83,59 @@ export function generateTotpCode(secretBase32: string, timeStepWindow = 0, stepS
  * Handles copy-pasted tokens with spaces or hyphens (e.g. "123 456" or "123-456").
  */
 export function verifyTotpCode(token: string, secretBase32: string, window = 1): boolean {
-    if (!token || typeof token !== 'string') return false;
+    return totpStepOf(token, secretBase32, window) !== null;
+}
+
+/** The time step `token` is the code for, within ±`window` steps of now; null when it is none of them. */
+function totpStepOf(token: string, secretBase32: string, window = 1, stepSeconds = 30): number | null {
+    if (!token || typeof token !== 'string') return null;
     const cleanToken = token.replace(/[\s-]/g, '').trim();
-    if (!/^\d{6}$/.exec(cleanToken)) return false;
+    if (!/^\d{6}$/.exec(cleanToken)) return null;
 
     const tokenBuf = Buffer.alloc(6);
     tokenBuf.write(cleanToken, 'utf8');
 
+    const now = Math.floor(Date.now() / 1000 / stepSeconds);
     for (let errorWindow = -window; errorWindow <= window; errorWindow++) {
-        const expected = generateTotpCode(secretBase32, errorWindow);
+        const expected = totpCodeAt(secretBase32, now + errorWindow);
         const expectedBuf = Buffer.alloc(6);
         expectedBuf.write(expected, 'utf8');
         if (crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
-            return true;
+            return now + errorWindow;
         }
     }
-    return false;
+    return null;
+}
+
+/** The step of the last code accepted for each secret (by its hash): never the secret itself. In memory. */
+const lastAcceptedStep = new Map<string, number>();
+
+/** What a code presented to let someone in turned out to be. */
+export type TotpUse = 'ok' | 'reused' | 'wrong';
+
+/** The refusal for a code this server has already accepted. */
+export const TOTP_CODE_REUSED = 'That 2FA code was already used. Wait for the next one from your authenticator app.';
+
+/**
+ * Accept a code once (RFC 6238 §5.2): right for now (±`window` steps), and for a later step than any code this server
+ * has already accepted for this secret, which is then remembered. A code seen once — over a shoulder, in a request log —
+ * opens nothing a second time in the 90 seconds it stays right (FABLE-sec-races LOW-1, 2026-10-01). 'reused' for a right
+ * code at or before that step, 'wrong' for anything else. Every check that lets someone in or turns 2FA off uses this;
+ * verifyTotpCode is the pure check.
+ */
+export function useTotpCode(token: string, secretBase32: string, window = 1): TotpUse {
+    const step = totpStepOf(token, secretBase32, window);
+    if (step === null) return 'wrong';
+    const id = crypto.createHash('sha256').update(base32Decode(secretBase32)).digest('hex');
+    const last = lastAcceptedStep.get(id);
+    if (last !== undefined && step <= last) return 'reused';
+    lastAcceptedStep.set(id, step);
+    return 'ok';
+}
+
+/** Tests only: forget the codes accepted so far, so a suite can sign in again inside one 30-second step. */
+export function forgetUsedTotpCodesForTests(): void {
+    lastAcceptedStep.clear();
 }
 
 /**

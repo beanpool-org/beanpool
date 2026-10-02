@@ -35,6 +35,7 @@ import { forgetOldJoinAddresses } from './engine/open-join.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { pushTokenId } from './services/push-token-seal.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -81,7 +82,7 @@ async function answer(method: 'POST' | 'DELETE', path: string, body: unknown, si
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyString });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: bodyString });
     const text = await res.text();
     let code: string | undefined;
     try { code = JSON.parse(text)?.code; } catch { /* not JSON */ }

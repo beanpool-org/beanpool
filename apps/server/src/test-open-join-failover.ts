@@ -45,6 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { newVaultTicket, signVaultTicket, solveDoorWorkSync, vaultTicketNonce } from '@beanpool/core';
 import { spawnNode, post, copyDir, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.GOOGLE_CLIENT_IDS;
@@ -243,7 +244,7 @@ async function signedPost(port: number, id: Id, route: string, body: unknown): P
     const raw = JSON.stringify(body ?? {});
     const ts = Date.now();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const res = await fetch(`https://127.0.0.1:${port}${route}`, {
+    const res = await localFetch(`https://127.0.0.1:${port}${route}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

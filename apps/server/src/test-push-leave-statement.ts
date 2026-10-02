@@ -40,6 +40,7 @@ import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { pushTokenId } from './services/push-token-seal.js';
 import { installCarriedRecoverySealKey } from './services/recovery-seal-key.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -90,7 +91,7 @@ async function send(method: 'POST' | 'DELETE', path: string, body: unknown, sign
         headers['X-Nonce'] = nonce;
         headers['X-Signed-For'] = HOST;
     }
-    const res = await fetch(`${BASE}${path}`, { method, headers, body: bodyString });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: bodyString });
     const text = await res.text();
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { parsed = text; }

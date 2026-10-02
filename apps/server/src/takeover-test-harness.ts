@@ -2,8 +2,8 @@
  * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
- * genesis, admin password, database, the take-over resume at boot (which may finish steps and run the audit), the
- * snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1),
+ * genesis, admin password, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
+ * finish steps and run the audit), the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1),
  * libp2p (on port 0), the envelope service in the node's role, the take-over's after-boot steps; then the real
  * backup and take-over routes over HTTP with the real admin auth. A take-over's restart is the real
  * `process.exit(0)`, and the orchestrator starts the process again on the same data dir, as Docker would.
@@ -192,7 +192,8 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { ensureGenesis } = await import('./genesis.js');
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initStateEngine, getNodeRole } = await import('./state-engine.js');
-    const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = await import('./services/takeover.js');
+    const takeover: { settleTakeoverBeforeDatabaseBoot?: () => void } & typeof import('./services/takeover.js') = await import('./services/takeover.js');
+    const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = takeover;
     const { startP2P } = await import('./p2p.js');
     const { loadConnectors } = await import('./connector-manager.js');
     const { startTakeoverEnvelopeService } = await import('./services/takeover-envelope.js');
@@ -215,6 +216,9 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
 
     await ensureGenesis();
     initAdminPassword();
+    // index.ts step 2.4: a take-over stopped after `role` decided before the database's boot reads the role. Optional: a tree
+    // from before it still starts.
+    takeover.settleTakeoverBeforeDatabaseBoot?.();
     initStateEngine();
     const boot = resumeTakeoverAtBoot();
     // index.ts step 2.61: the snapshot scheduler, armed from the schedule row once the take-over has resumed, for the role

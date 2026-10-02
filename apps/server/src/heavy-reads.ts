@@ -10,10 +10,12 @@
  *
  * Here a heavy answer is admitted while the weight of the answers in flight stays within a budget. An answer is in
  * flight from before its build until its last byte is written.
- *   - An answer's weight is the size of the last answer its route gave, keyed by the caller (a roster by its group). So
- *     the web app's directory weighs more than a roster, and a small group's roster next to nothing. A route not yet
- *     measured counts as a quarter of the budget, about a directory at the default.
- *   - A route whose last answer was under LIGHT_BYTES isn't heavy and goes straight through. Answers that size are built
+ *   - An answer's weight is the size of the last answer under its key. The key is the route and every input that changes
+ *     its answer's size (heavyReadKey: a roster's group, status and role; the list of groups' filters, page and size),
+ *     so a small answer (one group's convenors, a search that matches nothing) never stands in for the big one. So the
+ *     web app's directory weighs more than a roster, and a small group's roster next to nothing. A key not yet measured
+ *     counts as a quarter of the budget, about a directory at the default.
+ *   - A key whose last answer was under LIGHT_BYTES isn't heavy and goes straight through. Answers that size are built
  *     and written in milliseconds: the list of groups at 50 a page (1.4 MB) survived 512 at once on a 256 MB heap.
  *   - Nothing waits behind the first answer: one answer bigger than the whole budget is still served, alone.
  *   - One that doesn't fit waits its turn, in order, for up to WAIT_MS. That is under the apps' shortest timeout on
@@ -56,7 +58,7 @@ const UNMEASURED_SHARE = 4;
 const RETRY_AFTER_MIN_S = 10;
 const RETRY_AFTER_SPREAD_S = 20;
 const LOG_EVERY_MS = 60_000;
-/** How many routes' last sizes are kept (a roster's, one for each group read). Past it, the longest unread is dropped. */
+/** How many keys' last sizes are kept (a roster's, one for each group and filter read). Past it, the longest unread is dropped. */
 const MAX_SIZES_KEPT = 10_000;
 
 interface HeavyReadSettings {
@@ -170,10 +172,20 @@ function refuse(ctx: Koa.Context): void {
 }
 
 /**
+ * A heavy read's key: its route and every input that changes its answer's size, so that a small answer (a roster's
+ * convenors, a search that matches nothing) never stands in for the big one under the same route. An input left
+ * undefined is the route's default and is left out. Each value is URI-encoded, so none can read as another input.
+ */
+export function heavyReadKey(route: string, inputs: Record<string, unknown>): string {
+    const parts = Object.entries(inputs).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+    return parts.length > 0 ? `${route}?${parts.join('&')}` : route;
+}
+
+/**
  * Build and send a heavy answer under the cap: `build` sets ctx.body as the route always has, once there is room. Call it
  * after every check that refuses or answers 304, so only an answer that will be built takes budget. `key` names whose
- * last size this answer's weight is: one per route, or per group for a roster. When there is no room in time, the reader
- * gets 503 with Retry-After and `code: heavy_read_busy`, and `build` never runs.
+ * last size this answer's weight is (heavyReadKey: every input that changes the answer's size). When there is no room in
+ * time, the reader gets 503 with Retry-After and `code: heavy_read_busy`, and `build` never runs.
  */
 export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>): Promise<void> {
     const res = ctx.res;

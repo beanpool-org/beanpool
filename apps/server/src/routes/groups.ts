@@ -46,7 +46,7 @@ import { db } from '../db/db.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
-import { heavyRead } from '../heavy-reads.js';
+import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -151,8 +151,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.type = 'application/json';
             ctx.body = groups;
         };
-        // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy".
-        if (limit > 50) await heavyRead(ctx, 'groups', answer);
+        // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy",
+        // weighed by the last list with the same filters and page: a search that matches nothing is light, the whole
+        // list isn't. The viewer only adds their own invite-only groups, a few rows inside the same limit.
+        if (limit > 50) await heavyRead(ctx, heavyReadKey('groups', { category, q, member, limit, offset }), answer);
         else answer();
     });
 
@@ -253,9 +255,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         }
 
         const effectiveStatus = status ? (status === 'all' ? undefined : status) : (isConvenor ? undefined : 'active');
-        // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster: a big group's waits for room or
-        // is "busy", a small one's goes straight through.
-        await heavyRead(ctx, `roster:${ctx.params.id}`, () => {
+        // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster with the same status and role: a
+        // big group's waits for room or is "busy", a small one's goes straight through. Its convenors alone (any member
+        // may ask) are light, and must never make the whole roster read as light too.
+        await heavyRead(ctx, heavyReadKey('roster', { group: ctx.params.id, status: effectiveStatus, role }), () => {
             const members = getGroupMembers(ctx.params.id, { status: effectiveStatus, role });
             ctx.status = 200;
             ctx.body = members;

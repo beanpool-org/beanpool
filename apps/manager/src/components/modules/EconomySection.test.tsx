@@ -427,6 +427,33 @@ describe('EconomySection Component', () => {
         expect(screen.getByText('@doone')).toBeInTheDocument();
     });
 
+    it('renders explicit loading indicators when treasuries or proposals are fetching', async () => {
+        // Return promises that do not immediately resolve to simulate loading state
+        vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockImplementation(() => new Promise(() => {}));
+        vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise(() => {})));
+
+        await act(async () => {
+            render(
+                <EconomySection
+                    activeNode={mockProfile}
+                    nodeData={{}}
+                    initialSubTab="enterprises"
+                    onRefresh={vi.fn()}
+                />
+            );
+        });
+
+        expect(screen.getByText('Loading enterprises...')).toBeInTheDocument();
+
+        // Switch to decisions / proposals tab
+        const decisionsBtn = screen.getByRole('button', { name: /proposals/i });
+        await act(async () => {
+            fireEvent.click(decisionsBtn);
+        });
+
+        expect(screen.getByText('Loading proposals...')).toBeInTheDocument();
+    });
+
     it('renders safely with empty nodeData and empty treasuries', async () => {
         vi.spyOn(nodeClient, 'fetchNodeTreasuries').mockResolvedValue([]);
 

@@ -131,6 +131,15 @@ export interface ProfileSwitches {
      *  news of each join, and at its numbers (5 joins a second, 5,000 sockets) it was 25,000 frames a second, each
      *  sending a phone back for the list. */
     announceJoins: boolean;
+    /** Every member's socket hears `profile_updated` when a member edits their own card (name, photo, bio, contact,
+     *  archetype: engine/members.ts updateProfile), the doorbell on which each of their apps runs its whole sync. Off (the
+     *  global node): only that member's own sockets and the members who share a conversation with them hear it; the
+     *  members' and listings' versions still move, so anyone's next read has the new card. Measured on the global node's
+     *  load rehearsal (scratch/global-node/REPORT-global-load-rehearsal.md §3): 2,400 photos set in a minute to 3,500
+     *  sockets were 8.4 million frames, a whole core, before each app's sync of about ten requests. A change to a
+     *  member's standing (a suspension, a vouch, holiday, a re-key) is not an edit of their card, and goes to every
+     *  member's socket as before. */
+    announceProfiles: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -160,6 +169,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         exampleListings: false,
         decisions: true,
         announceJoins: true,
+        announceProfiles: true,
     },
     global: {
         openJoin: true,
@@ -190,6 +200,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         decisions: false,
         // Nobody in a lobby of strangers needs each join live, and every member's app read the list again for it.
         announceJoins: false,
+        // Nor each stranger's new photo: the people they talk with hear it, and everyone else reads it at their next sync.
+        announceProfiles: false,
     },
 };
 

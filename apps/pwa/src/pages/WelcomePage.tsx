@@ -271,6 +271,9 @@ function doorOf(info: CommunityInfo | null | undefined): Door {
     return info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite';
 }
 
+/** Before leaving for a provider at the end of onboarding: how long the browser's "keep this site's data" ask is given. */
+const PERSIST_WAIT_MS = 5_000;
+
 export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
@@ -299,6 +302,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
     // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
     const [joinedByWords, setJoinedByWords] = useState(false);
+    // That member chose "Add a sign-in as a second way back" at Safety Backup: offered at the end of the tour, and the page
+    // leaves for the provider only once the steps every new member has are finished (the photo on the node, the browser
+    // asked to keep the key), because the page does not come back to them (App opens the member's app on the return).
+    const [addSignInAfterTour, setAddSignInAfterTour] = useState(false);
+    // The end of onboarding ran (finishOnboarding): a second run, after a sign-in that didn't start, does not repeat it.
+    const onboardingFinished = useRef(false);
     // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
     // a member's key, while a join that went out from this browser is settled first (below).
     const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
@@ -1035,6 +1044,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
     async function handleSeedConfirmed() {
         if (!pendingIdentity) return;
+        if (await finishOnboarding()) onComplete(pendingIdentity);
+    }
+
+    /**
+     * Everything the end of onboarding does but opening the app: the registration where the door has not done it, the
+     * photo, the guide counted, the location and storage asks. False when it could not finish (said in `error`).
+     * `leaving`: the page leaves for a provider next (a sign-in added at the end of the tour), so the storage ask is
+     * waited for, and the location ask, whose prompt the leaving page would only dismiss, is left to the map's own.
+     */
+    async function finishOnboarding({ leaving = false }: { leaving?: boolean } = {}): Promise<boolean> {
+        if (!pendingIdentity) return false;
+        if (onboardingFinished.current) return true;
         setLoading(true);
         try {
             // Wraps the whole thing, rather than being folded into the first condition.
@@ -1075,7 +1096,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         if (!alreadyIn) {
                             setError(err.message || 'Invalid invite code');
                             setLoading(false);
-                            return;
+                            return false;
                         }
                     }
                 } else {
@@ -1084,7 +1105,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     } catch (err: any) {
                         setError(err.message || 'Registration failed.');
                         setLoading(false);
-                        return;
+                        return false;
                     }
                 }
             }
@@ -1107,13 +1128,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             recordOnboardingEvent('guide_complete');
 
             // Onboarding complete — explicitly ask for location once
-            if ('geolocation' in navigator) {
+            if (!leaving && 'geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
-            // Nothing waits on the answer, and the words warning stays either way.
-            if (joinedByDoor) void askPersistentStorage();
-            onComplete(pendingIdentity);
+            // Nothing waits on the answer, and the words warning stays either way; before leaving the page, the ask is
+            // given a moment to be answered (never a gate: the page leaves either way).
+            if (joinedByDoor) {
+                const asked = askPersistentStorage();
+                if (leaving) await Promise.race([asked, new Promise((r) => setTimeout(r, PERSIST_WAIT_MS))]);
+            }
+            onboardingFinished.current = true;
+            return true;
         } finally {
             setLoading(false);
         }
@@ -1863,6 +1889,22 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {loading ? 'Entering...' : "Let's Begin! 🚀"}
                             </button>
 
+                            {/* Chosen at Safety Backup: the sign-in, now that nothing of onboarding is left to lose. The
+                                page leaves only once finishOnboarding has saved the photo and asked to keep the key. */}
+                            {addSignInAfterTour && joinedByWords && !signInRecovery && pendingIdentity && (
+                                <section data-testid="tour-add-sign-in" aria-labelledby="tour-add-sign-in-title" style={{ marginTop: '1rem', textAlign: 'left' }}>
+                                    <h4 id="tour-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                        Add a sign-in as a second way back
+                                    </h4>
+                                    <AddSignIn
+                                        identity={pendingIdentity}
+                                        label="Add a sign-in as a second way back"
+                                        autoStart
+                                        onLeaving={() => finishOnboarding({ leaving: true })}
+                                    />
+                                </section>
+                            )}
+
                             <button
                                 onClick={() => { setShowOnboardingGuide(false); setError(null); }}
                                 style={{
@@ -1982,6 +2024,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             */}
                             <button
                                 onClick={() => {
+                                    setAddSignInAfterTour(false);
                                     recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
                                     // A member who ticked "I've written them down" has done the thing
                                     // Settings' banner nags about. Without this, finishing onboarding
@@ -2008,17 +2051,30 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             </button>
 
                             {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
-                                as a second. It leaves the page for the provider; App.tsx finishes it on the way back and
-                                opens Settings with the result. Skipping it changes nothing. */}
+                                as a second. Chosen here, it is offered at the end of the tour, and the page leaves for the
+                                provider only after the steps every new member has are finished: the photo is on the node
+                                and the browser asked to keep the key before the page goes (it does not come back here;
+                                App.tsx finishes the link on the return and opens Settings with the result). Skipping it
+                                changes nothing. */}
                             {joinedByWords && !signInRecovery && pendingIdentity && (
                                 <div data-testid="backup-add-sign-in" style={{ marginTop: '0.75rem', textAlign: 'left' }}>
-                                    <AddSignIn
-                                        identity={pendingIdentity}
-                                        label="Add a sign-in as a second way back"
-                                        onLeaving={() => {
+                                    <button
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={() => {
+                                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
                                             if (seedConfirmed) localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                            setAddSignInAfterTour(true);
+                                            setShowOnboardingGuide(true);
+                                            setError(null);
                                         }}
-                                    />
+                                        className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                    >
+                                        Add a sign-in as a second way back
+                                    </button>
+                                    <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
+                                        You'll choose it after a quick look at how things work here.
+                                    </p>
                                 </div>
                             )}
 

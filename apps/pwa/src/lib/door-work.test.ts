@@ -23,6 +23,7 @@ import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     aboutTime,
     busySentence,
+    signInBusySentence,
     secondsLeft,
     solveHere,
     solveInWorker,
@@ -187,5 +188,8 @@ describe('the busy level, said with this browser\'s own estimate (design §3.5)'
     it('the sentence: never a refusal, and the sign-in beside it', () => {
         expect(busySentence(14)).toBe('Lots of people are joining right now. Setting up a 12-words account will take about 15 seconds in this browser. Or sign in to join now.');
         expect(busySentence(null)).toMatch(/^Lots of people are joining right now.*Or sign in to join now\.$/);
+        // A sign-in the node asked for work is already the faster door: its line never says "or sign in".
+        expect(signInBusySentence(14)).toBe('Lots of people are joining right now, so joining will take about 15 seconds more in this browser.');
+        expect(signInBusySentence(null)).not.toMatch(/sign in|12-words/i);
     });
 });

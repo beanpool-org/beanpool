@@ -97,6 +97,22 @@ describe('made before the join', () => {
         expect(await taking).toMatchObject({ ok: true, work: { challenge: 'challenge-1' } });
     });
 
+    it('a join that stops waiting (← Choose another way) takes nothing: the work carries on, ready for the next take', async () => {
+        const { k, n, s } = keeper();
+        k.start();
+        await vi.advanceTimersByTimeAsync(0);
+        const wait = new AbortController();
+        const taking = k.take(wait.signal);
+        await vi.advanceTimersByTimeAsync(0);
+        wait.abort();
+        expect(await taking).toBeNull();
+        expect(s.runs[0].cancelled).toBe(false);
+        await s.finish();
+        expect(k.current).toEqual({ status: 'ready', level: 0 });
+        expect(await k.take()).toMatchObject({ ok: true, work: { challenge: 'challenge-1' } });
+        expect(n.request).toHaveBeenCalledTimes(1);
+    });
+
     it('progress from the solver is passed on, with the level', async () => {
         const { k, s, states } = keeper({ level: 3 });
         k.start();

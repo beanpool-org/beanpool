@@ -73,6 +73,7 @@ import {
 import { recoveryStored, sealJoinRecovery, type SealedJoinRecovery } from '../lib/join-recovery';
 import {
     busySentence,
+    signInBusySentence,
     secondsLeft,
     solveInWorker,
     BUSY_LEVEL,
@@ -193,6 +194,13 @@ const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
+/**
+ * What joining takes, said on the door's first screen (here, and the global lobby's Join card): both doors where the
+ * node takes 12 words alone (two-doors design §2.6), one sign-in where it does not.
+ */
+export function joinTakes(wordsDoor: boolean): string {
+    return wordsDoor ? 'It takes a name, and 12 secret words or a sign-in. No invite needed.' : 'It takes a name and one sign-in. No invite needed.';
+}
 export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
 /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
 const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
@@ -354,6 +362,9 @@ export function WebJoin({
     const [signInWork, setSignInWork] = useState<{ level: number; progress: DoorWorkProgress | null } | null>(null);
     // A refused piece of work is replaced and the join sent again once by itself; the second refusal is said.
     const workRetried = useRef(false);
+    // A 12-words join waiting for its work ("Setting up your account…"): stopped by ← Choose another way, which takes
+    // the member back to the two doors with the same key and its work still being made.
+    const waitingForWork = useRef<AbortController | null>(null);
     // The node has asked this page's sign-in joins for work: every one from now on brings it (a busy network stays busy).
     const signInWorkWanted = useRef(false);
     // The names the node has answered for, so going back and forth over one name asks once.
@@ -858,10 +869,16 @@ export function WebJoin({
                 k = new WordsWork(p.identity, { solver: solverRef.current, onChange: (s) => { if (mounted.current) setWork(s); } });
                 keeper.current = k;
             }
-            // Ready by now at ordinary levels; otherwise the joining screen waits for it, saying so.
+            // Ready by now at ordinary levels; otherwise the joining screen waits for it, saying so, with the way back to
+            // the two doors beside it (design §3.5: always the faster door beside it).
+            waitingForWork.current?.abort();
+            const wait = new AbortController();
+            waitingForWork.current = wait;
             if (k.current.status !== 'ready') setScreen({ name: 'joining', setting: true });
-            const got = await k.take();
-            if (!mounted.current) return;
+            const got = await k.take(wait.signal);
+            if (waitingForWork.current === wait) waitingForWork.current = null;
+            // Stopped waiting: the member chose another way, and nothing goes until they choose again.
+            if (!mounted.current || !got) return;
             if (!got.ok) {
                 // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the
                 // 12-words choice goes, so it is said at the top.
@@ -945,6 +962,15 @@ export function WebJoin({
 
     // The pending key's 12-words work: started on the name and sign-in screens, kept for that key, let go with it.
     const pendingKey = pending?.identity.publicKey ?? null;
+    // Let go with it: a key that is no longer this page's pending join (← Back past the name, another tab's account, a
+    // shut door) has its renewals and any solve under way stopped, so no signed work request goes for a key that is gone.
+    useEffect(() => {
+        if (keeper.current && keeper.current.identity.publicKey !== pendingKey) {
+            keeper.current.dispose();
+            keeper.current = null;
+            setWork({ status: 'idle' });
+        }
+    }, [pendingKey]);
     useEffect(() => {
         if (!wordsOpen || !pending || (screen.name !== 'name' && screen.name !== 'providers')) return;
         if (keeper.current?.identity.publicKey !== pending.identity.publicKey) {
@@ -1099,6 +1125,15 @@ export function WebJoin({
         return () => { cancelled = true; clearTimeout(t); };
     }, [name, screen.name, joiningKey]);
 
+    /** From "Setting up your account…": the two doors again, the same key, its work carrying on; nothing is sent. */
+    function chooseAnotherWay() {
+        waitingForWork.current?.abort();
+        waitingForWork.current = null;
+        setBusy(false);
+        if (pending) toProviders(pending, null);
+        else setScreen({ name: 'lobby' });
+    }
+
     async function startOver() {
         const p = pending;
         setBusy(true);
@@ -1203,7 +1238,7 @@ export function WebJoin({
                     <h3 style={heading}>Join BeanPool</h3>
                     <p style={lede}>
                         Post what you can offer and what you need, and talk with the people here.
-                        {wordsOpen ? ' It takes a name, and 12 secret words or a sign-in. No invite needed.' : ' It takes a name and one sign-in. No invite needed.'}
+                        {' '}{joinTakes(wordsOpen)}
                     </p>
                     <NoticeLine notice={notice} />
                     {canHoldKey === false ? (
@@ -1427,6 +1462,8 @@ export function WebJoin({
             // The work the join is waiting for: a sign-in's own, or the 12 words' (design §3.4: the 8-step bar).
             const setting = !screen.setting ? null
                 : signInWork ?? (work.status === 'solving' ? { level: work.level, progress: work.progress } : null);
+            // A 12-words join waiting for its work, rather than a sign-in's own: the other door is offered beside it.
+            const forWords = !!screen.setting && !signInWork;
             body = screen.setting ? (
                 <div data-testid="join-setting-up">
                     <p role="status" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.75rem' }}>
@@ -1435,8 +1472,15 @@ export function WebJoin({
                     <WorkBar done={setting?.progress?.done ?? 0} />
                     {setting && setting.level >= BUSY_LEVEL && (
                         <p data-testid="join-busy" style={{ ...lede, marginTop: '0.75rem' }}>
-                            {busySentence(secondsLeft(setting.level, setting.progress))}
+                            {forWords
+                                ? busySentence(secondsLeft(setting.level, setting.progress))
+                                : signInBusySentence(secondsLeft(setting.level, setting.progress))}
                         </p>
+                    )}
+                    {forWords && (
+                        <button type="button" data-testid="join-setting-back" style={quietButton} onClick={chooseAnotherWay}>
+                            ← Choose another way
+                        </button>
                     )}
                 </div>
             ) : (

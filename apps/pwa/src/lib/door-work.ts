@@ -134,6 +134,16 @@ export function busySentence(seconds: number | null): string {
         : `Lots of people are joining right now. Setting up a 12-words account will take ${aboutTime(seconds)} in this browser. Or sign in to join now.`;
 }
 
+/**
+ * The busy level for a sign-in the node asked to bring work: the sign-in is already the faster door, so this says only
+ * why it takes longer, never "or sign in".
+ */
+export function signInBusySentence(seconds: number | null): string {
+    return seconds === null
+        ? 'Lots of people are joining right now, so joining takes a little longer in this browser.'
+        : `Lots of people are joining right now, so joining will take ${aboutTime(seconds)} more in this browser.`;
+}
+
 /** When the work can't be done here at all (design §3.4): the sign-in is still a way in. */
 export const WORK_CANT_RUN = "This browser can't finish setting up a 12-words account right now. Try again, or sign in.";
 

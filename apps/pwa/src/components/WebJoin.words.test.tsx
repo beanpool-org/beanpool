@@ -263,6 +263,61 @@ describe('the two doors', () => {
         expect(node.joins()).toHaveLength(1);
     });
 
+    // Design §3.5, "always the faster door beside it" (review 4161724052).
+    it('"Setting up your account…" has ← Choose another way: the two doors again, the same key and its work, and no join sent by itself', async () => {
+        const node = stubNode();
+        const s = heldSolver(true);
+        const { onJoined } = renderJoin({ wordsDoor: true, solveWork: s.solver });
+        await toTheDoors();
+        const key = (await loadPendingJoin())!.identity.publicKey;
+        fireEvent.click(screen.getByTestId('join-words'));
+        await screen.findByText('Setting up your account…');
+        fireEvent.click(screen.getByRole('button', { name: '← Choose another way' }));
+        await screen.findByTestId('door-words');
+        expect(await screen.findByTestId('join-provider-google')).not.toBeDisabled();
+        expect(screen.getByTestId('join-words')).not.toBeDisabled();
+        // The work finishes while they look at the doors: nothing is sent until they choose.
+        s.release();
+        await new Promise((r) => setTimeout(r, 50));
+        expect(node.joins()).toHaveLength(0);
+        expect(onJoined).not.toHaveBeenCalled();
+        expect(node.works()).toHaveLength(1);
+        expect((await loadPendingJoin())?.identity.publicKey).toBe(key);
+        // And the 12 words still join, with that same work.
+        fireEvent.click(screen.getByTestId('join-words'));
+        await waitFor(() => expect(onJoined).toHaveBeenCalledTimes(1));
+        expect(node.joins()).toHaveLength(1);
+        expect(node.joins()[0].body.work.challenge).toBe(node.issued[0]);
+    });
+
+    it('"Setting up your account…" at a busy level: the sentence, and ← Choose another way beside it', async () => {
+        stubNode({ level: (d) => (d === 'words' ? 3 : null) });
+        const s = heldSolver(true);
+        renderJoin({ wordsDoor: true, solveWork: s.solver });
+        await toTheDoors();
+        fireEvent.click(screen.getByTestId('join-words'));
+        await screen.findByText('Setting up your account…');
+        s.progress.at(-1)?.({ done: 1, of: 8, tries: 1_000, rate: 500 });
+        expect(await screen.findByTestId('join-busy')).toHaveTextContent('Or sign in to join now.');
+        expect(screen.getByRole('button', { name: '← Choose another way' })).not.toBeDisabled();
+    });
+
+    // Review 4161724226: no signed work request for a key that is gone.
+    it('a key let go by ← Back takes its work with it: no more work is asked for it', async () => {
+        // A challenge that lives 91 s is renewed a second after it is ready (90 s before it runs out).
+        const node = stubNode({ life: () => 91 });
+        renderJoin({ wordsDoor: true, solveWork: heldSolver().solver });
+        await toTheDoors();
+        await waitFor(() => expect(node.works()).toHaveLength(1));
+        fireEvent.click(screen.getByRole('button', { name: '← Change name' }));
+        fireEvent.click(await screen.findByRole('button', { name: '← Back' }));
+        await screen.findByTestId('join-screen-guard');
+        expect(await loadPendingJoin()).toBeNull();
+        const atBack = node.works().length;
+        await new Promise((r) => setTimeout(r, 2_500));
+        expect(node.works()).toHaveLength(atBack);
+    }, 15_000);
+
     it('from level 3: the busy sentence with this browser\'s own estimate, beside the sign-in, and never a refusal', async () => {
         stubNode({ level: (d) => (d === 'words' ? 3 : null) });
         const s = heldSolver(true);

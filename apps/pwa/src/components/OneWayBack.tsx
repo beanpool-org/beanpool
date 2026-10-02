@@ -54,41 +54,76 @@ export function useOneWayBack(publicKey: string, refreshKey?: unknown): Standing
 
 // ---------- the landing card's schedule, kept in this browser for this account ----------
 
+/**
+ * Two returns, each independent of the other (design §2.5, the guide page): once after a post has stayed up since it
+ * was first put away, and once when the first week is over. ✕ marks every return that is due at that moment as shown,
+ * so it always puts the card away until the next one is due.
+ */
 interface Schedule {
-    /** How many times it was put away. */
-    dismissals: number;
-    /** Posts that had stayed up when it was last put away. */
+    /** It has been put away at least once. */
+    dismissed: boolean;
+    /** Posts that had stayed up when it was first put away. */
     keptPostsAtDismissal: number;
+    /** The return after a post that stayed up has been shown and put away. */
+    postReturnShown: boolean;
+    /** The return when the first week is over has been shown and put away (or was due when it was put away). */
+    weekReturnShown: boolean;
     /** They looked at their 12 words from the card: it is done on the landing screen. */
     checked: boolean;
 }
 
 const scheduleKey = (publicKey: string) => `beanpool_one_way_back_${publicKey}`;
+const NEW_SCHEDULE: Schedule = { dismissed: false, keptPostsAtDismissal: 0, postReturnShown: false, weekReturnShown: false, checked: false };
 
 export function readSchedule(publicKey: string): Schedule {
     try {
         const v = JSON.parse(localStorage.getItem(scheduleKey(publicKey)) || 'null');
         if (v && typeof v === 'object') {
-            return { dismissals: Number(v.dismissals) || 0, keptPostsAtDismissal: Number(v.keptPostsAtDismissal) || 0, checked: v.checked === true };
+            return {
+                dismissed: v.dismissed === true,
+                keptPostsAtDismissal: Number(v.keptPostsAtDismissal) || 0,
+                postReturnShown: v.postReturnShown === true,
+                weekReturnShown: v.weekReturnShown === true,
+                checked: v.checked === true,
+            };
         }
     } catch { /* private window, or not ours */ }
-    return { dismissals: 0, keptPostsAtDismissal: 0, checked: false };
+    return { ...NEW_SCHEDULE };
 }
 
 function writeSchedule(publicKey: string, s: Schedule): void {
     try { localStorage.setItem(scheduleKey(publicKey), JSON.stringify(s)); } catch { /* private window: shown again next time */ }
 }
 
+function postReturnDue(s: Schedule, standing: Standing): boolean {
+    return s.dismissed && !s.postReturnShown && standing.keptPosts > s.keptPostsAtDismissal;
+}
+
+function weekReturnDue(s: Schedule, standing: Standing, now: number): boolean {
+    return !s.weekReturnShown && standing.weekOverAt !== null && now >= standing.weekOverAt;
+}
+
 /**
- * Whether the landing screen shows the card now: until it is put away; once more after a post that stayed up since; once
- * more when the first week is over; then never (Settings keeps it).
+ * Whether the landing screen shows the card now: until it is first put away; then once after a post that stayed up
+ * since, and once when the first week is over, in whichever order they come; then never (Settings keeps it).
  */
 export function landingDue(s: Schedule, standing: Standing, now: number = Date.now()): boolean {
     if (s.checked) return false;
-    if (s.dismissals === 0) return true;
-    if (s.dismissals === 1) return standing.keptPosts > s.keptPostsAtDismissal;
-    if (s.dismissals === 2) return standing.weekOverAt !== null && now >= standing.weekOverAt;
-    return false;
+    if (!s.dismissed) return true;
+    return postReturnDue(s, standing) || weekReturnDue(s, standing, now);
+}
+
+/** ✕: put away until the next return is due. Every return due now counts as shown. */
+export function putAway(s: Schedule, standing: Standing, now: number = Date.now()): Schedule {
+    const postDue = postReturnDue(s, standing);
+    const weekDue = weekReturnDue(s, standing, now);
+    return {
+        ...s,
+        dismissed: true,
+        keptPostsAtDismissal: s.dismissed ? s.keptPostsAtDismissal : standing.keptPosts,
+        postReturnShown: s.postReturnShown || postDue,
+        weekReturnShown: s.weekReturnShown || weekDue,
+    };
 }
 
 // ---------- adding a sign-in ----------
@@ -100,34 +135,69 @@ interface AddSignInProps {
     /** Leaves the page for the provider. Swappable in tests. */
     navigate?: (url: string) => void;
     origin?: string;
-    /** Called just before the page leaves (Safety Backup: the member chose this way). */
-    onLeaving?: () => void;
+    /**
+     * Awaited just before the page leaves (the end of onboarding: the steps every new member has are finished first).
+     * Answering false keeps the page here.
+     */
+    onLeaving?: () => void | boolean | Promise<void | boolean>;
+    /** Ask for the sign-ins as it opens, so the choice is shown at once (the member already chose to add one). */
+    autoStart?: boolean;
 }
 
 /**
  * "Add a sign-in": asks the node which sign-ins it offers (a nonce bound to adding one for this member), then the
  * member picks one and the page leaves for it. Every refusal is a sentence beside the button.
  */
-export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin, onLeaving }: AddSignInProps) {
+export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin, onLeaving, autoStart = false }: AddSignInProps) {
     const [nonce, setNonce] = useState<JoinNonce | null>(null);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
+    const mounted = useRef(true);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
 
     async function open() {
         setBusy(true);
         setMessage(null);
         const got = await requestLinkNonce(identity);
+        if (!mounted.current) return;
         setBusy(false);
         if ('message' in got) setMessage(got.message);
         else setNonce(got.nonce);
     }
 
-    function choose(provider: Parameters<typeof leaveForLink>[1]) {
-        if (!nonce) return;
-        onLeaving?.();
-        const out = leaveForLink(identity, provider, nonce, { navigate, origin });
+    const started = useRef(false);
+    useEffect(() => {
+        if (!autoStart || started.current) return;
+        started.current = true;
+        void open();
+        // Once, as it opens.
+    }, [autoStart]);
+
+    function leave(provider: Parameters<typeof leaveForLink>[1], n: JoinNonce) {
+        const out = leaveForLink(identity, provider, n, { navigate, origin });
         // A nonce is spent on one trip: a sign-in that didn't start asks for another.
         if (!out.ok) { setMessage(out.message); setNonce(null); }
+    }
+
+    async function choose(provider: Parameters<typeof leaveForLink>[1]) {
+        if (!nonce || busy) return;
+        // Nothing to finish first: straight from the tap.
+        if (!onLeaving) return leave(provider, nonce);
+        setBusy(true);
+        let stay = false;
+        try {
+            stay = (await onLeaving()) === false;
+        } catch (e) {
+            console.error('[AddSignIn] could not get ready to leave:', e);
+            setMessage('Something went wrong on this page, so the sign-in didn\'t start. Try again.');
+            stay = true;
+        }
+        if (!mounted.current) return;
+        setBusy(false);
+        if (!stay) leave(provider, nonce);
     }
 
     const offered = nonce ? offeredProviders(nonce) : [];
@@ -144,7 +214,7 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
                 <div className="space-y-2">
                     <p className="text-xs font-semibold text-nature-600 dark:text-nature-300 m-0">Add a sign-in with</p>
                     {offered.map((provider) => (
-                        <button key={provider} type="button" data-testid={`add-sign-in-${provider}`} onClick={() => choose(provider)}
+                        <button key={provider} type="button" data-testid={`add-sign-in-${provider}`} disabled={busy} onClick={() => void choose(provider)}
                             className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                             {providerLabel(provider)}
                         </button>
@@ -209,7 +279,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                         </h2>
                         {placement === 'landing' && (
                             <button type="button" aria-label="Hide this for now"
-                                onClick={() => update({ ...schedule, dismissals: schedule.dismissals + 1, keptPostsAtDismissal: standing?.keptPosts ?? 0 })}
+                                onClick={() => { if (standing) update(putAway(schedule, standing)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] w-11 h-11 flex items-center justify-center rounded-full bg-transparent border-none text-nature-400 hover:text-nature-600 dark:hover:text-nature-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>

@@ -53,6 +53,14 @@ interface Ready extends DoorWorkSolution {
     level: number;
 }
 
+/** Answers null once `signal` is aborted. */
+function stoppedWaiting(signal: AbortSignal): Promise<null> {
+    return new Promise((resolve) => {
+        if (signal.aborted) resolve(null);
+        else signal.addEventListener('abort', () => resolve(null), { once: true });
+    });
+}
+
 export class WordsWork {
     private state: WordsWorkState = { status: 'idle' };
     private ready: Ready | null = null;
@@ -164,14 +172,21 @@ export class WordsWork {
     /**
      * The work for a join, used up by taking it: a fresh solution, or the one being made, waited for. One too close to
      * its end to reach the node in time is made again first; one just made is taken as it is.
+     *
+     * `signal`: the join stopped waiting (the member chose another way). Answers null at once, takes nothing, and the
+     * work carries on being made for this key, ready for the next take.
      */
-    async take(): Promise<WordsWorkTake> {
+    take(): Promise<WordsWorkTake>;
+    take(signal: AbortSignal): Promise<WordsWorkTake | null>;
+    async take(signal?: AbortSignal): Promise<WordsWorkTake | null> {
         if (this.disposed) return this.stopped();
+        if (signal?.aborted) return null;
         const ready = this.ready;
         if (ready && this.fresh(ready, SEND_MARGIN_MS)) return this.use(ready);
         if (ready) this.ready = null; // too close to its end to send
         if (!this.job) this.start();
-        const out = await this.job;
+        const out = await (signal ? Promise.race([this.job, stoppedWaiting(signal)]) : this.job);
+        if (signal?.aborted) return null;
         if (!out || this.disposed) return this.stopped();
         if (!out.ok) return out;
         const made = this.ready as Ready | null;

@@ -95,6 +95,42 @@ describe('on the landing screen: put away, it comes back twice, then lives in Se
         expect(screen.queryByRole('button', { name: 'Hide this for now' })).toBeNull();
     });
 
+    // The two returns are independent (design §2.5, the guide page): neither waits for the other (review 4161724137).
+    it('put away with no post since: it still comes back when the first week is over, then once after a post', async () => {
+        expect(await shown(standing('words', 0))).toBe(true);
+        hide();
+        expect(await shown(standing('words', 0))).toBe(false);
+        // The week is over, and there has been no post: once more.
+        expect(await shown(standing('words', 0, true))).toBe(true);
+        hide();
+        expect(await shown(standing('words', 0, true))).toBe(false);
+        // Then a post that stayed up: once more, its own return.
+        expect(await shown(standing('words', 1, true))).toBe(true);
+        hide();
+        expect(await shown(standing('words', 4, true))).toBe(false);
+    });
+
+    it('✕ always puts it away until the next return is due, even when both returns are due at once', async () => {
+        expect(await shown(standing('words', 0))).toBe(true);
+        hide();
+        // A post stayed up, and the week is over too: one return, and ✕ puts it away for both.
+        expect(await shown(standing('words', 1, true))).toBe(true);
+        hide();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        expect(await shown(standing('words', 1, true))).toBe(false);
+        expect(await shown(standing('words', 3, true))).toBe(false);
+    });
+
+    it('first seen after the week is over: ✕ puts it away, and it comes back once after a post', async () => {
+        expect(await shown(standing('words', 0, true))).toBe(true);
+        hide();
+        expect(screen.queryByTestId('one-way-back-landing')).toBeNull();
+        expect(await shown(standing('words', 0, true))).toBe(false);
+        expect(await shown(standing('words', 1, true))).toBe(true);
+        hide();
+        expect(await shown(standing('words', 2, true))).toBe(false);
+    });
+
     it('"See my 12 words" opens them, and the landing card is done', async () => {
         const onSeeWords = vi.fn();
         vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words'));

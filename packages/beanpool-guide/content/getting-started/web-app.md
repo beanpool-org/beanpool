@@ -2,7 +2,7 @@
 slug: web-app
 title: Using BeanPool in a web browser
 summary: The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, and where the web app's buttons have different names.
-related: the-bean, your-12-words, joining, messages, reporting
+related: home, the-bean, your-12-words, joining, messages, reporting
 ---
 
 ## The same account, a different screen
@@ -13,7 +13,7 @@ Your community can also be used in a web browser, on a computer or a phone. This
 
 The global community at global.beanpool.org is open to anyone, and you can join it right there in a web browser. You need no invite and no phone app.
 
-Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
+Before you join, the page shows **Home**, the **Market** and the **Map** as a visitor sees them: the public cards, listings, photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings.
 
 While the global community has only a few listings, its **Market** also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened. They go once there are enough real listings.
 
@@ -87,7 +87,7 @@ If you joined the global community with 12 words, they are your only way back. A
 ## Different names and places
 
 - **Joining with an invite:** the first step's button says **Create Identity & Join →**. If someone here already has the name you chose, you get it with a number added. **← Back** on **Your Photo** shows your name alone, with **Next →**: change it (up to 20 characters) or keep it, on the same account. If someone already has the new name, the page says so and suggests others.
-- **Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.
+- **Tabs:** the web app has **Home**, **Market**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.
 - **Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.
 - **Posting an Offer or a Need:** use **New Post** on the **Map** page.
 - **Appearance:** the choice is called **Same as device** instead of "Same as phone".

@@ -2,7 +2,7 @@
 slug: the-top-bar
 title: The top bar
 summary: The bean, the small icons that show when something needs you, and the buttons at the top right.
-related: the-bean, communities, my-deals, decisions, messages, notifications
+related: home, the-bean, communities, my-deals, decisions, messages, notifications
 ---
 
 ## What is in it
@@ -78,6 +78,6 @@ Sometimes a green bar shows under the top bar:
 
 ## The tabs
 
-Under the top bar are the tabs: **Market**, **Map**, **Talk**, **Pulse**, **Commons** and **Ledger**. The name of each tab sits above its icon.
+Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon.
 
 On a long page, tap the tab you are already on to jump back to the top. This works on every tab except **Map**.

@@ -2,8 +2,12 @@
 slug: whats-new
 title: What's new
 summary: What changed in each version of the app, in plain words.
-related: the-bean, how-it-works, rules, faq
+related: home, the-bean, how-it-works, rules, faq
 ---
+
+## Home
+
+- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You can customize which cards appear and their order with **Edit home**.
 
 ## Privacy by default
 

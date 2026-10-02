@@ -18,7 +18,7 @@ In the web app, it is in the same place: **Settings**, then **Help & how it work
 
 - **Your community:** its name, and whether its server can be reached right now. Tap it to switch to another community or add one.
 - **Guides:** how BeanPool works, the rules and how decisions are made, and common questions.
-- **How to use the app:** one short page for each task, grouped the way the app is: Market, Map, Talk, Pulse, Commons, Ledger and Settings.
+- **How to use the app:** one short page for each task, grouped the way the app is: Home, Market, Map, Talk, Pulse, Commons, Ledger and Settings.
 - **The BeanPool project:** what is new in this version, and a link to the website beanpool.org, with a **Share** button to send it to a friend.
 
 ## Searching

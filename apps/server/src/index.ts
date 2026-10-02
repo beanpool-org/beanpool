@@ -76,7 +76,7 @@ import { startStandbyHealthWatch } from './services/standby-health.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
 import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
-import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
+import { resumeTakeoverAtBoot, finishTakeoverAfterBoot, settleTakeoverBeforeDatabaseBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -118,6 +118,12 @@ async function main() {
             process.exit(1);
         }
     }
+
+    // Step 2.4: a take-over stopped after it made this server the main server, before its restart, is resumed or rolled
+    // back here, before the database's boot reads the role: the database boots as the main server only once the take-over
+    // has gone on, never first and then rolled back (services/takeover.ts settleTakeoverBeforeDatabaseBoot). Never blocks the
+    // boot.
+    settleTakeoverBeforeDatabaseBoot();
 
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();

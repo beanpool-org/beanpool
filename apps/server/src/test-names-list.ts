@@ -181,7 +181,7 @@ class Phone {
         if (!head || !this.pin!.ring[head.id]) return first;
         for (const a of st.admins ?? []) {
             if (a.pubkey === this.id.pk || !this.pin!.trusted.includes(a.pubkey) || drops.includes(a.pubkey)) continue;
-            const sh = namesSharesToSend(this.pin!, st, this.signer, a.pubkey)[0];
+            const sh = namesSharesToSend(this.pin!, st, this.signer, a.pubkey, drops)[0]; // never vouching for a key it drops
             if (sh) await postShare(this.id, sh);
         }
         return postGen(this.id, g);

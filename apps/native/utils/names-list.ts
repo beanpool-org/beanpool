@@ -286,7 +286,7 @@ export type EachOtherCheck =
  * code can only be compared: with `picked`'s key, or with each admin the server lists; a mismatch pins nothing.
  */
 export async function checkEachOther(
-    store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, state: Pick<NamesState, 'communityId' | 'admins'>,
+    store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, state: Pick<NamesState, 'communityId' | 'admins'> & Partial<Pick<NamesState, 'shares'>>,
     scannedOrTyped: string, picked?: Pick<NamesAdminRow, 'pubkey'> | null,
 ): Promise<EachOtherCheck> {
     const read = readNamesKeyCheck(scannedOrTyped);
@@ -308,7 +308,41 @@ export async function checkEachOther(
     const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
     const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
+    await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
     return { ok: true, pinned: key, mismatch };
+}
+
+/**
+ * The admins this phone checked in person, each with the signatures of the share headers their phone had sent when it
+ * was checked (round 11). Until that admin's phone sends a newer header, it hasn't opened since the check, and it will
+ * send the keys the next time it does: the words say so rather than "meet them". Public values only (keys, signatures).
+ */
+const checkedLabel = (publicKey: string, anchor: string) => `beanpool:names-checked:${publicKey.toLowerCase()}:${communityAddress(anchor) ?? anchor}`;
+const headersFrom = (shares: unknown, key: string): string[] => (Array.isArray(shares) ? shares : [])
+    .filter((x) => (x as { from?: unknown })?.from === key).map((x) => String((x as { signature?: unknown }).signature ?? ''));
+
+async function rememberChecked(store: NamesPinStore, publicKey: string, anchor: string, key: string, shares: unknown): Promise<void> {
+    try {
+        const raw = await store.getItem(checkedLabel(publicKey, anchor));
+        const map = raw ? JSON.parse(raw) as Record<string, string[]> : {};
+        map[key] = headersFrom(shares, key);
+        await store.setItem(checkedLabel(publicKey, anchor), JSON.stringify(map));
+    } catch { /* a convenience for the words only */ }
+}
+
+/** The admins checked in person here whose phones have sent no header since; the rest are forgotten. */
+async function justCheckedNow(store: NamesPinStore, publicKey: string, anchor: string, state: Pick<NamesState, 'shares'>): Promise<string[]> {
+    try {
+        const raw = await store.getItem(checkedLabel(publicKey, anchor));
+        if (!raw) return [];
+        const map = JSON.parse(raw) as Record<string, string[]>;
+        const still: Record<string, string[]> = {};
+        for (const [k, sigs] of Object.entries(map)) if (headersFrom(state.shares, k).every((sig) => sigs.includes(sig))) still[k] = sigs;
+        if (Object.keys(still).length !== Object.keys(map).length) await store.setItem(checkedLabel(publicKey, anchor), JSON.stringify(still));
+        return Object.keys(still);
+    } catch {
+        return [];
+    }
 }
 
 /** "Remove @X's old key" (asked first): the next open makes a new key without it. */
@@ -332,6 +366,8 @@ export interface NamesOpened {
     list: NamesListBody | null;
     /** Lines to show, in words. */
     notices: string[];
+    /** Admins checked in person on this phone whose phones have sent no header since (round 11): they will send. */
+    justChecked?: string[];
     /** The keys this open made a new generation without, if it made one. */
     made: string[] | null;
     /** Whom this open sent the keys to. */
@@ -429,7 +465,8 @@ async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: 
     for (const a of state.admins) {
         const to = a.pubkey.toLowerCase();
         if (to === pin.me || !pin.trusted.includes(to) || drops.includes(to)) continue;
-        const share = namesSharesToSend(pin, state, identity, to)[0];
+        // Never vouching for a key this statement drops, nor one this phone removed by hand (round 11).
+        const share = namesSharesToSend(pin, state, identity, to, drops)[0];
         if (share && (await postShare(anchor, identity, share)).ok) landed = true;
     }
     return landed;
@@ -516,10 +553,11 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     // The rolled-back card's estimate, before anything is read; the exact count comes on the ready read after it.
     const estimate = plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.seen.length - (state.counts?.entries ?? 0)) : 0;
     if (estimate) words.push(NAMES_COPY.lostSinceCopy(estimate));
+    const justChecked = await justCheckedNow(store, identity.publicKey, anchor, state);
     return {
         ok: true,
         value: {
-            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list, notices: words, made, sentTo,
+            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list, notices: words, made, sentTo, justChecked,
             toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
             lost: plan.kind === 'ready' ? gone : estimate,
         },
@@ -639,7 +677,7 @@ export interface OpenedEntry {
  * the holder's newest share header (each is public) names this phone, and no statement on the server's path after that
  * header's head dropped it. Trust isn't mutual: a holder whose phone dropped this key sends nothing until a check.
  */
-export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'generations' | 'shares' | 'current'>, me: string, holders: string[]): string[] {
+export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'generations' | 'shares' | 'current'>, me: string, holders: string[], justChecked: string[] = []): string[] {
     const gens = new Map<string, NamesGeneration>();
     for (const r of Array.isArray(state.generations) ? state.generations : []) {
         const g = readNamesGeneration(r, state.communityId);
@@ -654,6 +692,8 @@ export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'gene
     }
     const mine = me.toLowerCase();
     return holders.filter((h) => {
+        // Checked in person here, and their phone has sent no header since: it sends the keys when it next opens.
+        if (justChecked.includes(h.toLowerCase())) return true;
         const w = newest.get(h.toLowerCase());
         if (!w || !w.trusts.includes(mine)) return false;
         // Walk back from the server's current to that header's head: a drop of this phone on the way means they dropped it.
@@ -670,7 +710,7 @@ export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'gene
 }
 
 /** Every entry, opened where this phone can; open ones by name, then the locked ones. */
-export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'>): OpenedEntry[] {
+export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring' | 'pin' | 'generations' | 'state'> & Partial<Pick<NamesOpened, 'justChecked'>>): OpenedEntry[] {
     const live = new Map<string, ConfirmationRow>();
     for (const c of list.confirmations ?? []) if (c.status !== 'revoked') live.set(c.entryId, c);
     const out = (list.entries ?? []).map((e): OpenedEntry => {
@@ -682,7 +722,7 @@ export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring
         }
         const all = text ? [] : opened.state.admins
             .filter((a) => a.pubkey !== opened.pin.me && opened.pin.trusted.includes(a.pubkey) && (a.keyIds ?? []).includes(e.keyId));
-        const sending = new Set(holdersWhoWillSend(opened.state, opened.pin.me, all.map((a) => a.pubkey)));
+        const sending = new Set(holdersWhoWillSend(opened.state, opened.pin.me, all.map((a) => a.pubkey), opened.justChecked ?? []));
         const holders = all.filter((a) => sending.has(a.pubkey)).map((a) => a.callsign);
         const notTrusting = all.filter((a) => !sending.has(a.pubkey)).map((a) => a.callsign);
         return {
@@ -720,6 +760,12 @@ export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId
     return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyId });
 }
 
+/** Puts an entry id this phone added into its pin's `seen` (ids only; at most NAMES_LIMITS.entries). */
+async function rememberSeen(store: NamesPinStore, publicKey: string, anchor: string, id: string): Promise<void> {
+    const pin = await readNamesPinFrom(store, publicKey, anchor);
+    if (pin && !pin.seen.includes(id) && pin.seen.length < 2000) await writeNamesPinTo(store, publicKey, anchor, { ...pin, seen: [...pin.seen, id] });
+}
+
 /** A new entry's id, chosen when the Add form opens and kept until the add is confirmed (design §8: add is idempotent by id). */
 export const newEntryId = (): string => newNamesEntryId();
 
@@ -741,8 +787,10 @@ export async function saveNamesEntry(
         const sealed = sealedFor(o.ring[head.id], head.id, text, id);
         if (!sealed.ok) return { ok: false as const, status: 0, code: 'bad_text', message: sealed.error };
         const sent = entryId ? await editNamesEntry(anchor, identity, head.id, sealed) : await addNamesEntry(anchor, identity, head.id, sealed);
-        if (!sent.ok && sent.code === 'entry_exists' && !entryId) return { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } };
-        return sent.ok ? { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } } : sent;
+        const landed = sent.ok || (sent.code === 'entry_exists' && !entryId);
+        // An add that landed is seen at once (round 11): a take-over that loses it is said, with no read in between.
+        if (landed && !entryId) await rememberSeen(store, identity.publicKey, anchor, sealed.id);
+        return landed ? { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } } : sent;
     };
     const first = await attempt(opened);
     if (first.ok) return { ok: true, value: { ...first.value, opened: null } };
@@ -1050,7 +1098,7 @@ export const NAMES_COPY = {
 } as const;
 
 /** The plan, in words, for the screen's top card: the refusal or the wait. Null when ready. */
-export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): string | null {
+export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Partial<Pick<NamesOpened, 'justChecked'>>): string | null {
     const { plan, state } = o;
     const name = (k: string) => callsignIn(state, k);
     if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
@@ -1068,7 +1116,7 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): strin
             }
         }
         // "Will send" only for holders whose phones trust this one; the rest get the meeting words (round 9, Addendum 4).
-        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders);
+        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders, o.justChecked ?? []);
         const noTrust = plan.holders.filter((k) => !sending.includes(k)).map(name);
         if (!sending.length && noTrust.length) return NAMES_COPY.holdersNoTrust(noTrust);
         const holders = sending.map(name);

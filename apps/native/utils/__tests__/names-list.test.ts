@@ -9,7 +9,7 @@
  * would. Each phone runs the app's real functions end to end: openNamesList and the asked actions. What the phone sends
  * is recorded and checked for the planted names: nothing readable leaves the phone. The keys and boxes are real.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -70,6 +70,10 @@ const STORE: NamesPinStore = {
     getItem: async (k) => mem.get(k) ?? null, setItem: async (k, v) => { mem.set(k, v); },
     getSecret: async (k) => secrets.get(k) ?? null, setSecret: async (k, v) => { secrets.set(k, v); },
 };
+
+// The stubs below resolve at once, so a test never gives the event loop a turn: on a slow CI runner this file's run holds
+// the vitest worker past its RPC deadline ("Timeout calling onTaskUpdate"). A macrotask between tests lets it report.
+afterEach(() => new Promise<void>((r) => setTimeout(r, 0)));
 
 beforeEach(() => {
     mem.clear();
@@ -643,7 +647,7 @@ describe('C. Drops and removal', () => {
         expect((await open(cy)).plan.kind).toBe('ready');
     });
 
-    it("W2 (round 9) a holder whose phone no longer trusts this one is never said to send: Zed's role removed and given back; Owen's phone (the holder, on its own word) dropped him, so Zed's phone says to meet Owen; after a check, the keys come", async () => {
+    it("W2 (round 9) a holder whose phone no longer trusts this one is never said to send: Zed's role removed and given back; Owen's and Bea's phones (holders on their own word) dropped him, so Zed's phone says to meet one of them; after a check, the keys come", async () => {
         const { node, phones: [owen, bea, zed] } = await community(['Owen', 'Bea', 'Zed']);
         node.admins = [role(owen, 'owner'), role(bea)];
         await open(owen); // 2 drops Zed
@@ -652,16 +656,17 @@ describe('C. Drops and removal', () => {
         for (let i = 0; i < 3; i++) for (const p of [owen, bea]) await open(p);
         sent = [];
         const z = await open(zed);
-        // Bea took key 2 from Owen's box and has said so in no header: not a holder on her own word (Addendum 4).
-        expect(z.plan).toMatchObject({ kind: 'wait', holders: [owen.publicKey] });
-        expect(planWords(z)).toBe(NAMES_COPY.holdersNoTrust(['Owen']));
+        // Bea took key 2 from Owen's box and said so in her own header (round 11): both are holders on their own word.
+        expect(z.plan).toMatchObject({ kind: 'wait', holders: [owen.publicKey, bea.publicKey] });
+        expect(planWords(z)).toBe(NAMES_COPY.holdersNoTrust(['Owen', 'Bea']));
         expect(planWords(z)).not.toMatch(/will send/);
         // A locked entry under that key says the same.
         const k2 = node.current()!.id;
         const e = openEntries({ current: k2, entries: [{ ...node.entries[0], keyId: k2 }], confirmations: [] }, z)[0];
         expect(e.holders).toEqual([]);
-        expect(e.notTrusting).toEqual(['Owen']);
-        expect(NAMES_COPY.lockedEntry(2, 'Owen', e.holders, e.notTrusting)).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen holds it, but their phone doesn’t trust this one yet: meet @Owen and check each other’s phones.');
+        expect(e.notTrusting).toEqual(['Owen', 'Bea']);
+        expect(NAMES_COPY.lockedEntry(2, 'Owen', e.holders, e.notTrusting)).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen or @Bea hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.');
+        expect(NAMES_COPY.lockedEntry(2, 'Owen', [], ['Owen'])).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen holds it, but their phone doesn’t trust this one yet: meet @Owen and check each other’s phones.');
         await meet(node, owen, zed);
         await open(owen);
         expect((await open(zed)).plan.kind).toBe('ready');
@@ -1210,8 +1215,8 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         await removeOldKey(STORE, bea, COMMUNITY, abe.publicKey);
         sent = [];
         const r = await open(bea);
-        // Refused once (Bea holds key 2 from Owen's box but has said so in no header), then her header to Owen, then it lands.
-        expect(sentAs('POST', '/api/names/generations').length).toBe(2);
+        // Bea said she holds key 2 in her own header when she took it (round 11's due rule): it lands at once.
+        expect(sentAs('POST', '/api/names/generations').length).toBe(1);
         expect(sentAs('POST', '/api/names/shares').map((x) => readNamesShare(JSON.parse(x.body), CID)!.to)).not.toContain(abe.publicKey);
         expect(node.current()!).toMatchObject({ maker: bea.publicKey, n: 3, drops: [abe.publicKey] });
         expect(r.notices[0]).toBe(NAMES_COPY.newKeyRemoved(['Abe']));
@@ -1353,8 +1358,8 @@ describe('K. Addendum 4: Follow from a stop, holders on their own word, and name
             const copy = snapshot(node);
             if (keyChange) { await removeOldKey(STORE, owen, COMMUNITY, cy.publicKey); await open(owen); await meet(node, owen, cy); for (const p of [owen, cy, bea]) await open(p); }
             const b = await open(bea);
+            // Only the screen's own calls: the adds, and no read after them (round 11: an add is seen when it lands).
             for (const n of ['One', 'Two']) expect((await saveNamesEntry(COMMUNITY, bea, STORE, b, { name: n, note: '' }, undefined, newEntryId())).ok).toBe(true);
-            await open(bea);
             await open(cy);
             putBack(node, copy);
             let r = await open(bea);
@@ -1409,6 +1414,103 @@ describe('K. Addendum 4: Follow from a stop, holders on their own word, and name
         node.deleted.push(hidden.id);
         expect((await open(bea)).notices.some((w) => w.includes('on the server now'))).toBe(false);
         void owen;
+    });
+});
+
+describe('R. Round 11: the claim never vouches for a key being removed; adds are seen; holders say so; a fresh check', () => {
+    const headersBy = (who: BeanPoolIdentity, from = 0) => sent.slice(from)
+        .filter((x) => x.method === 'POST' && new URL(x.url).pathname === '/api/names/shares' && x.headers['X-Public-Key'] === who.publicKey)
+        .map((x) => readNamesShare(JSON.parse(x.body), CID)!);
+
+    it("R1 (the re-review's :432) Owen taps Remove @Xia; his next statement is refused (ask_for_share) and his claim goes out, then the second POST is lost: the claim vouches for nobody he is removing, Bea never trusts Xia, and no box ever reaches her", async () => {
+        const { node, phones: [owen, bea, zed] } = await community(['Owen', 'Bea', 'Zed']);
+        node.admins = [role(owen, 'owner'), role(bea)]; // Zed removed
+        drop = (req) => (new URL(req.url).pathname === '/api/names/shares' && req.headers['X-Public-Key'] === bea.publicKey ? 'before' : null);
+        await openNamesList(COMMUNITY, bea, STORE); // 2 without Zed; her box to Owen doesn't land
+        drop = null;
+        expect(node.current()!.maker).toBe(bea.publicKey);
+        expect((await open(owen)).plan.kind).toBe('wait');
+        const xia = await admin('Xia');
+        node.admins.push(role(xia));
+        await meet(node, owen, xia);
+        expect((await open(owen)).plan.kind).toBe('wait'); // still waiting: it sends nothing
+        expect((await pinOf(bea))!.trusted).not.toContain(xia.publicKey);
+        // Xia's phone is stolen that day; Owen taps Remove @Xia's old key (her role isn't removed yet).
+        await removeOldKey(STORE, owen, COMMUNITY, xia.publicKey);
+        sent = [];
+        await open(bea); // her box with key 2 reaches Owen
+        let posts = 0;
+        drop = (req) => {
+            if (req.method !== 'POST' || new URL(req.url).pathname !== '/api/names/generations' || req.headers['X-Public-Key'] !== owen.publicKey) return null;
+            posts++;
+            return posts === 2 ? 'before' : null; // the retry after the claim is lost
+        };
+        await openNamesList(COMMUNITY, owen, STORE);
+        drop = null;
+        const claims = headersBy(owen);
+        expect(claims.length).toBeGreaterThan(0);
+        for (const h of claims) expect(h.trusts).not.toContain(xia.publicKey);
+        await open(bea);
+        expect((await pinOf(bea))!.trusted).not.toContain(xia.publicKey);
+        await open(bea);
+        expect([...node.shares.values()].filter((x) => x.to === xia.publicKey)).toEqual([]);
+        // Owen's next open lands the key without Xia; still nothing to her.
+        await open(owen);
+        expect(node.current()!).toMatchObject({ maker: owen.publicKey, drops: [xia.publicKey] });
+        for (const h of headersBy(owen)) expect(h.trusts).not.toContain(xia.publicKey);
+        expect([...node.shares.values()].filter((x) => x.to === xia.publicKey)).toEqual([]);
+    });
+
+    it("R4a (the re-review's :889, words) a phone that took a key from a box says so in its own header: Dan, new, is told Ann will make the new key, not that nobody holds key 2; after Ann opens, the name under 2 opens", async () => {
+        const { node, phones: [ann, owen, zed] } = await community(['Ann', 'Owen', 'Zed']);
+        node.admins = [role(ann, 'owner'), role(owen)];
+        const o = await open(owen); // 2 without Zed
+        const two = node.current()!.id;
+        expect((await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' }, undefined, newEntryId())).ok).toBe(true);
+        await open(ann); // takes 2 from Owen's box, and says so in a header
+        node.admins = [role(ann, 'owner')]; // Owen leaves
+        const dan = await admin('Dan');
+        node.admins.push(role(dan));
+        await meet(node, dan, ann);
+        const d = await open(dan);
+        expect(d.state.nobodyHoldsKey).toBe(false);
+        expect(d.plan).toMatchObject({ kind: 'wait', canMakeNew: false });
+        expect(planWords(d)).not.toMatch(/Nobody who is an admin now holds/);
+        // A new key is due (Owen left): Ann's phone makes it, then sends it (Dan just checked her).
+        expect(planWords(d)).toBe(NAMES_COPY.waitNewKey(['Ann']));
+        for (let i = 0; i < 2; i++) { await open(ann); await open(dan); }
+        const d2 = await open(dan);
+        expect(d2.plan.kind).toBe('ready');
+        expect(openEntries(d2.list!, d2).find((e) => e.keyId === two)?.text?.name).toBe(PLANTED[2]);
+        void zed;
+    });
+
+    it("R4b (the re-review's :889, two admins) Owen made the current key and his phone is lost; Bea taps Remove @Owen: her key without him lands at once, no owner needed", async () => {
+        const { node, phones: [owen, bea, zed] } = await community(['Owen', 'Bea', 'Zed']);
+        node.admins = [role(owen, 'owner'), role(bea)];
+        await open(owen); // 2 without Zed
+        await open(bea); // takes 2 from Owen's box, and says so in a header
+        await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey);
+        sent = [];
+        const b = await open(bea);
+        expect(sentAs('POST', '/api/names/generations').length).toBe(1);
+        expect(node.current()!).toMatchObject({ maker: bea.publicKey, drops: [owen.publicKey] });
+        expect(b.plan.kind).toBe('ready');
+        void zed;
+    });
+
+    it("R5 (the re-review's :642) right after Cy and Owen check each other, Cy's phone opens first: it says Owen will send the keys, not that they must meet", async () => {
+        const { node, phones: [owen, ada] } = await community(['Owen', 'Ada']);
+        const cy = await admin('Cy');
+        node.admins.push(role(cy));
+        await meet(node, cy, owen);
+        const c = await open(cy);
+        expect(c.plan).toMatchObject({ kind: 'wait' });
+        expect(planWords(c)!.startsWith(NAMES_COPY.wait(['Owen']))).toBe(true);
+        expect(planWords(c)).not.toMatch(/meet @Owen/);
+        await open(owen);
+        expect((await open(cy)).plan.kind).toBe('ready');
+        void ada;
     });
 });
 

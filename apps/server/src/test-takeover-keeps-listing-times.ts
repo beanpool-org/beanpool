@@ -31,6 +31,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
 import { spawnNode, post, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -79,7 +80,7 @@ async function child(): Promise<void> {
             owner = Buffer.from(ed25519.getPublicKey(Buffer.from(a.ownerSeedHex, 'hex'))).toString('hex');
             se.seedGenesisMember(owner, 'Anna');
             // A profile photo, which the marketplace asks for before a first listing.
-            db.prepare("UPDATE members SET avatar_url = 'bundled://leaf' WHERE public_key = ?").run(owner);
+            setMemberPhoto(db, owner, 'bundled://leaf');
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();
             await flushTakeoverChecks();

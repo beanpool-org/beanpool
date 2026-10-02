@@ -50,6 +50,7 @@ import { nodeSha256 } from './services/door-work.js';
 import { lockedDm } from './dm-test-payload.js';
 import { getFunnel } from './engine/funnel.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -113,7 +114,7 @@ async function wordsMember(name: string): Promise<Id> {
     const work = { challenge: w.body?.work?.challenge, counters: solveDoorWorkSync(w.body?.work?.challenge, nodeSha256) };
     const j = await call('POST', id, '/api/join', { door: 'words', callsign: name, work });
     if (j.status !== 200) throw new Error(`${name} did not join by 12 words: ${show(j)}`);
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, id.pk);
+    setMemberPhoto(db, id.pk, AVATAR);
     return id;
 }
 /** Joins with a Google sign-in, with a photo. */
@@ -122,14 +123,15 @@ async function signInMember(name: string, sub: string): Promise<Id> {
     const n = await call('POST', id, '/api/join/sso-nonce', {});
     const j = await call('POST', id, '/api/join', { callsign: name, provider: 'google', idToken: mint(sub, n.body?.nonce), nonce: n.body?.nonce });
     if (j.status !== 200) throw new Error(`${name} did not join with a sign-in: ${show(j)}`);
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, id.pk);
+    setMemberPhoto(db, id.pk, AVATAR);
     return id;
 }
 /** A member of `daysAgo` days, written straight in (as test-global-moderation does), to report with. */
 function oldMember(name: string, daysAgo: number, owner: Id): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', ?, 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }

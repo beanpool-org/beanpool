@@ -46,6 +46,7 @@ if (!DATA_DIR) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory')
 
 const se = await import('./state-engine.js');
 const { db } = await import('./db/db.js');
+const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
 const { setNodeRole } = await import('./config/node-role.js');
 const { initAdminPassword } = await import('./config/local-config.js');
 const { checkAdminAuth } = await import('./admin-auth.js');
@@ -232,9 +233,10 @@ async function main() {
     se.seedGenesisMember(gwen, 'Gwen');
     const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
     for (const [key, name] of [[wren, 'Wren Calloway'], [juniper, 'Juniper Holt']] as const) {
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, updated_at)
-                    VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-            .run(key, name, gwen, `INV-${name.split(' ')[0]}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, updated_at)
+                    VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+            .run(key, name, gwen, `INV-${name.split(' ')[0]}`);
+        setMemberPhoto(db, key, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
     }
     db.prepare(`INSERT INTO invalidated_keys (public_key, reason, rekeyed_to) VALUES (?, 'rekey', ?)`).run(wrenOld, wren);
@@ -308,8 +310,9 @@ async function main() {
     assert(wrenObjects.every((k) => !inStore(k)), `their DM photos' stored objects are gone (${wrenObjects.filter(inStore).length} left)`);
     assert(juniperObjects.every(inStore) && objectsOf(juniper).length === 1, "Juniper's photo, row and object, is still there");
 
-    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(wren) as { avatar_url: string | null };
-    assert(row.avatar_url === null, 'their picture is gone from their row (it was never a stored object)');
+    const row = db.prepare('SELECT avatar_ref, avatar_bytes FROM members WHERE public_key = ?').get(wren) as { avatar_ref: string | null; avatar_bytes: number | null };
+    assert(row.avatar_ref === null && row.avatar_bytes === null && getMemberPhoto(db, wren) === null,
+        'their picture is gone: from member_photos, and its reference from their row (it was never a stored object)');
     const after = await avatars.getAvatar(wren);
     assert(after.status === 404, `the avatar route answers 404 for them (${after.status})`);
     assert(!avatars.cache.get(wren), "and the route's memory no longer holds their picture's bytes");

@@ -335,7 +335,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
@@ -404,7 +404,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {

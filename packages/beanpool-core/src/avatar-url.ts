@@ -1,26 +1,32 @@
 /**
- * The ONE place a stored avatar value becomes a URL this node emits, and the ONE place that
- * decides whether a stored value is a real avatar at all.
+ * The ONE place a member's avatar becomes a URL this node emits, and the ONE place that decides
+ * whether a stored value is a real avatar at all.
  *
- * Two problems live here.
+ * Three problems live here.
  *
  * STALENESS. `/api/avatar/<pk>?size=thumb` carried no version, so a changed photo kept the
  * same URL. Every client that caches by URL — expo-image with `cachePolicy="memory-disk"` on
  * the phone, and the browser for the PWA — kept serving the old bytes, and the route's
  * `must-revalidate` + ETag never got the chance to say otherwise. The URL now carries `&v=`,
- * derived from the CONTENT of the stored avatar. Because it is derived from the content, it
- * changes on every write path — profile update, enterprise or group edit, federation import,
- * restore, prune — without any of them having to remember to invalidate anything. Fixing this
- * at the server fixes the builds already on members' phones, and the PWA, as soon as a node
- * updates.
+ * derived from the CONTENT of the stored avatar (avatarVersionOf), so a changed photo is a new
+ * URL. Fixing this at the server fixed the builds already on members' phones, and the PWA, as
+ * soon as a node updated.
  *
- * SELF-REFERENCE. Installed app builds read `members.avatar_url` out of their synced local
- * row — which since #725 holds this node's own `/api/avatar/…` string — and post it straight
- * back as `avatar` on the next profile save. The node stored it, and from then on
- * `GET /api/avatar/<pk>` 404d: the photo was gone. Such a row now reads as NO avatar
+ * SELF-REFERENCE. Installed app builds read the avatar out of their synced local row — which
+ * since #725 holds this node's own `/api/avatar/…` string — and post it straight back as
+ * `avatar` on the next profile save. The node stored it, and from then on
+ * `GET /api/avatar/<pk>` 404d: the photo was gone. Such a value reads as NO avatar
  * (emitted null, and no photo for the marketplace gate), so members see their initials rather
  * than a blank ring and the phone's existing self-heal republishes the canonical copy.
  * `isSelfAvatarUrl` is the write-side half: see the server's `engine/members.ts` and `db/db.ts`.
+ *
+ * COST. A photo is about 27 KB of base64. While it sat in its member's row, every list of members
+ * read every photo to version its URL: at about 6,400 members with photos one full member list
+ * ran a 256 MB heap out of memory (the global node's load rehearsal, 2026-10-02). So the photo
+ * lives in its own table (the server's `member_photos`), and the members row keeps only its
+ * reference, `avatar_ref` (avatarRefOf), written with the photo: its version, or a shipped
+ * picture's name. Every URL is made from the reference alone (avatarUrlOf), so no list, count
+ * or URL reads a photo, and each is the URL the node made when the photo sat in the row.
  *
  * It lives in @beanpool/core because the emission sites are split across two packages — the
  * server's routes and state engine, and @beanpool/engine's posts, messaging and social
@@ -68,77 +74,48 @@ export function isServableAvatarValue(stored: string | null | undefined): stored
 }
 
 /**
- * Content-derived version cache.
+ * A short, stable, content-derived version for a stored avatar value (trimmed): the first 8 hex
+ * characters of its SHA-256.
  *
- * Hashing a stored avatar is cheap once and wasteful per row: a members list re-derives the
- * same version for the same unchanged bytes on every request. So the version is memoised per
- * id, and reused only when the stored string is byte-for-byte what it was — an exact `===`,
- * never a length or prefix sample, so a changed avatar can never keep an old version. That
- * comparison is a memcmp of two strings already in memory; the hash is a SHA-256 over up to
- * 2 MB, which is what we are avoiding on every row of every list.
- *
- * Bounded like `AvatarCache`, and for the same reason: the entries hold avatar-sized strings,
- * so an unbounded map is a slow memory leak on a node with many members. Least-recently-used
- * is evicted first.
+ * Same bytes in, same version out, for the life of the node and across restarts — it is a
+ * hash, not a counter, so a restore or an import that brings back an older photo brings back
+ * its old version too, which is correct: the bytes really are those bytes. Worked out once, as
+ * the photo is written (avatarRefOf), never per row of a list.
  */
-const MAX_VERSION_CACHE_CHARS = 8 * 1024 * 1024;
-
-interface VersionCacheEntry {
-    stored: string;
-    version: string;
+export function avatarVersionOf(stored: string): string {
+    return bytesToHex(sha256(utf8ToBytes(stored))).slice(0, 8);
 }
 
-const versionCache = new Map<string, VersionCacheEntry>();
-let versionCacheChars = 0;
-
-/** Test seam: drop every memoised version, so a suite can prove the derivation, not the cache. */
-export function clearAvatarVersionCache(): void {
-    versionCache.clear();
-    versionCacheChars = 0;
-}
-
-/** Test seam: how much the memo is holding. */
-export function avatarVersionCacheStats(): { count: number; chars: number } {
-    return { count: versionCache.size, chars: versionCacheChars };
+/** Is this avatar a shipped picture (`bundled://<name>`), named rather than stored as bytes? */
+export function isBundledAvatar(value: string): boolean {
+    return value.trim().startsWith('bundled://');
 }
 
 /**
- * A short, stable, content-derived version for a stored avatar value.
- *
- * Same bytes in, same version out, for the life of the node and across restarts — it is a
- * hash, not a counter, so a restore or a federation import that brings back an older photo
- * brings back its old version too, which is correct: the bytes really are those bytes.
+ * What a member's row keeps of their avatar (the server's `members.avatar_ref`): everything
+ * avatarUrlOf needs, and nothing of the photo. Null when the stored value is not one the node
+ * serves (isServableAvatarValue); a shipped picture's `bundled://…` exactly as stored, since it
+ * is emitted as it is (its name versions it); otherwise the photo's version, avatarVersionOf
+ * its trimmed value, which is what goes in the URL's `v`. `versionOf` is avatarVersionOf by
+ * default; a server passes the same digest by `node:crypto`, which this package must not import
+ * (see the note on `@noble/hashes` above) and which is ten times faster over a photo.
  */
-export function avatarVersionOf(id: string, stored: string): string {
-    const cached = versionCache.get(id);
-    if (cached && cached.stored === stored) {
-        // Refresh LRU position.
-        versionCache.delete(id);
-        versionCache.set(id, cached);
-        return cached.version;
-    }
+export function avatarRefOf(
+    stored: string | null | undefined,
+    versionOf: (trimmed: string) => string = avatarVersionOf,
+): string | null {
+    if (!isServableAvatarValue(stored)) return null;
+    if (isBundledAvatar(stored)) return stored;
+    return versionOf(stored.trim());
+}
 
-    const version = bytesToHex(sha256(utf8ToBytes(stored))).slice(0, 8);
-
-    if (cached) {
-        versionCacheChars -= cached.stored.length;
-        versionCache.delete(id);
-    }
-    while (versionCacheChars + stored.length > MAX_VERSION_CACHE_CHARS && versionCache.size > 0) {
-        const oldestKey = versionCache.keys().next().value;
-        if (!oldestKey) break;
-        const oldest = versionCache.get(oldestKey);
-        if (oldest) versionCacheChars -= oldest.stored.length;
-        versionCache.delete(oldestKey);
-    }
-    // A single avatar larger than the whole budget is served without being memoised rather
-    // than evicting everything else to hold it.
-    if (versionCacheChars + stored.length <= MAX_VERSION_CACHE_CHARS) {
-        versionCache.set(id, { stored, version });
-        versionCacheChars += stored.length;
-    }
-
-    return version;
+/**
+ * The content version an avatar's key is made with (configureAvatarKeys), from its reference: a
+ * photo's reference is its version; a shipped picture's is avatarVersionOf its name, as when the
+ * name sat in the row (its URL is the name itself, which carries no key, so no app is given one).
+ */
+export function avatarVersionOfRef(ref: string): string {
+    return isBundledAvatar(ref) ? avatarVersionOf(ref.trim()) : ref;
 }
 
 /**
@@ -162,21 +139,19 @@ export function configureAvatarKeys(keyer: AvatarKeyer | null): void {
 }
 
 /**
- * The avatar URL to emit for a member, enterprise, treasury or group.
+ * The avatar URL to emit for a member, enterprise or treasury (each a members row).
  *
- * @param id      the key `/api/avatar/:pubkey` will be looked up by — a member public key, an
- *                enterprise or treasury pubkey, or a group id.
- * @param stored  the raw stored `avatar_url`, exactly as the row holds it.
+ * @param id   the key `/api/avatar/:pubkey` will be looked up by — a member public key, an
+ *             enterprise or treasury pubkey.
+ * @param ref  the row's `avatar_ref` (avatarRefOf), exactly as the row holds it.
  *
- * Returns null when there is nothing servable, `bundled://…` unchanged (it names a shipped
- * asset, so it is already versioned by its name and needs no buster), and otherwise the
+ * Returns null when there is no avatar, a shipped picture's `bundled://…` unchanged (it names a
+ * shipped asset, so it is already versioned by its name and needs no buster), and otherwise the
  * versioned route URL, with its member-only key where the node has one (configureAvatarKeys).
  */
-export function avatarUrlFor(id: string, stored: string | null | undefined): string | null {
-    if (!isServableAvatarValue(stored)) return null;
-    const trimmed = stored.trim();
-    if (trimmed.startsWith('bundled://')) return stored;
-    const version = avatarVersionOf(id, trimmed);
-    const url = `/api/avatar/${id}?size=thumb&v=${version}`;
-    return avatarKeyer ? `${url}&k=${avatarKeyer(id, version)}` : url;
+export function avatarUrlOf(id: string, ref: string | null | undefined): string | null {
+    if (!ref) return null;
+    if (isBundledAvatar(ref)) return ref;
+    const url = `/api/avatar/${id}?size=thumb&v=${ref}`;
+    return avatarKeyer ? `${url}&k=${avatarKeyer(id, ref)}` : url;
 }

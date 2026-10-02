@@ -87,6 +87,7 @@ async function main() {
     const { getMembersVersion, getPostsVersion } = await import('./engine/versions.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
     const { grantNodeRole, revokeNodeRole } = await import('./engine/node-roles.js');
+    const { setMemberPhoto } = await import('@beanpool/engine');
 
     initAdminPassword();
     await initTls();
@@ -102,12 +103,13 @@ async function main() {
     };
 
     // Members two months old, past any new account's limits.
-    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'seed', 'bundled://avatar-1')`);
+    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-60 days'), 'seed', 'seed')`);
     const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
     const member = (callsign: string): Id => {
         const id = keypair();
         insertMember.run(id.pubKeyHex, callsign);
+        setMemberPhoto(db, id.pubKeyHex, 'bundled://avatar-1');
         insertAccount.run(id.pubKeyHex);
         return id;
     };

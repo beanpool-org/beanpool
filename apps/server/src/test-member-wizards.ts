@@ -73,6 +73,7 @@ import { ledger } from './engine/ledger.js';
 import { recordActivity } from './engine/members.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0;
 let passed = 0;
@@ -143,9 +144,10 @@ function makeMember(callsign: string, pubkey?: string): string {
     const pk = pubkey || generateValidPubkey();
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pk, uniqueCallsign);
+    setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }

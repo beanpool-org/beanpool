@@ -25,7 +25,7 @@ import {
     handOverGroupLead, getGroupLead,
     setMemberRole, isGroupMember, getMemberGroupIds, createPost, getPosts, signSyncPayload,
 } from './state-engine.js';
-import { getStateHash, getReplicaConsistency } from '@beanpool/engine';
+import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { emptyCopiedTables } from './engine/copied-tables.js';
 import { addConnector } from './connector-manager.js';
@@ -52,8 +52,9 @@ function attempt<T>(fn: () => T): T | undefined {
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    setMemberPhoto(db, pub, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }

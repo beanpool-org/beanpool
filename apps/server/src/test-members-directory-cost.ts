@@ -68,13 +68,27 @@ async function main() {
     const { initAdminPassword } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
     const { withAreaDistances } = await import('./engine/member-area.js');
-    const { avatarUrlFor } = await import('@beanpool/core');
+    const { isSelfAvatarUrl } = await import('@beanpool/core');
+    const { setMemberPhoto } = await import('@beanpool/engine');
 
     initAdminPassword();
     await initTls();
     initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+
+    /**
+     * The URL the route made from a photo held in the member's row, before photos moved out of it (origin/main 09c2588d
+     * @beanpool/core avatarUrlFor; no member-only keys here): the oracle's, from the photo each member was given.
+     */
+    const oldAvatarUrl = (id: string, stored: string | null | undefined): string | null => {
+        if (!stored || !stored.trim() || isSelfAvatarUrl(stored)) return null;
+        const trimmed = stored.trim();
+        if (trimmed.startsWith('bundled://')) return stored;
+        return `/api/avatar/${id}?size=thumb&v=${crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8)}`;
+    };
+    // Each member's photo as the test gave it: what their row held before photos moved out.
+    const given = new Map<string, string | null>();
 
     /**
      * The route as it was before this change (origin/main 2a0547c0), the oracle: every non-pruned member as a Member,
@@ -95,7 +109,7 @@ async function main() {
             callsign: m.callsign,
             joinedAt: m.joinedAt,
             nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
+            avatarUrl: oldAvatarUrl(m.publicKey, given.get(m.publicKey)),
             profileUpdatedAt: m.profileUpdatedAt,
             earnedCredit: m.earnedCredit ?? 0,
             elderVouchedBy: m.elderVouchedBy || null,
@@ -104,14 +118,20 @@ async function main() {
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
     };
 
-    const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, avatar_url,
+    const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status,
                                    profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury, is_visitor, area_lat, area_lng)
-                               VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @avatar, @profile, @earned, @elder, @archetype,
+                               VALUES (@pk, @callsign, @joined, NULL, 'TEST', @status, @profile, @earned, @elder, @archetype,
                                    @treasury, @visitor, @lat, @lng)`);
-    const row = (pk: string, callsign: string, o: Partial<Record<string, unknown>> = {}) => insert.run({
-        pk, callsign, joined: '2026-03-01T00:00:00.000Z', status: 'active', avatar: null, profile: null, earned: 0, elder: null,
-        archetype: null, treasury: 0, visitor: 0, lat: null, lng: null, ...o,
-    });
+    // A photo goes in by its one writer (member_photos, and the row's avatar_ref), as a profile save puts it there.
+    const row = (pk: string, callsign: string, o: Partial<Record<string, unknown>> = {}) => {
+        const { avatar = null, ...rest } = o as Record<string, unknown> & { avatar?: string | null };
+        insert.run({
+            pk, callsign, joined: '2026-03-01T00:00:00.000Z', status: 'active', profile: null, earned: 0, elder: null,
+            archetype: null, treasury: 0, visitor: 0, lat: null, lng: null, ...rest,
+        });
+        given.set(pk, avatar);
+        if (avatar !== null) setMemberPhoto(db as any, pk, avatar);
+    };
 
     // ── 1. the same bytes, for every kind of row and cursor ──────────────────────────────────────────────────────────
     const reader = keypair();

@@ -69,7 +69,7 @@ import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -507,7 +507,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     const r = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
-                m.callsign, m.avatar_url
+                m.callsign, m.avatar_ref
            FROM pulse_items i
            LEFT JOIN creator_channels c ON c.id = i.channel_id
            LEFT JOIN members m ON m.public_key = i.owner_pubkey
@@ -522,7 +522,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: avatarUrlFor(r.owner_pubkey, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.owner_pubkey, r.avatar_ref),
         platform: r.platform,
         category: r.category,
         url: r.url || null,

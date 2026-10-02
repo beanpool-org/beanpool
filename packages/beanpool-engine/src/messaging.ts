@@ -3,7 +3,7 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { postPhotoUrl } from './photo-url.js';
 
 type Db = Database.Database;
@@ -142,7 +142,7 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
     const membersByPubkey = new Map<string, any>();
     if (allPeerPubkeys.size > 0) {
         const pubkeysArray = Array.from(allPeerPubkeys);
-        const allMembers = selectInChunks(db, pubkeysArray, ph => `SELECT public_key, callsign, avatar_url FROM members WHERE public_key IN (${ph})`);
+        const allMembers = selectInChunks(db, pubkeysArray, ph => `SELECT public_key, callsign, avatar_ref FROM members WHERE public_key IN (${ph})`);
 
         for (const member of allMembers) {
             membersByPubkey.set(member.public_key, member);
@@ -180,7 +180,7 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
             const peerMember = membersByPubkey.get(peerPubkey);
             if (peerMember) {
                 peerCallsign = peerMember.callsign;
-                peerAvatar = avatarUrlFor(peerMember.public_key, peerMember.avatar_url);
+                peerAvatar = avatarUrlOf(peerMember.public_key, peerMember.avatar_ref);
             }
         }
 

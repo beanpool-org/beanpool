@@ -42,7 +42,7 @@ import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor, isSyntheticAccount } from '@beanpool/core';
+import { avatarUrlOf, isSyntheticAccount } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { answerPotPaused } from '../engine/audit.js';
 
@@ -181,7 +181,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
-            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
             !(r.status === 'suspended' || r.status === 'disabled')
             || (!!viewer && canAdministerTreasury(viewer, r.public_key))
@@ -231,7 +231,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 return {
                     publicKey: r.public_key, name: r.callsign,
                     callsign: r.callsign,
-                    avatar: avatarUrlFor(r.public_key, r.avatar_url),
+                    avatar: avatarUrlOf(r.public_key, r.avatar_ref),
                     avatarUrl: r.avatar_url,
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     allowance: floorInfo.allowance,
@@ -297,7 +297,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
         const rows = db.prepare(
-            `SELECT public_key, callsign, avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
+            `SELECT public_key, callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
              FROM members
              WHERE is_treasury = 1
                AND lat IS NOT NULL
@@ -311,7 +311,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 publicKey: r.public_key,
                 name: r.callsign || 'Unnamed',
                 callsign: r.callsign || 'Unnamed',
-                avatar: avatarUrlFor(r.public_key, r.avatar_url),
+                avatar: avatarUrlOf(r.public_key, r.avatar_ref),
                 avatarUrl: r.avatar_url,
                 purpose: r.purpose ?? null,
                 lat: Number(r.lat),
@@ -327,7 +327,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
@@ -386,7 +386,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const pendingBids = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+                   m.callsign as peer_callsign, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) as peer_avatar
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
             LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
@@ -397,7 +397,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const activeDeals = isOperator ? (db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, m.avatar_url as peer_avatar,
+                   m.callsign as peer_callsign, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) as peer_avatar,
                    CASE WHEN t.buyer_pubkey = ? THEN 'pay' ELSE 'fulfill' END as action_required
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
@@ -416,7 +416,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             callsign: m.callsign,
-            avatar: avatarUrlFor(treasury, m.avatar_url),
+            avatar: avatarUrlOf(treasury, m.avatar_ref),
             avatarUrl: m.avatar_url,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             allowance: floorInfo.allowance,
@@ -647,7 +647,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
-        // G9a-3: the enterprise routes hand members.avatar_url out as stored (avatarUrl), so the photo rule, as above.
+        // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above.
         if (!isAcceptablePhotoValue(String(avatar))) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
         try {
             ctx.body = {

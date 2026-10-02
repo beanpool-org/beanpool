@@ -26,6 +26,7 @@
 import { initStateEngine } from './state-engine.js';
 import { getFunnel } from './engine/funnel.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -56,9 +57,10 @@ function addMember(
     key: string, callsign: string, joinedAt: string, avatar: string | null,
     opts: { homeNode?: string | null; inviteCode?: string } = {},
 ): void {
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, home_node_url)
-                VALUES (?, ?, ?, 'seed', ?, ?, ?)`)
-        .run(key, callsign, joinedAt, opts.inviteCode ?? 'x', avatar, opts.homeNode ?? null);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url)
+                VALUES (?, ?, ?, 'seed', ?, ?)`)
+        .run(key, callsign, joinedAt, opts.inviteCode ?? 'x', opts.homeNode ?? null);
+    setMemberPhoto(db, key, avatar);
 }
 
 function addPost(id: string, author: string, at: string, originNode: string | null = null): void {

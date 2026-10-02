@@ -55,6 +55,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -265,7 +266,7 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             // A photo, which posting asks of its author.
-            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run('data:image/png;base64,iVBORw0KGgo=', a.owner);
+            setMemberPhoto(db, a.owner, 'data:image/png;base64,iVBORw0KGgo=');
             const kept = se.createGroup({ name: 'Garden', createdBy: a.owner, joinPolicy: 'open' });
             const left = se.createGroup({ name: 'Choir', createdBy: a.owner, joinPolicy: 'open' });
             const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, [], false, undefined, false,

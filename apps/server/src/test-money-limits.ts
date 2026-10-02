@@ -108,6 +108,7 @@ import { updateGatewayConfig } from './config/local-config.js';
 import { DEFAULT_GATEWAY_CONFIG } from './config/gateway.js';
 import { WRITER_LIMITS, MONEY_LIMITS } from './config/writer-limits.js';
 import { admitMoneyActs } from './engine/money-limits.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--money-limits-child';
@@ -187,8 +188,9 @@ let tradie: Id;
 /** A member who joined a week ago, with a profile photo and name (the marketplace asks for both) and `balance` Beans. */
 function member(name: string, balance = 1_000): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
     return id;
@@ -288,7 +290,7 @@ const enterprise = async (keeper: Id, name: string): Promise<string> => {
     const pk = r.body?.publicKey as string;
     if (!pk) throw new Error(`setup: ${keeper.name} could not start ${name}: ${show(r)}`);
     // The marketplace asks every author for a profile photo first, an enterprise too.
-    db.prepare("UPDATE members SET avatar_url = 'https://example.com/e.jpg' WHERE public_key = ?").run(pk);
+    setMemberPhoto(db, pk, 'https://example.com/e.jpg');
     return pk;
 };
 const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', credits: 0, authorPublicKey: id.pk });
@@ -372,13 +374,15 @@ async function runChild(): Promise<void> {
     await initTls();
     initStateEngine();
     if (!getMember(seed.owner)) seedGenesisMember(seed.owner, 'Owner');
-    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                               VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`);
+    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                               VALUES (?, ?, ?, ?, 'TEST', 'active')`);
     // Seeded once: a restart on the same data finds the rows there and changes nothing.
     const first = !getMember(seed.tradie);
     insert.run(seed.tradie, 'Tradie', ago(7 * DAY), seed.owner);
+    setMemberPhoto(db, seed.tradie, 'https://example.com/a.jpg');
     for (const m of seed.members) {
         insert.run(m.pk, m.name, ago(7 * DAY), seed.owner);
+        setMemberPhoto(db, m.pk, 'https://example.com/a.jpg');
         if (first) {
             db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(m.pk, m.balance, ledger.getCurrentEpoch());
             if (m.trades) completedTrade(m.pk, seed.tradie);

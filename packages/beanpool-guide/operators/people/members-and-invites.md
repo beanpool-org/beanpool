@@ -17,6 +17,22 @@ Joining with a code is signed by the new member's own key, from the app or the w
 
 **The key vault at the global community's door.** An app built with BeanPool's key vault can tie its sign-in at the door to a ticket from the vault, so that one sign-in both joins and keeps the member's sign-in copy at the vault. The door checks the ticket itself, with the vault's public keys, which go in the server's .env as BEANPOOL_VAULT_TICKET_KEYS: the same value the app is built with, newest key first, two at most. The server never contacts the vault and keeps nothing of the ticket. Give a standby the same line in its own .env: it is not copied. Without the line, or with one that isn't one or two keys of 64 characters (0–9 and a–f), the door takes no tickets. The log says so when the server starts, the door tells every app that asks, and an app then joins with the door's own sign-in check, as before. **On any other server, leave it empty:** your door, if it is open, needs nothing of BeanPool's.
 
+## What the open door keeps
+
+For each member who joined through the open door, your server keeps a small record beside their account:
+
+- **How they came in**: 12 words, Google, Apple or Facebook. The Onboarding Funnel counts joins by it, and it sets which new-account limits they have (see A member's page, below).
+- **For a sign-in, a scrambled reference to that sign-in account**: never its email, its name or the provider's id for it. It is made with a key kept in a file beside the database, data/open-join.key, never in the database. It is what makes one sign-in account one member, and what turns a removed member's sign-in away. **For 12 words there is nothing like it**: the person is only their key and the name they chose.
+- **When they joined.** Their new-account limits are counted from it.
+- **A scrambled reference to the internet connection they joined from**, for a day, never the address. It sets how much setting up a join from that connection asks, and the ceilings (see Rate limits). For a member you remove within a day of their joining it is kept for 7 days from the join (below), and never longer for someone who deleted their own account. A standby never copies it.
+- **A random label shared by everyone who joined from one connection within a day of each other**: not the address, and not worked out from it. It makes their reports count as one, and shows you who joined together (see Reports and takedowns). It is cleared when a member who is not suspended or removed deletes their own account.
+
+The setting up itself is not kept. The server checks it, and remembers only that it was used, until it runs out 10 minutes after it was handed out. The key it is checked with lives in memory: a restart, or a standby taking over, makes any setting up still in progress start again, which the apps do by themselves.
+
+A standby copies these records (all but the connection's reference), and so does the take-over bundle, so a server that takes over still knows who joined which way. A 12-words join needs no door key: a server without data/open-join.key turns sign-ins away and still takes 12-words joins.
+
+**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from the app at any time. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does.
+
 ## Who may invite
 
 Open **People & Safety**, then **Invites & QR**. At the top, **Who may invite** says who can bring people into the community: make an invite, or answer someone who asks to join. Pick one and tap **Save who may invite**.
@@ -92,7 +108,21 @@ Owners and admins can:
 
 Only an owner can suspend an owner, or remove an owner or an admin. Nobody can remove the last owner.
 
-**Removing someone from a community with an open door is a speed bump, not a wall.** Their key is shut out for good, and if they had joined within a day, new 12-words accounts from their network take longer to set up for a week. But anyone can make a new account in about a minute with new 12 words, and someone removed with their Google account can come back that way too. So what protects the community is how little a new account can do: someone who joined with 12 words has new-account limits for their first 7 days (2 posts, 4 photos and 3 new people a day), and one report from an established member hides their post until a moderator looks. Adding a sign-in puts them on the usual new-account limits.
+**Removing someone from a community with an open door is a speed bump, not a wall.** What it does:
+
+- Their key is shut out for good: every request it signs is refused, and no door takes it back.
+- The sign-in account they joined with, if any, can't join again, and can't be added to another account later.
+- If they joined within a day, the scrambled reference to their connection is kept for 7 days from their join, and every 12-words join from that connection meanwhile asks for at least level 4 of setting up, where 5 is the most (see Rate limits). Their neighbours on that connection are asked for the same. A sign-in join from there is not slowed.
+
+What it does not do:
+
+- It doesn't stop the person coming back. Anyone can make a new account in about a minute with new 12 words, and someone removed with their Google account can come back that way too. There is no way to stop that without knowing who people are, which is what the 12-words door exists to avoid.
+- For someone removed more than a day after joining, nothing about their connection is kept: the server had already cleared it.
+- A standby that takes over has no connection references, so it remembers no removed connection.
+
+So what protects the community is how little a new account can do. Someone who joined with 12 words has new-account limits for their first 7 days and until 3 of their posts have stayed up: 2 posts, 4 photos and 3 new people to message a day (someone who joined with a sign-in: 3, 5 and 10, for their first 3 days). One report from an established member hides their post until a moderator looks. Removing them again is one action, and a report shows who joined with them (see Reports and takedowns). Adding a sign-in puts them on the usual new-account limits.
+
+A member who deletes their own account is not removed, and nothing about their connection is kept longer. If they were not suspended or removed at the time, the sign-in they joined with is freed and can join again; a suspended or removed member's stays turned away.
 
 ## Things to know
 

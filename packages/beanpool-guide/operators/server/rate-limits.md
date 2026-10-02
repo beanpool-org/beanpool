@@ -11,7 +11,7 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 - **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.
 - **Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.
-- **The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: from the 10th join an hour from one address, each new account's setting-up takes a little longer, in steps at the 10th, 30th, 100th and 200th, and a step more when the whole community is taking hundreds of 12-words accounts in 10 minutes. A join is refused only past 500 12-words accounts an hour or 2,000 a day from one address (the sign-in way stays open to them), or 1,000 an hour or 5,000 a day by sign-in. Each of these numbers can be changed with a node_config row named doorNumbers. and the number's name (in the server's code, engine/door-signal.ts); there is no Settings screen for them, and a standby does not copy them.
+- **The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.
 - **New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.
 - **Settings**: 300 requests a minute per internet address.
 - **Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.
@@ -19,6 +19,31 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 - **Reports**: 10 an hour per member.
 
 ![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
+
+## The open door's numbers
+
+On a community whose door is open (the global community), a 12-words join asks the person's phone or browser for a moment of setting-up work. It runs while they type their name, so at ordinary times nobody waits. The work has levels from 0 to 5, and each level doubles it. In tests on a phone emulator, levels 0 to 2 took under a second, level 3 about 3 to 6 seconds and level 5 about 6 to 26 seconds; an old phone takes longer, and none has been measured yet. From level 3 the app tells the person about how long it will take on their phone, with the sign-in way beside it. A sign-in join asks no work at all until a connection is very busy. The work never decides who gets in: anyone with a computer can do it quickly. It turns a crowd's wait into seconds instead of a refusal, and makes a flood of joins cost whoever makes them.
+
+How the level is set:
+
+- **A 12-words join**: how many of the connection's steps it has reached, plus how many of the community's, at most 5. From a connection you removed a newcomer from in the last 7 days (see Members and invites), at least removedNetworkLevel.
+- **A sign-in join**: no work before the connection's signInWorkFrom-th join in the hour. From there, the connection's steps less signInDiscount, never below 0.
+
+The numbers, by name, with their defaults:
+
+- **networkSteps**, 10,30,100,200: the joins from one connection in the last hour, both ways in and this one included, at which each of the connection's steps starts.
+- **nodeSteps**, 500,2000,5000: the 12-words joins on the whole community in the last 10 minutes, this one included, at which each of the community's steps starts. Counted in memory, so a restart starts it again at 0.
+- **signInWorkFrom**, 30: the join from one connection in an hour from which a sign-in join asks for any work.
+- **signInDiscount**, 2: how many steps less a sign-in join asks for.
+- **removedNetworkLevel**, 4: the least a 12-words join asks for from a connection you removed a newcomer from in the last 7 days.
+- **wordsPerHour**, 500, and **wordsPerDay**, 2000: past these many 12-words accounts from one connection, a 12-words join from it is refused, with how long to wait. The sign-in way stays open there.
+- **signInPerHour**, 1000, and **signInPerDay**, 5000: the same for sign-ins. Each way counts only its own joins.
+
+To change one, add a row to the server's node_config named doorNumbers. and the name, with a whole number; for networkSteps and nodeSteps, the same number of rising whole numbers, separated by commas. For example, to let up to 1,000 12-words accounts an hour come from one connection, run on the server: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"INSERT INTO node_config (key, value) VALUES ('doorNumbers.wordsPerHour', '1000') ON CONFLICT(key) DO UPDATE SET value = excluded.value\").run()"
+
+The server reads them at each join, so there is nothing to restart. To go back to the default, delete the row: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"DELETE FROM node_config WHERE key = 'doorNumbers.wordsPerHour'\").run()"
+
+A value that isn't right (not a whole number, a list of the wrong length or not rising, a name that isn't one of these) is ignored and the default kept, and the log says so once. There is no Settings screen for them. The rows are this server's own: a standby does not copy them and a take-over does not carry them, so after a take-over the door runs on the defaults until you add them again.
 
 ## What one member can make in a day
 
@@ -64,7 +89,7 @@ If it keeps happening, someone is guessing your password. The logs name the addr
 
 ## Many people on one connection
 
-A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again.
+A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away.
 
 If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
 
@@ -74,6 +99,7 @@ The message says which:
 
 - "Gateway rate limit exceeded": the gateway.
 - "Too many attempts": sign-in and recovery attempts, or checking invite codes.
+- "A very large number of 12-words accounts were made from your network", or "Too many new accounts have joined from your network": the open door's ceilings, for 12 words and for sign-ins.
 - "Too many administrative requests": Settings, 300 a minute.
 - "You're sending messages too fast": chats, direct messages included.
 - "You have made 5,000 changes today": the member's changes for the day. "You have made 50,000 changes today for the enterprises you keep": one keeper's, for all their enterprises.

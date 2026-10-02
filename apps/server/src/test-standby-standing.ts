@@ -13,12 +13,14 @@
  *  1. The main server M: an enterprise, Probe Co, with a purpose, a map pin, a working capital ceiling, two keepers who
  *     each pledge backing, an external sale (earned surplus) and a legacy credit floor; a project with a goal and a
  *     deadline; Elders (granted credit), an appointed voucher and two members he vouched for (at 50 and 25), a frozen
- *     Elder, a member on holiday and one with a notification opt-out and a reminder default. A preference save moves the
- *     member's row, as holiday does.
+ *     Elder, a member on holiday and one with a notification opt-out, a reminder default, and a Home layout and interests
+ *     (slice H1 of scratch/global-node/DESIGN-home-dashboard-fable.md). A preference save moves the member's row, as
+ *     holiday does.
  *  2. The standby S's first copy: every members column (but last_active_at), every preference, keeper and pledge is M's,
  *     stamps included; the copy records the importer's format.
  *  3. Between two pulls, on M: the vouch at 25 withdrawn, a keeper unbound, a pledge released, the enterprise paused, its
- *     ceiling changed by the admin (a write of that column alone), another opt-out. A delta brings every one.
+ *     ceiling changed by the admin (a write of that column alone), another opt-out, a moved Home card and a new interest. A
+ *     delta brings every one.
  *  4. A whole copy leaves every row and stamp as M's, and puts back the members touch triggers the import set aside.
  *  5. A keeper who is also a pledger, and a pledger no longer a keeper, are re-keyed between two pulls: the standby follows
  *     both re-keys and the whole set of keepers together, and ends equal to M.
@@ -43,7 +45,8 @@
  *  9. M dies; S takes over with the recovery code. On the promoted S: every floor and granted credit is M's (the withdrawn
  *     vouch gives no credit back, the frozen Elder stays at 0); the enterprise's page answers for its keeper, paused; the
  *     board is M's (the paused enterprise's listing and the holiday member's stay off); the holiday member can't be traded
- *     with; the enterprises pay no demurrage; the opt-outs hold; the appointed voucher vouches; the enterprise is on the
+ *     with; the enterprises pay no demurrage; the opt-outs hold; the member reads her Home
+ *     (and nobody else does); the appointed voucher vouches; the enterprise is on the
  *     map; its lead resumes it and a re-keyed keeper posts for it.
  *
  * Run:
@@ -360,6 +363,8 @@ function rowsDiff(m: Rows, s: Rows): string[] {
     return out;
 }
 const first = (xs: string[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs.slice(0, 6).join(' | ')}`);
+/** A server's rows of the Home keys (home.layout, interests: engine/home-preferences.ts), every member's, in key order. */
+const homeRows = (r: Rows) => r.member_preferences.filter((p) => p.pref_key === 'home.layout' || p.pref_key === 'interests');
 
 /**
  * The members table of a community from before the enterprise unification: every column a fresh install's has but Slice 3's
@@ -467,6 +472,10 @@ async function main(): Promise<void> {
         built('Ann switches off marketplace pushes and sets her reminder default', await S_(ann, '/api/members/preferences', {
             publicKey: ann.pk, preferences: { notify_marketplace: false, eventReminderOffsets: [60] },
         }));
+        const annHome = { v: 1, order: ['events', 'market'], hidden: ['pulse'], dismissed: { safety: new Date(Date.now() - 3_600_000).toISOString() }, updatedAt: new Date(Date.now() - 60_000).toISOString() };
+        built('Ann tailors her Home (Coming up first, the Pulse hidden, the safety card dismissed) and stars Food and Garden', await S_(ann, '/api/members/preferences', {
+            publicKey: ann.pk, preferences: { 'home.layout': annHome, interests: ['food', 'garden'] },
+        }));
         const m1: Rows = await main.send('rows');
         const probeRow = m1.members.find((r) => r.public_key === probe.publicKey);
         require_(probeRow?.is_treasury === 1 && probeRow.earned_surplus > 0 && probeRow.legacy_credit_floor === 200 && probeRow.lat !== null
@@ -489,6 +498,8 @@ async function main(): Promise<void> {
         require_(firstPull.ok === true, `S: the loop's first pull lands (${firstPull.ok ? firstPull.mode : firstPull.error})`);
         let s: Rows = await standby.send('rows');
         assert(rowsDiff(m1, s).length === 0, `its members, preferences, keepers and pledges are M's, every column and stamp (differences ${first(rowsDiff(m1, s))})`);
+        assert(homeRows(m1).length === 2 && JSON.stringify(homeRows(s)) === JSON.stringify(homeRows(m1)),
+            `Ann's Home layout and interests are among them (${JSON.stringify(homeRows(s).map((r) => [r.pref_key, r.pref_value.length]))})`);
         assert(s.format === FORMAT, `the copy records the importer's format, ${FORMAT} (${s.format})`);
         assert(MEMBERS_TOUCH.every((t) => s.touch.includes(t)), `the members touch triggers are in place after the import (${s.touch.join(', ')})`);
 
@@ -500,6 +511,9 @@ async function main(): Promise<void> {
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
         built('the admin changes Probe Co\'s working capital ceiling (that column alone)', await A(`/api/local/admin/treasury/${probe.publicKey}/ceiling`, { ceiling: 80 }));
         built('Ann switches off chat pushes too', await S_(ann, '/api/members/preferences', { publicKey: ann.pk, preferences: { notify_chat: false } }));
+        built('Ann moves Your Beans to the top of her Home and stars Tools too', await S_(ann, '/api/members/preferences', {
+            publicKey: ann.pk, preferences: { 'home.layout': { ...annHome, order: ['beans', 'events', 'market'], updatedAt: new Date().toISOString() }, interests: ['food', 'garden', 'tools'] },
+        }));
         const m3: Rows = await main.send('rows');
         require_(m3.members.find((r) => r.public_key === lou.pk)?.elder_vouched_by === null
             && m3.members.find((r) => r.public_key === probe.publicKey)?.paused === 1
@@ -515,6 +529,9 @@ async function main(): Promise<void> {
         assert(s.members.find((r) => r.public_key === probe.publicKey)?.working_capital_ceiling === 80, 'the ceiling the admin changed alone arrives');
         assert(!s.treasury_operators.some((o) => o.member_pubkey === dee.pk), 'the unbound keeper is no keeper on S');
         assert(rowsDiff(m3, s).length === 0, `every row and stamp is M's after the delta (differences ${first(rowsDiff(m3, s))})`);
+        assert(JSON.stringify(homeRows(s)) === JSON.stringify(homeRows(m3)) && homeRows(s).some((r) => r.pref_key === 'home.layout' && r.pref_value.includes('"beans"'))
+            && homeRows(s).some((r) => r.pref_key === 'interests' && r.pref_value.includes('"tools"')),
+            `Ann's moved card and her new interest arrive with the delta (${JSON.stringify(homeRows(s).map((r) => r.pref_value))})`);
 
         // ── 4. A whole copy ──
         console.log('\n— 4. a whole copy —');
@@ -780,6 +797,14 @@ async function main(): Promise<void> {
         const pushes = await standby.send('pushable');
         assert(!pushes.marketplace.includes(ann.pk) && !pushes.chat.includes(ann.pk) && pushes.escrow.includes(ann.pk) && pushes.marketplace.includes(bo.pk),
             `Ann's opt-outs hold: no marketplace or chat pushes, escrow still (${JSON.stringify(Object.fromEntries(Object.entries(pushes).map(([c, ks]) => [c, (ks as string[]).map((k) => (k === ann.pk ? 'Ann' : k === bo.pk ? 'Bo' : k.slice(0, 6)))])))})`);
+        const annPrefs = await api(p, 'GET', `/api/members/preferences?publicKey=${ann.pk}`, { as: ann });
+        assert(annPrefs.status === 200 && JSON.stringify(annPrefs.body?.['home.layout']?.order) === '["beans","events","market"]'
+            && JSON.stringify(annPrefs.body?.['home.layout']?.hidden) === '["pulse"]' && annPrefs.body?.['home.layout']?.dismissed?.safety === annHome.dismissed.safety
+            && JSON.stringify(annPrefs.body?.interests) === '["food","garden","tools"]',
+            `Ann's Home is hers on the promoted server: her layout, her dismissal and her interests, read by her (${brief(annPrefs)})`);
+        const boReadsAnn = await api(p, 'GET', `/api/members/preferences?publicKey=${ann.pk}`, { as: bo });
+        assert(!JSON.stringify(boReadsAnn.body ?? '').includes('home.layout') && !JSON.stringify(boReadsAnn.body ?? '').includes('"tools"'),
+            `and nobody else's to read (${brief(boReadsAnn)})`);
         const vouched = await P_(bo, '/api/profile/vouch', { targetPubkey: hal.pk, level: 1 });
         assert(vouched.status === 200, `the appointed voucher vouches (${brief(vouched)})`);
         const pins = await api(p, 'GET', '/api/enterprises/map', { as: ann });

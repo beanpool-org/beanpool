@@ -53,6 +53,8 @@
  *      node still shows a web member what they have not seen, and not what they have.
  *  18. And the keys a re-key replaced (`invalidated_keys`, engine/member-wizards.ts), with the key that replaced each, so a
  *      restored node still refuses a lost phone's key at every door.
+ *  19. And a member's Home (`member_preferences` keys `home.layout` and `interests`, engine/home-preferences.ts), saved by
+ *      the preferences setter, so a restored node still draws their Home as they left it.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -200,7 +202,7 @@ async function main(): Promise<void> {
 
     const { initTls } = await import('./services/tls.js');
     const { db } = await import('./db/db.js');
-    const { initStateEngine, seedGenesisMember, createPost, updatePost } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createPost, updatePost, setMemberPreferences } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
@@ -311,6 +313,10 @@ async function main(): Promise<void> {
     const replacedBy = 'cd'.repeat(32);
     db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, 'rekeyed', ?, ?), (?, 'rekey_pending', ?, NULL)`)
         .run(replacedKey, replacedAtT, replacedBy, '12'.repeat(32), replacedAtT);
+
+    // A member's Home (engine/home-preferences.ts), saved by the preferences setter itself: a layout and interests.
+    const homeAtT = { v: 1, order: ['events', 'market'], hidden: ['pulse'], dismissed: { safety: new Date(Date.now() - 540_000).toISOString() }, updatedAt: new Date(Date.now() - 530_000).toISOString() };
+    assert(setMemberPreferences(mutedMember, { 'home.layout': homeAtT, interests: ['garden', 'food'] }) === true, 'setup: a member saves a Home layout and interests');
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -427,6 +433,10 @@ async function main(): Promise<void> {
             assert(replacedRows.length === 2 && replacedRows.some((r) => r.public_key === replacedKey && r.reason === 'rekeyed' && r.rekeyed_to === replacedBy && r.invalidated_at === replacedAtT)
                 && replacedRows.some((r) => r.reason === 'rekey_pending' && r.rekeyed_to === null),
                 'and the keys a re-key replaced, with the key that replaced each, so a restored node still refuses a lost phone\'s key');
+            const home = Object.fromEntries((archived.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ? AND pref_key IN ('home.layout', 'interests')`)
+                .all(mutedMember) as { pref_key: string; pref_value: string }[]).map((r) => [r.pref_key, r.pref_value]));
+            assert(home['home.layout'] === JSON.stringify(homeAtT) && home.interests === '["garden","food"]',
+                `and a member's Home, their layout and interests, so a restored node still draws it as they left it (${JSON.stringify(home)})`);
         } finally {
             archived.close();
         }

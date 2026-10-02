@@ -83,7 +83,7 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeMember(callsign: string, balance: number, homeNodeUrl?: string, isVisitor = false): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, avatar_url, is_visitor)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, home_node_url, avatar_ref, is_visitor)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?, ?, ?)`)
         .run(pk, callsign, homeNodeUrl ?? null, TINY_PNG, isVisitor ? 1 : 0);
     // Epoch at NOW, not 0 — epoch 0 is 1970 and the first read would charge ~56 years of demurrage (#138).

@@ -287,6 +287,7 @@ async function main(): Promise<void> {
     const { initStateEngine, createPost, createGroup, getPosts } = se;
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
+    const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
     const { getProfileSwitches } = await import('./config/node-profile.js');
     const { writeDirectoryRows } = await import('./engine/directory-cache.js');
     // Before boot, where the faces' keys are decided (engine/avatar-keys.ts); the schema first, as boot would lay it.
@@ -304,9 +305,10 @@ async function main(): Promise<void> {
     // ── the community ──────────────────────────────────────────────────────────────────────────
     const member = (callsign: string, status = 'active'): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, ?, ?, 'seed', ?, ?)`)
-            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`, TINY_PNG);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, ?, ?, 'seed', ?)`)
+            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pk, TINY_PNG);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
@@ -919,7 +921,8 @@ async function main(): Promise<void> {
         assert((await call('GET', null, `/api/avatar/${outsider.pk}?k=${k}`)).status === 404, 'a key for a key with no member is 404');
         // Alice changes her photo: the old URL and its key open nothing; the new ones do.
         const NEW_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-        db.prepare('UPDATE members SET avatar_url = ?, profile_updated_at = ? WHERE public_key = ?').run(NEW_PNG, new Date().toISOString(), alice.pk);
+        db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), alice.pk);
+        setMemberPhoto(db, alice.pk, NEW_PNG);
         assert((await call('GET', null, direct.url!)).status === 404, 'after a photo change, the old URL and its key are 404');
         const changed = await avatarOf(bob, '/api/community/members', alice);
         assert(!!changed.url && changed.url !== direct.url && (await call('GET', null, changed.url)).status === 200,
@@ -1100,7 +1103,7 @@ async function main(): Promise<void> {
                     `${who}: redeeming a code and a ticket for Alice's key is refused, not signed by her key, and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
             }
             // The card holds the photo itself, as stored: the phone keeps it only if the node can serve it.
-            const photo = (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(alice.pk) as { avatar_url: string }).avatar_url;
+            const photo = getMemberPhoto(db, alice.pk);
             const own = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             const ownTicket = await call('POST', alice, '/api/invite/redeem-offline', { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             assert([own, ownTicket].every(r => r.status === 200 && r.body?.member?.callsign === 'SentinelAlice' && r.body?.member?.avatarUrl === photo),
@@ -1111,7 +1114,9 @@ async function main(): Promise<void> {
         // A face goes out as a keyed link or as the photo itself (the redeem card held the photo). So every member but the
         // pruned account gets a photo no listing, enterprise or crowdfund holds, and the sweep looks for it too.
         const FACE = 'data:image/png;base64,U2VudGluZWwgZmFjZSwgYSBtZW1iZXIncyBvd24=';
-        db.prepare("UPDATE members SET avatar_url = ? WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").run(FACE, pruned.pk);
+        for (const { public_key } of db.prepare("SELECT public_key FROM members WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").all(pruned.pk) as { public_key: string }[]) {
+            setMemberPhoto(db, public_key, FACE);
+        }
 
         // 11d. The sweep.
         /** A write's body, unless the route has its own below: every field a route names someone by, each naming Alice. */

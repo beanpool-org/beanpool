@@ -142,7 +142,7 @@ function keptPosts(id: Id, count: number): void {
 /** A member of `daysAgo` days with a photo, written straight in, with `kept` kept posts. */
 function oldMember(name: string, daysAgo: number, kept: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active')`).run(id.pk, name, ago(daysAgo * DAY), AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     keptPosts(id, kept);
@@ -155,7 +155,7 @@ async function wordsMember(name: string): Promise<Id> {
     const work = { challenge: w.body?.work?.challenge, counters: solveDoorWorkSync(w.body?.work?.challenge, nodeSha256) };
     const j = await call('POST', id, '/api/join', { door: 'words', callsign: name, work });
     if (j.status !== 200) throw new Error(`${name} did not join by 12 words: ${show(j)}`);
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, id.pk);
+    db.prepare('UPDATE members SET avatar_ref = ? WHERE public_key = ?').run(AVATAR, id.pk);
     return id;
 }
 /** Joins with a Google sign-in over HTTPS, with a photo. */
@@ -164,7 +164,7 @@ async function signInMember(name: string): Promise<Id> {
     const n = await call('POST', id, '/api/join/sso-nonce', {});
     const j = await call('POST', id, '/api/join', { callsign: name, provider: 'google', idToken: mint(`sub-${name}`, n.body?.nonce), nonce: n.body?.nonce });
     if (j.status !== 200) throw new Error(`${name} did not join with a sign-in: ${show(j)}`);
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, id.pk);
+    db.prepare('UPDATE members SET avatar_ref = ? WHERE public_key = ?').run(AVATAR, id.pk);
     return id;
 }
 const setJoined = (id: Id, ms: number) => db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(ms), id.pk);

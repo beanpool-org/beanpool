@@ -66,7 +66,7 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_ref)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
@@ -93,7 +93,7 @@ function makeLocalMember(callsign: string): string {
 function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.KeyObject } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_ref)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:

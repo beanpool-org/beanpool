@@ -96,12 +96,17 @@ export function isBundledAvatar(value: string): boolean {
  * avatarUrlOf needs, and nothing of the photo. Null when the stored value is not one the node
  * serves (isServableAvatarValue); a shipped picture's `bundled://…` exactly as stored, since it
  * is emitted as it is (its name versions it); otherwise the photo's version, avatarVersionOf
- * its trimmed value, which is what goes in the URL's `v`.
+ * its trimmed value, which is what goes in the URL's `v`. `versionOf` is avatarVersionOf by
+ * default; a server passes the same digest by `node:crypto`, which this package must not import
+ * (see the note on `@noble/hashes` above) and which is ten times faster over a photo.
  */
-export function avatarRefOf(stored: string | null | undefined): string | null {
+export function avatarRefOf(
+    stored: string | null | undefined,
+    versionOf: (trimmed: string) => string = avatarVersionOf,
+): string | null {
     if (!isServableAvatarValue(stored)) return null;
     if (isBundledAvatar(stored)) return stored;
-    return avatarVersionOf(stored.trim());
+    return versionOf(stored.trim());
 }
 
 /**

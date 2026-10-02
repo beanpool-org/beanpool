@@ -140,7 +140,7 @@ function keypair(name: string, holding?: string): Id {
 
 function makeMember(name: string, beans = 100, joinedDaysAgo = 30, holding?: string): Id {
     const id = keypair(name, holding);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, updated_at)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status, updated_at)
                 VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
         .run(id.pk, name, ago(joinedDaysAgo * DAY), AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
@@ -343,7 +343,7 @@ async function main(): Promise<void> {
     let apiary = '';
     let quinnChange = '';
     asBeforeThisRule(vera, () => {
-        db.prepare("UPDATE members SET callsign = 'Vera', avatar_url = ? WHERE public_key = ?").run(AVATAR, vera.pk);
+        db.prepare("UPDATE members SET callsign = 'Vera', avatar_ref = ? WHERE public_key = ?").run(AVATAR, vera.pk);
         veraOffer = offer(vera, 'Vera honey').id;
         const t = acceptPost(offer(bob, 'Bob jam', 20).id, vera.pk);
         completePostTransaction(t.id, vera.pk);

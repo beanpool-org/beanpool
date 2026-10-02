@@ -40,7 +40,7 @@ function check(cond: boolean, msg: string) {
 function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(16).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_ref)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
     ).run(pubkey, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubkey);

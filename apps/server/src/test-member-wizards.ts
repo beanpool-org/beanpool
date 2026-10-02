@@ -143,7 +143,7 @@ function makeMember(callsign: string, pubkey?: string): string {
     const pk = pubkey || generateValidPubkey();
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status, avatar_url)
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status, avatar_ref)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 'data:image/png;base64,iVBORw0KGgo=')`
     ).run(pk, uniqueCallsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);

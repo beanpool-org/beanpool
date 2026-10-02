@@ -134,7 +134,7 @@ async function main() {
 
     const seed = (callsign: string, status = 'active'): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
                     VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
             .run(id.pubKeyHex, callsign, status, `INV-${callsign.toUpperCase()}`, AVATAR);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
@@ -304,7 +304,7 @@ async function main() {
         // without the voters, as everyone did before.
         assert(OPEN_NODE ? before.status === 200 && !namesVoter(before.text) : before.status === 403 && !namesVoter(before.text),
             `before joining, the newcomer reads nothing that names the voter (got ${before.status})`);
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
                     VALUES (?, 'Newcomer', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'INV-NEWCOMER', ?)`).run(newcomer.pubKeyHex, AVATAR);
         const after = await get('/api/marketplace/posts', newcomer, { 'If-None-Match': before.etag || '' });
         assert(after.status === 200, `after joining, the old ETag no longer answers 304 (got ${after.status})`);

@@ -86,7 +86,7 @@ function keypair(name: string): Id {
 
 function makeMember(name: string, beans = 100): Id {
     const id = keypair(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active')`).run(id.pk, name, ago(30 * DAY), AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);

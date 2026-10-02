@@ -247,8 +247,16 @@ export interface MemberPhotoColumns {
     bytes: number;
 }
 
+/**
+ * @beanpool/core avatarVersionOf, by `node:crypto`: the same digest of the same UTF-8, ten times faster than the portable
+ * one, which the server's boot pays for every photo it moves out of the members rows (db.ts moveMemberPhotosOutOfRows).
+ */
+export function avatarVersionByNode(trimmed: string): string {
+    return crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8);
+}
+
 export function memberPhotoColumnsOf(stored: string | null | undefined): MemberPhotoColumns | null {
-    const ref = avatarRefOf(stored);
+    const ref = avatarRefOf(stored, avatarVersionByNode);
     if (ref === null || typeof stored !== 'string') return null;
     return { photo: stored, ref, bytes: Buffer.byteLength(stored, 'utf8') };
 }

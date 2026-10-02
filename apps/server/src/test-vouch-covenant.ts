@@ -31,7 +31,7 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 let seq = 0;
 function seedMember(pk: string, balance = 0) {
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, 'a.png', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_ref, joined_at) VALUES (?, ?, 'a.png', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, pk.slice(0, 8));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pk, balance);
 }
 // Insert an Offer row directly. live=false → a paused/soft-deleted offer that still counts for the

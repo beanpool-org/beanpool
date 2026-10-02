@@ -64,7 +64,7 @@ function keypair(name: string): Id {
 
 function makeMember(name: string): Id {
     const id = keypair(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
         VALUES (?, ?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, name, daysAgo(90), AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     transfer('genesis', id.pk, 100, `seed ${name}`, 'direct', true);

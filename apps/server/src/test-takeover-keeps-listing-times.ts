@@ -79,7 +79,7 @@ async function child(): Promise<void> {
             owner = Buffer.from(ed25519.getPublicKey(Buffer.from(a.ownerSeedHex, 'hex'))).toString('hex');
             se.seedGenesisMember(owner, 'Anna');
             // A profile photo, which the marketplace asks for before a first listing.
-            db.prepare("UPDATE members SET avatar_url = 'bundled://leaf' WHERE public_key = ?").run(owner);
+            db.prepare("UPDATE members SET avatar_ref = 'bundled://leaf' WHERE public_key = ?").run(owner);
             setReplicationToken(a.replicationToken);
             const made = await makeRecoveryCode();
             await flushTakeoverChecks();

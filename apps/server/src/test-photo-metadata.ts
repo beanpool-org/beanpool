@@ -41,7 +41,7 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
-import { postPhotoUrl } from '@beanpool/engine';
+import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -662,9 +662,10 @@ async function partTwo(): Promise<void> {
     initAdminPassword();
     const member = keypair();
     // Joined long ago with a photo and a name, so no new-account limit or profile gate is what answers.
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code)
-                VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
-        .run(member.pub, `photo-${member.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
+        .run(member.pub, `photo-${member.pub.slice(0, 6)}`);
+    setMemberPhoto(db, member.pub, dataUrl('image/jpeg', CLEAN_JPEG));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
@@ -774,7 +775,7 @@ async function partTwo(): Promise<void> {
     }, member);
     assert(bareHeicEnt.status === 400, `an enterprise photo sent as bare base64 of a HEIC (GPS inside) is refused, not stored (${bareHeicEnt.status})`);
 
-    // The operator's form, POST /api/local/admin/treasury, writes the same members.avatar_url, and the enterprise
+    // The operator's form, POST /api/local/admin/treasury, writes the same enterprise photo (member_photos), and the enterprise
     // routes hand it out as stored (avatarUrl): the same photo rule, bare base64 included.
     const adminTreasury = async (name: string, avatar: string): Promise<{ status: number; json: any }> => {
         const res = await fetch(`${BASE}/api/local/admin/treasury`, {
@@ -925,14 +926,15 @@ async function partTwo(): Promise<void> {
     assert(link.status === 200, `a link as the thumbnail still passes (${link.status})`);
 
     console.log('\n── 2i. A member\'s photo as other members read it: POST /api/profile/update → groups, profile, chats ──');
-    // members.avatar_url is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
+    // A member's photo (member_photos) is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
     // routes hand it out exactly as stored; the chats turn it into an avatar address. A second member reads each.
     const reader = keypair();
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code)
-                VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
-        .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
+        .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`);
+    setMemberPhoto(db, reader.pub, dataUrl('image/jpeg', CLEAN_JPEG));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
-    const storedAvatar = () => (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(member.pub) as { avatar_url: string | null }).avatar_url;
+    const storedAvatar = () => getMemberPhoto(db, member.pub);
 
     const bare = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);
     assert(bare.status === 200, `a camera JPEG sent as bare base64 is saved (${bare.status} ${bare.json?.error ?? ''})`);

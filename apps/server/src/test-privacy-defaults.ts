@@ -153,7 +153,7 @@ async function main() {
 
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number; balance?: number; joinedAt?: string } = {}): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref, is_visitor, earned_credit)
                     VALUES (?, ?, ?, ?, 'seed', ?, ?, ?, ?)`)
             .run(id.pk, callsign, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(),
                 `INV-${callsign.toUpperCase()}`, TINY_PNG, opts.visitor ? 1 : 0, opts.earned ?? 0);

@@ -53,7 +53,7 @@ function assert(cond: boolean, msg: string): void {
 function makeIdentity(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_ref, joined_at) VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }

@@ -50,7 +50,7 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago, with a profile photo (posting needs one). */
 function member(name: string, daysAgo: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;

@@ -123,7 +123,7 @@ async function main() {
         d.prepare("DELETE FROM node_config WHERE key = 'migration_board_standing_v1'").run();
         const hasColumn = (d.prepare('PRAGMA table_info(members)').all() as Array<{ name: string }>).some(c => c.name === 'board_standing_changed_at');
         assert(!hasColumn, 'the fixture is a node from before members.board_standing_changed_at');
-        const member = d.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, updated_at, is_treasury, paused, paused_at)
+        const member = d.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref, updated_at, is_treasury, paused, paused_at)
                                   VALUES (?, ?, 'active', ?, 'seed', ?, 'data:image/png;base64,iVBORw0KGgo=', ?, ?, ?, ?)`);
         const joined = ago(365 * 86_400_000);
         member.run(carol.pubKeyHex, 'ReaderCarol', joined, 'INV-CAROL', seeded.carol, 0, 0, null);

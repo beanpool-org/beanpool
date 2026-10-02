@@ -66,7 +66,7 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago with a profile photo, invited by `invitedBy` (the owner by default). */
 function member(name: string, daysAgo: number, invitedBy?: Id): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), (invitedBy ?? owner).pk);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     // The 150-day members are the established reporters (off probation: a reporter on it counts for nothing, design 2.3).
@@ -161,7 +161,7 @@ async function doorJoin(name: string): Promise<Id> {
     if (n.status !== 200 || typeof n.body?.nonce !== 'string') throw new Error(`no join nonce: ${n.status} ${JSON.stringify(n.body)}`);
     const j = await call('POST', id, '/api/join', { callsign: name, provider: 'google', idToken: mint(`sub-${name}-${crypto.randomUUID()}`, n.body.nonce), nonce: n.body.nonce });
     if (j.status !== 200) throw new Error(`join refused: ${j.status} ${JSON.stringify(j.body)}`);
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(id.pk);
+    db.prepare(`UPDATE members SET avatar_ref = 'https://example.com/a.jpg' WHERE public_key = ?`).run(id.pk);
     return id;
 }
 /** Make a door member as established as `days` days of membership (the join row moves with it). */

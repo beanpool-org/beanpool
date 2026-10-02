@@ -108,7 +108,7 @@ function newId(name: string): Id {
 let owner: Id;
 function member(name: string, made?: Id): Id {
     const id = made ?? newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, avatar_url)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, avatar_ref)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'TEST', 'active', 0, ?)`)
         .run(id.pk, name, owner.pk, `https://example.org/${name}.jpg`);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);

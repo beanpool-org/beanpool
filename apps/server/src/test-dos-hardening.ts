@@ -169,7 +169,7 @@ async function main() {
 
     const member = (callsign: string): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', '/uploads/avatar.jpg')`).run(id.pubKeyHex, callsign);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
@@ -511,7 +511,7 @@ async function main() {
         {
             const photo = `data:image/jpeg;base64,${crypto.randomBytes(18_750).toString('base64')}`;
             const keys: string[] = [];
-            const ins = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+            const ins = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
                                     VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', ?)`);
             db.transaction(() => {
                 for (let i = 0; i < 3_000; i++) { const k = crypto.randomBytes(32).toString('hex'); keys.push(k); ins.run(k, `DosPhoto${i}`, photo); }

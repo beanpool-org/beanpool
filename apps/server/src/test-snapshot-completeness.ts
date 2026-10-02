@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     const author = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(author, 'Snapper');
     // The marketplace refuses a post from a member with no profile photo, so give them one.
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?')
+    db.prepare('UPDATE members SET avatar_ref = ? WHERE public_key = ?')
         .run(dataUrl(makePhoto('the-author-avatar')), author);
 
     const keptPhoto = makePhoto('kept');

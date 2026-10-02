@@ -67,7 +67,7 @@ function makeMember(baseCallsign: string): { pubKeyHex: string; callsign: string
     const pubKeyHex = crypto.randomBytes(32).toString('hex');
     const callsign = `${baseCallsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, avatar_url, status, earned_credit, joined_at)
+        INSERT INTO members (public_key, callsign, avatar_ref, status, earned_credit, joined_at)
         VALUES (?, ?, 'bundled://sprout', 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(pubKeyHex, callsign);
 

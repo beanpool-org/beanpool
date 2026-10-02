@@ -56,7 +56,7 @@ function addMember(
     key: string, callsign: string, joinedAt: string, avatar: string | null,
     opts: { homeNode?: string | null; inviteCode?: string } = {},
 ): void {
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, home_node_url)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, home_node_url)
                 VALUES (?, ?, ?, 'seed', ?, ?, ?)`)
         .run(key, callsign, joinedAt, opts.inviteCode ?? 'x', avatar, opts.homeNode ?? null);
 }

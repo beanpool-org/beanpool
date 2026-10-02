@@ -52,7 +52,7 @@ type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
 /** A member with a balance, written as rows, before the ledger is loaded. The window closed now, so nothing decays. */
 function plantMember(callsign: string, balance: number): string {
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active')`)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active')`)
         .run(pk, callsign, AVATAR);
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, EPOCH_NOW);
     return pk;
@@ -92,7 +92,7 @@ function keypair(callsign: string): Id {
 /** A member who can sign, trade (a photo, a name, an Offer listed) and pay. */
 function makeMember(callsign: string, beans: number): Id {
     const id = keypair(callsign);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);

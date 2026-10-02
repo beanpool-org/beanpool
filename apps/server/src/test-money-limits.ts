@@ -187,7 +187,7 @@ let tradie: Id;
 /** A member who joined a week ago, with a profile photo and name (the marketplace asks for both) and `balance` Beans. */
 function member(name: string, balance = 1_000): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
     // The epoch now, never 0: epoch 0 is 1970, and the first read would charge decades of demurrage.
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(id.pk, balance, ledger.getCurrentEpoch());
@@ -288,7 +288,7 @@ const enterprise = async (keeper: Id, name: string): Promise<string> => {
     const pk = r.body?.publicKey as string;
     if (!pk) throw new Error(`setup: ${keeper.name} could not start ${name}: ${show(r)}`);
     // The marketplace asks every author for a profile photo first, an enterprise too.
-    db.prepare("UPDATE members SET avatar_url = 'https://example.com/e.jpg' WHERE public_key = ?").run(pk);
+    db.prepare("UPDATE members SET avatar_ref = 'https://example.com/e.jpg' WHERE public_key = ?").run(pk);
     return pk;
 };
 const ownPost = (id: Id) => call('POST', id, '/api/marketplace/posts', { type: 'offer', category: 'other', title: `${id.name} offer ${++seq}`, description: 'An offer', credits: 0, authorPublicKey: id.pk });
@@ -372,7 +372,7 @@ async function runChild(): Promise<void> {
     await initTls();
     initStateEngine();
     if (!getMember(seed.owner)) seedGenesisMember(seed.owner, 'Owner');
-    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`);
     // Seeded once: a restart on the same data finds the rows there and changes nothing.
     const first = !getMember(seed.tradie);

@@ -30,7 +30,7 @@ const reporterKey = generateTestKeyHex();
 const offenderKey = generateTestKeyHex();
 
 function createTestMember(pubKey: string, callsign: string) {
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pubKey, callsign);
+    db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pubKey, callsign);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pubKey);
     ledger.initializeGenesisAccount(pubKey);
 }

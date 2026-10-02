@@ -132,7 +132,7 @@ async function main() {
     // Setup a test member author with a fresh random pubkey and unique callsign
     const authorPk = crypto.randomBytes(32).toString('hex');
     const authorCallsign = 'EtagTester_' + crypto.randomBytes(4).toString('hex');
-    db.prepare("INSERT INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, ?, ?, ?)").run(
+    db.prepare("INSERT INTO members (public_key, callsign, joined_at, avatar_ref) VALUES (?, ?, ?, ?)").run(
         authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed'
     );
 

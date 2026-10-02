@@ -107,7 +107,7 @@ async function main() {
 
     const member = (callsign: string, opts: { contact?: { value: string; visibility: string }; status?: string } = {}): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, contact_value, contact_visibility)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref, contact_value, contact_visibility)
                     VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?, ?, ?)`)
             .run(id.pubKeyHex, callsign, opts.status ?? 'active', `INV-${callsign.toUpperCase()}`, AVATAR,
                 opts.contact?.value ?? null, opts.contact?.visibility ?? null);

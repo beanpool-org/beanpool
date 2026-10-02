@@ -125,7 +125,7 @@ async function runChild(): Promise<void> {
     // Seeded once: a restart on the same data finds the rows there and changes nothing.
     const first = !getMember(seed.owner);
     if (first) seedGenesisMember(seed.owner, 'Owner');
-    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    const insert = db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`);
     if (first) {
         for (const m of seed.members) {
@@ -241,7 +241,7 @@ const hasAccount = (pk: string) => !!db.prepare('SELECT 1 FROM accounts WHERE pu
 
 function seedMember(name: string, balance: number, isTreasury = false): string {
     const pk = newId(name).pk;
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury) VALUES (?, ?, ?, 'https://example.com/a.jpg', 'active', ?)`)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, is_treasury) VALUES (?, ?, ?, 'https://example.com/a.jpg', 'active', ?)`)
         .run(pk, name, ago(7 * DAY), isTreasury ? 1 : 0);
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, ledger.getCurrentEpoch());
     return pk;

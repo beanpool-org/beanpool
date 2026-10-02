@@ -265,7 +265,7 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             // A photo, which posting asks of its author.
-            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run('data:image/png;base64,iVBORw0KGgo=', a.owner);
+            db.prepare('UPDATE members SET avatar_ref = ? WHERE public_key = ?').run('data:image/png;base64,iVBORw0KGgo=', a.owner);
             const kept = se.createGroup({ name: 'Garden', createdBy: a.owner, joinPolicy: 'open' });
             const left = se.createGroup({ name: 'Choir', createdBy: a.owner, joinPolicy: 'open' });
             const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, [], false, undefined, false,

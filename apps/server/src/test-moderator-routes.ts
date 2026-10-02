@@ -111,7 +111,7 @@ async function main() {
     addMember(pat, 'Pat', olive.pubKeyHex);
     grantNodeRole(mo.pubKeyHex, 'moderator', olive.pubKeyHex);
     // Posting needs a profile photo.
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(oscar.pubKeyHex);
+    db.prepare(`UPDATE members SET avatar_ref = 'https://example.com/a.jpg' WHERE public_key = ?`).run(oscar.pubKeyHex);
 
     // Which request reached checkAdminAuth: the sweep tells a refused admin route from a route that never asked.
     const app = new Koa();

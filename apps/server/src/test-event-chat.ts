@@ -60,7 +60,7 @@ const decode = (b64: string) => Buffer.from(b64, 'base64').toString('utf8');
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;

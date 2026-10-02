@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     const report = (actor: string, body: Record<string, unknown>) => callRouter(community, 'POST', '/api/reports', actor, body);
 
     const target = makeMember('Target');
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(target);
+    db.prepare(`UPDATE members SET avatar_ref = 'https://example.com/a.jpg' WHERE public_key = ?`).run(target);
     // The posts these reports name: a report on a post id no post here has is refused (section 6).
     const postBy = (author: string, id: string) => createPost('offer', 'other', `Post ${id}`, 'for sale', 0, 'fixed', author,
         undefined, undefined, undefined, undefined, id);

@@ -158,7 +158,7 @@ async function main(): Promise<void> {
 
     const member = (callsign: string): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_ref)
                     VALUES (?, ?, 'active', ?, 'seed', ?, ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), `INV-${callsign.toUpperCase()}`, TINY_PNG);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);

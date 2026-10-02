@@ -50,7 +50,7 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 function seedMember(pk: string) {
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at)
+        `INSERT OR IGNORE INTO members (public_key, callsign, avatar_ref, joined_at)
          VALUES (?, ?, 'a.png', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, pk.slice(0, 8));
 }

@@ -132,7 +132,7 @@ async function main() {
 
     // 7. Verify Escrow Protection Against Transacting on Pulse Posts
     const peerPubkey = 'peer_test_pubkey_1234567890123456';
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
+    db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance) VALUES (?, ?)").run(peerPubkey, 50);
 
     let requestBlocked = false;
@@ -204,7 +204,7 @@ async function main() {
     // Remove treasury first to simulate a scenario where a regular member took 'Daily Pulse'
     db.prepare("DELETE FROM members WHERE public_key = ?").run(pulsePubkey);
     const collideePubkey = 'collidee_pubkey_1234567890123456';
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, is_treasury) VALUES (?, 'Daily Pulse', 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(collideePubkey);
+    db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, is_treasury) VALUES (?, 'Daily Pulse', 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(collideePubkey);
 
     const newPulsePubkey = ensurePulseTreasury();
     assert(newPulsePubkey !== collideePubkey, 'Treasury creation does not hijack regular member account');

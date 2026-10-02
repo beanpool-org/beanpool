@@ -72,7 +72,7 @@ async function main() {
 
     for (const m of members) {
         db.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, credit_frozen, joined_at)
+            INSERT OR REPLACE INTO members (public_key, callsign, avatar_ref, status, credit_frozen, joined_at)
             VALUES (?, ?, ?, ?, ?, datetime('now'))
         `).run(m.pubkey, m.callsign, m.avatar, m.status, m.frozen);
     }
@@ -524,7 +524,7 @@ async function main() {
     replicaDb.exec(schemaSql);
     for (const m of members) {
         replicaDb.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, credit_frozen, joined_at)
+            INSERT OR REPLACE INTO members (public_key, callsign, avatar_ref, status, credit_frozen, joined_at)
             VALUES (?, ?, ?, ?, ?, datetime('now'))
         `).run(m.pubkey, m.callsign, m.avatar, m.status, m.frozen);
     }

@@ -102,7 +102,7 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 function makeMember(callsign: string, initialBalance = 0): string {
     // A real member key: 64 hex characters in lower case (every door since #1195 refuses any other spelling).
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, callsign, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
                 VALUES (?, 0, 0)`).run(pk);
@@ -829,7 +829,7 @@ async function main() {
 
             const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
             const senderHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url)
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref)
                         VALUES (?, 'AtomicRoute', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(senderHex, AVATAR);
             db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
             ledger.initializeGenesisAccount(senderHex);

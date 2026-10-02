@@ -222,7 +222,7 @@ async function main(): Promise<void> {
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number } = {}): Id => {
         const id = newId();
         // A profile photo, because posting needs one; joined long ago, so no new account's limits apply.
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, is_visitor, earned_credit)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status, is_visitor, earned_credit)
                     VALUES (?, ?, ?, 'seed', 'seed', 'https://example.com/a.jpg', ?, ?, ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active', opts.visitor ? 1 : 0, opts.earned ?? 0);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);

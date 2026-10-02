@@ -28,7 +28,7 @@ function makeMember(callsign: string, initialBalance = 100) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url, status)
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_ref, status)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active')`
     ).run(pubKeyHex, callsign);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);

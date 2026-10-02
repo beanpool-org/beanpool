@@ -28,7 +28,7 @@ function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(32).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, earned_credit)
+        INSERT INTO members (public_key, callsign, joined_at, avatar_ref, status, earned_credit)
         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'bundled://sprout', 'active', 50)
     `).run(pubkey, uniqueCallsign);
     // Give member initial offer to satisfy covenant

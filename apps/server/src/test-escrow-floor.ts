@@ -106,7 +106,7 @@ function listEscrowAccounts(): string[] {
 
 function makeMember(callsign: string, initialBalance = 0): string {
     const pk = crypto.randomBytes(16).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_ref)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, callsign, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);

@@ -65,7 +65,7 @@ async function main(): Promise<void> {
     const authorPk = authorKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const authorCallsign = 'HeaderTester_' + crypto.randomBytes(4).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url)
+        INSERT INTO members (public_key, callsign, joined_at, avatar_ref)
         VALUES (?, ?, ?, ?)
     `).run(authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed');
 

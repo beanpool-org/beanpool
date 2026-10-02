@@ -139,7 +139,7 @@ async function child(): Promise<void> {
             se.seedGenesisMember(a.owner.pk, a.owner.callsign);
             db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(a.owner.pk);
             for (const m of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at, invited_by, invite_code, avatar_url)
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at, invited_by, invite_code, avatar_ref)
                             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', '-30 days'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
                     .run(m.pk, m.callsign, `INV-${m.callsign.toUpperCase()}`, TINY_PNG);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);

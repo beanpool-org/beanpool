@@ -146,7 +146,7 @@ async function main() {
     };
     // Profile completeness is enforced on post creation; seed avatars directly.
     for (const pk of [local.pubKeyHex, visitor.pubKeyHex, payee.pubKeyHex]) {
-        db.prepare("UPDATE members SET avatar_url='data:image/png;base64,iVBORw0KGgo=' WHERE public_key=?").run(pk);
+        db.prepare("UPDATE members SET avatar_ref='data:image/png;base64,iVBORw0KGgo=' WHERE public_key=?").run(pk);
     }
     const localOffer = await mkOffer(local, 'Local fence fixing');
     await mkOffer(visitor, 'Visiting guitar lessons');   // satisfies the visitor's own covenant

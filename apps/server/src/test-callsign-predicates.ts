@@ -43,7 +43,7 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 function seedMember(pk: string, callsign: string, status: string, hasSso = true) {
     db.prepare(
-        `INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, joined_at)
+        `INSERT OR REPLACE INTO members (public_key, callsign, avatar_ref, status, joined_at)
          VALUES (?, ?, 'a.png', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, callsign, status);
     if (hasSso) {

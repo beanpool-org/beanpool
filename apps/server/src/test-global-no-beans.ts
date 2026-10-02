@@ -109,7 +109,7 @@ async function main() {
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, updated_at, invited_by, invite_code)
+        db.prepare(`INSERT INTO members (public_key, callsign, avatar_ref, status, joined_at, updated_at, invited_by, invite_code)
                     VALUES (?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
             .run(pubKeyHex, callsign, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);

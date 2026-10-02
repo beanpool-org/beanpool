@@ -168,7 +168,7 @@ async function main(): Promise<void> {
         'asking the question does not itself count — nothing is booked before the write');
 
     recordFunnelEvent('avatar_published');   // the write succeeded
-    db.prepare("UPDATE members SET avatar_url = ? WHERE public_key = ?").run('stored.png', av);
+    db.prepare("UPDATE members SET avatar_ref = ? WHERE public_key = ?").run('stored.png', av);
     assert(count('avatar_published') === 1, 'a landed first avatar counts once');
 
     assert(!hasNoAvatarYet(av), 'a member who already has a photo is not a first-avatar case');

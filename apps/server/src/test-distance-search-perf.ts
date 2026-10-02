@@ -126,7 +126,7 @@ function seedTransactions(n: number): void {
  */
 const rowsNear743b5d57: RowsNear = (conn, near, where, whereParams, filter) => {
     let sql = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+        SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
                haversine_km(?, ?, p.lat, p.lng) AS distance_km,
                COALESCE(m.earned_credit, 0) as author_earned_credit,

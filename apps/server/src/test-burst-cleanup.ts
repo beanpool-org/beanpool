@@ -83,7 +83,7 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago with a profile photo, invited by the owner. */
 function member(name: string, daysAgo: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
@@ -154,7 +154,7 @@ const membersState = () => JSON.stringify(db.prepare('SELECT public_key, status 
 function doorRow(name: string, label: string, daysAgo = 0): Id {
     const id = newId(name);
     const at = ago(daysAgo * DAY + 60_000);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_ref, status)
                 VALUES (?, ?, ?, 'open:google', 'OPEN', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, at);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, join_cohort) VALUES (?, ?, ?, ?, ?)')
@@ -215,7 +215,7 @@ async function doorJoin(name: string): Promise<Id> {
     const j = await tryDoorJoin(id, sub);
     if (j.status !== 200) throw new Error(`join refused: ${j.status} ${JSON.stringify(j.body)}`);
     subs.set(id.pk, sub);
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(id.pk);
+    db.prepare(`UPDATE members SET avatar_ref = 'https://example.com/a.jpg' WHERE public_key = ?`).run(id.pk);
     return id;
 }
 /** The door lets 5 an hour through from one address: the joins of the last hour go back 61 minutes, still within the day. */

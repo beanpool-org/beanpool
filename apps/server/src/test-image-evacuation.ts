@@ -217,7 +217,7 @@ async function main(): Promise<void> {
     // ── 2. a new photo goes straight to the store ──────────────────────────────────────────────
     const author = crypto.randomBytes(32).toString('hex');
     // An avatar, because the marketplace gate requires a profile photo before a member may post.
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_ref) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
         .run(author, dataUrl(makePhoto('avatar')));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const freshBytes = makePhoto('fresh');

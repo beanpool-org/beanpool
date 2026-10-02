@@ -62,7 +62,7 @@ At the bottom of Home, on your community's card, tap **Edit home**:
 - Tap the up and down arrows to change the order of your cards.
 - Hidden cards sit under **Hidden** with their switches off so you can bring them back at any time.
 - Tap **Reset to defaults** to return all cards to their original order and unhide them.
-- A card with nothing to show right now says **Nothing to show now**. It will appear on Home when it has something.
+- On the phone, a card with nothing to show right now says **Nothing to show now**. It will appear on Home when it has something.
 - Only the cards your community can show are listed. For example, there is no **Your Beans** or **Your deals** on the global community.
 - **Needs you** always stays at the top, and **Your community** always stays at the bottom.
 - **Find your community**, in your first 30 days on the global community, is not listed. It stays near the top for now.

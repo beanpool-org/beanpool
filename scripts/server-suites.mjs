@@ -27,7 +27,9 @@ export const DEFAULT_ENV = {
  * matter: the runner orders by the last recorded durations, longest first.
  */
 export const SUITES = [
-    'test-schema-upgrade',
+    'test-schema-upgrade-fresh-shape',
+    'test-schema-upgrade-triggers-visitors',
+    'test-schema-upgrade-markers-watermarks',
     'test-creator-channels',
     'test-pulse-resolver',
     'test-ssrf-fetch-timeout',
@@ -237,6 +239,9 @@ export const SUITES = [
     'test-members-contact-visibility',
     'test-members-directory-cost',
     'test-member-photos-out-of-rows',
+    'test-group-pictures-out-of-rows',
+    'test-group-rosters-photo-urls',
+    'test-group-pictures-crowdfund-urls',
     'test-contact-trade-partners',
     'test-sync-signature',
     'test-trust-value-curve',
@@ -451,8 +456,8 @@ export const VARIANTS = [
  * something, so a neighbour's burst of CPU can fail them. (Inside test-all the other checks, settings_phone above
  * all, may still be running.) Keyed by run id (`test-x` or `test-x(tag)`), with the reason. Keep it short: every
  * entry is serial wall-clock added to every run. A suite belongs here when a check of it compares a wall-clock time
- * with a bound a busy machine can cross; generous bounds (test-schema-upgrade's 5 s for a rebuild measured in tens of
- * ms) stay in the pool.
+ * with a bound a busy machine can cross; generous bounds (test-schema-upgrade-triggers-visitors' 5 s for a rebuild
+ * measured in tens of ms) stay in the pool.
  */
 export const SERIAL = {
     // Compares a visitor's board read with a member's by CPU time, alternating rounds in one process (generous bound, ~2x

@@ -299,7 +299,7 @@ async function main(): Promise<void> {
     console.log(`  ${tables.length} tables looked at`);
 
     console.log('\n— 3. watermarks and payload keys —');
-    const { exportSyncState, setMemberPhoto } = await import('@beanpool/engine');
+    const { exportSyncState, setMemberPhoto, setGroupPicture } = await import('@beanpool/engine');
     const { PLAIN_TABLES, PLAIN_TABLES_PAYLOAD, plainTableTriggers } = manifest;
     // The export as a main server makes it, with the plain tables the manifest names (engine/sync.ts exportSyncState).
     const payload = exportSyncState(db as any, 'manifest-test', null, 0, PLAIN_TABLES) as unknown as Record<string, unknown>;
@@ -334,6 +334,11 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-photo', 'Manifest Photo')`).run();
             setMemberPhoto(db as any, 'manifest-in-row-photo', 'data:image/png;base64,iVBORw0KGgo=');
             return (x) => x?.publicKey === 'manifest-in-row-photo' && x?.standing?.avatar_url === 'data:image/png;base64,iVBORw0KGgo=';
+        },
+        group_pictures: () => {
+            db.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('manifest-in-row-group', 'Manifest Group', 'manifest-in-row-group', 'manifest-in-row')`).run();
+            setGroupPicture(db as any, 'manifest-in-row-group', 'data:image/png;base64,iVBORw0KGgo=');
+            return (x) => x?.id === 'manifest-in-row-group' && x?.avatarUrl === 'data:image/png;base64,iVBORw0KGgo=';
         },
     };
     const deltaNow = () => exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown>;
@@ -380,6 +385,8 @@ async function main(): Promise<void> {
     db.prepare(`DELETE FROM enterprise_pledges WHERE id = 'manifest-or-watermark'`).run();
     db.prepare(`DELETE FROM member_preferences WHERE public_key = 'manifest-in-row'`).run();
     db.prepare(`DELETE FROM member_photos WHERE public_key = 'manifest-in-row-photo'`).run();
+    db.prepare(`DELETE FROM group_pictures WHERE group_id = 'manifest-in-row-group'`).run();
+    db.prepare(`DELETE FROM groups WHERE id = 'manifest-in-row-group'`).run();
     db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row-photo'`).run();
     db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row'`).run();
 
@@ -418,9 +425,10 @@ async function main(): Promise<void> {
     console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
     console.log(`  writes that move no watermark, of columns a tombstone clears: ${list(tombstoneCleared)}`);
     // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
-    // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved).
-    assert([...inParentRow].every((t) => t === 'member_photos'),
-        `the only table written in place that travels in its parent's row is member_photos, held to it below (${list(inParentRow)})`);
+    // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved). And
+    // group_pictures by its one writer (@beanpool/engine groups.ts setGroupPicture), the group's (#1486).
+    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures'),
+        `the only tables written in place that travel in their parent's row are member_photos and group_pictures, each held to it below (${list(inParentRow)})`);
     {
         const pk = 'manifest-photo-stamp';
         const old = '2000-01-01T00:00:00.000Z';
@@ -439,6 +447,25 @@ async function main(): Promise<void> {
         assert(moves.length === 0 && stampOf() === old,
             `member_photos: each change by its writer moves the member's updated_at, and setting what is held moves nothing (did not move: ${list(moves)})`);
         db.prepare('DELETE FROM members WHERE public_key = ?').run(pk);
+    }
+    {
+        const id = 'manifest-picture-stamp';
+        const old = new Date(Date.now() - 365 * 24 * 3600_000).toISOString(); // a year before the run
+        const stampOf = () => (db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(id) as { updated_at: string }).updated_at;
+        const reset = () => db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(old, id);
+        db.prepare(`INSERT INTO groups (id, name, slug, created_by, updated_at) VALUES (?, 'Manifest Stamp', ?, 'manifest-in-row', ?)`).run(id, id, old);
+        const moves: string[] = [];
+        for (const [label, value] of [['a first picture', ' data:image/png;base64,iVBORw0KGgo='], ['the same picture, its blanks moved (the same version and size)', 'data:image/png;base64,iVBORw0KGgo= '],
+            ['another picture', 'data:image/png;base64,iVBORw0KGgoAAAA='], ['no picture', null]] as const) {
+            reset();
+            setGroupPicture(db as any, id, value);
+            if (stampOf() === old) moves.push(label);
+        }
+        reset();
+        setGroupPicture(db as any, id, null);
+        assert(moves.length === 0 && stampOf() === old,
+            `group_pictures: each change by its writer moves the group's updated_at, and setting what is held moves nothing (did not move: ${list(moves)})`);
+        db.prepare('DELETE FROM groups WHERE id = ?').run(id);
     }
     // The standby makes each such clear itself: the importer's case for that tombstone sets the column to NULL.
     const importerSource = fs.readFileSync(importer, 'utf-8');

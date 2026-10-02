@@ -719,7 +719,7 @@ export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): bo
     return isMemberKeySpelling(pubkey) && isNodeMember(db, pubkey);
 }
 
-/** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */
+/** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade-triggers-visitors.ts). */
 export const OWNERS_WHO_ADDED_AS_FRIEND_SQL = "SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?";
 
 /**

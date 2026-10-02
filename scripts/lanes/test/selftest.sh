@@ -160,7 +160,7 @@ check "held for the maintainer"                  logged "left open for the maint
 check "decide lock released"                     [ ! -e "$LANE_LOCK_DIR/decide.lock" ]
 
 scenario "13. deciding pass that only succeeded on the FALLBACK model → DOWNGRADED, NOT clean"
-FAKE_CLAUDE_MODE=fail_fable LANE_DECIDE_FALLBACK_MODEL=claude-sonnet-5; print 3 > "$FAKE_STATE/comments"
+FAKE_CLAUDE_MODE=fail_fable LANE_DECIDE_FALLBACK_MODEL=claude-sonnet-5-5; print 3 > "$FAKE_STATE/comments"
 { decide_pass 42 feat/x; } >> "$LOG" 2>&1
 show
 check "STAGE_DOWNGRADED=1, CLEAN=0"               [ "$STAGE_DOWNGRADED:$CLEAN" = 1:0 ]

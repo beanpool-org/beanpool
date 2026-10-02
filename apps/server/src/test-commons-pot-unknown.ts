@@ -34,6 +34,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 import { spawnNode, post, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -62,8 +63,9 @@ async function child(): Promise<void> {
             se.seedGenesisMember(k.anna, 'Anna');
             const epoch = ledger.getCurrentEpoch();
             for (const name of NAMES.slice(1)) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, earned_credit, invited_by, invite_code)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', 500, ?, 'TEST')`).run(k[name], name, AVATAR, k.anna);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, invited_by, invite_code)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 500, ?, 'TEST')`).run(k[name], name, k.anna);
+                setMemberPhoto(db, k[name], AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(k[name], epoch);
             }
             se.reconcileLedgerFromDb();

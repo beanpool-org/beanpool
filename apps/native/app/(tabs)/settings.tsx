@@ -67,6 +67,7 @@ import { doorOfferedToAccount, globalStandingOnPhone, type GlobalStanding } from
 import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
+import { OneWayBackCard } from '../../components/OneWayBackCard';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -2025,6 +2026,8 @@ export default function SettingsScreen() {
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
+                            {/* In by 12 words with no sign-in: one way back, said plainly, with the sign-in offered (two-doors §2.5). */}
+                            <OneWayBackCard place="settings" colors={colors} />
                             <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                             {protectionNote && (
                                 <Text style={[styles.infoText, { marginBottom: 12 }]} accessibilityLiveRegion="polite">{protectionNote}</Text>

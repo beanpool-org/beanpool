@@ -20,8 +20,11 @@
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
+    checkDoorWorkChallenge,
+    checkDoorWorkSolution,
     checkVaultTicket,
     isVaultChallenge,
+    makeDoorWorkChallenge,
     newVaultChallenge,
     newVaultTicket,
     openVaultDepositBox,
@@ -437,7 +440,89 @@ export class FakeGlobal {
     /** Refuse every join that carries a ticket, 401 with this code (a ticket that ran out between the sheet and the join). */
     refuseTickets: string | null = null;
 
+    // ── The 12-words door and adding a sign-in later (apps/server routes/open-join.ts, S2/S3) ─────────────────────
+    /** The door's work key: the challenges it hands out are real ones, checked as the node checks them. */
+    readonly workKey = new Uint8Array(32).fill(0x55);
+    /** The level the work route hands out at each door; null: none needed (the sign-in door at ordinary rates). */
+    workLevel: { words: number; 'sign-in': number | null } = { words: 0, 'sign-in': null };
+    /** Work this door has taken, by challenge: spent once. */
+    readonly spentWork = new Set<string>();
+    /** The next N work checks refuse with this code, whatever was sent (a restart, a challenge that ran out). */
+    refuseWork: { code: string; times: number } | null = null;
+    /** A 12-words door that is shut (a sign-in required here). */
+    wordsShut = false;
+    /** Members by key: the door they came in by, as `open_joins` records it ('words', or the provider once linked). */
+    readonly joined = new Map<string, string>();
+    /** The link's own nonce (bound to `open-join-link:<key>` on the node). */
+    readonly linkNonce = 'link-nonce-1';
+    /** Sign-in accounts already someone's here, and removed members' (`provider:sub`). */
+    readonly takenSignIns = new Set<string>();
+    readonly removedSignIns = new Set<string>();
+    /** The node's own clock, for the work's ten minutes. */
+    now = () => Date.now();
+
+    private checkWork(work: any, key: string, door: 'words' | 'sign-in'): Reply | null {
+        if (this.refuseWork && this.refuseWork.times > 0) {
+            this.refuseWork.times--;
+            return reply(400, { error: 'Setting up your account didn\'t work out. Please try again.', code: this.refuseWork.code });
+        }
+        if (!work) return reply(400, { error: 'work required', code: 'work_required' });
+        const issued = checkDoorWorkChallenge(work.challenge, { workKey: this.workKey, key, door, now: this.now() });
+        if (!issued.ok) return reply(400, { error: 'x', code: issued.reason === 'expired' ? 'work_expired' : 'work_invalid' });
+        if (this.spentWork.has(work.challenge)) return reply(400, { error: 'x', code: 'work_spent' });
+        if (!checkDoorWorkSolution(work.challenge, work.counters).ok) return reply(400, { error: 'x', code: 'work_invalid' });
+        this.spentWork.add(work.challenge);
+        return null;
+    }
+
+    private handleWordsAndLink(req: SentRequest): Reply | null {
+        const key = req.headers['X-Public-Key'];
+        const b = req.body ?? {};
+        if (req.method === 'POST' && req.path === '/api/join/work') {
+            if (b.door === 'words' && this.wordsShut) return reply(403, { error: 'sign-in required', code: 'sign_in_required' });
+            const level = this.workLevel[b.door as 'words' | 'sign-in'];
+            if (level === null) return reply(200, { work: null, turnstile: null });
+            const challenge = makeDoorWorkChallenge({ workKey: this.workKey, level, key, door: b.door, now: this.now() });
+            return reply(200, { work: { challenge, level, parts: 8, bits: 7 + level, size: 65_536, expiresInSeconds: 600 }, turnstile: null });
+        }
+        if (req.method === 'POST' && req.path === '/api/join' && b.door === 'words') {
+            if (this.wordsShut) return reply(403, { error: 'sign-in required', code: 'sign_in_required' });
+            if (this.joined.has(key)) return reply(409, { error: 'This key is already a member of this community.', code: 'already_member' });
+            const refused = this.checkWork(b.work, key, 'words');
+            if (refused) return refused;
+            this.joined.set(key, 'words');
+            return reply(200, { success: true, member: { publicKey: key, callsign: b.callsign }, door: 'words' });
+        }
+        if (req.method === 'POST' && (req.path === '/api/join/link/sso-nonce' || req.path === '/api/join/link')) {
+            const row = this.joined.get(key);
+            if (!row) return reply(403, { error: 'Only an active member of this community can add a sign-in here.', code: 'not_a_member' });
+            if (row !== 'words') return reply(409, { error: 'This account already has a sign-in.', code: 'already_linked' });
+            if (req.path === '/api/join/link/sso-nonce') {
+                return reply(200, { nonce: this.linkNonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'], vault: this.ticketKeys ? { ticketKeys: this.ticketKeys } : null });
+            }
+            const claims = claimsOf(b.idToken);
+            if (typeof b.vaultTicket === 'string') {
+                if (this.refuseTickets) return reply(401, { error: 'Your sign-in could not be used.', code: this.refuseTickets });
+                const check = checkVaultTicket(b.vaultTicket, { ticketKeys: this.ticketKeys ?? [], now: Date.now(), key, purpose: 'deposit' });
+                if (!check.ok) return reply(401, { error: 'x', code: DOOR_TICKET_CODES[check.reason] });
+                if (claims?.nonce !== vaultTicketNonce(b.vaultTicket)) return reply(401, { error: 'x', code: 'sign_in' });
+            } else if (claims?.nonce !== this.linkNonce || b.nonce !== this.linkNonce) {
+                return reply(401, { error: 'Your sign-in could not be used.', code: 'sign_in' });
+            }
+            const account = `${b.provider}:${claims?.sub}`;
+            if (this.removedSignIns.has(account)) return reply(403, { error: 'removed', code: 'removed' });
+            if (this.takenSignIns.has(account)) return reply(409, { error: 'already', code: 'already_joined' });
+            this.takenSignIns.add(account);
+            this.joined.set(key, b.provider);
+            const recovery = b.recovery ? { enrolled: true, generation: 1, enrolledSso: [b.provider], threshold: 1 } : undefined;
+            return reply(200, { success: true, provider: b.provider, ...(recovery ? { recovery } : {}) });
+        }
+        return null;
+    }
+
     handle(req: SentRequest): Reply {
+        const wordsOrLink = this.handleWordsAndLink(req);
+        if (wordsOrLink) return wordsOrLink;
         if (req.method === 'POST' && req.path === '/api/join/sso-nonce') {
             const answer = { nonce: this.nonce, expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'] };
             if (this.beforeV5) return reply(200, answer);
@@ -447,6 +532,11 @@ export class FakeGlobal {
             const b = req.body ?? {};
             const signedIn = claimsOf(b.idToken)?.nonce;
             const refused = (code: string) => reply(401, { error: 'Your sign-in could not be used.', code });
+            // From the 30th sign-in join an hour from one network, the door asks for work, checked before the sign-in.
+            if (this.workLevel['sign-in'] !== null) {
+                const noWork = this.checkWork(b.work, req.headers['X-Public-Key'], 'sign-in');
+                if (noWork) return noWork;
+            }
             if (typeof b.vaultTicket === 'string' && !this.beforeV5) {
                 if (this.refuseTickets) return refused(this.refuseTickets);
                 if (!this.ticketKeys) return refused('ticket_unsupported');

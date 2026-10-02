@@ -559,6 +559,16 @@ export type DoorOutcome =
     | { kind: 'refused'; message: string };
 
 const DOOR_CLOSED = "This community isn't taking new members right now.";
+/**
+ * A 401 with no code: the node's signature check refused the request's timestamp (more than 5 minutes off), the one
+ * thing a 12-words joiner can fix. The phone says the same (utils/global-join.ts `phoneClock`); never "sign in again" here.
+ */
+export const WRONG_CLOCK = "The community couldn't accept this because this device's date and time look wrong. Check them in this device's settings (set them to automatic), then try again.";
+
+/** A refusal with no code at 401: the signature check's stale timestamp, which is a wrong clock on this device. */
+export function isWrongClock(answer: { status: number; body: Record<string, unknown> }): boolean {
+    return answer.status === 401 && typeof answer.body?.code !== 'string';
+}
 const EXPIRED = "That took a while and the sign-in expired. Let's try once more.";
 /** A work refusal said twice (design §3.3): the node's own words ask an old app to update, which a web page can't. */
 const WORK_FAILED = "Setting up your account didn't work out. Please try again.";
@@ -580,6 +590,7 @@ export function withRetryAfter(sentence: string, seconds: number | null | undefi
 export function doorOutcome(answer: DoorAnswer, provider: JoinProvider | null): DoorOutcome {
     const { status, body } = answer;
     const said = typeof body.error === 'string' && body.error ? body.error : null;
+    if (!provider && isWrongClock(answer)) return { kind: 'refused', message: WRONG_CLOCK };
     if (status === 200 && body.success === true) {
         const callsign = typeof body.member?.callsign === 'string' && body.member.callsign ? body.member.callsign : null;
         const recovery = body.recovery && typeof body.recovery === 'object' ? body.recovery : null;
@@ -663,6 +674,7 @@ export function doorRefusalMessage(answer: DoorAnswer): string {
  */
 export function wordsWorkRefusal(answer: DoorAnswer): { kind: 'busy' | 'closed' | 'failed'; message: string } {
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (isWrongClock(answer)) return { kind: 'failed', message: WRONG_CLOCK };
     if (answer.status === 403 && answer.body.code === 'sign_in_required') return { kind: 'closed', message: said ?? SIGN_IN_REQUIRED };
     if (answer.status === 429) {
         const sentence = answer.body.code === 'network_busy' && said ? said : TOO_MANY;

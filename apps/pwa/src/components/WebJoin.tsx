@@ -14,7 +14,6 @@ import {
     completePendingJoin,
     generateIdentity,
     lastSentAt,
-    loadIdentity,
     loadPendingJoin,
     markPendingJoinSent,
     pendingJoinSent,
@@ -31,6 +30,8 @@ import {
     type NodeRefusedJoin,
     type PendingJoin,
     NO_STORAGE_SENTENCE,
+    STORE_WOULD_NOT_OPEN_SENTENCE,
+    loadIdentityStrict,
 } from '../lib/identity';
 import {
     browserKeyProblem,
@@ -161,8 +162,8 @@ const WENT_WRONG_KEPT = "Something went wrong on this page before we could finis
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
 /** The one sentence for a browser that can't hold a key: its storage is missing or blocked, or it is too old. */
-export function keyProblemSentence(problem: 'storage' | 'old' | null): string {
-    return problem === 'storage' ? NO_STORAGE_SENTENCE : TOO_OLD;
+export function keyProblemSentence(problem: 'storage' | 'reload' | 'old' | null): string {
+    return problem === 'storage' ? NO_STORAGE_SENTENCE : problem === 'reload' ? STORE_WOULD_NOT_OPEN_SENTENCE : TOO_OLD;
 }
 
 export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
@@ -181,7 +182,7 @@ function restoredPending(r: BeanPoolIdentity): PendingJoin {
  * goes, so a second tab never makes a second member (review 4106962020); completePendingJoin refuses the rest.
  */
 async function accountHeldElsewhere(p: PendingJoin | null): Promise<BeanPoolIdentity | null> {
-    const held = await loadIdentity();
+    const held = await loadIdentityStrict();
     return held?.publicKey && held.publicKey !== p?.identity.publicKey ? held : null;
 }
 

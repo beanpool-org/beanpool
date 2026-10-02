@@ -46,7 +46,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
 import {
-    identityStoreAvailable,
+    identityStoreProblem,
     isDefiniteJoinRefusal,
     isJoinProvider,
     lastSentAt,
@@ -613,13 +613,16 @@ export async function browserCanHoldKey(): Promise<boolean> {
 }
 
 /**
- * Why this browser can't hold a key, or null when it can: 'storage' when it has nowhere to keep one (no IndexedDB, or a
- * profile that blocks it: an in-app browser, an older private mode), 'old' when it lacks WebCrypto Ed25519. The screens
+ * Why this browser can't hold a key, or null when it can: 'storage' when it has nowhere to keep one (no IndexedDB, or open()
+ * throws: an in-app browser, an older private mode), 'reload' when the store would not open twice running (not the
+ * browser's fault to switch away from), 'old' when it lacks WebCrypto Ed25519. The screens
  * say each in its own words.
  */
-export async function browserKeyProblem(): Promise<'storage' | 'old' | null> {
+export async function browserKeyProblem(): Promise<'storage' | 'reload' | 'old' | null> {
     try {
-        if (!(await identityStoreAvailable())) return 'storage';
+        const store = await identityStoreProblem();
+        if (store === 'absent') return 'storage';
+        if (store === 'failed') return 'reload';
         if (!globalThis.crypto?.subtle) return 'old';
         await globalThis.crypto.subtle.generateKey({ name: 'Ed25519' } as unknown as AlgorithmIdentifier, false, ['sign', 'verify']);
         return null;

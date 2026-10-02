@@ -14,7 +14,9 @@ import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
 import * as sync from '../lib/sync';
-import { importIdentity } from '../lib/identity';
+import { importIdentity, markPendingJoinSent, savePendingJoin, loadPendingJoin, loadIdentityStrict, IdentityHeldError } from '../lib/identity';
+import { browserKeyProblem } from '../lib/web-join';
+import { keyProblemSentence } from '../components/WebJoin';
 import { request } from '../lib/api';
 
 
@@ -202,6 +204,8 @@ afterEach(() => {
 
 describe.each(Object.keys(NO_IDB))('a visitor whose browser has IndexedDB %s', (kind) => {
     beforeEach(() => NO_IDB[kind]());
+    // A store that is missing says so; one that fails to open, twice, says to reload (it may well hold an account).
+    const SAY = kind === 'failing to open' ? /Couldn't open your account on this browser. Reload the page./ : SENTENCE;
 
     it('still gets the guest lobby and its listings from the node, every read unsigned', async () => {
         const calls = stubNode(GLOBAL);
@@ -221,17 +225,19 @@ describe.each(Object.keys(NO_IDB))('a visitor whose browser has IndexedDB %s', (
         stubNode(GLOBAL);
         render(<App />);
         await screen.findByTestId('guest-lobby');
-        expect(await screen.findByTestId('lobby-too-old')).toHaveTextContent(SENTENCE);
-        expect(screen.getByTestId('lobby-too-old').textContent).toMatch(/phone's normal browser/);
-        expect(screen.getByTestId('lobby-too-old').textContent).toMatch(/BeanPool app/);
+        expect(await screen.findByTestId('lobby-too-old')).toHaveTextContent(SAY);
+        if (kind !== 'failing to open') {
+            expect(screen.getByTestId('lobby-too-old').textContent).toMatch(/phone's normal browser/);
+            expect(screen.getByTestId('lobby-too-old').textContent).toMatch(/BeanPool app/);
+        }
         expect(screen.getByTestId('lobby-too-old').textContent).not.toMatch(/too old/);
         expect(screen.queryByTestId('lobby-join')).toBeNull();
         fireEvent.click(screen.getAllByTestId('header-join')[0]);
         const overlay = await screen.findByTestId('lobby-join-overlay');
-        expect(await within(overlay).findByTestId('join-too-old')).toHaveTextContent(SENTENCE);
-        expect(overlay.textContent).not.toMatch(/went wrong|Reload/i);
+        expect(await within(overlay).findByTestId('join-too-old')).toHaveTextContent(SAY);
+        if (kind !== 'failing to open') expect(overlay.textContent).not.toMatch(/went wrong|Reload/i);
         fireEvent.click(within(overlay).getByRole('button', { name: 'Already have BeanPool?' }));
-        expect(await within(overlay).findByTestId('restore-too-old')).toHaveTextContent(SENTENCE);
+        expect(await within(overlay).findByTestId('restore-too-old')).toHaveTextContent(SAY);
     });
 });
 
@@ -267,5 +273,54 @@ describe('request() with no IndexedDB', () => {
         vi.stubGlobal('indexedDB', undefined);
         await expect(importIdentity(await generateIdentity('Bob'))).rejects.toThrow(SENTENCE);
         await expect(savePendingJoin({ identity: await generateIdentity('Bob'), provider: null, nonce: null, startedAt: 1, expiresAt: Date.now() + 1e6, restored: false })).rejects.toThrow(SENTENCE);
+    });
+});
+
+describe('review of #1463', () => {
+    /** An IndexedDB whose next `fails` opens fail asynchronously, then it behaves as `real`. */
+    function flaky(real: ReturnType<typeof memoryIndexedDB>, fails: number): IDBFactory {
+        let left = fails;
+        return {
+            ...real,
+            open: (name: string, version?: number) => {
+                if (left-- > 0) {
+                    const req: any = {};
+                    setTimeout(() => { req.error = new DOMException('flaky', 'UnknownError'); req.onerror?.(); }, 0);
+                    return req;
+                }
+                return real.open(name, version);
+            },
+        } as unknown as IDBFactory;
+    }
+
+    it('a join with a new key is refused, with nothing sent, in a browser that holds another account whose store failed to open once (Safari)', async () => {
+        const real = memoryIndexedDB();
+        vi.stubGlobal('indexedDB', real);
+        const a = await generateIdentity('Alice');
+        await importIdentity(a);
+        const b = await generateIdentity('Bob');
+        const pending = { identity: b, provider: null, nonce: null, startedAt: 1, expiresAt: Date.now() + 1e6, restored: false };
+        const calls = stubNode(GLOBAL);
+        // The write itself looks at the identity slot, whatever a page read before it.
+        await expect(markPendingJoinSent(pending)).rejects.toBeInstanceOf(IdentityHeldError);
+        await expect(savePendingJoin(pending)).rejects.toBeInstanceOf(IdentityHeldError);
+        expect(await loadPendingJoin()).toBeNull();
+        // The held-account check does not guess when the store won't open (twice): it throws, it does not read "none".
+        vi.stubGlobal('indexedDB', flaky(real, 2));
+        await expect(loadIdentityStrict()).rejects.toMatchObject({ name: 'IdentityStoreUnavailableError', reason: 'failed' });
+        // One failed open is retried once, and the account is read.
+        vi.stubGlobal('indexedDB', flaky(real, 1));
+        expect((await loadIdentityStrict())?.publicKey).toBe(a.publicKey);
+        expect(calls.filter(c => c.path === '/api/join')).toHaveLength(0);
+    });
+
+    it('a store that fails to open is not "switch browsers": it says reload; only a missing store says the storage sentence', async () => {
+        vi.stubGlobal('indexedDB', flaky(memoryIndexedDB(), 2));
+        expect(await browserKeyProblem()).toBe('reload');
+        vi.stubGlobal('indexedDB', flaky(memoryIndexedDB(), 1));
+        expect(await browserKeyProblem()).toBeNull();
+        vi.stubGlobal('indexedDB', undefined);
+        expect(await browserKeyProblem()).toBe('storage');
+        expect(keyProblemSentence('reload')).toBe("Couldn't open your account on this browser. Reload the page.");
     });
 });

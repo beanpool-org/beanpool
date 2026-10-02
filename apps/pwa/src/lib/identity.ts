@@ -32,49 +32,70 @@ export interface BeanPoolIdentity {
  * settle: a join the node has said yes to would sit on "Joining…" instead of saying it could not be saved.
  */
 
-/** What a person is told when this browser has nowhere to keep an account. One sentence, and the error's own message. */
+/** What a person is told when this browser has nowhere to keep an account. One sentence. */
 export const NO_STORAGE_SENTENCE =
     "This browser can't keep your account, so open the site in your phone's normal browser, or use the BeanPool app.";
+/** What a person is told when the store exists but would not open, even on a second try: a reload may fix it. */
+export const STORE_WOULD_NOT_OPEN_SENTENCE = "Couldn't open your account on this browser. Reload the page.";
 
 /**
- * This browser's identity store can't be opened: no IndexedDB (some in-app browsers, older private modes), or a profile
- * that blocks it. Reading says there is no account here (loadIdentity and the load* readers return null); anything
- * that would have to keep a key or a slot refuses with this, never a false success.
+ * This browser's identity store can't be opened. `absent`: there is none (no IndexedDB, or open() throws at once: some
+ * in-app browsers, older private modes, a blocked profile), so no account can be held here. `failed`: it is there but
+ * the open failed or was blocked, twice (Safari does this now and then), so an account may be held and not readable.
+ * Reading says there is no account here only for `absent` and only through the lenient readers; nothing that must keep
+ * a key or a slot ever goes ahead, and the held-account checks (loadIdentityStrict) refuse to guess on `failed`.
  */
 export class IdentityStoreUnavailableError extends Error {
-    constructor() {
-        super(NO_STORAGE_SENTENCE);
+    readonly reason: 'absent' | 'failed';
+    constructor(reason: 'absent' | 'failed' = 'absent') {
+        super(reason === 'absent' ? NO_STORAGE_SENTENCE : STORE_WOULD_NOT_OPEN_SENTENCE);
         this.name = 'IdentityStoreUnavailableError';
+        this.reason = reason;
     }
 }
 
-function openDb(): Promise<IDBDatabase> {
+function openDbOnce(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
         let req: IDBOpenDBRequest;
         try {
             if (typeof indexedDB === 'undefined' || !indexedDB) throw new Error('no indexedDB');
             req = indexedDB.open(DB_NAME, 1);
         } catch {
-            reject(new IdentityStoreUnavailableError());
+            reject(new IdentityStoreUnavailableError('absent'));
             return;
         }
         req.onupgradeneeded = () => {
             req.result.createObjectStore(STORE_NAME);
         };
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(new IdentityStoreUnavailableError());
-        req.onblocked = () => reject(new IdentityStoreUnavailableError());
+        req.onerror = () => reject(new IdentityStoreUnavailableError('failed'));
+        req.onblocked = () => reject(new IdentityStoreUnavailableError('failed'));
     });
 }
 
-/** True when this browser's identity store opens, false when it can't (see IdentityStoreUnavailableError). */
-export async function identityStoreAvailable(): Promise<boolean> {
+/** An open that failed asynchronously is tried once more: it is often a one-off. */
+async function openDb(): Promise<IDBDatabase> {
+    try {
+        return await openDbOnce();
+    } catch (e) {
+        if (e instanceof IdentityStoreUnavailableError && e.reason === 'failed') return openDbOnce();
+        throw e;
+    }
+}
+
+/** Why this browser's identity store can't be opened, or null when it can. */
+export async function identityStoreProblem(): Promise<'absent' | 'failed' | null> {
     try {
         (await openDb()).close();
-        return true;
-    } catch {
-        return false;
+        return null;
+    } catch (e) {
+        return e instanceof IdentityStoreUnavailableError ? e.reason : 'absent';
     }
+}
+
+/** True when this browser's identity store opens. */
+export async function identityStoreAvailable(): Promise<boolean> {
+    return (await identityStoreProblem()) === null;
 }
 
 /** A reader's answer when the store can't be opened: none. Any other failure is still the reader's to throw. */
@@ -206,16 +227,28 @@ function identityToWrite(stored: BeanPoolIdentity | undefined, incoming: BeanPoo
  * Load the existing identity from IndexedDB, or return null.
  */
 export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
-    return noneIfStoreUnavailable(async () => {
+    return noneIfStoreUnavailable(loadIdentityStrict);
+}
+
+/**
+ * loadIdentity for a check that decides whether a second account may be made: none when this browser can hold no
+ * account at all, but a store that exists and would not open is thrown (IdentityStoreUnavailableError, `failed`),
+ * since an account may be held there and a join with another key must not go ahead on a guess.
+ */
+export async function loadIdentityStrict(): Promise<BeanPoolIdentity | null> {
+    try {
         const db = await openDb();
-        return new Promise<BeanPoolIdentity | null>((resolve, reject) => {
+        return await new Promise<BeanPoolIdentity | null>((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
             const req = store.get(KEY_ID);
             req.onsuccess = () => resolve(req.result ?? null);
             req.onerror = () => reject(req.error);
         });
-    });
+    } catch (e) {
+        if (e instanceof IdentityStoreUnavailableError && e.reason === 'absent') return null;
+        throw e;
+    }
 }
 
 /**
@@ -513,16 +546,19 @@ function withoutSentMark(pending: PendingJoin): PendingJoin {
  * another tab sent must not undo it. Returns what was stored.
  */
 export async function savePendingJoin(pending: PendingJoin): Promise<PendingJoin> {
-    const out = await withStoredPendingJoin<{ saved: PendingJoin } | { held: PendingJoin }>((current) => {
+    const out = await withStoredSlots<{ saved: PendingJoin } | { held: PendingJoin } | { account: BeanPoolIdentity }>(({ identity, pending: current }) => {
+        // This browser holds another account: no second key is kept beside it, decided in this transaction.
+        if (identity?.publicKey && identity.publicKey !== pending.identity.publicKey) return { result: { account: identity } };
         if (isSent(current)) {
             if (current.identity.publicKey !== pending.identity.publicKey) return { result: { held: current } };
             const next: PendingJoin = { ...withoutSentMark(pending), sentAt: current.sentAt };
             if (current.earlierSentAt !== undefined) next.earlierSentAt = current.earlierSentAt;
-            return { write: next, result: { saved: next } };
+            return { pending: next, result: { saved: next } };
         }
         // Nothing sent is stored: a copy that says sent is kept as it says (the safe way round).
-        return { write: pending, result: { saved: pending } };
+        return { pending, result: { saved: pending } };
     });
+    if ('account' in out) throw new IdentityHeldError(out.account);
     if ('held' in out) throw new PendingJoinHeldError(out.held);
     return out.saved;
 }
@@ -543,7 +579,9 @@ export interface MarkJoinSentOptions {
  * savePendingJoin when another key's sent join holds the slot, or as `options` says. Returns what was stored.
  */
 export async function markPendingJoinSent(pending: PendingJoin, at: number = Date.now(), options: MarkJoinSentOptions = {}): Promise<PendingJoin> {
-    const out = await withStoredSlots<{ saved: PendingJoin } | { held: PendingJoin } | { invite: InviteSent }>(({ pending: current, inviteSent }) => {
+    const out = await withStoredSlots<{ saved: PendingJoin } | { held: PendingJoin } | { invite: InviteSent } | { account: BeanPoolIdentity }>(({ identity, pending: current, inviteSent }) => {
+        // This browser holds another account: a join with this key would make a second member, so it does not go.
+        if (identity?.publicKey && identity.publicKey !== pending.identity.publicKey) return { result: { account: identity } };
         if (isSent(current) && current.identity.publicKey !== pending.identity.publicKey) return { result: { held: current } };
         const invite = options.refuseWhileInviteKept ? asInviteSent(inviteSent) : null;
         if (invite && invite.identity.publicKey !== pending.identity.publicKey) return { result: { invite } };
@@ -554,6 +592,7 @@ export async function markPendingJoinSent(pending: PendingJoin, at: number = Dat
         if (earlier.length) next.earlierSentAt = earlier.some(Number.isNaN) ? Number.NaN : Math.max(...earlier);
         return { pending: next, result: { saved: next } };
     });
+    if ('account' in out) throw new IdentityHeldError(out.account);
     if ('held' in out) throw new PendingJoinHeldError(out.held);
     if ('invite' in out) throw new InviteSentHeldError(out.invite);
     return out.saved;

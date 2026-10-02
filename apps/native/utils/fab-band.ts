@@ -1,8 +1,9 @@
 /**
- * The floating "+ ADD POST" button (the Market's, app/(tabs)/market.tsx `styles.fab`, and Home's, app/(tabs)/index.tsx)
- * and the actions of the cards it floats over, at 320dp with 1.3x text: the "one way back" card's
- * (components/OneWayBackCard.tsx, PR #1452 re-review, finding 4), Find your community's (components/FindCommunityCard.tsx)
- * and every Home card's buttons, chips and trailing links (H2, components/home/FabAware.tsx).
+ * The floating "+ ADD POST" button on Home (app/(tabs)/index.tsx) and the actions of the cards it floats over, at 320dp
+ * with 1.3x text: the "one way back" card's (components/OneWayBackCard.tsx, PR #1452 re-review, finding 4), Find your
+ * community's (components/home/FindCommunityBody.tsx; on the global Market's first view until H4 moved it to Home) and
+ * every Home card's buttons, chips and trailing links (H2, components/home/HomeParts.tsx FabAware). The Market's own button
+ * no longer floats over a card's actions: neither card is drawn there now.
  *
  * The button floats 32dp above the screen's bottom edge, about 58dp tall at the app's largest text. On a small screen the
  * card's two actions rest right there on the Market's first view, and the button then read as one of the card's own

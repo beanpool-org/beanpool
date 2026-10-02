@@ -41,8 +41,6 @@ import {
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
-import { FindCommunityCard } from '../../components/FindCommunityCard';
-import { fabStepsAside, type CardActionsAt } from '../../utils/fab-band';
 import { readPhoneInterests, saveInterests } from '../../utils/home-store';
 import { anchorUrl } from '../../utils/node-post';
 import { ExampleListings } from '../../components/ExampleListings';
@@ -116,17 +114,16 @@ const MIN_FEED_UNDER_PANEL = 48;
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
     // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
-    const { width: winW, height: winH, fontScale } = useWindowDimensions();
+    const { width: winW, fontScale } = useWindowDimensions();
     const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
     const { identity } = useIdentity();
 
     // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
-    // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, puts the "Find
-    // your community" card on top, and orders listings nearest first (utils/market-global.ts). Local communities
-    // are unchanged: a node that says nothing trades in Beans.
+    // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, and orders listings
+    // nearest first (utils/market-global.ts). Its "Find your community" card is on Home since H4 (the top of Home, pinned
+    // for a member's first 30 days). Local communities are unchanged: a node that says nothing trades in Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = marketShowsBeans(nodeProfile?.features);
-    const isGlobal = nodeProfile?.profile === 'global';
     // Deals are escrow: off where escrow is off.
     const showsDeals = nodeProfile?.features.escrow !== false;
 
@@ -602,26 +599,9 @@ export default function MarketScreen() {
      * down and come back on any scroll up (components/QuickReturn). They stay while in use: the category
      * panel open, or the search field focused (typing narrows the list under the keyboard).
      */
-    /**
-     * "+ ADD POST" steps aside while the Find your community card's actions rest under it (utils/fab-band.ts; at 320dp ×
-     * 1.3 they do on the global Market's first view), and is back as soon as the feed scrolls them clear or the card goes.
-     */
-    const marketScrollY = useRef(0);
-    const cardActions = useRef<CardActionsAt | null>(null);
-    const [fabAside, setFabAside] = useState(false);
-    const updateFabAside = useCallback(() => {
-        const aside = fabStepsAside(cardActions.current, marketScrollY.current, winH);
-        setFabAside(prev => (prev === aside ? prev : aside));
-    }, [winH]);
-    useEffect(() => { updateFabAside(); }, [updateFabAside]);
-    const onCardActionsAt = useCallback((at: { top: number; bottom: number } | null) => {
-        cardActions.current = at ? { ...at, scrollY: marketScrollY.current } : null;
-        updateFabAside();
-    }, [updateFabAside]);
     const qr = useQuickReturn({
         pinned: categoryPanel.open || searchFocused,
         resetKey: viewMode,
-        onScrollY: (y) => { marketScrollY.current = y; updateFabAside(); },
     });
     // Tapping Market again scrolls to the top, and brings the controls with it.
     useTabRetapScrollTop(listRef, qr.show);
@@ -1206,9 +1186,8 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
-            {/* The worldwide community's way out to a local one (design §3.1). Home hosts it from H4. "Your account has one
-                way back" lives on Home, the landing screen, since H2. */}
-            {isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} onActionsAt={onCardActionsAt} />}
+            {/* The worldwide community's way out to a local one (design §3.1) is a Home card since H4, and "Your account
+                has one way back" lives on Home, the landing screen, since H2: neither is drawn here. */}
             {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}
             {showFirstOfferQuest && showsBeans && !categoryPanel.open && (
                 <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
@@ -1762,9 +1741,8 @@ export default function MarketScreen() {
                 <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}
             </View>
-            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. And while
-                the "one way back" card's actions rest under it, so it never reads as one of the card's buttons. */}
-            {!categoryPanel.open && !fabAside && (
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
+            {!categoryPanel.open && (
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>

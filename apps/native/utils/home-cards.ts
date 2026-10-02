@@ -14,8 +14,10 @@
  * - **Needs you** is the header's own list (utils/needs-you.ts): the phone's own deals and unread messages from its
  *   database (fresher, no request), the node's admin work, votes and group lines from the answer.
  *
- * Slice H2 draws every card but `find`: the global node's Find your community card moves from the Market into Home in
- * H4, with the global First steps words and the 30-day pin (§12). The Market keeps drawing it until then.
+ * - **The global flavour** (slice H4, §3.1, §7, §13 Q4 and Q5): Find your community is a Home card on the global node
+ *   (the Market no longer draws it), pinned at the top and impossible to hide or move for the member's first 30 days,
+ *   then a card like any other; First steps there says the global words and the new-account limits (`me.probation`);
+ *   Who joined is a count by area, never a name; "Near you" lists the nearest first. A local community's Home is H2's.
  */
 
 import {
@@ -39,8 +41,12 @@ export const FIXED_FIRST: HomeCardId = 'needs';
 export const FIXED_LAST: HomeCardId = 'community';
 const FIXED: ReadonlySet<HomeCardId> = new Set([FIXED_FIRST, FIXED_LAST]);
 
-/** The cards this build draws (H2): all but `find`, which comes to Home in H4. */
-export const HOME_DRAWN: readonly HomeCardId[] = HOME_CARD_IDS.filter(id => id !== 'find');
+/** The cards this build draws: the whole catalogue since H4 (Find your community came to Home from the Market). */
+export const HOME_DRAWN: readonly HomeCardId[] = [...HOME_CARD_IDS];
+
+/** Find your community is pinned for a member's first 30 days on the global node, then it can be hidden (§4.1, §7, §13 Q5). */
+export const FIND_PINNED_DAYS = 30;
+const DAY_MS = 86_400_000;
 /** Cards with no data of their own in the answer: drawn from `me` and `features` (routes/home-answer.ts header). */
 const NO_DATA: ReadonlySet<HomeCardId> = new Set(['interests', 'invite']);
 
@@ -76,10 +82,33 @@ export interface HomeMarketItem { id: string; type: 'offer' | 'need'; title: str
 export interface HomeEventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
 export interface HomePulseItem { id: string; title: string | null; thumbnailUrl: string | null; platform: string; callsign: string; category: string; url: string | null }
 
+/**
+ * Find your community's body: GET /api/global/home's, assembled in-process (apps/server routes/global-directory.ts
+ * `landingCardFor`). Its rows are other people's publications: the screen reads them through
+ * utils/community-directory.ts `readGlobalHome`, which checks each one, before anything of them is drawn.
+ */
+export interface HomeFind {
+    point: 'request' | 'area' | null;
+    communities: unknown[];
+    communityCount: number;
+    nearbyPosts: { radiusKm: number; count: number; more: boolean } | null;
+    watches: unknown[] | null;
+    knock: null;
+    directoryFetchedAt: string | null;
+}
+
+/** The member's own new-account limits as the node sends them (`me.probation`, apps/server engine/probation.ts ProbationSummary). */
+export interface HomeProbation {
+    onProbation: boolean;
+    rules?: 'words' | 'ordinary';
+    limits?: { posts?: { limit: number }; photos?: { limit: number }; new_dm_recipients?: { limit: number } };
+    endsWhen?: { hours: number; keptPosts: number };
+}
+
 export interface HomeCards {
     needs?: { items: HomeNeedsItem[] };
     safety?: { words: true; signInLinked: false };
-    find?: unknown;
+    find?: HomeFind;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
     enterprise?: { id: string; name: string; requests: number; others: number };
@@ -97,7 +126,7 @@ export interface HomeCards {
 export interface HomeMe {
     joinedAt: string | null;
     isKeeper: boolean;
-    probation: unknown;
+    probation: HomeProbation | null;
     interests: string[];
     area: { lat: number; lng: number } | null;
     firstOffer: boolean;
@@ -182,27 +211,52 @@ export function pickLayout(account: HomeLayout | null, phone: HomeLayout | null)
     return stamp(phone) > stamp(account) ? { layout: phone, push: true } : { layout: account, push: false };
 }
 
-/** The member's order: `needs` first, the cards they placed, the rest in the default order, `community` last. */
-export function cardOrder(layout: HomeLayout | null): HomeCardId[] {
-    const placed = (layout?.order ?? []).filter(id => !FIXED.has(id));
-    const rest = HOME_CARD_IDS.filter(id => !FIXED.has(id) && !placed.includes(id));
-    return [FIXED_FIRST, ...placed, ...rest, FIXED_LAST];
+/**
+ * Whether Find your community is pinned for this reader: on the global node, in the member's first 30 days from joining,
+ * or while the join date is unknown (the node's own rule, routes/home-answer.ts `cardsToBuild`, and the web app's,
+ * apps/pwa lib/home-cards.ts `findPinned`).
+ */
+export function findPinned(answer: Pick<HomeAnswer, 'profile' | 'me'>, now: number): boolean {
+    if (answer.profile !== 'global') return false;
+    const joined = answer.me?.joinedAt ? Date.parse(answer.me.joinedAt) : NaN;
+    return !Number.isFinite(joined) || now - joined < FIND_PINNED_DAYS * DAY_MS;
 }
 
-/** Whether a card can be hidden: everything but `needs` and `community` (§4.1). */
-export const canHideCard = (id: HomeCardId): boolean => !FIXED.has(id);
-/** Whether a card can be moved: the same cards; `needs` stays first and `community` last. */
-export const canMoveCard = (id: HomeCardId): boolean => !FIXED.has(id);
+/** The cards pinned for this reader now: they can't be hidden or moved, and stand at the top (only `find` has a pin). */
+export function pinnedCards(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
+    return answer && findPinned(answer, now) ? ['find'] : [];
+}
+
+/**
+ * The member's order: `needs` first, the cards they placed, the rest in the default order, `community` last. A pinned
+ * `find` stands right under `needs` (and under "Your way back in" while that one keeps its place there, as the design's
+ * global Home draws them, §9 (a)), whatever the layout says: "pinned at the top for 30 days" (§0, §7).
+ */
+export function cardOrder(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardId[] {
+    const placed = (layout?.order ?? []).filter(id => !FIXED.has(id));
+    const rest = HOME_CARD_IDS.filter(id => !FIXED.has(id) && !placed.includes(id));
+    const order: HomeCardId[] = [FIXED_FIRST, ...placed, ...rest, FIXED_LAST];
+    if (!pinned.includes('find')) return order;
+    const without = order.filter(id => id !== 'find');
+    const at = without[1] === 'safety' ? 2 : 1;
+    return [...without.slice(0, at), 'find', ...without.slice(at)];
+}
+
+/** Whether a card can be hidden: everything but `needs`, `community` and a pinned card (§4.1). */
+export const canHideCard = (id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(id) && !pinned.includes(id);
+/** Whether a card can be moved: the same cards; `needs` stays first, a pinned card under it, and `community` last. */
+export const canMoveCard = (id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean => !FIXED.has(id) && !pinned.includes(id);
 
 const emptyLayout = (): HomeLayout => ({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: null });
 
-export function isHidden(layout: HomeLayout | null, id: HomeCardId): boolean {
-    return canHideCard(id) && !!layout?.hidden.includes(id);
+/** Hidden by the layout and hideable now: a pinned card shows whatever the layout says. */
+export function isHidden(layout: HomeLayout | null, id: HomeCardId, pinned: readonly HomeCardId[] = []): boolean {
+    return canHideCard(id, pinned) && !!layout?.hidden.includes(id);
 }
 
 /** Hidden: it goes from Home and comes back from Edit home (§4.1 "Add = un-hide"). Null when it can't be. */
-export function hideCard(layout: HomeLayout | null, id: HomeCardId, now: number): HomeLayout | null {
-    if (!canHideCard(id)) return null;
+export function hideCard(layout: HomeLayout | null, id: HomeCardId, now: number, pinned: readonly HomeCardId[] = []): HomeLayout | null {
+    if (!canHideCard(id, pinned)) return null;
     const l = layout ?? emptyLayout();
     if (l.hidden.includes(id)) return null;
     return { ...l, hidden: [...l.hidden, id], updatedAt: new Date(now).toISOString() };
@@ -218,13 +272,16 @@ export function showCard(layout: HomeLayout | null, id: HomeCardId, now: number)
  * there), so a move always shows. The whole order is kept, so a card not in `among` keeps its place. Null when it can't
  * move that way.
  */
-export function moveCard(layout: HomeLayout | null, id: HomeCardId, dir: 'up' | 'down', among: readonly HomeCardId[], now: number): HomeLayout | null {
-    if (!canMoveCard(id)) return null;
-    const movable = among.filter(canMoveCard);
+export function moveCard(
+    layout: HomeLayout | null, id: HomeCardId, dir: 'up' | 'down', among: readonly HomeCardId[], now: number, pinned: readonly HomeCardId[] = [],
+): HomeLayout | null {
+    if (!canMoveCard(id, pinned)) return null;
+    const movable = among.filter(c => canMoveCard(c, pinned));
     const at = movable.indexOf(id);
     const other = at < 0 ? undefined : movable[dir === 'up' ? at - 1 : at + 1];
     if (!other) return null;
-    const order = cardOrder(layout).filter(canMoveCard);
+    // Every card's place is written, a pinned card's where it stands now: it keeps that place once its pin is over.
+    const order = cardOrder(layout, pinned).filter(c => !FIXED.has(c));
     const i = order.indexOf(id);
     const j = order.indexOf(other);
     [order[i], order[j]] = [order[j], order[i]];
@@ -248,18 +305,19 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 /**
  * Whether a node of this profile can ever show the card in this build: the money cards only where Beans, escrow and
  * enterprises are on (the node builds them only then, routes/home-answer.ts), the invite card only where invites are,
- * First steps not on the global node, whose words come in H4, and "Your way back in" only where the 12-words door is
- * open (only a member who came in by 12 words has it: a local community's door never takes 12 words), or where the node
- * sent one (a member who came in before the door shut keeps theirs). Unknown counts as on, as utils/node-profile.ts reads
- * a node's features (kept here so this file stays pure). Home draws only these whatever an answer holds, and Edit home
- * offers only these: "Nothing to show now" is said of a card that could show, never of one that can't.
+ * Find your community only on the global node (the Market drew it only there before H4), and "Your way back in" only
+ * where the 12-words door is open (only a member who came in by 12 words has it: a local community's door never takes 12
+ * words), or where the node sent one (a member who came in before the door shut keeps theirs). Unknown counts as on, as
+ * utils/node-profile.ts reads a node's features (kept here so this file stays pure). Home draws only these whatever an
+ * answer holds, and Edit home offers only these: "Nothing to show now" is said of a card that could show, never of one
+ * that can't.
  */
 export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
     if (!HOME_DRAWN.includes(id)) return false;
     const f = answer.features;
     switch (id) {
         case 'safety': return f.wordsDoor !== false || !!answer.cards?.safety;
-        case 'steps': return answer.profile !== 'global';
+        case 'find': return answer.profile === 'global';
         case 'beans': return f.beans !== false;
         case 'deals': return f.escrow !== false;
         case 'enterprise': return f.enterprises !== false;
@@ -295,10 +353,20 @@ export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): bo
  * The cards to ask the node for (`cards=`), in the catalogue's order so the address is the same each time and a repeat
  * read can be a 304: what this build draws and the answer carries, minus the member's hidden cards (never `needs` or
  * `community`). Never decided by what the last answer said of the node (its profile): a list built on a stale answer
- * would leave out a card the node now has (measured on the emulator: First steps went missing after a switch).
+ * would leave out a card the node now has (measured on the emulator: First steps went missing after a switch). `find` is
+ * asked on every node like the rest: a local community has no such card and answers none (routes/home-answer.ts
+ * `findCard`). `pinned` ({@link askPinned}): a pinned card is asked for even where the layout hides it.
  */
-export function cardsToAsk(layout: HomeLayout | null): HomeCardId[] {
-    return HOME_DRAWN.filter(id => !NO_DATA.has(id) && !isHidden(layout, id));
+export function cardsToAsk(layout: HomeLayout | null, pinned: readonly HomeCardId[] = []): HomeCardId[] {
+    return HOME_DRAWN.filter(id => !NO_DATA.has(id) && !isHidden(layout, id, pinned));
+}
+
+/**
+ * The pins to ask by: the account's, from the answer in hand; with none yet, `find` counts as pinned, so a hidden one is
+ * asked for until an answer says whether it still is (the web app's rule, apps/pwa lib/home-cards.ts `askedCards`).
+ */
+export function askPinned(answer: Pick<HomeAnswer, 'profile' | 'me'> | null | undefined, now: number): HomeCardId[] {
+    return answer ? pinnedCards(answer, now) : ['find'];
 }
 
 /** The member's starred categories: the account's, else the phone's own (the Market's For You stars, `bp_fav_categories`). */
@@ -327,6 +395,10 @@ export interface HomeDrawContext {
     needs?: number;
     /** The reader's role here, for where only admins invite ({@link invitesForReader}); absent: not heard. */
     role?: HomeRole;
+    /** The phone remembers a knock this account sent (utils/knock.ts `rememberedKnocks`); absent: not read yet. */
+    knocked?: boolean;
+    /** The phone's clock, for the 30-day pin; absent: now. */
+    now?: number;
 }
 
 /**
@@ -341,8 +413,11 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
     return dealsTab ? { tab: 'deals', dealsTab } : { tab: 'deals' };
 }
 
-/** The First steps lines of a local community (§3.1), with what is done. */
-export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite'; text: string; done: boolean }
+/**
+ * A First steps line (§3.1), with what is done. `suggestion`: a line that never holds the card open (the phone can't
+ * tick it: a knock is kept on the community knocked on, not here); it goes once the phone remembers a knock.
+ */
+export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite' | 'post' | 'ask'; text: string; done: boolean; suggestion?: true }
 
 /**
  * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
@@ -360,21 +435,97 @@ export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: 
     return lines;
 }
 
+/** Whether the answer carries a Find your community body the screen can read (its rows are checked as they are drawn). */
+export const isFindCard = (v: unknown): v is HomeFind => isObj(v) && Array.isArray(v.communities);
+
 /**
- * The cards to draw, top to bottom (§3.2): the member's order, each card only while it has something to say, a hidden
- * card never (but `needs` and `community`). Not `find` (H4).
+ * A community near enough to be listed, with an https address to knock on (the find card lists the nearest first, §3.1;
+ * Communities near you checks each address in full, utils/community-directory.ts `communityOrigin`).
+ */
+function communityToAsk(find: HomeFind | undefined): boolean {
+    return !!find && isFindCard(find) && find.communities.some(c => isObj(c) && typeof c.url === 'string' && /^https:\/\/[^\s/?#@]+/i.test(c.url));
+}
+
+/**
+ * The First steps lines of the global node (§3.1, §7; the web app's, apps/pwa lib/home-cards.ts `stepLines`): a first
+ * post, free or for swap (Beans are off there), and, while a community near has an address and the phone remembers no
+ * knock, a suggestion to ask one to let them in, which never holds the card open. The design's "Set your area" is left
+ * out, as on the web: no screen on the phone sets the account's area yet, and every line opens a screen.
+ */
+export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: HomeFind | undefined, knocked: boolean): StepLine[] {
+    const lines: StepLine[] = [{ id: 'post', text: 'Post something free or for swap', done: steps.firstPost }];
+    if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: 'Ask a community to let you in', done: false, suggestion: true });
+    return lines;
+}
+
+/**
+ * The new-account limits, said before the member meets them (§3.1, §6.2, §7): "For your first 3 days: 3 posts and 10
+ * new chats a day." ("7 days: 2 posts and 3 new chats" for a member who came in by 12 words), from the node's own numbers
+ * (`me.probation`, read tolerantly: it comes off the network). Nothing when the node sends none or the limits are over.
+ */
+export function probationSentence(p: HomeProbation | null | undefined): string | null {
+    if (!isObj(p) || p.onProbation !== true) return null;
+    const whole = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
+    const hours = whole(p.endsWhen?.hours);
+    const posts = whole(p.limits?.posts?.limit);
+    const chats = whole(p.limits?.new_dm_recipients?.limit);
+    if (!hours || posts === null || chats === null) return null;
+    const span = hours % 24 === 0 ? plural(hours / 24, 'day', 'days') : plural(hours, 'hour', 'hours');
+    return `For your first ${span}: ${plural(posts, 'post', 'posts')} and ${plural(chats, 'new chat', 'new chats')} a day.`;
+}
+
+/**
+ * First steps as this node says it: a local community's lines (H2's, unchanged), or the global node's lines and the
+ * new-account limits. `show`: a line it can tick is undone, or (global) the limits still apply.
+ */
+export function firstSteps(
+    answer: HomeAnswer, ctx: Pick<HomeDrawContext, 'interests' | 'role' | 'knocked'>,
+): { lines: StepLine[]; note: string | null; show: boolean } {
+    const s = answer.cards.steps;
+    if (!s) return { lines: [], note: null, show: false };
+    if (answer.profile !== 'global') {
+        const lines = stepLines(s, ctx.interests.length > 0, invitesForReader(answer.features, ctx.role));
+        return { lines, note: null, show: lines.some(l => !l.done) };
+    }
+    const lines = globalStepLines(s, answer.cards.find, !!ctx.knocked);
+    const note = probationSentence(answer.me?.probation);
+    return { lines, note, show: lines.some(l => !l.done && !l.suggestion) || note !== null };
+}
+
+/**
+ * "Near you" (§3.1): on the global node the nearest first, those with no distance after in the order they came; then
+ * starred categories first, each part keeping that order (interests reorder, never filter). Elsewhere what's new, starred
+ * first, as H2 drew it. The node orders it so too, but the phone's stars can be newer than its answer.
+ */
+export function marketInOrder<T extends { category: string; distanceKm?: number | null }>(
+    items: readonly T[], interests: readonly string[], profile: string, normalise: (c: string) => string = c => c,
+): T[] {
+    const near = profile === 'global' ? nearestFirst(items) : [...items];
+    return starredFirst(near, i => i.category, interests, normalise);
+}
+
+function nearestFirst<T extends { distanceKm?: number | null }>(items: readonly T[]): T[] {
+    const far = (t: T) => (typeof t.distanceKm === 'number' && Number.isFinite(t.distanceKm) ? t.distanceKm : Infinity);
+    return items.map((t, i) => ({ t, i })).sort((a, b) => (far(a.t) - far(b.t)) || (a.i - b.i)).map(x => x.t);
+}
+
+/**
+ * The cards to draw, top to bottom (§3.2): the member's order (a pinned `find` at the top), each card only while it has
+ * something to say, a hidden card never (but `needs`, `community` and a pinned card).
  */
 export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: HomeDrawContext): HomeCardId[] {
     const c = answer.cards;
     const global = answer.profile === 'global';
     const canInvite = invitesForReader(answer.features, ctx.role);
+    const pinned = pinnedCards(answer, ctx.now ?? Date.now());
     const shows = (id: HomeCardId): boolean => {
         if (!cardOnNode(id, answer, ctx.role)) return false;
-        if (isHidden(layout, id)) return false;
+        if (isHidden(layout, id, pinned)) return false;
         switch (id) {
             case 'needs': return ctx.needs !== undefined ? ctx.needs > 0 : !!c.needs?.items?.length;
             case 'safety': return ctx.safetyUp;
-            case 'steps': return !global && !!c.steps && stepLines(c.steps, ctx.interests.length > 0, canInvite).some(l => !l.done);
+            case 'find': return isFindCard(c.find);
+            case 'steps': return firstSteps(answer, ctx).show;
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
@@ -383,7 +534,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             default: return c[id as keyof HomeCards] !== undefined;
         }
     };
-    return cardOrder(layout).filter(shows);
+    return cardOrder(layout, pinned).filter(shows);
 }
 
 /**
@@ -502,9 +653,17 @@ export function communityLines(card: HomeCards['community'] | undefined, profile
     return { title, line: `${parts.join(' · ')}.` };
 }
 
+/**
+ * The faces and names Who joined may show: a local community's (the members list shows them to members already); on the
+ * global node none, whatever an answer holds (§13 Q4: strangers, probation, harvesting; the node sends none there).
+ */
+export function joinedNames(card: NonNullable<HomeCards['joined']>, profile: string): { callsign: string; avatarUrl: string | null }[] {
+    return profile === 'global' ? [] : (card.names ?? []);
+}
+
 /** Who joined (§3.1): faces and names on a local community; on the global node a count by area, no names. */
-export function joinedLine(card: NonNullable<HomeCards['joined']>): string {
-    const names = (card.names ?? []).map(n => n.callsign).filter(Boolean);
+export function joinedLine(card: NonNullable<HomeCards['joined']>, profile: string = 'local'): string {
+    const names = joinedNames(card, profile).map(n => n.callsign).filter(Boolean);
     if (names.length) {
         const more = card.count7d - names.length;
         if (more > 0) return `${names.join(', ')} and ${more} more joined this week.`;

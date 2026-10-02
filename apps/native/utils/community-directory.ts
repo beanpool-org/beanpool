@@ -270,6 +270,13 @@ export function communityFacts(c: Pick<DirectoryCommunity, 'distanceKm' | 'membe
     return parts.join(' · ');
 }
 
+/** "9 listings within 25 km of you" (the card's count, design §3.1), or null when the node measured from no point. */
+export function nearbyPostsLine(home: Pick<GlobalHome, 'nearbyPosts'>): string | null {
+    if (!home.nearbyPosts) return null;
+    const { count, more, radiusKm } = home.nearbyPosts;
+    return `${count.toLocaleString('en')}${more ? '+' : ''} ${count === 1 && !more ? 'listing' : 'listings'} within ${radiusKm} km of you`;
+}
+
 /** The card's headline, from what the node said (or couldn't). */
 export function findCommunityCardCopy(home: Fetched<GlobalHome> | null, hasPoint: boolean): { title: string; body: string } {
     const title = 'Find your community';

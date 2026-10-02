@@ -14,15 +14,18 @@ import { HOME_TARGET_DP } from './HomeParts';
  * back, and Reset to defaults. Nothing is dragged (fragile on old Android, poor with large text and a screen reader) and
  * nothing is typed. Needs you stays at the top and the community's card at the bottom: they are not in the list. Only the
  * cards this node can show are offered (utils/home-cards.ts `cardOnNode`): no money cards on the global node, and no Grow
- * your community where only the community's admins invite and the member is not one.
+ * your community where only the community's admins invite and the member is not one. A pinned card (Find your community,
+ * a member's first 30 days on the global node) is not in the list either: the note says it stays at the top for now.
  */
-export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, onChange, onClose }: {
+export function EditHomeSheet({ visible, layout, node, role, pinned = [], drawnNow, colors, onChange, onClose }: {
     visible: boolean;
     layout: HomeLayout | null;
     /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
     node: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeAnswer['cards'] };
     /** The member's role there, for where only admins invite (utils/home-cards.ts `invitesForReader`). */
     role?: HomeRole;
+    /** The cards pinned now (utils/home-cards.ts `pinnedCards`): neither hidden nor moved, so not listed. */
+    pinned?: readonly HomeCardId[];
     /** The cards on Home now; the others say they have nothing to show yet. */
     drawnNow: readonly HomeCardId[];
     colors: AppColors;
@@ -30,9 +33,10 @@ export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, o
     onClose: () => void;
 }) {
     const insets = useSafeAreaInsets();
-    const listed = cardOrder(layout).filter(id => canMoveCard(id) && cardOnNode(id, node, role));
-    const shown = listed.filter(id => !isHidden(layout, id));
-    const hidden = listed.filter(id => isHidden(layout, id));
+    const listed = cardOrder(layout, pinned).filter(id => canMoveCard(id, pinned) && cardOnNode(id, node, role));
+    const shown = listed.filter(id => !isHidden(layout, id, pinned));
+    const hidden = listed.filter(id => isHidden(layout, id, pinned));
+    const findPinnedHere = pinned.includes('find') && cardOnNode('find', node, role);
     const name = (id: HomeCardId) => (id === 'market' ? marketCaption(node.profile) : HOME_CARD_NAMES[id]);
     const apply = (next: HomeLayout | null) => { if (next) onChange(next); };
 
@@ -51,7 +55,7 @@ export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, o
                     <>
                         <Pressable
                             disabled={!canUp}
-                            onPress={() => apply(moveCard(layout, id, 'up', shown, Date.now()))}
+                            onPress={() => apply(moveCard(layout, id, 'up', shown, Date.now(), pinned))}
                             style={editHomeStyles.arrow}
                             accessibilityRole="button"
                             accessibilityLabel={`Move ${name(id)} up`}
@@ -62,7 +66,7 @@ export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, o
                         </Pressable>
                         <Pressable
                             disabled={!canDown}
-                            onPress={() => apply(moveCard(layout, id, 'down', shown, Date.now()))}
+                            onPress={() => apply(moveCard(layout, id, 'down', shown, Date.now(), pinned))}
                             style={editHomeStyles.arrow}
                             accessibilityRole="button"
                             accessibilityLabel={`Move ${name(id)} down`}
@@ -75,7 +79,7 @@ export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, o
                 )}
                 <Switch
                     value={on}
-                    onValueChange={v => apply(v ? showCard(layout, id, Date.now()) : hideCard(layout, id, Date.now()))}
+                    onValueChange={v => apply(v ? showCard(layout, id, Date.now()) : hideCard(layout, id, Date.now(), pinned))}
                     accessibilityLabel={`Show ${name(id)} on Home`}
                     accessibilityState={{ checked: on }}
                     testID={`edit-home-${id}-switch`}
@@ -97,6 +101,7 @@ export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, o
                     <ScrollView contentContainerStyle={editHomeStyles.list}>
                         <Text style={[editHomeStyles.note, { color: colors.text.secondary }]}>
                             Needs you stays at the top, and your community's card at the bottom.
+                            {findPinnedHere ? ' Find your community stays near the top for your first 30 days.' : ''}
                         </Text>
                         {shown.map(id => row(id, true))}
                         {hidden.length > 0 && (

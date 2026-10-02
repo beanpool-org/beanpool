@@ -180,16 +180,20 @@ async function main(): Promise<void> {
     const words = String(overflow.body?.error);
     assert(overflow.status === 400 && /^Paying for 4 days at this deal's rate comes to more Beans than one payment can carry, so nothing has moved\./.test(words),
         `the refusal says what happened, in days (${brief(overflow)})`);
-    assert(/Confirm the days you booked, or cancel the deal and the Beans held for it go back\.$/.test(words)
-        && !/fewer|can't be completed, cancelled or disputed/.test(words),
-        'and what the member can do: the days booked, or cancel; never "fewer", never "can\'t be cancelled"');
-    assert(JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${loanDeal.id}`) }) === JSON.stringify(beforeLoan)
-        && txRow(loanDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
-    db.prepare('UPDATE marketplace_transactions SET credits = 4 WHERE id = ?').run(loanDeal.id);   // put the row back
+    assert(/This deal holds an amount the Beans held for it can't cover, so it can't be completed or cancelled\. Ask a moderator to remove the listing to clear it: the Beans held for it go back to whoever paid them\.$/.test(words)
+        && !/fewer|Confirm the/.test(words),
+        'and the way out that works in this state: a moderator removing the listing (#1445 re-review)');
+    const loanSnap = () => JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${loanDeal.id}`) });
+    assert(loanSnap() === JSON.stringify(beforeLoan) && txRow(loanDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
+    // Measured, as the words say: neither confirming the booked days (no quantity) nor cancelling can clear such a row.
+    const loanBooked = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: loanDeal.id, confirmerPublicKey: buyer.pk });
     const loanCancel = await signed('/api/marketplace/transactions/cancel', buyer, { transactionId: loanDeal.id, cancellerPublicKey: buyer.pk });
-    assert(loanCancel.status === 200 && bal(buyer.pk) === beforeLoan.buyer + 4 && bal(`escrow_${loanDeal.id}`) === 0,
-        `cancelling gives the buyer the 4 back (${brief(loanCancel)}, buyer ${bal(buyer.pk)})`);
-    ledgerAddsUp('the overflow and its cancel');
+    assert(loanBooked.status !== 200 && loanCancel.status !== 200 && loanSnap() === JSON.stringify(beforeLoan) && txRow(loanDeal.id)?.status === 'pending',
+        `confirming the booked days and cancelling are both refused, and nothing moves (${brief(loanBooked)}; ${brief(loanCancel)})`);
+    const loanRemoved = await adminPost(`/api/local/admin/posts/${loan.id}/delete`, {});
+    assert(loanRemoved.status === 200 && txRow(loanDeal.id)?.status === 'cancelled' && bal(buyer.pk) === beforeLoan.buyer + 4 && bal(`escrow_${loanDeal.id}`) === 0,
+        `a moderator removing the listing clears it, and the buyer gets the 4 held back (${brief(loanRemoved)}, buyer ${bal(buyer.pk)})`);
+    ledgerAddsUp('the overflow and the moderator\'s removal');
 
     // (b) A booked quantity so small (1e-320) that the deal's rate (4 / 1e-320) is Infinity: no rate is worked out from
     //     it, whatever the quantity confirmed (0.5 h used to get "Confirm fewer hours", which couldn't work).
@@ -201,8 +205,8 @@ async function main(): Promise<void> {
     for (const finalHours of [2, 0.5]) {
         const r = await signed('/api/marketplace/transactions/complete', buyer, { transactionId: weedDeal.id, confirmerPublicKey: buyer.pk, finalHours });
         const w = String(r.body?.error);
-        assert(r.status === 400 && /^This deal's rate per hour can't be worked out from what it holds, so nothing has moved\. Confirm the hours you booked, or cancel the deal and the Beans held for it go back\.$/.test(w),
-            `confirming ${finalHours} h is refused in plain words, with the way out (${brief(r)})`);
+        assert(r.status === 400 && /^This deal's rate per hour can't be worked out from what it holds, so nothing has moved\. Cancel the deal, and the Beans held for it go back\.$/.test(w),
+            `confirming ${finalHours} h is refused in plain words, naming only the cancel, which works (${brief(r)})`);
         assert(JSON.stringify({ buyer: bal(buyer.pk), seller: bal(seller.pk), escrow: bal(`escrow_${weedDeal.id}`) }) === JSON.stringify(before2)
             && txRow(weedDeal.id)?.status === 'pending', 'nothing moved and the deal is still open');
     }
@@ -484,6 +488,44 @@ async function main(): Promise<void> {
     assert(rebase.status === 409 && /2 account balance\(s\) are not a number, so the ledger has no total to set a new baseline at\. Nothing was changed\./.test(String(rebase.body?.error))
         && baselineRow() === baselineBefore,
         `a rebaseline is refused in plain words, and the baseline stays ${baselineBefore} (${brief(rebase)}, now ${baselineRow()})`);
+    // NB 3 of the re-review: both answers name the broken accounts (key and name) and how to mend them.
+    const REPAIR = /Stop the server, set each one's balance in state\.db to what its transactions say, start it again, then set a new baseline for any difference left\./;
+    const rebaseWords = String(rebase.body?.error);
+    assert(rebaseWords.includes(`${broken.pk} (BrokenRow) holds text 'abc'`) && rebaseWords.includes(`${infinite.pk} (InfiniteRow) holds Infinity`) && REPAIR.test(rebaseWords),
+        `the refusal names each broken account, its name and what it holds, and the repair (${rebaseWords})`);
+    const listed = (liveAudit.body?.brokenBalances ?? []) as { account: string; callsign: string | null; holds: string }[];
+    assert(listed.length === 2 && listed.some((b) => b.account === broken.pk && b.callsign === 'BrokenRow' && b.holds === "text 'abc'")
+        && listed.some((b) => b.account === infinite.pk && b.callsign === 'InfiniteRow' && b.holds === 'Infinity') && REPAIR.test(String(liveAudit.body?.repair)),
+        `the admin ledger audit lists them too, with the repair (${JSON.stringify(listed)})`);
+
+    // BLOCKING 1 of the re-review: the Commons pot itself not a finite number. Its flush refused before anything was
+    // counted, so the take-over's audit never recorded (stalled at `restarting`) and the operator's audit answered 500.
+    const potRow2 = rowBalance('COMMONS_POOL');
+    const potKept = getCommonsBalanceExact();
+    for (const pot of [Infinity, -Infinity, NaN]) {
+        setCommonsBalance(pot);
+        let threw = '';
+        let a: ReturnType<typeof runLedgerAudit> | null = null;
+        try { a = runLedgerAudit(); } catch (e: any) { threw = e?.message || String(e); }
+        assert(!threw && a?.ok === false && a?.badBalances === 3 && rowBalance('COMMONS_POOL') === potRow2,
+            `a pot of ${pot}: the audit counts it as a third balance that is not a number, never throws, and writes nothing (${threw || JSON.stringify(a)}, row ${rowBalance('COMMONS_POOL')})`);
+        const route = await adminPost('/api/local/admin/ledger-audit', {});
+        assert(route.status === 200 && route.body?.ok === false && route.body?.badBalances === 3
+            && (route.body?.brokenBalances ?? []).some((b: any) => b.account === 'COMMONS_POOL' && b.holds === `in memory: ${pot}`),
+            `the admin ledger audit answers 200 and names the pot (${brief(route)})`);
+        const rebase2 = await adminPost('/api/local/admin/ledger-rebaseline', { reason: 'acknowledging the drift from the pot' });
+        assert(rebase2.status === 409 && /COMMONS_POOL \(the Commons pot\) holds in memory/.test(String(rebase2.body?.error)) && baselineRow() === baselineBefore,
+            `the rebaseline is refused (409, not 500) and names the pot (${brief(rebase2)})`);
+        restartingTakeover();
+        const boot3 = resumeTakeoverAtBoot();
+        const p3 = getTakeoverProgress();
+        const step3 = String(p3.steps.find((s) => s.step === 'audit')?.detail);
+        assert(boot3.auditRan && p3.steps.find((s) => s.step === 'audit')?.done === true && (p3.result?.audit as any)?.addsUp === false
+            && /the ledger does NOT add up \(drift [^,]+, 0 stranded escrow\(s\), 3 balance\(s\) that are not a finite number\)/.test(step3)
+            && getLocalConfig().promotionAuditPending === false,
+            `and a take-over's audit records it, is marked done and says the ledger doesn't add up (${step3})`);
+    }
+    setCommonsBalance(potKept);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

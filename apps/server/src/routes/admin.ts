@@ -33,6 +33,7 @@ import {
     hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
+import { listBrokenBalances, BROKEN_BALANCE_REPAIR } from '../engine/audit.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -551,6 +552,8 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const result = runLedgerAudit();
+        // Which balances aren't a number, and what to do (#1445 re-review): a count alone left the operator to find them.
+        const broken = result.badBalances > 0 ? listBrokenBalances() : null;
         ctx.body = {
             success: true,
             sumBalances: result.sumBalances,
@@ -559,6 +562,7 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
             strandedEscrows: result.strandedEscrows,
             badBalances: result.badBalances,
             ok: result.ok,
+            ...(broken ? { brokenBalances: broken.accounts, ...(broken.total > broken.accounts.length ? { brokenBalancesMore: broken.total - broken.accounts.length } : {}), repair: BROKEN_BALANCE_REPAIR } : {}),
         };
     } catch (e: any) {
         ctx.status = 500;
@@ -588,11 +592,17 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
         // A ledger holding a balance that isn't a finite number has no sum to set a baseline at: one of 9e999 makes the
         // sum Infinity, which this wrote as the baseline and answered "ok". Those rows are mended first (#1445 review).
         if (result.badBalances > 0 || !Number.isFinite(result.sumBalances)) {
+            // Named, with the way to mend them (#1445 re-review): no route or Settings control mends a balance.
+            const broken = listBrokenBalances();
+            const named = broken.accounts.map((b) => `${b.account}${b.callsign ? ` (${b.callsign})` : ''} holds ${b.holds}`).join('; ');
+            const more = broken.total > broken.accounts.length ? `; and ${broken.total - broken.accounts.length} more` : '';
             ctx.status = 409;
             ctx.body = {
                 success: false,
                 error: `${result.badBalances} account balance(s) are not a number, so the ledger has no total to set a new baseline at. `
-                    + 'Nothing was changed. Mend those balances first.',
+                    + `Nothing was changed. ${named ? `They are: ${named}${more}. ` : ''}${BROKEN_BALANCE_REPAIR}`,
+                brokenBalances: broken.accounts,
+                repair: BROKEN_BALANCE_REPAIR,
             };
             return;
         }

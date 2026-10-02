@@ -24,7 +24,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { spawnNode, post, runNodeChild, inspectNode, type NodeProc } from './takeover-test-harness.js';
+import { spawnNode, post, runNodeChild, inspectNode, serveCommands, type NodeProc } from './takeover-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW_MAIN = 'Main-Server-Pw-5531!';
@@ -34,6 +34,7 @@ const PW_STANDBY = 'Standby-Own-Pw-8820!';
 
 async function child(): Promise<void> {
     await runNodeChild({
+        ...serveCommands,
         'setup-primary': async (a: { ownerSeedHex: string; replicationToken: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
             const se = await import('./state-engine.js');
@@ -92,16 +93,17 @@ function assert(cond: unknown, msg: string): void {
     }
 }
 
-async function main(): Promise<void> {
-    const root = process.env.BEANPOOL_DATA_DIR;
-    if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+/** Whose balance the restart breaks, and to what: a member's (the first review), or the Commons pot's own (the re-review). */
+type Scenario = { label: string; account: 'ben' | 'COMMONS_POOL'; value: '9e999' | '-9e999' };
+
+async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<void> {
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
-    const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const pw = (p: string) => ({ 'X-Admin-Password': p });
-
-    try {
+    const expected = sc.value === '9e999' ? Infinity : -Infinity;
+    {
+        console.log(`\n═══ ${sc.label} ═══`);
         console.log('\n— 1. a main server and a standby that copies it —');
         const main = await spawnNode(SCRIPT, dirs.main, { ADMIN_PASSWORD: PW_MAIN, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined });
         nodes.push(main);
@@ -127,13 +129,15 @@ async function main(): Promise<void> {
         const exitCode = await standby.exited;
         assert(exitCode === 0, `the standby restarts itself (exit ${exitCode})`);
 
-        // While it is down for that restart, one of its own balances becomes 9e999: SQLite stores REAL Infinity.
+        // While it is down for that restart, one of its own balances becomes ±9e999: SQLite stores REAL ±Infinity. The
+        // Commons pot's row is restored into memory at boot (setCommonsBalance), so the pot itself is then ±Infinity.
+        const key = sc.account === 'ben' ? setup.ben : 'COMMONS_POOL';
         const sdb = new Database(path.join(dirs.standby, 'state.db'));
-        sdb.prepare('UPDATE accounts SET balance = 9e999 WHERE public_key = ?').run(setup.ben);
-        const stored = sdb.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(setup.ben) as { balance: number; t: string };
+        const changed = sdb.prepare(`UPDATE accounts SET balance = ${sc.value} WHERE public_key = ?`).run(key).changes;
+        const stored = sdb.prepare('SELECT balance, typeof(balance) AS t FROM accounts WHERE public_key = ?').get(key) as { balance: number; t: string };
         sdb.pragma('wal_checkpoint(TRUNCATE)');
         sdb.close();
-        assert(stored.balance === Infinity && stored.t === 'real', `Ben's balance on the standby is now Infinity (${stored.balance}, ${stored.t})`);
+        assert(changed === 1 && stored.balance === expected && stored.t === 'real', `${sc.account}'s balance on the standby is now ${expected} (${stored.balance}, ${stored.t})`);
 
         console.log('\n— 3. it starts as the main server, and the take-over finishes —');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
@@ -173,6 +177,19 @@ async function main(): Promise<void> {
             'the announcement went out, the keys were locked again on this server, and the tunnel step ran');
         const live = await standby.send('ledger-audit');
         assert(live.ok === false && live.badBalances === 1, `the live ledger audit on the new main server agrees (${JSON.stringify(live)})`);
+        // The operator's own audit, over the real HTTPS server and admin auth: 200 (it answered 500 for the pot), naming
+        // the account and how to mend it; the rebaseline refuses with 409 and names it too.
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+        const httpsBase = `https://localhost:${await standby.send('serve')}`;
+        const route = await post(httpsBase, '/api/local/admin/ledger-audit', {}, pw(PW_MAIN));
+        const listed = (route.body?.brokenBalances ?? []) as { account: string; callsign: string | null; holds: string }[];
+        assert(route.status === 200 && route.body?.ok === false && route.body?.badBalances === 1
+            && listed.length === 1 && listed[0].account === key && listed[0].holds === String(expected)
+            && listed[0].callsign === (sc.account === 'ben' ? 'Ben' : 'the Commons pot') && /^Stop the server/.test(String(route.body?.repair)),
+            `the admin ledger audit answers 200 and names ${sc.account} (${route.status} ${JSON.stringify(route.body).slice(0, 400)})`);
+        const rebase = await post(httpsBase, '/api/local/admin/ledger-rebaseline', { reason: 'checking the refusal names it' }, pw(PW_MAIN));
+        assert(rebase.status === 409 && String(rebase.body?.error).includes(`${key} (${listed[0].callsign}) holds ${expected}`),
+            `the rebaseline is refused with 409 and names it (${rebase.status} ${String(rebase.body?.error).slice(0, 300)})`);
 
         console.log('\n— 5. a second start is quiet, and the take-over stays complete —');
         await standby.kill('SIGTERM');
@@ -183,6 +200,23 @@ async function main(): Promise<void> {
         assert(!/Boot check failed/.test(second) && standby.ready.role === 'primary' && again.status === 200 && again.body?.state === 'complete',
             `the second start: no boot check failed, still the main server, still complete (${again.status} ${again.body?.state})`);
 
+    }
+}
+
+async function main(): Promise<void> {
+    const root = process.env.BEANPOOL_DATA_DIR;
+    if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+    const nodes: NodeProc[] = [];
+    const scenarios: Scenario[] = [
+        { label: "a member's balance at 9e999", account: 'ben', value: '9e999' },
+        { label: "the Commons pot's own row at 9e999", account: 'COMMONS_POOL', value: '9e999' },
+        { label: "the Commons pot's own row at -9e999", account: 'COMMONS_POOL', value: '-9e999' },
+    ];
+    try {
+        for (const [i, sc] of scenarios.entries()) {
+            await takeOver(path.join(root, `run${i}`), sc, nodes);
+            for (const n of nodes.splice(0)) await n.kill('SIGKILL').catch(() => {});
+        }
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     } catch (e: any) {
         console.error(`❌ ${e?.message || e}`);

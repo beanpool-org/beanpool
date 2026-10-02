@@ -53,6 +53,8 @@ export interface TakeoverProgressData {
             ok: boolean; drift: number | null; strandedEscrows: number | null; addsUp?: boolean;
             /** Balances that are not a finite number; absent on servers before they were counted here. */
             badBalances?: number | null;
+            /** The audit could not run: why (a server from #1445's fix round on). */
+            error?: string;
             copy?: { match: boolean; here: LedgerHeld; lastCopy: (LedgerHeld & { generatedAt: string | null }) | null } | null;
         } | null;
         announcement?: string | null;
@@ -148,12 +150,13 @@ function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['resul
         : `${h.accounts} account(s) holding an amount that is not a number`);
     const difference = finite(audit.drift) ? `difference ${audit.drift}` : 'the difference is not a number';
     const reasons: string[] = [];
+    if (audit.error) reasons.push(`The ledger audit could not run (${audit.error}), so it can't say the ledger adds up.`);
     // Balances that are not a number leave the difference at 0 or make it not a number, so they are said as themselves,
     // as the copy is.
     const bad = audit.badBalances ?? 0;
     if (audit.addsUp !== true && bad > 0) reasons.push(`${bad} account balance(s) are not a number, so the ledger can't add up.`);
     const stranded = finite(audit.strandedEscrows) ? audit.strandedEscrows : 0;
-    if (audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && Math.abs(audit.drift) >= 0.01) || stranded > 0)) {
+    if (!audit.error && audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && Math.abs(audit.drift) >= 0.01) || stranded > 0)) {
         reasons.push(`The ledger does NOT add up (${difference}).`);
     }
     if (audit.copy && !audit.copy.match) {

@@ -266,6 +266,12 @@ describe('TakeoverPanel', () => {
                 says: [/The ledger does NOT add up \(the difference is not a number\)\. The ledger is not the main server's as this server last copied it: here 1 account\(s\) holding an amount that is not a number, the main server's 7 account\(s\) holding 76\.71 Beans\. Check it before members trade\./],
                 never: [/null/, /NaN/],
             },
+            // An audit that could not run (a check threw): said as itself, never "adds up", never "difference null".
+            {
+                audit: { ok: false, drift: null, strandedEscrows: null, addsUp: false, badBalances: null, error: 'the check stopped', copy: null },
+                says: [/^The ledger audit could not run \(the check stopped\), so it can't say the ledger adds up\. Check it before members trade\.$/],
+                never: [/null/, /does NOT add up/],
+            },
             // Both: each said.
             {
                 audit: { ok: false, drift: -3, strandedEscrows: 0, addsUp: false, badBalances: 1, copy: { match: true, here: { accounts: 7, holdings: 76.71 }, lastCopy } },

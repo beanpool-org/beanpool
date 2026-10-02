@@ -99,10 +99,12 @@ export interface LocalConfig {
     // `sumBalances` and `drift` are null when they aren't a finite number (a balance of Infinity makes both Infinity, which
     // JSON writes as null): every reader takes null, and anything else that isn't a finite number, as "not a number".
     lastPromotionAudit?: {
-        at: string; ok: boolean; sumBalances: number | null; drift: number | null; strandedEscrows: number;
+        at: string; ok: boolean; sumBalances: number | null; drift: number | null; strandedEscrows: number | null;
         // Balances that are not a finite number (engine audit.ts BROKEN_BALANCE_SQL). Absent from a record written before.
-        badBalances?: number;
-        copy?: { match: boolean; here: { accounts: number; holdings: number }; lastCopy: { accounts: number; holdings: number; generatedAt: string | null } | null };
+        badBalances?: number | null;
+        // The audit could not run (a check threw): why. The take-over goes on and says so; never "ok".
+        error?: string;
+        copy?: { match: boolean; here: { accounts: number; holdings: number }; lastCopy: { accounts: number; holdings: number; generatedAt: string | null } | null } | null;
     } | null;
     // The recovery code a take-over was opened with. While recoveryCode is still that code, Settings says "Your
     // recovery code was used. Make a new one" (a used code is a spent code, §5.3). Making a new code ends it.

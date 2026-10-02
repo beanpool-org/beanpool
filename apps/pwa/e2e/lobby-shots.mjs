@@ -202,6 +202,8 @@ async function main() {
 
             try {
                 await page.goto(`${origin}/app`, { waitUntil: 'load' });
+                // A visitor lands on their Home (DESIGN-home-dashboard-fable.md H3); these pictures are of the Market, one tap away.
+                await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click();
                 await page.waitForSelector('[data-testid="visitor-list"]');
                 await page.waitForSelector('[data-testid="visitor-card"] img');
                 // On a phone the list starts at the Join card: bring the first card and the line under it into view.

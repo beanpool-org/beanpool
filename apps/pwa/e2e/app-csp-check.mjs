@@ -171,7 +171,7 @@ async function checkView(browser, origin, view, me) {
     if (workFallback.length) failures.push(`the worker did not run, the page solved instead: ${JSON.stringify(workFallback)}`);
     door.open = false;
 
-    // A member: the key goes where the web app keeps it, then the app opens on the Market.
+    // A member: the key goes where the web app keeps it, then the app opens on Home and the Market is one tap away.
     await page.evaluate((identity) => new Promise((resolve, reject) => {
         const open = indexedDB.open('beanpool-identity', 1);
         open.onupgradeneeded = () => open.result.createObjectStore('keys');
@@ -186,6 +186,7 @@ async function checkView(browser, origin, view, me) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     await scaleText();
     try {
+        await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click({ timeout: 20_000 });
         await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 20_000 });
     } catch {
         failures.push('the Market did not draw its listings');

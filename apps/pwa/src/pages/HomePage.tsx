@@ -119,6 +119,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
 
     const statusRef = useRef(status);
     const answerRef = useRef<HomeAnswer | null>(null);
+    // The node's tag for the answer drawn: the next read sends it, and is a 304 while nothing changed.
+    const etagRef = useRef<string | null>(null);
     const layoutRef = useRef<HomeLayout | null>(null);
     const unsavedRef = useRef(false);
     const layoutSeq = useRef(0);
@@ -137,7 +139,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }, []);
 
     const keep = useCallback((a: HomeAnswer, l: HomeLayout | null) => {
-        void writeCachedHome(cacheKey, { answer: a, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() });
+        void writeCachedHome(cacheKey, { answer: a, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() });
     }, [cacheKey]);
 
     const saveLayout = useCallback((next: HomeLayout) => {
@@ -172,10 +174,22 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         lastStart.current = Date.now();
         try {
             const p = pointRef.current;
-            const a = await getHome({ cards: askedCards(layoutRef.current, answerRef.current), ...(p ? { lat: p.lat, lng: p.lng } : {}) });
+            const read = await getHome({ cards: askedCards(layoutRef.current, answerRef.current), ...(p ? { lat: p.lat, lng: p.lng } : {}) },
+                answerRef.current ? etagRef.current : null);
             if (!mounted.current) return;
+            // 304: the copy drawn is still the answer, layout and all. Anything not sent since is sent again.
+            if (read?.notModified && answerRef.current) {
+                if (unsavedRef.current && layoutRef.current) saveLayout(layoutRef.current);
+                if (pendingInterests.current) saveInterests(pendingInterests.current);
+                if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
+                statusRef.current = 'ready';
+                setStatus('ready');
+                return;
+            }
+            const a = read && !read.notModified ? read.answer : null;
             // Only an answer shaped as Home is drawn (a proxy's page or an odd reply is a failed read, never a crash).
             if (!a || typeof a !== 'object' || !a.cards || typeof a.cards !== 'object' || Array.isArray(a.cards)) throw new Error('not a Home answer');
+            etagRef.current = read && !read.notModified ? read.etag : null;
             const fromNode = normalizeLayout(a.layout);
             const local = layoutRef.current;
             const merged = newerLayout(fromNode, local);
@@ -220,6 +234,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     useEffect(() => {
         let cancelled = false;
         answerRef.current = null;
+        etagRef.current = null;
         layoutRef.current = null;
         setAnswer(null);
         statusRef.current = 'loading';
@@ -228,6 +243,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             if (cancelled || !mounted.current) return;
             if (cached && !answerRef.current) {
                 answerRef.current = cached.answer;
+                etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
                 unsavedRef.current = cached.layoutUnsaved;
                 setAnswer(cached.answer);
@@ -585,7 +601,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                             <div data-testid="home-examples" className="mt-2">
                                 <p className="m-0 mb-1 text-xs font-bold text-nature-700 dark:text-nature-200">{EXAMPLES_HEADING}</p>
                                 {EXAMPLE_LISTINGS.slice(0, 2).map(ex => (
-                                    <p key={ex.key} aria-label={exampleLabel(ex)} className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 flex items-start gap-2 min-w-0">
+                                    <p key={ex.key} data-testid="home-example" className="m-0 py-1 text-sm text-nature-800 dark:text-nature-100 flex items-start gap-2 min-w-0">
+                                        {/* "Example" first for a screen reader (lib/example-listings.ts exampleLabel). */}
+                                        <span className="sr-only">{exampleLabel(ex)}</span>
                                         <span aria-hidden="true" className="shrink-0">{ex.emoji}</span>
                                         <span aria-hidden="true" className="min-w-0 break-words">
                                             <span className="text-[0.65rem] font-extrabold mr-1 px-1 rounded bg-nature-200 dark:bg-nature-700 text-nature-900 dark:text-white">{EXAMPLE_BADGE}</span>
@@ -730,7 +748,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 <div key={id}>
                     {renderCard(id, i)}
                     {i === 0 && hintOpen && !isVisitor && (
-                        <p data-testid="home-hint" className="-mt-1 mb-3 flex items-center gap-2 text-xs text-nature-700 dark:text-nature-200">
+                        <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
                             <button type="button" aria-label="Close this tip" onClick={() => { setHintOpen(false); if (publicKey) writeFlag(hintKey(publicKey)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">

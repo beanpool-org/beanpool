@@ -701,14 +701,14 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
 
         it('switches to Pulse and renders PulsePage without blanking', async () => {
             // The Pulse is a card on Home now, its page one tap away (DESIGN-home-dashboard-fable.md §8, §13 Q1).
-            vi.spyOn(api, 'getHome').mockResolvedValue({
+            vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: {
                 generatedAt: '2026-10-02T09:00:00.000Z', profile: 'local', features: {}, layout: null,
                 me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['food'], area: null, firstOffer: false, standing: 'member' },
                 cards: {
                     pulse: { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }] },
                     community: { name: 'Test', members: 2 },
                 },
-            });
+            } });
             render(<App />);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(100);

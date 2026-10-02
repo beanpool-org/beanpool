@@ -98,8 +98,11 @@ type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'l
 
 // Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
 // Each tab's share of the row follows its label length, with a floor for the emoji above it.
+// Measured (e2e/home-check.mjs): "Home" in extrabold, its H and m wide, is cut by a pixel on four shares at 320px; it
+// takes the fifth the Pulse had before the Pulse became a card on Home.
+const WIDER_THAN_ITS_LENGTH: Record<string, number> = { Home: 5 };
 export function navTabWeight(label: string): number {
-    return Math.max(4, label.length);
+    return WIDER_THAN_ITS_LENGTH[label] ?? Math.max(4, label.length);
 }
 // Measured in headless Chrome at 320px: "Commons" in extrabold needs ~4.9px of row per px of
 // font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.

@@ -224,6 +224,8 @@ describe('App mobile bottom nav labels on a 320px phone at 1.3x text', () => {
         expect(navTabWeight('Pulse')).toBe(5);
         expect(navTabWeight('Market')).toBe(6);
         expect(navTabWeight('Commons')).toBe(7);
+        // Wider than its four letters (measured, e2e/home-check.mjs): the fifth share the Pulse had.
+        expect(navTabWeight('Home')).toBe(5);
     });
 
     it('caps the label size by viewport width so whole labels fit, full 0.6rem on wider screens', () => {

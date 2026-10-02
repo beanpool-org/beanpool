@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { HomeAnswer, HomeLayout } from '../lib/home-cards';
+import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
@@ -54,6 +55,9 @@ function answer(over: Partial<HomeAnswer> = {}, cards: HomeAnswer['cards'] = {})
     };
 }
 
+/** A 200 from the node: the answer and its tag. */
+const fresh = (a: HomeAnswer, etag = 'W/"home-test"'): HomeRead => ({ notModified: false, answer: a, etag });
+
 const cardIds = () => Array.from(document.querySelectorAll('[data-testid^="home-card-"]')).map(e => e.getAttribute('data-testid')!.replace('home-card-', '')).filter(id => id !== 'menu');
 /** The Market card's rows, as a screen reader names them. */
 const marketTitles = () => within(screen.getByTestId('home-card-market')).getAllByTestId('home-market-item').map(e => e.getAttribute('aria-label') ?? '');
@@ -76,7 +80,7 @@ afterEach(() => {
 
 describe('one request, the cached answer first (§5)', () => {
     it('lands with one GET /api/home and draws the cards the answer holds, in the default order', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         const nav = vi.fn();
         render(<HomePage identity={ME} onNavigate={nav} />);
         await screen.findByTestId('home-card-community');
@@ -90,8 +94,8 @@ describe('one request, the cached answer first (§5)', () => {
 
     it('draws the copy this browser kept before the node answers, and asks for the cards its layout shows', async () => {
         const layout: HomeLayout = { v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { answer: answer({ layout }, { community: { name: 'Cached town', members: 5 } }), layout, layoutUnsaved: false, savedAt: 1 });
-        let answerNode!: (a: HomeAnswer) => void;
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout }, { community: { name: 'Cached town', members: 5 } }), layout, layoutUnsaved: false, savedAt: 1 });
+        let answerNode!: (r: HomeRead) => void;
         vi.mocked(api.getHome).mockReturnValue(new Promise(r => { answerNode = r; }));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByText('Cached town')).toBeInTheDocument();
@@ -100,12 +104,42 @@ describe('one request, the cached answer first (§5)', () => {
         expect(asked).not.toContain('pulse');
         expect(asked).toContain('needs');
         expect(asked).not.toContain('interests');
-        await act(async () => { answerNode(answer({ layout })); });
+        await act(async () => { answerNode(fresh(answer({ layout }))); });
         expect(await screen.findByText('Mullumbimby')).toBeInTheDocument();
     });
 
+    it('sends the tag of the copy it keeps; a 304 keeps the copy drawn, and the next read sends the new tag after a 200', async () => {
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: 'W/"home-kept"', answer: answer({}, { community: { name: 'Kept town', members: 5 } }), layout: null, layoutUnsaved: false, savedAt: 1 });
+        vi.mocked(api.getHome).mockResolvedValueOnce({ notModified: true, etag: 'W/"home-kept"' });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        expect(await screen.findByText('Kept town')).toBeInTheDocument();
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.getHome).mock.calls[0][1]).toBe('W/"home-kept"');
+        expect(screen.queryByTestId('home-offline')).toBeNull();
+        // A change: a 200 with a new tag, drawn, and its tag sent next.
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer(), 'W/"home-new"'));
+        vi.useFakeTimers();
+        hooks.sync.forEach(cb => cb());
+        await vi.advanceTimersByTimeAsync(3_100);
+        vi.useRealTimers();
+        expect(await screen.findByText('Mullumbimby')).toBeInTheDocument();
+        vi.mocked(api.getHome).mockResolvedValueOnce({ notModified: true, etag: 'W/"home-new"' });
+        vi.useFakeTimers();
+        hooks.sync.forEach(cb => cb());
+        await vi.advanceTimersByTimeAsync(3_100);
+        expect(vi.mocked(api.getHome).mock.calls[2][1]).toBe('W/"home-new"');
+        expect(screen.getByText('Mullumbimby')).toBeInTheDocument();
+    });
+
+    it('a first read with no copy sends no tag', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(vi.mocked(api.getHome).mock.calls[0][1]).toBeNull();
+    });
+
     it('offline with a copy: the copy stays, and the page says so, politely', async () => {
-        await writeCachedHome(homeCacheKey(ME.publicKey), { answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: null, layoutUnsaved: false, savedAt: 1 });
         vi.mocked(api.getHome).mockRejectedValue(new TypeError('Failed to fetch'));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-offline')).toHaveTextContent(HOME_OFFLINE);
@@ -117,7 +151,7 @@ describe('one request, the cached answer first (§5)', () => {
         vi.mocked(api.getHome).mockRejectedValueOnce(new TypeError('Failed to fetch'));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-failed')).toHaveTextContent("Couldn't reach your community");
-        vi.mocked(api.getHome).mockResolvedValueOnce(answer());
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(answer()));
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(await screen.findByTestId('home-card-market')).toBeInTheDocument();
         cleanup();
@@ -129,13 +163,13 @@ describe('one request, the cached answer first (§5)', () => {
     });
 
     it('an answer that is not Home (a proxy page, an empty object) is a failed read, not a crash', async () => {
-        vi.mocked(api.getHome).mockResolvedValue({} as HomeAnswer);
+        vi.mocked(api.getHome).mockResolvedValue(fresh({} as HomeAnswer));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-failed')).toBeInTheDocument();
     });
 
     it('a burst of doorbells is one re-read, 3 s after the last; none while the tab is hidden', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(api.getHome).toHaveBeenCalledTimes(1);
@@ -155,7 +189,7 @@ describe('one request, the cached answer first (§5)', () => {
     });
 
     it("the socket's own first sync, right after landing, is not a change: no second read", async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         vi.useFakeTimers();
@@ -168,7 +202,7 @@ describe('one request, the cached answer first (§5)', () => {
 
 describe('tailoring (§4)', () => {
     it('"…" says which card it is for; Hide takes the card away and saves the layout on the account', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const pulse = await screen.findByTestId('home-card-pulse');
         const dots = within(pulse).getByRole('button', { name: 'Card options for The Pulse' });
@@ -185,7 +219,7 @@ describe('tailoring (§4)', () => {
     });
 
     it('the menu closes on Escape and gives focus back to its "…"; Move up is off for the first movable card', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const events = await screen.findByTestId('home-card-events');
         const dots = within(events).getByRole('button', { name: 'Card options for Coming up' });
@@ -197,7 +231,7 @@ describe('tailoring (§4)', () => {
     });
 
     it('Move down swaps a card with the next one, and the community card stays last with no "…"', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const market = await screen.findByTestId('home-card-market');
         fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
@@ -207,7 +241,7 @@ describe('tailoring (§4)', () => {
     });
 
     it('Edit home is a real dialog: labelled, focus inside, a switch per card, Hidden apart, Reset, Escape back to Edit home', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const open = await screen.findByTestId('home-edit-open');
         open.focus();
@@ -219,6 +253,8 @@ describe('tailoring (§4)', () => {
         expect(pulseSwitch).toHaveAttribute('aria-checked', 'true');
         fireEvent.click(pulseSwitch);
         expect(within(dialog).getByRole('switch', { name: 'Show The Pulse' })).toHaveAttribute('aria-checked', 'false');
+        // The row moved to "Hidden" and was drawn anew: focus went with it, not to the page.
+        await waitFor(() => expect(within(dialog).getByRole('switch', { name: 'Show The Pulse' })).toHaveFocus());
         expect(within(within(dialog).getByRole('list', { name: 'Hidden' })).getByText('The Pulse')).toBeInTheDocument();
         expect(screen.queryByTestId('home-card-pulse')).toBeNull();
         // Needs you and the community card are never in the list: they always stay.
@@ -242,8 +278,8 @@ describe('tailoring (§4)', () => {
     it('a newer layout from another device wins over this browser\'s older copy', async () => {
         const older: HomeLayout = { v: 1, order: [], hidden: ['beans'], dismissed: {}, updatedAt: '2026-09-01T00:00:00.000Z' };
         const newer: HomeLayout = { v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { answer: answer({ layout: older }), layout: older, layoutUnsaved: false, savedAt: 1 });
-        vi.mocked(api.getHome).mockResolvedValue(answer({ layout: newer }));
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer({ layout: older }), layout: older, layoutUnsaved: false, savedAt: 1 });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: newer })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByText('Mullumbimby');
         await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
@@ -253,8 +289,8 @@ describe('tailoring (§4)', () => {
 
     it("this browser's newer layout that never reached the node is sent again after the next read", async () => {
         const mine: HomeLayout = { v: 1, order: [], hidden: ['beans'], dismissed: {}, updatedAt: '2026-10-02T00:00:00.000Z' };
-        await writeCachedHome(homeCacheKey(ME.publicKey), { answer: answer(), layout: mine, layoutUnsaved: true, savedAt: 1 });
-        vi.mocked(api.getHome).mockResolvedValue(answer({ layout: { ...mine, hidden: [], updatedAt: '2026-09-01T00:00:00.000Z' } }));
+        await writeCachedHome(homeCacheKey(ME.publicKey), { etag: null, answer: answer(), layout: mine, layoutUnsaved: true, savedAt: 1 });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ layout: { ...mine, hidden: [], updatedAt: '2026-09-01T00:00:00.000Z' } })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledWith(ME.publicKey, { 'home.layout': mine }));
         expect(screen.queryByTestId('home-card-beans')).toBeNull();
@@ -263,7 +299,7 @@ describe('tailoring (§4)', () => {
 
 describe('interests (§4.3, §6.2)', () => {
     it('a member with none sees the chips; a tap reorders the Market card in place and saves on the account and in the Market', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer({ me: { ...answer().me!, interests: [] } }));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: [] } })));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         const chips = await screen.findByTestId('home-card-interests');
         expect(marketTitles()[0]).toBe('Offer, Pottery lessons, 20 Beans');
@@ -280,7 +316,7 @@ describe('interests (§4.3, §6.2)', () => {
     });
 
     it('Tune on the Market card opens the chips for a member who has some', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-market');
         expect(screen.queryByTestId('home-card-interests')).toBeNull();
@@ -292,12 +328,12 @@ describe('interests (§4.3, §6.2)', () => {
 
 describe('the cards say real things, plainly (§3, §6.3)', () => {
     it('Needs you: amber ▲ and the words for what waits, never red; one tap into the deal', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer({}, {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             needs: { items: [
                 { kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal', postId: 'p2', txId: 't1' } },
                 { kind: 'message', count: 2, accent: false, label: '3 unread from 2 people', target: { to: 'unread-messages' } },
             ] },
-        }));
+        })));
         const nav = vi.fn();
         render(<HomePage identity={ME} onNavigate={nav} />);
         const needs = await screen.findByTestId('home-card-needs');
@@ -313,10 +349,10 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
     });
 
     it('a new member\'s Beans: nothing to repay, how credit opens; the steps link to where each is done', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer({}, {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, {
             beans: { balance: 0, room: 0, tier: 'Newcomer', activated: false, frozen: false },
             steps: { joinedAt: NOW, firstOffer: false, firstPost: false, photo: false, interests: true, invited: false, area: false, knocked: null },
-        }));
+        })));
         const nav = vi.fn();
         render(<HomePage identity={ME} onNavigate={nav} />);
         expect(await screen.findByTestId('home-card-beans')).toHaveTextContent('0 Beans · nothing to repayYour credit opens with a first trade.');
@@ -331,7 +367,7 @@ describe('the cards say real things, plainly (§3, §6.3)', () => {
     });
 
     it('the one-time hint, once: closed, it does not come back', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(answer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         expect(await screen.findByTestId('home-hint')).toHaveTextContent(HOME_HINT);
         fireEvent.click(screen.getByRole('button', { name: 'Close this tip' }));
@@ -356,7 +392,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
     });
 
     it('the Join card first, then the public cards; no "…", no Edit home, nothing of a member\'s, examples marked Example', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(visitorAnswer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
         render(<HomePage identity={null} visitor={{ joinCard: <section data-testid="lobby-join-card">Join BeanPool</section>, beans: false }} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-community');
         const page = screen.getByTestId('home-page');
@@ -369,7 +405,13 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         expect(screen.getByRole('heading', { name: 'What people post' })).toBeInTheDocument();
         expect(screen.getByTestId('home-card-market')).toHaveTextContent('Free, a swap, or ask');
         expect(screen.getByTestId('home-card-market')).toHaveTextContent('Names, photos of people and exact places appear when you join.');
-        expect(within(screen.getByTestId('home-examples')).getAllByLabelText(/^Example, not a real listing/)).toHaveLength(2);
+        // Each example says "Example" first to a screen reader (the visible words are hidden from it), and can't be tapped.
+        const examples = within(screen.getByTestId('home-examples')).getAllByTestId('home-example');
+        expect(examples).toHaveLength(2);
+        for (const ex of examples) {
+            expect(ex.querySelector('.sr-only')!.textContent).toMatch(/^Example, not a real listing\. (Offer|Need): /);
+            expect(ex.querySelectorAll('button, a')).toHaveLength(0);
+        }
         expect(screen.getByTestId('home-card-events')).toHaveTextContent('Place shown after you join');
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('The worldwide community');
         expect(screen.getByTestId('home-card-community')).toHaveTextContent('2,310 members · 38 communities listed.');
@@ -378,7 +420,7 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
     });
 
     it('"Share my area" asks the browser once and reads Home again with the area rounded to about 10 km', async () => {
-        vi.mocked(api.getHome).mockResolvedValue(visitorAnswer());
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
         const getCurrentPosition = vi.fn((ok: PositionCallback) => ok({ coords: { latitude: -28.5543, longitude: 153.4999 } } as GeolocationPosition));
         vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
         render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);

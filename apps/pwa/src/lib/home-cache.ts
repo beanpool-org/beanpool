@@ -14,6 +14,8 @@ const STORE = 'answers';
 
 export interface CachedHome {
     answer: HomeAnswer;
+    /** The node's tag for `answer`: sent with the next read, which is a 304 while it is still the answer. */
+    etag: string | null;
     /** The layout as this browser last had it: the node's, or a newer one of the member's not yet saved there. */
     layout: HomeLayout | null;
     /** Whether `layout` still has to be saved on the account. */
@@ -63,6 +65,7 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
                 if (!v || !v.answer || typeof v.answer !== 'object' || !v.answer.cards) return resolve(null);
                 resolve({
                     answer: v.answer as HomeAnswer,
+                    etag: typeof v.etag === 'string' && v.etag.length <= 200 ? v.etag : null,
                     layout: normalizeLayout(v.layout),
                     layoutUnsaved: v.layoutUnsaved === true,
                     savedAt: Number(v.savedAt) || 0,

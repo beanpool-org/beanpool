@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, askedCards, beansLines, canTailor, closesWords, communityLine, decideLine, editableCards, effectiveOrder,
+    HOME_CARD_IDS, askedCards, beansLines, canTailor, closesWords, communityFacts, communityLine, decideLine, editableCards, effectiveOrder,
     findBody, findPinned, hideCard, joinedLine, moveCard, newerLayout, normalizeLayout, probationSentence, resetLayout,
     shownCards, showCard, starredFirst, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe,
 } from './home-cards';
@@ -256,7 +256,12 @@ describe('the words (§3.1, §9)', () => {
     });
 
     it('the find card says what the node found, and nothing it did not', () => {
-        expect(findBody(find)).toBe('Byron Shire BeanPool is 12 km away. Ask to join, and trade with your neighbours there.');
+        expect(findBody(find)).toBe('The community nearest you. Ask to join, and trade with your neighbours there.');
+        expect(findBody({ ...find, communities: [...find.communities, { ...find.communities[0], key: 'k2', distanceKm: 39 }] }))
+            .toBe('The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.');
+        expect(communityFacts(find.communities[0])).toBe('12 km away · 40 members');
+        expect(communityFacts({ distanceKm: 4.62, memberCount: 1 })).toBe('4.6 km away · 1 member');
+        expect(communityFacts({ distanceKm: 0.4, memberCount: null })).toBe('Less than 1 km away');
         expect(findBody({ ...find, communities: [], point: null, communityCount: 1 })).toBe('1 community is listed. Share your area to see the nearest.');
         expect(findBody({ ...find, communities: [] })).toBe('No community is listed near you yet. Start one, or ask to be told when one starts here.');
     });

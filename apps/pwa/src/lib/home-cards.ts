@@ -353,8 +353,8 @@ export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & 
     const visitor = !!answer.welcome || answer.me === null;
     if (visitor && id === 'find') return 'Near you';
     if (visitor && id === 'market') return 'What people post';
+    // "Coming up" says how near only when the node measured from a point (the card adds "· within 50 km").
     if (id === 'market' && answer.profile === 'global') return 'Near you';
-    if (id === 'events' && answer.profile === 'global') return 'Coming up near you';
     return CARD_TITLES[id];
 }
 
@@ -449,13 +449,15 @@ export function communityFacts(c: Pick<HomeCommunity, 'distanceKm' | 'memberCoun
     return parts.join(' · ');
 }
 
-/** The find card's headline, from what the node said (the phone's findCommunityCardCopy, the same words). */
+/**
+ * The find card's headline, from what the node said (the phone's findCommunityCardCopy, but for the web's card, which
+ * lists the communities themselves right under it, each a link to its own page, so the sentence doesn't name one).
+ */
 export function findBody(f: HomeFind): string {
     if (f.communities.length > 0) {
-        const nearest = f.communities[0];
-        const where = communityFacts({ distanceKm: nearest.distanceKm, memberCount: null }).toLowerCase() || 'near you';
-        const more = f.communities.length > 1 ? `, and ${f.communities.length - 1} more nearby` : '';
-        return `${nearest.name ?? 'A community'} is ${where}${more}. Ask to join, and trade with your neighbours there.`;
+        return f.communities.length === 1
+            ? 'The community nearest you. Ask to join, and trade with your neighbours there.'
+            : 'The communities nearest you, closest first. Ask one to let you in, and trade with your neighbours there.';
     }
     if (f.point === null) {
         const n = f.communityCount;

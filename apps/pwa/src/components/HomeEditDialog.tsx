@@ -7,7 +7,7 @@
  * round), Escape closes it, and focus goes back to what opened it. Every control is a button at least 44 px tall whose
  * label says what it does ("Move Coming up up", a switch that says whether the card is shown).
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cardTitle, type HomeAnswer, type HomeCardId } from '../lib/home-cards';
 
 interface Props {
@@ -25,33 +25,50 @@ const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), [tabin
 export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onReset, onClose }: Props) {
     const dialog = useRef<HTMLDivElement | null>(null);
     const opener = useRef<Element | null>(typeof document !== 'undefined' ? document.activeElement : null);
+    // A switch moves its row between "Shown" and "Hidden", which draws it anew: focus follows it there.
+    const [refocus, setRefocus] = useState<HomeCardId | null>(null);
+    const closeRef = useRef(onClose);
+    closeRef.current = onClose;
 
     useEffect(() => {
         const back = opener.current as HTMLElement | null;
         dialog.current?.querySelector<HTMLElement>('h2')?.focus();
-        return () => { back?.focus?.(); };
+        // On the document, so Escape and Tab work wherever focus is while the dialog is open.
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeRef.current();
+                return;
+            }
+            if (e.key !== 'Tab' || !dialog.current) return;
+            const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+            if (!items.length) return;
+            const first = items[0];
+            const last = items[items.length - 1];
+            const active = document.activeElement;
+            if (!dialog.current.contains(active)) {
+                e.preventDefault();
+                (e.shiftKey ? last : first).focus();
+            } else if (e.shiftKey && active === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && active === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('keydown', onKeyDown);
+            back?.focus?.();
+        };
     }, []);
 
-    function onKeyDown(e: React.KeyboardEvent) {
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            onClose();
-            return;
-        }
-        if (e.key !== 'Tab' || !dialog.current) return;
-        const items = Array.from(dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-        if (!items.length) return;
-        const first = items[0];
-        const last = items[items.length - 1];
-        const active = document.activeElement;
-        if (e.shiftKey && (active === first || !dialog.current.contains(active))) {
-            e.preventDefault();
-            last.focus();
-        } else if (!e.shiftKey && (active === last || !dialog.current.contains(active))) {
-            e.preventDefault();
-            first.focus();
-        }
-    }
+    useEffect(() => {
+        if (!refocus) return;
+        dialog.current?.querySelector<HTMLElement>(`[data-testid="home-edit-switch-${refocus}"]`)?.focus();
+        setRefocus(null);
+    }, [refocus, shown, hidden]);
 
     const btn = 'min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg border border-nature-300 dark:border-nature-700 bg-transparent text-nature-800 dark:text-nature-100 font-bold cursor-pointer disabled:opacity-40 disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 
@@ -72,7 +89,7 @@ export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onRese
                     </>
                 )}
                 <button type="button" role="switch" aria-checked={on} aria-label={`Show ${title}`} data-testid={`home-edit-switch-${id}`}
-                    onClick={() => onToggle(id, !on)}
+                    onClick={() => { onToggle(id, !on); setRefocus(id); }}
                     className={`relative shrink-0 w-[52px] min-h-[44px] flex items-center rounded-full border-0 bg-transparent cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}>
                     <span aria-hidden="true" className={`block w-[44px] h-[26px] mx-auto rounded-full transition-colors ${on ? 'bg-emerald-700' : 'bg-nature-300 dark:bg-nature-700'}`}>
                         <span className={`block w-[22px] h-[22px] mt-[2px] rounded-full bg-white shadow transition-transform ${on ? 'translate-x-[20px]' : 'translate-x-[2px]'}`} />
@@ -83,9 +100,10 @@ export function HomeEditDialog({ answer, shown, hidden, onToggle, onMove, onRese
     }
 
     return (
-        <div className="fixed inset-0 flex items-end sm:items-center justify-center" style={{ zIndex: 120, background: 'rgba(0,0,0,0.45)' }}
+        // Above everything while it is open, the install banner (InstallPrompt, 1000) included: it is modal.
+        <div className="fixed inset-0 flex items-end sm:items-center justify-center" style={{ zIndex: 1100, background: 'rgba(0,0,0,0.45)' }}
             onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-            <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="home-edit-title" data-testid="home-edit-dialog" onKeyDown={onKeyDown}
+            <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="home-edit-title" data-testid="home-edit-dialog"
                 className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-nature-950 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 min-w-0">
                 <h2 id="home-edit-title" tabIndex={-1} className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white focus:outline-none">Edit home</h2>
                 <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">Choose which cards Home shows, and their order. Needs you and your community's card always stay.</p>

@@ -2354,13 +2354,20 @@ export async function updateNotificationPreferences(pubkey: string, preferences:
 
 // ===================== HOME =====================
 
+/** A Home read: the answer and its tag, or the node saying the copy whose tag was sent is still the answer. */
+export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | null } | { notModified: true; etag: string };
+
 /**
  * The whole Home screen in one read (GET /api/home, routes/home.ts): signed for a member, unsigned in the global lobby.
- * The node tags each answer and says `private, max-age=0, must-revalidate`, so the browser asks again with the tag and
- * an unchanged Home costs a 304 (the request's `no-cache`). `cards` is what the member's layout shows; absent, the node
- * uses the account's own layout.
+ * `cards` is what the member's layout shows; absent, the node uses the account's own layout.
+ *
+ * The node tags each answer (`private, max-age=0, must-revalidate`). With `etag`, the tag of the copy the app keeps
+ * (lib/home-cache.ts), an unchanged Home is a 304 and costs headers only (design §5.2). The app sends the tag itself
+ * rather than leaning on the browser's cache, which keeps nothing in a private window, in some in-app browsers, or over a
+ * certificate the browser was told to accept; and only to the node that served this page: another origin's preflight
+ * refuses the header and doesn't let the page read the tag, so there the browser revalidates on its own, if it can.
  */
-export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}): Promise<HomeAnswer> {
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
     const q = new URLSearchParams();
     if (params.cards) q.set('cards', params.cards.join(','));
     if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
@@ -2368,7 +2375,25 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
         q.set('lng', String(params.lng));
     }
     const qs = q.toString();
-    return request<HomeAnswer>('GET', `/api/home${qs ? `?${qs}` : ''}`);
+    const path = `/api/home${qs ? `?${qs}` : ''}`;
+    const base = getNodeApiUrl();
+    const sameOrigin = !base || (typeof window !== 'undefined' && base === window.location.origin);
+    const headers: Record<string, string> = {};
+    // Signed as request() signs: by the member when there is one, nothing for a visitor.
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        try {
+            Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey));
+        } catch (e) {
+            console.warn('[API] Could not sign request:', e);
+        }
+    }
+    const conditional = !!etag && sameOrigin;
+    if (conditional) headers['If-None-Match'] = etag!;
+    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
+    if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
+    if (!res.ok) throw await refusalError(res);
+    return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };
 }
 
 /** What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew. */

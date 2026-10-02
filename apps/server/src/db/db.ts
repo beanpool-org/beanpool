@@ -380,7 +380,7 @@ function backfillBoardStanding(): void {
 }
 
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
-const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
+export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
 /**
  * Brings this node's members rows into the rules a fresh install's table has (schema.sql's CHECKs on members, read from its
@@ -1458,24 +1458,8 @@ export function initSchema() {
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
-    // Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at
-    // this boot rather than on each code's next use, which may be never.
-    try {
-        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
-        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
-    } catch (e) {
-        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
-    }
-
-    // On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
-    // takes over boots as a main server, which seeds one if the copy brought none.
-    if (getNodeRole() !== 'backup') {
-        try {
-            seedPricingGuideIfEmpty(false, db);
-        } catch (err) {
-            console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
-        }
-    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
 
     try {
         migrateProjectsAndCommonsToEnterprises(db);
@@ -1487,6 +1471,64 @@ export function initSchema() {
     stampPlainTables();
     markLinkTreasuries();
     fillReleaseOwners();
+}
+
+/**
+ * Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at this boot
+ * rather than on each code's next use, which may be never; a suspended member's too on a main server.
+ */
+function upgradeBreakGlassHashesAtBoot(): void {
+    try {
+        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
+        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
+    }
+}
+
+/**
+ * On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
+ * takes over boots as a main server, which seeds one if the copy brought none.
+ */
+function seedPricingGuideOnMainServer(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        seedPricingGuideIfEmpty(false, db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    }
+}
+
+/**
+ * What initSchema runs only on a main server, run now: for a standby a take-over made the main server in this process, after
+ * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
+ * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
+ * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
+ * treasuries' markers and the recovery releases' owners. Nothing on a standby. Never throws.
+ */
+export function runMainServerSchemaPasses(): void {
+    if (getNodeRole() === 'backup') return;
+    markExistingVisitors();
+    try {
+        bringMembersToSchemaRules(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8'));
+    } catch (e) {
+        console.error('[DB] ❌ Could not read schema.sql for the members\' schema rules:', e);
+    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
+    for (const t of PLAIN_TABLES) stampUnstampedRows(t);
+    markLinkTreasuries();
+    fillReleaseOwners();
+}
+
+/** A plain table's rows the ALTER left with no stamp, stamped now, on a main server only (stampPlainTables). */
+function stampUnstampedRows(t: (typeof PLAIN_TABLES)[number]): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        db.prepare(`UPDATE ${t.table} SET ${t.watermark} = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${t.watermark} IS NULL`).run();
+    } catch (e) {
+        console.error(`[DB] ❌ Could not stamp ${t.table}'s unstamped rows:`, e);
+    }
 }
 
 /**

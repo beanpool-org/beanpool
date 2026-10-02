@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -18,6 +18,7 @@ import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -211,6 +212,7 @@ import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
+    getMemberDirectoryRows as getMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -232,6 +234,7 @@ import {
     rowToMember,
     rowToProfile,
     type Member,
+    type DirectoryRow,
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
@@ -326,6 +329,7 @@ import {
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
     closePoll as closePollEngine,
+    closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
@@ -632,6 +636,10 @@ export function initStateEngine(): void {
     // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
     // here, once, as the faces are.
     installPhotoKeysAtBoot(READ_AUTH_ON);
+    // Each anonymous poll on the public board says, once it has closed, how many of its votes came from new or 12-word
+    // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
+    // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
+    installPollVoteOriginsAtBoot();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
@@ -880,6 +888,9 @@ function armMainServerTimers(): void {
         // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
         // itself is bounded by one indexed range scan over events starting inside the next week.
         try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+        // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
+        // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
+        try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
     }), 60 * 1000);
 }
 
@@ -1580,6 +1591,11 @@ export function getMembers(): Member[] {
 
 export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
+}
+
+/** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
+export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
+    return getMemberDirectoryRowsEngine(db, updatedAfter);
 }
 
 // ===================== INVITE CODES =====================
@@ -5424,6 +5440,8 @@ export function closePoll(postId: string, authorPublicKey: string): MarketplaceP
     return closePollEngine(broadcast, postId, authorPublicKey);
 }
 
+export { closeExpiredPolls };
+
 export function votePoll(
     postId: string,
     voterPublicKey: string,
@@ -6544,7 +6562,9 @@ function countHealth(t: ReturnType<typeof getThresholds>): HealthCounts {
 function healthBody(counts: HealthCounts, reportCount: number, watchdog: WatchdogStatus): Omit<CommunityHealth, 'flags'> {
     const config = getLocalConfig();
     return {
-        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
+        // The name alone (directoryName): getDirectoryInfo also counts the members, a scan this read threw away, and every
+        // phone asks it every 30 s (members' photos are inline, so the count read them all: the global load rehearsal).
+        nodeName: directoryName(),
         version: getVersion(),
         // The app reads both of these. `minAppVersion` is this node's floor — below it
         // the app says so and will not let you dismiss it. `appVersions` is what the
@@ -7663,10 +7683,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
     // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
-    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts). Marked so (core
+    // dm-crypto DM_FROM_ADMINS_KEY): both apps show it as the community admins' message, which the server can read, and
+    // never as a private one; a readable line in a DM without the mark is shown as nobody's words.
     if (conv) {
         sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
-            'text', undefined, undefined, undefined, { nodeAuthored: true });
+            'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
 
@@ -7826,6 +7848,12 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     return host ? `https://${host}` : null;
 }
 
+/** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */
+export function directoryName(): string {
+    const localConfig = getLocalConfig();
+    return localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node';
+}
+
 /**
  * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
  * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
@@ -7836,7 +7864,7 @@ export function getDirectoryInfo(): any {
     const config = getNodeConfig();
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: directoryName(),
         publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
         communityName: localConfig.communityName || null,
     };
@@ -7848,7 +7876,10 @@ export function getDirectoryInfo(): any {
     }
 
     if (config.publishMembers) {
-        info.memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
+        // The same count (members not pruned) from communityCountsCached: GET /api/directory/info is public and ran the
+        // scan on every hit. Counted afresh once a member changes (the members version), else at most
+        // COMMUNITY_COUNTS_TTL_MS old.
+        info.memberCount = communityCountsCached().memberCount;
     } else {
         info.memberCount = null;
     }

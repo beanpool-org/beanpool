@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 93,
-  "hash": "3a8609467bdddfbdc50d67f3c54635f7da5b4d80e38be3221c51c53cbe7360c3",
+  "version": 94,
+  "hash": "1cb522f9e478299a38bea9daed6f2bbfbbc3adfaaf6393ec7d56a0b2a30c6af6",
   "sections": [
     {
       "id": "setup",
@@ -644,6 +644,7 @@
             "Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.",
             "There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.",
             "Once you have typed a code, the browser does not ask again for **4 hours** of use.",
+            "Each code works once. A code the server has already taken, from anyone, is refused with \"That 2FA code was already used. Wait for the next one from your authenticator app.\" The next code comes within 30 seconds. So someone who saw a code over your shoulder can't use it after you, and two people signing in together need a code each.",
             "Only an owner can switch it on or off."
           ]
         },
@@ -1147,7 +1148,7 @@
           "type": "ul",
           "items": [
             "In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.",
-            "Each row shows which post the report is about, who wrote it, and whether it has already been removed."
+            "Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused."
           ]
         },
         {
@@ -1282,7 +1283,7 @@
         },
         {
           "type": "p",
-          "text": "**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, \"Your posts are hidden for review\", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden."
+          "text": "**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, \"Your posts are hidden for review\", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up; then every post of it again, as the last round left them, until nothing changes: a post kept hidden lowers the bar for its author's other posts, and can put its author back on probation, so a report of theirs no longer counts and a post they reported comes back), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden."
         },
         {
           "type": "p",
@@ -2095,7 +2096,8 @@
           "items": [
             "A server with no recovery code sends a backup that is not locked. The fleet manager keeps it as before: the latest database, and one copy a day for 30 days, and shows the server as \"Partial: database, no keys\". The same goes for a server that runs a BeanPool older than locked backups.",
             "A server with a recovery code sends a locked backup. The fleet manager keeps it as it came: the newest, and one a day for 30 days. It cannot open these files and does not need to.",
-            "When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours. A collection started by hand from the dashboard still asks at once."
+            "When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours.",
+            "The copies are files in its data folder, under backups/(server name). A community server no longer lists, collects or hands out these copies itself: the old fleet manager pages (/api/manager/backups) were removed in October 2026."
           ]
         },
         {
@@ -2185,6 +2187,7 @@
             "**How often.** The routine whole copy comes at the **Routine Full Reconcile Interval** (15 minutes unless you change it) while your server's copy fits in one page. Once it takes more than one page, it comes once a day, or sooner if the standby finds its copy differs from your server's, or more has changed than the small changes carry (below).",
             "**Many changes at once.** The small changes carry up to 4 pages of changed rows at a time, and at most 32 MB. Every member's balance comes with them each time, whatever changed, and counts toward neither. When more than that has changed since the standby's last copy (thousands of new rows at once, or a standby switched off for a while), it takes a whole copy instead, by itself, and nobody is told.",
             "**Listing photos come on their own.** A copy names each listing photo instead of carrying it, and the standby fetches only the photos it doesn't have yet, checking each one as it arrives; a routine copy fetches only the new ones. A standby's first copy fetches every photo, about four a second, so a community with 30,000 listing photos takes about two hours before it is swapped in. A photo your server can no longer read is left out, and the standby keeps its own. Update a standby before or with its main server: a main server refuses to copy to an older standby, which says \"primary returned HTTP 426\" at every pull until it is updated.",
+            "**A photo that won't come.** If a photo can't be fetched (your server's photo storage not answering, or the request timing out), the copy isn't taken, and the standby keeps the photos it did fetch, so the next copy asks only for the rest. Small changes are asked for again at the next pull. A whole copy waits: a first copy or a force-resync an hour, a routine one until the next routine time. Each whole copy in a row that fails the same way waits about twice as long as the one before, at most a day, so a broken photo never has your server build whole copies for nothing every hour. **Live Backup Server** on the standby says what it is waiting on, until when, and how many photos it is keeping; **Force Full Resync** asks at once.",
             "If your main server is gone for good, the standby can take over as the main server. See the next part."
           ]
         },
@@ -2502,6 +2505,36 @@
           "text": "Only an owner can write off an escrow, and only on the main server. A standby picks up the change with its next sync."
         },
         {
+          "type": "h3",
+          "text": "A balance that isn't a number"
+        },
+        {
+          "type": "p",
+          "text": "Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many \"balances that are not a number\" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up."
+        },
+        {
+          "type": "p",
+          "text": "The audit's own answer names each one: POST /api/local/admin/ledger-audit lists the account, the member's or enterprise's name, and what it holds, under brokenBalances. The Commons pot shows as COMMONS_POOL. Setting a new baseline is refused while any balance isn't a number, and the refusal names them too."
+        },
+        {
+          "type": "p",
+          "text": "To mend one:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "stop the server: docker compose stop beanpool-node",
+            "open data/state.db with any SQLite tool, and work out what the account should hold from its transactions table: every payment into it (to_pubkey) less the community fee on each (tax_fee), less every payment out of it (from_pubkey). For COMMONS_POOL, add every fee in the table too. For any one account, with its key in place of KEY: SELECT COALESCE((SELECT SUM(amount - COALESCE(tax_fee, 0)) FROM transactions WHERE to_pubkey = 'KEY'), 0) - COALESCE((SELECT SUM(amount) FROM transactions WHERE from_pubkey = 'KEY'), 0);",
+            "set it, putting that number in place of AMOUNT and the account in place of KEY: UPDATE accounts SET balance = AMOUNT WHERE public_key = 'KEY';",
+            "start the server again: docker compose up -d",
+            "run the audit again. Once every balance is a number, set a new baseline for any difference that's left, with a written reason."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Take a backup of the data folder before you change anything in it."
+        },
+        {
           "type": "h2",
           "text": "When a background job fails"
         },
@@ -2639,7 +2672,7 @@
         },
         {
           "type": "p",
-          "text": "None of these asks your server anything. Leaving only asks it, in passing, to stop sending that phone notifications, and never waits for the answer. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it."
+          "text": "None of these asks your server anything. Leaving asks it, in passing, to stop sending that phone notifications, and nothing it answers changes what happens. Leaving for another community on the phone never waits for it; leaving the last one, as Sign Out, waits a few seconds at most. So a server that sets a floor it should not, or answers anything else wrongly, can stop its own community on a phone, and nothing else on it."
         },
         {
           "type": "h2",

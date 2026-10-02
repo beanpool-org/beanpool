@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
-    registerMember, getMembers, getAllMembers, getMember,
+    registerMember, getMembers, getAllMembers, getMember, getMemberDirectoryRows,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     getCommunityInfo, getPublicCommunityInfo,
@@ -2140,35 +2140,32 @@ router.get('/api/members', async (ctx) => {
         }
     }
 
-    // Use getMembers() (excludes pruned) so the directory matches the count reported by
-    // /api/community/info — otherwise clients keep pruned members locally and read as
-    // permanently "out of sync" against the node's pruned-excluding member count.
-    let allMembers = getMembers()
-        .filter(m => !m.publicKey.startsWith('escrow_') && !m.publicKey.startsWith('project_') && !m.isTreasury);
-
-    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members
-    // who joined or changed their profile (avatar/callsign/bio) since that cursor. This lets
-    // the client pick up new members and avatar changes every sync cycle instead of waiting
-    // for the hourly full-directory snapshot. No param => full directory (unchanged behaviour).
-    const updatedAfter = ctx.query.updatedAfter as string | undefined;
-    if (updatedAfter) {
-        allMembers = allMembers.filter(m =>
-            (m.joinedAt && m.joinedAt > updatedAfter) ||
-            (m.profileUpdatedAt != null && String(m.profileUpdatedAt) > updatedAfter)
-        );
-    }
+    // Pruned members are left out (as getMembers) so the directory matches the count reported by /api/community/info —
+    // otherwise clients keep pruned members locally and read as permanently "out of sync" against the node's
+    // pruned-excluding member count.
+    //
+    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members who joined or changed their
+    // profile (avatar/callsign/bio) since that cursor. This lets the client pick up new members and avatar changes every
+    // sync cycle instead of waiting for the hourly full-directory snapshot. No param => full directory.
+    //
+    // Only the columns below are read, and a delta reads only the rows changed since its cursor (engine members.ts
+    // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
+    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal).
+    const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
+        .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
     const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    const members = allMembers.map(m => ({
-        publicKey: m.publicKey,
-        callsign: m.callsign,
-        joinedAt: m.joinedAt,
-        nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-        avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-        profileUpdatedAt: m.profileUpdatedAt,
-        earnedCredit: m.earnedCredit ?? 0,
-        elderVouchedBy: m.elderVouchedBy || null,
-        archetype: m.archetype || null,
+    // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
+    const members = rows.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        nodeRole: rolesByPubkey.get(r.public_key) ?? null,
+        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url || null),
+        profileUpdatedAt: r.profile_updated_at || null,
+        earnedCredit: r.earned_credit ?? 0,
+        elderVouchedBy: r.elder_vouched_by || null,
+        archetype: r.archetype || null,
     }));
 
     const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);

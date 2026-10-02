@@ -211,6 +211,76 @@ export function getAllMembers(db: Db): Member[] {
     return rows.map(rowToMember);
 }
 
+/**
+ * One member as the member directory (the server's GET /api/members) reads it: only the columns that response is
+ * built from, as stored, plus `is_treasury` to leave treasuries out. The rest of the row (bio, contact details, the
+ * invite code, standing) is never read, so it is never copied out of SQLite.
+ */
+export interface DirectoryRow {
+    public_key: string;
+    callsign: string;
+    joined_at: unknown;
+    avatar_url: string | null;
+    profile_updated_at: unknown;
+    earned_credit: number | null;
+    elder_vouched_by: string | null;
+    archetype: string | null;
+    is_treasury: unknown;
+}
+
+const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_url, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury';
+
+/**
+ * Whether a member's row changed after `updatedAfter`, the phone's delta cursor: joined after it, or updated their
+ * profile after it. The comparison the directory has always made, on getMembers' values (rowToMember: `joinedAt` as
+ * stored, `profileUpdatedAt` stored-or-null), kept exactly, coercions included, so every cursor gets the rows it got.
+ */
+function changedAfter(row: DirectoryRow, updatedAfter: any): boolean {
+    const joinedAt = row.joined_at as any;
+    const profileUpdatedAt = (row.profile_updated_at || null) as any;
+    return !!((joinedAt && joinedAt > updatedAfter) ||
+        (profileUpdatedAt != null && String(profileUpdatedAt) > updatedAfter));
+}
+
+/**
+ * The member directory's rows: every member not pruned (as getMembers), in rowid order (as getMembers' scan returns
+ * them). With `updatedAfter` (any truthy value, as the query string gives it), only those that changedAfter it.
+ *
+ * A delta cursor that is a string with no character at or above U+D800 (every cursor a phone sends: an ISO time) is
+ * answered from idx_members_joined_at and idx_members_profile_updated_at, so a phone's sync reads the rows changed since
+ * its cursor, not every member. The SQL takes a superset and changedAfter decides, so the rows are exactly the old ones:
+ * - a TEXT value against the cursor compares as JavaScript does: SQLite's BINARY collation orders UTF-8 bytes, which is
+ *   code point order, and JavaScript orders UTF-16 code units; the two agree wherever one side has nothing at or above
+ *   U+D800, and the cursor has nothing there.
+ * - a numeric value (`< ''`: every INTEGER and REAL sorts before every TEXT, and '' before every other TEXT) is always
+ *   taken, since JavaScript compares it to the cursor as a number or a string; so is a BLOB (`> cursor`: BLOBs sort
+ *   after TEXT).
+ * - a cursor SQLite reads as a number (the columns' NUMERIC affinity, e.g. `5`) makes every TEXT value `> cursor`: a
+ *   superset again.
+ * Any other cursor (a repeated query parameter arrives as an array) reads every member's directory columns and filters
+ * in JavaScript, as before.
+ */
+export function getMemberDirectoryRows(db: Db, updatedAfter?: unknown): DirectoryRow[] {
+    if (!updatedAfter) {
+        return db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+    }
+    let rows: DirectoryRow[];
+    if (typeof updatedAfter === 'string' && !/[\uD800-￿]/.test(updatedAfter)) {
+        // One index range a term, by rowid: written as one WHERE with ORs, SQLite scans the whole table instead.
+        rows = db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members
+                           WHERE rowid IN (
+                                     SELECT rowid FROM members WHERE joined_at > @c
+                           UNION ALL SELECT rowid FROM members WHERE joined_at < ''
+                           UNION ALL SELECT rowid FROM members WHERE profile_updated_at > @c
+                           UNION ALL SELECT rowid FROM members WHERE profile_updated_at < '')
+                             AND status != 'pruned'
+                           ORDER BY rowid`).all({ c: updatedAfter }) as DirectoryRow[];
+    } else {
+        rows = db.prepare(`SELECT ${DIRECTORY_COLUMNS} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+    }
+    return rows.filter(r => changedAfter(r, updatedAfter));
+}
+
 export function generateShortCode(): string {
     const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // base32-ish without confusing chars (0/O, 1/I)
     let part1 = '';

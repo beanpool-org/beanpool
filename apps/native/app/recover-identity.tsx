@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, SafeAreaView, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { router, ErrorBoundary } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+
+export { ErrorBoundary };
 import { colors } from '../constants/colors';
 
 export default function RecoverIdentityScreen() {

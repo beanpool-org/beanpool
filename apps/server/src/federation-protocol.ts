@@ -15,7 +15,7 @@ import { FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE } from './federa
 import { getProfileSwitches, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from './config/node-profile.js';
 import { getNodeRole } from './state-engine.js';
 import { isMemberKeySpelling, BAD_KEY_ERROR } from './engine/member-key.js';
-import { MessagingError } from './engine/messaging.js';
+import { MessagingError, relayedMessageId } from './engine/messaging.js';
 import {
     handlePurchaseRequest, handleReceiptDelivery, answerReceiptStatus, runOutboundSettlement,
     PURCHASE_ASK_TIMEOUT_MS, RECEIPT_DELIVERY_TIMEOUT_MS, type OutboundOutcome,
@@ -265,7 +265,7 @@ export function registerFederationHandler(node: Libp2p): void {
                 }
             } 
             else if (request.action === 'relay_message') {
-                const { senderPublicKey, senderCallsign, senderNodeUrl, recipientPublicKey, ciphertext, nonce, metadata } = request;
+                const { id, senderPublicKey, senderCallsign, senderNodeUrl, recipientPublicKey, ciphertext, nonce, metadata } = request;
 
                 if (!senderPublicKey || !recipientPublicKey || !ciphertext || !nonce) {
                     response = { error: 'Missing required payload fields' };
@@ -305,7 +305,8 @@ export function registerFederationHandler(node: Libp2p): void {
                             let message: ReturnType<typeof sendMessage> = null;
                             let refusal: string | null = null;
                             try {
-                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata);
+                                // Under the sender's own id: the line is sealed to it (relayedMessageId).
+                                message = sendMessage(conversation.id, senderPublicKey, ciphertext, nonce, 'text', undefined, metadata, relayedMessageId(id));
                             } catch (e: any) {
                                 if (!(e instanceof MessagingError)) throw e;
                                 refusal = e.message;
@@ -543,7 +544,7 @@ export async function settleCrossNodePurchase(
 export async function federatedRelayMessage(
     node: Libp2p, 
     targetPeerId: any, 
-    payload: { senderPublicKey: string; senderCallsign?: string; senderNodeUrl?: string; recipientPublicKey: string; ciphertext: string; nonce: string; metadata?: string; }
+    payload: { id?: string; senderPublicKey: string; senderCallsign?: string; senderNodeUrl?: string; recipientPublicKey: string; ciphertext: string; nonce: string; metadata?: string; }
 ): Promise<any> {
     let stream: any = null;
     try {

@@ -272,6 +272,8 @@ export interface SyncPollVote {
     optionId: string;
     signature: string;
     createdAt: string;
+    /** Whether the voter was a new or 12-word account when they first voted: 1, 0, or null where the node kept none. */
+    voterNewOrWords?: number | null;
 }
 
 export interface SyncEventRsvp {
@@ -1172,6 +1174,7 @@ function pollVoteOfRow(r: any): SyncPollVote {
         optionId: r.option_id,
         signature: r.signature || '',
         createdAt: r.created_at,
+        voterNewOrWords: r.voter_new_or_words ?? null,
     };
 }
 

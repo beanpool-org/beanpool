@@ -116,6 +116,11 @@ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 -- the index alone.
 CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+-- The member directory's delta (GET /api/members?updatedAfter=, engine members.ts getMemberDirectoryRows): who joined, or
+-- changed their profile, since a phone's cursor, from these alone. Without them every phone's sync read every member's
+-- row (at 26,000 members: ~76 ms of CPU for a 513-byte answer, found in the global node's load rehearsal).
+CREATE INDEX IF NOT EXISTS idx_members_joined_at ON members(joined_at);
+CREATE INDEX IF NOT EXISTS idx_members_profile_updated_at ON members(profile_updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
 -- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
@@ -276,6 +281,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     option_id TEXT NOT NULL,
     signature TEXT NOT NULL,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
+    -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
+    voter_new_or_words INTEGER,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);

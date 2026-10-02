@@ -527,8 +527,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
-            const cleanMemo = typeof memo === 'string' ? replaceLoneSurrogates(memo) : (memo || 'Enterprise Pledge');
-            pledgeToProject(txId, treasury, actor, parsedAmount, cleanMemo, (ctx.state as any)?.authSig);
+            pledgeToProject(txId, treasury, actor, parsedAmount, memo || 'Enterprise Pledge', (ctx.state as any)?.authSig);
             deps.broadcast?.({ type: 'project_updated', project: getCrowdfundProject(treasury) });
             ctx.body = { success: true, txId };
         } catch (err: any) {

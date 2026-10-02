@@ -27,7 +27,7 @@ import { ProbationLimitError } from '../engine/probation.js';
 import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { DoorClosedError } from '../config/door.js';
-import { BEANS_NOTE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
+import { BEANS_NOTE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -216,7 +216,7 @@ export const BEANS_NOTE_TOO_LONG = textTooLongMessage('A note with Beans', BEANS
  * request body (2 MB) was its only bound. True when it did. Before anything moves.
  */
 export function respondIfNoteTooLong(ctx: { status: number; body: unknown }, memo: unknown): boolean {
-    if (!isNote(memo) || fitsTextLimit(replaceLoneSurrogates(String(memo)), BEANS_NOTE_LIMIT)) return false;
+    if (!isNote(memo) || fitsTextLimit(String(memo), BEANS_NOTE_LIMIT)) return false;
     ctx.status = 400;
     ctx.body = { error: BEANS_NOTE_TOO_LONG };
     return true;

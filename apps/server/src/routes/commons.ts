@@ -29,7 +29,6 @@ import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertEnterpriseText } from '../engine/enterprise-text.js';
-import { replaceLoneSurrogates } from '@beanpool/core';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
@@ -365,14 +364,12 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         return;
     }
     // Its title is the enterprise's name and its description its purpose, each held to its limit (#1493).
-    const cleanTitle = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
-    const cleanDesc = typeof description === 'string' ? replaceLoneSurrogates(description) : (description || '');
-    try { assertEnterpriseText(cleanTitle, cleanDesc); } catch (e: any) {
+    try { assertEnterpriseText(title, description || ''); } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e.message };
         return;
     }
-    createCrowdfundProject(projectId, actor, cleanTitle, cleanDesc, photos || [], Number(goalAmount), deadlineAt || null);
+    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
     
@@ -497,8 +494,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
 
     try {
         const txId = crypto.randomUUID();
-        const cleanMemo = typeof memo === 'string' ? replaceLoneSurrogates(memo) : (memo || 'Project Pledge');
-        pledgeToProject(txId, projectId, actor, parsedAmount, cleanMemo, (ctx.state as any).authSig);
+        pledgeToProject(txId, projectId, actor, parsedAmount, memo || 'Project Pledge', (ctx.state as any).authSig);
         const updatedProject = getCrowdfundProject(projectId);
         deps.broadcast?.({ type: 'project_updated', project: updatedProject });
         ctx.body = { success: true, txId };

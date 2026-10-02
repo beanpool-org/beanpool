@@ -133,8 +133,6 @@ export function replaceLoneSurrogates(text: string): string {
     return result;
 }
 
-export const normalizeSurrogates = replaceLoneSurrogates;
-
 /** Does `text` fit `limit`, in characters and in bytes? */
 export function fitsTextLimit(text: string, limit: TextLimit): boolean {
     return text.length <= limit.chars && utf8ByteLength(text) <= limit.bytes;

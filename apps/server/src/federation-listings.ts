@@ -206,7 +206,7 @@ export function cacheRemoteListings(
                     // A peer's listing is a copy this node shows and never edits, held to the limits a member's is (#1493):
                     // a title or description past its limit is kept cut to it, ending "…", and a category past its limit
                     // is no category this node knows.
-                    typeof l.category === 'string' && l.category && fitsTextLimit(replaceLoneSurrogates(l.category), LISTING_CATEGORY_LIMIT) ? replaceLoneSurrogates(l.category) : 'other',
+                    typeof l.category === 'string' && l.category && fitsTextLimit(l.category, LISTING_CATEGORY_LIMIT) ? replaceLoneSurrogates(l.category) : 'other',
                     cutToLimit(l.title, LISTING_TITLE_LIMIT),
                     typeof l.description === 'string' ? cutToLimit(l.description, LISTING_DESCRIPTION_LIMIT) : '',
                     Number(l.credits),

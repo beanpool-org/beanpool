@@ -1468,7 +1468,8 @@ export const NAMES_COPY = {
     checkNotKept: 'This phone couldn’t read or save its names list keys just now, so nothing was checked and nothing was changed. Try again.',
     /** A Remove whose pin couldn't be read or saved (round 16, :186): nothing was removed, and nothing is written until it is. */
     removeNotKept: (who: string[]) => `This phone couldn’t read or save its names list keys just now, so ${who.length > 1 ? `the old keys of ${both(who)} weren’t` : `${at(who[0] ?? '')}’s old key wasn’t`} `
-        + `removed and nothing was changed. This phone writes nothing to the list until it is: tap ${who.length > 1 ? 'each Remove' : `Remove ${at(who[0] ?? '')}’s old key`} again.`,
+        + `removed and nothing was changed. Tap ${who.length > 1 ? 'each Remove' : `Remove ${at(who[0] ?? '')}’s old key`} again before you add any names: `
+        + `until ${who.length > 1 ? 'they are' : 'it is'} removed, names added here could still be read on ${who.length > 1 ? 'those phones' : 'that phone'}.`,
     exportTitle: 'Export the list as a PDF?',
     export: 'The PDF holds every name you can open here. Once it leaves this phone it’s yours to keep safe, like a paper list. '
         + 'The other admins can see that you exported it, and when.',

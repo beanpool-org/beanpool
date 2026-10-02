@@ -1,0 +1,265 @@
+/**
+ * A cap on the heavy list reads, so that a burst of them can't kill the node (docs/global-heavy-lists.md §5(c), slice 1).
+ *
+ * Every heavy list (the directory, the web app's directory, a big group's roster, the list of groups at its most) is
+ * built whole in memory and kept until its last byte leaves. A 30,000-member directory (11.9 MB) holds about 57 MB while
+ * it is in flight: two copies of the body in the heap, and a native write buffer three times its size. So the limit was
+ * answers in flight, not members. On a 256 MB heap 12 directory reads at once ended the process, and on the global node's
+ * 1 GB droplet (512 MB heap) the kernel killed it at 20 to 24. Docker restarted it, every phone synced again, and the
+ * same burst met it again.
+ *
+ * Here a heavy answer is admitted while the weight of the answers in flight stays within a budget. An answer is in
+ * flight from before its build until its last byte is written.
+ *   - An answer's weight is the size of the last answer its route gave, keyed by the caller (a roster by its group). So
+ *     the web app's directory weighs more than a roster, and a small group's roster next to nothing. A route not yet
+ *     measured counts as a quarter of the budget, about a directory at the default.
+ *   - A route whose last answer was under LIGHT_BYTES isn't heavy and goes straight through. Answers that size are built
+ *     and written in milliseconds: the list of groups at 50 a page (1.4 MB) survived 512 at once on a 256 MB heap.
+ *   - Nothing waits behind the first answer: one answer bigger than the whole budget is still served, alone.
+ *   - One that doesn't fit waits its turn, in order, for up to WAIT_MS. That is under the apps' shortest timeout on
+ *     these reads (10 s, native syncMessages). Then it is answered 503 with Retry-After and `code: heavy_read_busy`. So is
+ *     one that arrives with MAX_QUEUE already waiting.
+ *   - The weight comes back when the last byte is written ('finish'), when the connection closes first ('close': a
+ *     phone that gives up mid-answer must not keep it), and when the build throws. A reader who leaves while waiting
+ *     leaves the line.
+ *   - While it refuses, the log gets one line a minute saying how many.
+ *
+ * Only a request the routes would answer gets here. The read gate, the signature and each route's own checks run first,
+ * and a 304 costs nothing, so an unsigned or refused read never takes budget.
+ *
+ * This is a safety net, not service: under a real burst most readers are told "busy", keep what they have and ask again
+ * later. Shared snapshots of the directory and rosters (slices 2 and 3) are what will serve them.
+ *
+ * The budget: HEAVY_READ_BUDGET_MB, a whole number above 0, default 48. That is about four 30,000-member directories.
+ * The design measured four in flight at most 177 MB of heap on a 256 MB heap, 255 MB on a 512 MB heap, and 481 MB RSS:
+ * inside the 1 GB droplet. A server with more memory can raise it; a smaller one should lower it.
+ */
+import type Koa from 'koa';
+import { logger } from './logger.js';
+
+/** The machine code on a heavy read refused as busy. */
+export const HEAVY_READ_BUSY_CODE = 'heavy_read_busy';
+/** The .env line that sets the budget, in MB. */
+export const HEAVY_READ_BUDGET_ENV = 'HEAVY_READ_BUDGET_MB';
+export const DEFAULT_HEAVY_READ_BUDGET_MB = 48;
+
+const MB = 2 ** 20;
+/** How long a heavy read waits for room before it is told "busy": under the apps' shortest timeout on these reads, 10 s. */
+const WAIT_MS = 6_000;
+/** How many may wait at once. Past this, one would wait only to be refused. */
+const MAX_QUEUE = 64;
+/** Below this, a route's answer isn't heavy (see above). */
+const LIGHT_BYTES = 512 * 1024;
+/** A route not yet measured weighs this share of the budget. */
+const UNMEASURED_SHARE = 4;
+/** Retry-After on a refusal, in seconds: spread over this range, so the readers turned away don't all come back at once. */
+const RETRY_AFTER_MIN_S = 10;
+const RETRY_AFTER_SPREAD_S = 20;
+const LOG_EVERY_MS = 60_000;
+/** How many routes' last sizes are kept (a roster's, one for each group read). Past it, the longest unread is dropped. */
+const MAX_SIZES_KEPT = 10_000;
+
+interface HeavyReadSettings {
+    budgetBytes: number;
+    waitMs: number;
+    maxQueue: number;
+}
+
+interface Waiter {
+    weight: number;
+    admit: () => void;
+    leave: () => void;
+}
+
+let testOverrides: Partial<HeavyReadSettings> = {};
+let resolved: HeavyReadSettings | null = null;
+
+let inFlightBytes = 0;
+const line: Waiter[] = [];
+const lastSize = new Map<string, number>();
+let admittedCount = 0;
+let refusedCount = 0;
+let refusedSinceLog = 0;
+let lastLogAt = 0;
+let logTimer: NodeJS.Timeout | null = null;
+
+function budgetFromEnv(): number {
+    const raw = process.env[HEAVY_READ_BUDGET_ENV] ?? '';
+    const value = raw.trim();
+    if (value === '') return DEFAULT_HEAVY_READ_BUDGET_MB * MB;
+    const n = /^\d{1,7}$/.test(value) ? Number(value) : 0;
+    if (n > 0) return n * MB;
+    console.warn(`⚠️  ${HEAVY_READ_BUDGET_ENV}=${JSON.stringify(raw)} is not a whole number above 0, so this node keeps ${DEFAULT_HEAVY_READ_BUDGET_MB} MB for heavy list reads in flight.`);
+    return DEFAULT_HEAVY_READ_BUDGET_MB * MB;
+}
+
+/** What the cap runs with: the .env's budget (read once) and the fixed wait and line, under any test overrides. */
+export function heavyReadSettings(): Readonly<HeavyReadSettings> {
+    resolved ??= { budgetBytes: budgetFromEnv(), waitMs: WAIT_MS, maxQueue: MAX_QUEUE, ...testOverrides };
+    return resolved;
+}
+
+/** What is in flight and waiting now, and how many were let through and refused since the server started. */
+export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number } {
+    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount };
+}
+
+/** The size of the last answer a route gave, as a heavy read counts it; undefined before its first. */
+export function heavyReadWeight(key: string): number | undefined {
+    return lastSize.get(key);
+}
+
+/**
+ * Tests only: other settings (a smaller budget, a shorter wait), and a clean slate: no sizes known, nothing counted. Call
+ * it with nothing in flight. `undefined` puts the defaults back.
+ */
+export function setHeavyReadsForTests(overrides: Partial<HeavyReadSettings> | undefined): void {
+    testOverrides = { ...(overrides ?? {}) };
+    resolved = null;
+    lastSize.clear();
+    admittedCount = 0;
+    refusedCount = 0;
+}
+
+function fits(weight: number): boolean {
+    return inFlightBytes === 0 || inFlightBytes + weight <= heavyReadSettings().budgetBytes;
+}
+
+/** Let in whoever is first in line, for as long as they fit. In order: a big answer waiting is never overtaken. */
+function drain(): void {
+    while (line.length > 0 && fits(line[0].weight)) line.shift()!.admit();
+}
+
+function remember(key: string, bytes: number): void {
+    lastSize.delete(key);
+    lastSize.set(key, bytes);
+    if (lastSize.size > MAX_SIZES_KEPT) lastSize.delete(lastSize.keys().next().value!);
+}
+
+/** The size of the answer on `ctx`, once its headers say it: Koa sets Content-Length for a string or Buffer body. */
+function answerBytes(ctx: Koa.Context): number | null {
+    const header = typeof ctx.res?.getHeader === 'function' ? ctx.res.getHeader('content-length') : undefined;
+    const n = Number(header);
+    return header !== undefined && Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function noteRefusal(): void {
+    refusedCount++;
+    refusedSinceLog++;
+    const now = Date.now();
+    if (now - lastLogAt >= LOG_EVERY_MS) writeRefusalLine(now);
+    else logTimer ??= setTimeout(() => { logTimer = null; if (refusedSinceLog > 0) writeRefusalLine(Date.now()); }, lastLogAt + LOG_EVERY_MS - now).unref();
+}
+
+function writeRefusalLine(now: number): void {
+    const s = heavyReadSettings();
+    logger.warn('SYS', `Heavy list reads: ${refusedSinceLog} answered "busy" (503) in the last minute. `
+        + `${(inFlightBytes / MB).toFixed(1)} MB of ${(s.budgetBytes / MB).toFixed(0)} MB in flight, ${line.length} waiting. `
+        + `${HEAVY_READ_BUDGET_ENV} sets the budget (apps/server/src/heavy-reads.ts).`);
+    refusedSinceLog = 0;
+    lastLogAt = now;
+}
+
+function refuse(ctx: Koa.Context): void {
+    ctx.status = 503;
+    // The route set its ETag before it came here: a refusal must not carry the tag of an answer it isn't.
+    if (typeof ctx.remove === 'function') ctx.remove('ETag');
+    ctx.set('Retry-After', String(RETRY_AFTER_MIN_S + Math.floor(Math.random() * (RETRY_AFTER_SPREAD_S + 1))));
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { error: 'This community is busy right now. Please try again in a moment.', code: HEAVY_READ_BUSY_CODE };
+}
+
+/**
+ * Build and send a heavy answer under the cap: `build` sets ctx.body as the route always has, once there is room. Call it
+ * after every check that refuses or answers 304, so only an answer that will be built takes budget. `key` names whose
+ * last size this answer's weight is: one per route, or per group for a roster. When there is no room in time, the reader
+ * gets 503 with Retry-After and `code: heavy_read_busy`, and `build` never runs.
+ */
+export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>): Promise<void> {
+    const res = ctx.res;
+    const known = lastSize.get(key);
+    const light = known !== undefined && known < LIGHT_BYTES;
+    const weight = light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
+    // A route called with no response to watch (a suite dispatching a handler directly): its weight is given back as
+    // soon as it is built.
+    const watched = typeof res?.once === 'function';
+    // A reader already gone (its connection closed before the route got here) gets nothing built. Its 'close' has fired
+    // already, so nothing would ever give the weight back.
+    if (watched && (res.destroyed || res.writableEnded)) return;
+
+    // This answer: waiting in line, in flight holding `held` bytes of the budget, or out (refused, left or done).
+    const ticket: { phase: 'waiting' | 'in' | 'out'; held: number; waiter: Waiter | null } = { phase: 'waiting', held: 0, waiter: null };
+    const take = () => {
+        ticket.phase = 'in';
+        ticket.held = weight;
+        inFlightBytes += weight;
+        admittedCount++;
+    };
+    const giveBack = () => {
+        if (ticket.phase === 'waiting') ticket.waiter?.leave();
+        const wasIn = ticket.phase === 'in';
+        ticket.phase = 'out';
+        if (!wasIn) return;
+        // Its size, for the next answer's weight: also from a reader who left mid-answer, whose headers were already set.
+        const bytes = answerBytes(ctx);
+        if (bytes !== null && (watched ? res.statusCode : ctx.status) === 200) remember(key, bytes);
+        inFlightBytes -= ticket.held;
+        ticket.held = 0;
+        drain();
+    };
+    if (watched) {
+        res.once('finish', giveBack);
+        res.once('close', giveBack);
+    }
+
+    if (light || (line.length === 0 && fits(weight))) {
+        take();
+    } else if (line.length >= heavyReadSettings().maxQueue) {
+        ticket.phase = 'out';
+        noteRefusal();
+        refuse(ctx);
+        return;
+    } else {
+        const admitted = await new Promise<boolean>((resolve) => {
+            const waiter: Waiter = {
+                weight,
+                admit: () => { clearTimeout(timer); take(); resolve(true); },
+                leave: () => {
+                    clearTimeout(timer);
+                    const at = line.indexOf(waiter);
+                    if (at >= 0) line.splice(at, 1);
+                    resolve(false);
+                },
+            };
+            const timer = setTimeout(waiter.leave, heavyReadSettings().waitMs);
+            ticket.waiter = waiter;
+            line.push(waiter);
+        });
+        if (!admitted) {
+            // Waited its time, or its reader left the line ('close', which set it out): either way it is answered as
+            // busy, and only the first counts as a refusal (a reader who left hears nothing).
+            if (ticket.phase !== 'out') noteRefusal();
+            ticket.phase = 'out';
+            refuse(ctx);
+            // The one that left may have been holding up the line.
+            drain();
+            return;
+        }
+    }
+
+    try {
+        await build();
+    } catch (e) {
+        giveBack();
+        throw e;
+    }
+    if (!watched) { giveBack(); return; }
+    // Built: what is in flight is this answer as it is, not the last one's size, when its headers already say so.
+    const bytes = ticket.phase === 'in' && !light ? answerBytes(ctx) : null;
+    if (bytes !== null) {
+        inFlightBytes += bytes - ticket.held;
+        ticket.held = bytes;
+        if (ctx.status === 200) remember(key, bytes);
+        drain();
+    }
+}

@@ -1,9 +1,10 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getBalance, getTransactions } from '../lib/api';
+import { getBalance, getMembers, getTransactions } from '../lib/api';
+import { onSyncActivity } from '../lib/sync';
 import { getBlockedUsers } from '../lib/blocklist';
 
 vi.mock('../lib/sync', () => ({
@@ -139,5 +140,38 @@ describe('a line of Beans from someone the member has blocked', () => {
         expect(await screen.findByText('thanks for the eggs')).toBeInTheDocument();
         expect(screen.getByText('for the bread')).toBeInTheDocument();
         expect(screen.queryByText('Beans from a member you blocked')).not.toBeInTheDocument();
+    });
+});
+
+describe('the Send picker when the node is too busy to send the members list', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 5, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+    });
+
+    it('keeps the members it had when a refresh is answered "busy" (503), not an empty list', async () => {
+        vi.mocked(getMembers).mockResolvedValueOnce([{ publicKey: 'd'.repeat(64), callsign: 'Dana' }] as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getMembers).toHaveBeenCalledTimes(1));
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Credits/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
+        expect(await screen.findByText('Dana')).toBeInTheDocument();
+
+        // The next refresh, past its 2 s coalescing window: the members list refused as the api module throws a 503 from
+        // the heavy-read cap (apps/server/src/heavy-reads.ts).
+        vi.mocked(getMembers).mockRejectedValueOnce(Object.assign(new Error('This community is busy right now.'), { status: 503, code: 'heavy_read_busy' }));
+        const sync = vi.mocked(onSyncActivity).mock.calls.at(-1)![0] as () => Promise<void> | undefined;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(Date.now() + 5000);
+            await act(async () => { await sync(); });
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(getMembers).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('Dana')).toBeInTheDocument();
+        expect(screen.queryByText('No members found')).not.toBeInTheDocument();
     });
 });

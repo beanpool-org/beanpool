@@ -46,6 +46,7 @@ import { db } from '../db/db.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
+import { heavyRead } from '../heavy-reads.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -144,10 +145,15 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
         }
 
-        const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
-        ctx.status = 200;
-        ctx.type = 'application/json';
-        ctx.body = groups;
+        const answer = () => {
+            const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
+            ctx.status = 200;
+            ctx.type = 'application/json';
+            ctx.body = groups;
+        };
+        // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy".
+        if (limit > 50) await heavyRead(ctx, 'groups', answer);
+        else answer();
     });
 
     // 2. Get group by ID or slug
@@ -247,9 +253,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         }
 
         const effectiveStatus = status ? (status === 'all' ? undefined : status) : (isConvenor ? undefined : 'active');
-        const members = getGroupMembers(ctx.params.id, { status: effectiveStatus, role });
-        ctx.status = 200;
-        ctx.body = members;
+        // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster: a big group's waits for room or
+        // is "busy", a small one's goes straight through.
+        await heavyRead(ctx, `roster:${ctx.params.id}`, () => {
+            const members = getGroupMembers(ctx.params.id, { status: effectiveStatus, role });
+            ctx.status = 200;
+            ctx.body = members;
+        });
     });
 
     // 6. Invite a member or approve pending request (Convenor only)

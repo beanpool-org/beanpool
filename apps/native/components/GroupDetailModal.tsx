@@ -63,7 +63,8 @@ export function GroupDetailModal({
             const data = await fetchGroupDetails(group.id);
             if (data) {
                 setGroupData(data.group);
-                setMembers(data.members);
+                // No roster this time (the node busy, or offline): keep the one on screen.
+                if (data.members) setMembers(data.members);
             }
         } catch (e) {
             console.warn('[GroupDetail] Failed to load:', e);

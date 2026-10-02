@@ -82,17 +82,17 @@ describe("a group's faces come from the node's photo URLs", () => {
     it("the roster's rows keep each photo's URL, and each is drawn from the phone's node with its version and key", async () => {
         serve({ '/api/groups/g1': card, '/api/groups/g1/members': roster });
         const details = await fetchGroupDetails('g1');
-        expect(details?.members.map(m => m.avatarUrl)).toEqual([leadUrl, memberUrl, 'bundled://leaf', undefined]);
+        expect(details?.members?.map(m => m.avatarUrl)).toEqual([leadUrl, memberUrl, 'bundled://leaf', undefined]);
 
-        const lead = new URL(drawn(details!.members[0].avatarUrl ?? undefined, LEAD)!);
+        const lead = new URL(drawn(details!.members![0].avatarUrl ?? undefined, LEAD)!);
         expect(`${lead.origin}${lead.pathname}`).toBe(`${NODE}/api/avatar/${LEAD}`);
         expect(lead.searchParams.get('size')).toBe('thumb');
         expect(lead.searchParams.get('v')).toBe('1a2b3c4d');
         expect(lead.searchParams.get('k')).toBe(KEY);
-        expect(drawn(details!.members[1].avatarUrl ?? undefined, MEMBER)).toBe(`${NODE}${memberUrl}&_v=${MEMBER.slice(0, 8)}`);
+        expect(drawn(details!.members![1].avatarUrl ?? undefined, MEMBER)).toBe(`${NODE}${memberUrl}&_v=${MEMBER.slice(0, 8)}`);
         // A shipped picture stays its name (MemberAvatar draws the app's own file); no photo, no image (the initial).
-        expect(drawn(details!.members[2].avatarUrl ?? undefined, SHIPPED)).toBe('bundled://leaf');
-        expect(drawn(details!.members[3].avatarUrl ?? undefined, NONE)).toBeNull();
+        expect(drawn(details!.members![2].avatarUrl ?? undefined, SHIPPED)).toBe('bundled://leaf');
+        expect(drawn(details!.members![3].avatarUrl ?? undefined, NONE)).toBeNull();
     });
 
     it("the invite landing's inviter and its row of faces are drawn the same way", async () => {

@@ -261,7 +261,7 @@ async function wordsJoinThenLink(browser, origin, node, seen) {
         const copies = await node.ask({ op: 'sql', all: true, sql: "SELECT count(*) AS n FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'sso'", params: [linked.key] }).catch(() => null);
         const stored = copies?.[0]?.n ?? 'unknown';
         console.log(`  ✓ a sign-in added later: Settings says so, the node's row is Google's, sign-in copies stored: ${stored}`);
-        const [{ avatar }] = await node.ask({ op: 'sql', all: true, sql: 'SELECT avatar_url AS avatar FROM members WHERE public_key = ?', params: [linked.key] });
+        const [{ avatar }] = await node.ask({ op: 'sql', all: true, sql: 'SELECT mp.photo AS avatar FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key WHERE m.public_key = ?', params: [linked.key] });
         if (avatar !== 'bundled://bean-green') throw new Failure(`after adding a sign-in from Safety Backup the node has Wren's photo as ${JSON.stringify(avatar)}`);
         const persistAsked = await page.evaluate(() => Number(localStorage.getItem('__persistAsked') || 0));
         if (persistAsked !== 1) throw new Failure(`the browser was asked to keep its data ${persistAsked} times, not once`);

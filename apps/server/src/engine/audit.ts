@@ -71,8 +71,9 @@ export const COMMONS_POT_PAUSED = 'Payments are paused on this community while i
 /** Thrown with COMMONS_POT_PAUSED as its message; `code` lets a route answer 503 rather than 500. */
 export class CommonsPotUnknownError extends Error {
     readonly code = 'COMMONS_POT_UNKNOWN';
-    constructor() {
-        super(COMMONS_POT_PAUSED);
+    /** `detail` is appended to the pause words, to say which of a batch is held. */
+    constructor(detail?: string) {
+        super(detail ? `${COMMONS_POT_PAUSED} ${detail}` : COMMONS_POT_PAUSED);
         this.name = 'CommonsPotUnknownError';
     }
 }

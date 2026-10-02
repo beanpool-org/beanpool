@@ -251,6 +251,12 @@ async function main(): Promise<void> {
         // Re-review NB-3: listings with no deal come down; one with a held deal doesn't.
         const [eggs, plums, honey] = setup.posts;
         const del = await post(base, `/api/local/admin/posts/${eggs}/delete`, {}, admin);
+        // Follow-up A: a mixed bulk removal is refused whole, up front, naming the held listing: Plums (no deal) stays up too.
+        const mixed = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums, setup.heldPost] }, admin);
+        const afterMixed = await node.send('state', { k, setup });
+        assert(mixed.status === 503 && String(mixed.body?.error).startsWith(PAUSED) && /"Chard"/.test(String(mixed.body?.error)) && !/"Plums"/.test(String(mixed.body?.error))
+            && live(afterMixed.posts[plums]) && live(afterMixed.posts[setup.heldPost]),
+            `a bulk removal mixing a no-deal listing and a held deal is refused whole, naming the held one; nothing is removed (${brief(mixed)})`);
         const bulk = await post(base, '/api/local/admin/posts/bulk-delete', { postIds: [plums] }, admin);
         const action = await post(base, `/api/local/admin/reports/${setup.report}/action`, { deletePost: true }, admin);
         const heldDel = await post(base, `/api/local/admin/posts/${setup.heldPost}/delete`, {}, admin);
@@ -311,6 +317,22 @@ async function main(): Promise<void> {
         assert(carried.length === 2, `the log says G and R1 were carried out after waiting (${carried.length} lines)`);
         assert(later.audit.ok === true && later.audit.badBalances === 0 && Math.abs(later.audit.drift) < 1e-9,
             `the ledger adds up (${JSON.stringify(later.audit)})`);
+
+        console.log('\n— 6. mended, but 30 days of inflow that is not a number: the grant refusal says so plainly —');
+        await node.kill('SIGTERM');
+        const idb = new Database(path.join(dir, 'state.db'));
+        idb.prepare("INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?, ?, 'COMMONS_POOL', 1e999, 'inf', strftime('%Y-%m-%dT%H:%M:%fZ','now'))").run(crypto.randomUUID(), k.ben);
+        idb.pragma('wal_checkpoint(TRUNCATE)');
+        idb.close();
+        node = await spawnNode(SCRIPT, dir, env);
+        nodes.push(node);
+        const base6 = `https://localhost:${await node.send('serve')}`;
+        const inf = await signed(base6, '/api/commons/decisions', ids.fay, {
+            title: 'A small grant', description: 'A grant the Commons could pay if its figures were sound', touches: 'pool', effect: 'grant_hardship',
+            subject: k.ben, params: { amount: 5 },
+        });
+        assert(inf.status >= 400 && /can't be proposed until the Commons figures are fixed/.test(String(inf.body?.error)) && !/Infinity|NaN/.test(String(inf.body?.error)),
+            `with infinite inflow a grant is refused in plain words, with no "Infinity Beans" (${brief(inf)})`);
 
         console.log(`\n${testsPassed}/${testsRun} checks passed.`);
         if (testsPassed !== testsRun) process.exitCode = 1;

@@ -171,7 +171,7 @@ async function zip215(): Promise<void> {
             });
         }
     };
-    for (const d of ['apps/server/src', 'apps/vault/src', 'packages/beanpool-core/src', 'packages/beanpool-engine/src', 'packages/beanpool-signin/src']) {
+    for (const d of ['apps/server/src', 'apps/vault/src', 'packages/beanpool-core/src', 'packages/beanpool-engine/src', 'packages/beanpool-signin/src', 'apps/native/utils']) {
         if (fs.existsSync(path.join(repo, d))) walk(path.join(repo, d));
     }
     assert(seen >= 8 && lax2.length === 0, `every one of the ${seen} noble verifiers that ships names zip215: false${lax2.length ? ` — not: ${lax2.join(', ')}` : ''}`);
@@ -320,6 +320,46 @@ async function errorText(ann: Id): Promise<void> {
         const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
         assert(r.status === 400 && r.body?.error === 'ssrf_blocked' && !r.text.includes(host),
             `a refused address (${url}) is refused without naming it (${show(r)})`);
+    }
+
+    // The public thumbnail route (a visitor, no signature) over the real HTTPS server: a pulse item whose thumbnail URL
+    // is a private address, IPv4 or IPv6, is refused in fixed words naming no address.
+    const chan = 'chan_' + crypto.randomBytes(6).toString('hex');
+    db.prepare(`INSERT INTO creator_channels (id, owner_pubkey, platform, url, category, created_at, updated_at)
+        VALUES (?, ?, 'rss', 'https://blog.example.org/feed', 'art', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(chan, ann.pk);
+    const addThumbItem = (url: string): string => {
+        const id = 'item_' + crypto.randomBytes(8).toString('hex');
+        db.prepare(`INSERT INTO pulse_items (id, channel_id, owner_pubkey, platform, url, external_id, title, thumbnail_url, category, source, created_at, updated_at)
+            VALUES (?, ?, ?, 'rss', 'https://blog.example.org/a-post', NULL, 'A post', ?, 'art', 'autolist', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, chan, ann.pk, url);
+        return id;
+    };
+    const thumbCases: Array<[string, RegExp]> = [
+        ['http://10.1.2.3/x.png', /10\.1\.2\.3/],
+        ['http://[fd12:3456:789a::1]/x.png', /fd12|3456|789a|ULA|RFC/i],
+        ['http://[fe80::1]/x.png', /fe80|link-local|RFC/i],
+    ];
+    let firstThumbItem = '';
+    for (const [url, leak] of thumbCases) {
+        const id = addThumbItem(url);
+        firstThumbItem ||= id;
+        const r = await call('GET', null, `/api/pulse/items/${id}/thumbnail`);
+        assert(r.status >= 400 && typeof r.body?.error === 'string' && !leak.test(r.text) && !/RFC|blocked|Resolved/i.test(r.text),
+            `the public thumbnail route refuses ${url} without naming an address (${show(r)})`);
+        const again = await call('GET', null, `/api/pulse/items/${id}/thumbnail`);
+        assert(again.status >= 400 && !leak.test(again.text) && !/RFC|blocked|Resolved/i.test(again.text),
+            `and so does its cached refusal (${show(again)})`);
+    }
+    // The net as the node mounts it (https-server.ts app.use(scrubServerFaults())): a persisted backoff row written by an
+    // older build holds the guard's own text with the address in it; the route serves it back, and only the net keeps it in.
+    const oldRow = addThumbItem('http://10.1.2.3/x.png');
+    db.prepare(`INSERT INTO pulse_thumbnail_backoff (item_id, thumbnail_url, failure_count, status, error, last_failed_at, retry_after)
+        VALUES (?, 'http://10.1.2.3/x.png', 1, 400, ?, ?, ?)`).run(
+        oldRow, 'SSRF_BLOCKED: Resolved IP 10.1.2.3 is blocked (Private-Use RFC 1918 (10.0.0.0/8))',
+        new Date().toISOString(), new Date(Date.now() + 3600_000).toISOString());
+    {
+        const r = await call('GET', null, `/api/pulse/items/${oldRow}/thumbnail`);
+        assert(r.status === 500 && !r.text.includes('10.1.2.3') && r.text.includes('Something went wrong on the server'),
+            `net, as mounted on the real server: a stored refusal that names 10.1.2.3 is answered in fixed words, 500 (${show(r)})`);
     }
 
     // The net under every member route: a server fault's text from anywhere becomes fixed words, 500; the operator's

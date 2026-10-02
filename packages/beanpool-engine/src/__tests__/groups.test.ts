@@ -19,8 +19,13 @@ import {
     updateGroup,
     approveGroupMember,
     inviteGroupMember,
-    deleteGroupPost
+    deleteGroupPost,
+    getGroupPicture,
+    setGroupPicture,
+    pictureBytesOf,
+    GROUP_PICTURE_TOO_LARGE
 } from '../groups.js';
+import { MAX_PICTURE_BYTES } from '@beanpool/core';
 import { getPosts, getPostCount, getActivePostCount } from '../posts.js';
 import { registerGeoFunctions } from '../geo.js';
 
@@ -48,7 +53,8 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 name TEXT NOT NULL,
                 slug TEXT UNIQUE NOT NULL,
                 description TEXT,
-                avatar_url TEXT,
+                avatar_ref TEXT,
+                avatar_bytes INTEGER,
                 category TEXT DEFAULT 'general' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
                 created_by TEXT NOT NULL REFERENCES members(public_key),
                 lead_pubkey TEXT REFERENCES members(public_key),
@@ -56,6 +62,9 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
                 created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                 updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             );
+            CREATE TABLE group_pictures (group_id TEXT PRIMARY KEY, picture TEXT NOT NULL);
+            CREATE TRIGGER groups_touch_updated_at AFTER UPDATE ON groups FOR EACH ROW WHEN NEW.updated_at IS OLD.updated_at
+            BEGIN UPDATE groups SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid; END;
 
             CREATE TABLE group_members (
                 group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -208,6 +217,57 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.deepStrictEqual(getGroup(db, group.id, 'carol_pub')?.viewerInvitedBy, { pubkey: 'alice_pub', callsign: 'Alice', avatarUrl: alice });
         const everything = JSON.stringify([rows, getGroup(db, group.id, 'carol_pub'), listGroups(db, {}, 'alice_pub')]);
         assert.ok(!everything.includes('PHOTO'), 'no group read carries the photo');
+    });
+
+    it("a group's own picture is kept apart and every read gives its URL, never the picture (#1486)", () => {
+        const picture = `data:image/jpeg;base64,${'QUJD'.repeat(2000)}`;
+        const group = createGroup(db, { name: 'Pictured', joinPolicy: 'open', createdBy: 'alice_pub', avatarUrl: picture });
+        const row = db.prepare('SELECT avatar_ref, avatar_bytes, created_at, updated_at FROM groups WHERE id = ?').get(group.id) as any;
+        assert.strictEqual(getGroupPicture(db, group.id), picture, 'the picture is in group_pictures, exactly as set');
+        assert.match(row.avatar_ref, /^[0-9a-f]{8}$/, 'the row keeps its version');
+        assert.strictEqual(row.avatar_bytes, picture.length);
+        assert.strictEqual(row.updated_at, row.created_at, 'a new group keeps the stamp it was made with');
+        const url = `/api/groups/${group.id}/picture?v=${row.avatar_ref}`;
+        assert.strictEqual(group.avatarUrl, url);
+        assert.strictEqual(getGroup(db, group.id, 'bob_pub')?.avatarUrl, url);
+        assert.strictEqual(listGroups(db, {}, 'bob_pub').find(g => g.id === group.id)?.avatarUrl, url);
+        assert.ok(!JSON.stringify([getGroup(db, group.id), listGroups(db, {})]).includes('QUJD'), 'no read carries the picture');
+
+        // Its own URL sent back is "unchanged"; a new picture is a new version; '' removes it.
+        const before = (db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(group.id) as any).updated_at;
+        assert.strictEqual(updateGroup(db, group.id, 'alice_pub', { avatarUrl: url }).avatarUrl, url);
+        assert.strictEqual(getGroupPicture(db, group.id), picture);
+        assert.strictEqual((db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(group.id) as any).updated_at, before,
+            'its own URL alone writes nothing');
+        const next = updateGroup(db, group.id, 'alice_pub', { avatarUrl: 'bundled://leaf' });
+        assert.strictEqual(next.avatarUrl, 'bundled://leaf', 'a shipped picture is its name');
+        assert.strictEqual(getGroupPicture(db, group.id), 'bundled://leaf');
+        assert.strictEqual(updateGroup(db, group.id, 'alice_pub', { avatarUrl: '' }).avatarUrl, undefined);
+        assert.strictEqual(getGroupPicture(db, group.id), null, 'removed: no row left');
+        assert.deepStrictEqual(db.prepare('SELECT avatar_ref, avatar_bytes FROM groups WHERE id = ?').get(group.id), { avatar_ref: null, avatar_bytes: null });
+
+        // Bigger than a member's photo may be: refused, before anything is written.
+        const huge = `data:image/jpeg;base64,${'A'.repeat(Math.ceil((MAX_PICTURE_BYTES + 3) / 3) * 4)}`;
+        assert.throws(() => updateGroup(db, group.id, 'alice_pub', { avatarUrl: huge }), new RegExp(GROUP_PICTURE_TOO_LARGE));
+        assert.throws(() => createGroup(db, { name: 'Too big', createdBy: 'alice_pub', avatarUrl: huge }), new RegExp(GROUP_PICTURE_TOO_LARGE));
+        assert.strictEqual(listGroups(db, {}).filter(g => g.name === 'Too big').length, 0);
+        const fits = `data:image/jpeg;base64,${'A'.repeat(Math.floor(MAX_PICTURE_BYTES / 3) * 4)}`;
+        assert.ok(updateGroup(db, group.id, 'alice_pub', { avatarUrl: fits }).avatarUrl, 'a picture at the cap is taken');
+        assert.strictEqual(pictureBytesOf(fits), Math.floor(MAX_PICTURE_BYTES / 3) * 3);
+    });
+
+    it('setGroupPicture clears a picture still inline in the row (a move stopped part way), on every call (#1486)', () => {
+        db.exec('ALTER TABLE groups ADD COLUMN avatar_url TEXT');
+        const group = createGroup(db, { name: 'Half moved', createdBy: 'alice_pub' });
+        db.prepare("UPDATE groups SET avatar_url = 'data:image/jpeg;base64,T0xE' WHERE id = ?").run(group.id);
+        assert.strictEqual(setGroupPicture(db, group.id, null), true, 'removing a picture the move had not reached is a change');
+        assert.strictEqual((db.prepare('SELECT avatar_url FROM groups WHERE id = ?').get(group.id) as any).avatar_url, null);
+        db.prepare("UPDATE groups SET avatar_url = 'data:image/jpeg;base64,T0xE' WHERE id = ?").run(group.id);
+        assert.strictEqual(setGroupPicture(db, group.id, 'data:image/jpeg;base64,TkVX'), true);
+        assert.strictEqual((db.prepare('SELECT avatar_url FROM groups WHERE id = ?').get(group.id) as any).avatar_url, null);
+        assert.strictEqual(getGroupPicture(db, group.id), 'data:image/jpeg;base64,TkVX');
+        assert.strictEqual(setGroupPicture(db, 'no-such-group', 'data:image/jpeg;base64,TkVX'), false, 'no group: nothing written');
+        assert.strictEqual(getGroupPicture(db, 'no-such-group'), null);
     });
 
     it('handles open join policy', () => {

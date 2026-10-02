@@ -43,6 +43,8 @@ import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
 import { db } from '../db/db.js';
+import { getAvatarService } from '../engine/avatar.js';
+import { groupPictureKeyMatches } from '../engine/avatar-keys.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
@@ -148,6 +150,42 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         ctx.status = 200;
         ctx.type = 'application/json';
         ctx.body = groups;
+    });
+
+    // 2a. The group's own picture (#1486), for an <img>, which cannot sign: a public read (https-server.ts
+    // PUBLIC_READ_PATTERNS), served only to a URL carrying the key for this picture as it is now (engine/avatar-keys.ts).
+    // Every group read hands that URL only to someone who may read the group, on every node. Any other request, a group
+    // with no picture and one nobody may see included, is answered alike, so the route tells nobody which is which. The
+    // bytes as a member's photo's are served (routes/avatar.ts): raster only, under the type they are, never cached for long.
+    router.get('/api/groups/:id/picture', async (ctx) => {
+        const groupId = ctx.params.id;
+        if (!groupPictureKeyMatches(groupId, ctx.query.k)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Picture not found' };
+            return;
+        }
+        const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+        const result = await getAvatarService().getGroupPicture(groupId, { ifNoneMatch });
+        if (result.status === 304) {
+            ctx.status = 304;
+            if (result.etag) ctx.set('ETag', result.etag);
+            ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+            return;
+        }
+        if (result.status !== 200 || !result.buffer) {
+            ctx.status = result.status;
+            ctx.body = { error: result.error || 'Picture not found' };
+            return;
+        }
+        ctx.status = 200;
+        ctx.type = result.contentType!;
+        ctx.set('Content-Type', result.contentType!);
+        ctx.set('X-Content-Type-Options', 'nosniff');
+        ctx.set('Content-Disposition', 'inline');
+        if (result.etag) ctx.set('ETag', result.etag);
+        // Private, unlike a member's photo: a group is its members' read, so no shared cache keeps its picture.
+        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        ctx.body = result.buffer;
     });
 
     // 2. Get group by ID or slug

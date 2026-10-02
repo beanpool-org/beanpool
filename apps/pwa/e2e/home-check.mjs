@@ -13,7 +13,13 @@
  *      traffic over a window with one doorbell (a new listing) in it, by Chromium's own byte counts;
  *   3. a visitor in the global lobby: Home first, the Join card, then the public cards from one unsigned read, axe clean;
  *      "Share my area" reads Home again from a rough point; the Market one tap away;
- *   4. a new member of the global node: Find your community first and pinned, no money cards, who joined as a count.
+ *   4. a new member of the global node: Find your community first and pinned, no money cards, who joined as a count;
+ *   5. two tabs of one browser (PR #1479's second review): a card shown in another browser is drawn at this one's next
+ *      landing, and in a tab left open at its next read, with one more read at once. With her Home open in other tabs,
+ *      Sign Out (Device Only), the delete at the last community and Force Clear & Re-Sync in one: a tab that hears it
+ *      drops her Home at once (axe clean); one that hears nothing finds out at its first write. Nothing of hers is put
+ *      back on disk by a Hide (1), a read in flight (2), or, on global, the next read, which would have gone out
+ *      unsigned (3); after Force Clear a read from before it is never kept, and the other tab reads afresh with no tag.
  *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
@@ -21,7 +27,7 @@
  * Run: pnpm --filter @beanpool/pwa home-check   (HOME_IDLE_S sets the idle window, 150 by default)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global Buffer, URL, URLSearchParams, console, process, setTimeout, document, window, indexedDB, localStorage, axe -- Node, and the page's side of evaluate() */
+/* global Buffer, URL, URLSearchParams, console, process, setTimeout, document, window, indexedDB, localStorage, axe, Event -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -113,7 +119,8 @@ function recorder(cdp, origin) {
     cdp.on('Network.requestWillBeSent', (e) => {
         const u = new URL(e.request.url);
         const r = { id: e.requestId, at: Date.now(), method: e.request.method, url: e.request.url, origin: u.origin, path: u.pathname, search: u.search,
-            signed: !!(e.request.headers['X-Public-Key'] || e.request.headers['x-public-key']), up: e.request.method.length + e.request.url.length + 12 + headerBytes(e.request.headers) + (e.request.postData?.length ?? 0), status: null, down: 0, done: false };
+            signed: !!(e.request.headers['X-Public-Key'] || e.request.headers['x-public-key']),
+            tag: e.request.headers['If-None-Match'] ?? e.request.headers['if-none-match'] ?? null, up:e.request.method.length + e.request.url.length + 12 + headerBytes(e.request.headers) + (e.request.postData?.length ?? 0), status: null, down: 0, done: false };
         byId.set(e.requestId, r);
         all.push(r);
     });
@@ -136,22 +143,24 @@ function recorder(cdp, origin) {
     };
 }
 
-async function openContext(browser, origin, { identity = null, dark = false, geolocation = null } = {}) {
+/** `installDismissed`: the install banner said no to for good (a device setting, kept across sign-out), so nothing covers a tap. */
+async function openContext(browser, origin, { identity = null, dark = false, geolocation = null, installDismissed = false } = {}) {
     const context = await browser.newContext({
         viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce',
         ...(geolocation ? { geolocation, permissions: ['geolocation'] } : {}),
     });
     const seen = { violations: [], otherHosts: new Set() };
     await context.exposeBinding('__reportCspViolation', (_s, v) => { seen.violations.push(v); });
-    await context.addInitScript(([mode]) => {
+    await context.addInitScript(([mode, quiet]) => {
         document.addEventListener('securitypolicyviolation', (e) => {
             window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, at: `${e.sourceFile}:${e.lineNumber}` });
         });
         try {
             localStorage.setItem('beanpool-theme-mode', mode);
             localStorage.setItem('beanpool-theme-default-light-v1', 'done');
+            if (quiet) localStorage.setItem('beanpool-install-dismissed-forever', '1');
         } catch { /* none */ }
-    }, [dark ? 'dark' : 'light']);
+    }, [dark ? 'dark' : 'light', installDismissed]);
     await context.route((url) => url.hostname !== 'localhost', (route) => {
         seen.otherHosts.add(new URL(route.request().url()).hostname);
         return route.abort();
@@ -176,6 +185,80 @@ async function openContext(browser, origin, { identity = null, dark = false, geo
         }), identity);
     }
     return { context, page, net, seen };
+}
+
+/**
+ * Another tab of the same browser (one context: one localStorage, one IndexedDB), its requests recorded. `deaf`: a tab
+ * that hears nothing of another tab's sign-out or clear (no BroadcastChannel, no `storage` event), as a frozen or busy
+ * tab may miss them; it can only find out by checking before it reads or writes (lib/account-epoch.ts).
+ */
+async function openTab(context, origin, { deaf = false } = {}) {
+    const page = await context.newPage();
+    if (deaf) {
+        await page.addInitScript(() => {
+            window.BroadcastChannel = undefined;
+            const add = window.addEventListener.bind(window);
+            window.addEventListener = (type, ...rest) => (type === 'storage' ? undefined : add(type, ...rest));
+        });
+    }
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Network.enable');
+    return { page, net: recorder(cdp, origin) };
+}
+
+/**
+ * The page's next GET /api/home is answered by the node at once (signed, as the page sent it) but handed to the page only
+ * on `release()`: a read still out, as on a 2G phone. `fetched` resolves with the answer's tag once the node answered.
+ */
+async function holdNextHomeRead(page) {
+    let release;
+    const released = new Promise((r) => { release = r; });
+    let fetched;
+    const answered = new Promise((r) => { fetched = r; });
+    let held = false;
+    await page.route('**/api/home*', async (route) => {
+        if (held || route.request().method() !== 'GET') return route.continue();
+        held = true;
+        const response = await route.fetch();
+        // Marked, so a copy of it kept anywhere can be told from a fresh one with the same contents.
+        const body = response.status() === 200 ? JSON.stringify({ ...(await response.json()), heldFromBefore: true }) : await response.text();
+        fetched(response.headers().etag ?? null);
+        await released;
+        await route.fulfill({ response, body }).catch(() => { /* the page went meanwhile */ });
+    });
+    return { fetched: answered, release: () => release() };
+}
+
+/** Home asks again now, as it does once the member's notices are put away (lib/home-cards.ts NOTICES_SEEN_EVENT). */
+const ringHome = (page) => page.evaluate(() => window.dispatchEvent(new Event('beanpool:notices-seen')));
+
+/** Every key in Home's store in this browser (lib/home-cache.ts), `[]` when there is none; never makes the database. */
+const homeEntries = (page) => page.evaluate(async () => {
+    if (!(await indexedDB.databases()).some((d) => d.name === 'beanpool-home')) return [];
+    return new Promise((resolve) => {
+        const open = indexedDB.open('beanpool-home');
+        open.onsuccess = () => {
+            const db = open.result;
+            if (!db.objectStoreNames.contains('answers')) { db.close(); resolve([]); return; }
+            const store = db.transaction('answers').objectStore('answers');
+            const keys = store.getAllKeys();
+            const values = store.getAll();
+            values.onsuccess = () => { db.close(); resolve(keys.result.map((k, i) => ({ key: String(k), etag: values.result[i]?.etag ?? null, text: JSON.stringify(values.result[i]?.answer ?? null) }))); };
+            values.onerror = () => { db.close(); resolve([{ key: '(unreadable)' }]); };
+        };
+        open.onerror = () => resolve([{ key: '(unopenable)' }]);
+    });
+});
+
+/** Settings → Sign Out (Device Only) → Confirm, in `page`. Returns when it was confirmed, and the reload that follows. */
+async function signOutIn(page) {
+    await page.getByRole('button', { name: 'Settings' }).first().click();
+    await page.getByText('⚠️ Account Deletion & Sign Out').click();
+    await page.getByRole('button', { name: 'Sign Out (Device Only)' }).click();
+    const reloaded = page.waitForEvent('load', { timeout: 15_000 });
+    const at = Date.now();
+    await page.getByRole('button', { name: 'Confirm Sign Out' }).click();
+    return { at, reloaded };
 }
 
 async function scaleText(page) {
@@ -464,6 +547,208 @@ async function localMember(browser, root) {
     }
 }
 
+// ---------- 5: two tabs of one browser ----------
+
+/**
+ * PR #1479's second review: a tab still on Home put the member's Home back on disk after Sign Out in another tab, by a
+ * Hide there (1), a read in flight (2), and on global its next unsigned read (3, in globalNode). Every tab here is a page
+ * of one browser, sharing its storage. A tab that hears drops her Home at once; a deaf one finds out before it writes.
+ */
+async function twoTabs(browser, root) {
+    const ana = memberIdentity('Ana');
+    const bea = memberIdentity('Bea');
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }, { publicKey: bea.publicKey, callsign: 'Bea', joinedDaysAgo: 1 }]);
+    console.log(`\nTwo tabs of one browser, on a local node on ${node.origin}:`);
+    const contexts = [];
+    /** What this browser keeps of `pk`: Home's entries under its key, and localStorage keys naming it or the favourites. */
+    const leftOf = async (page, pk) => {
+        const entries = (await homeEntries(page)).filter((e) => e.key.includes(pk)).map((e) => e.key);
+        const keys = (await page.evaluate(() => Object.keys(localStorage))).filter((k) => k.includes(pk) || k === 'bp_fav_categories');
+        return [...entries, ...keys];
+    };
+    try {
+        // ── A card shown on another device: this browser's next landing draws it at once, and so does an open tab ──
+        console.log('  Ana hides the Pulse in this browser, shows it again in another, and comes back here:');
+        await node.ask({ op: 'resetLimits' });
+        const x = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
+        contexts.push(x);
+        const x2 = await openTab(x.context, node.origin);
+        for (const t of [x, x2]) await land(t.page, node.origin);
+        for (const t of [x, x2]) await t.page.getByTestId('home-card-pulse').waitFor({ timeout: 30_000 });
+        const layoutPost = (page) => page.waitForResponse((r) => r.url().endsWith('/api/members/preferences') && r.request().method() === 'POST' && /home\.layout/.test(r.request().postData() || ''));
+        const hid = layoutPost(x.page);
+        await x.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
+        await x.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        await hid;
+        await ringHome(x2.page);
+        await x2.page.getByTestId('home-card-pulse').waitFor({ state: 'detached', timeout: 8_000 });
+        const y = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
+        contexts.push(y);
+        await land(y.page, node.origin);
+        await y.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        await y.page.getByTestId('home-edit-open').click();
+        const shown = layoutPost(y.page);
+        await y.page.getByRole('dialog', { name: 'Edit home' }).getByRole('switch', { name: 'Show The Pulse' }).click();
+        await shown;
+        await y.context.close();
+        const withPulse = (r) => !!new URLSearchParams(r.search).get('cards')?.split(',').includes('pulse');
+        const says = (reads, t) => reads.map((r) => `${r.status}${withPulse(r) ? ' with' : ' without'} pulse +${((r.at - t) / 1000).toFixed(1)} s`).join('; ') || 'no read';
+        // This browser lands again: its kept layout hides the Pulse, the account's newer one shows it.
+        const back = x.net.mark();
+        await x.page.reload({ waitUntil: 'load' });
+        await scaleText(x.page);
+        const drawn = await x.page.getByTestId('home-card-pulse').waitFor({ timeout: 10_000 }).then(() => Date.now() - back, () => null);
+        await wait(1_000);
+        const reads = x.net.since(back).filter((r) => r.path === '/api/home');
+        check(drawn !== null && reads.length === 2 && !withPulse(reads[0]) && withPulse(reads[1]),
+            `the next landing draws the Pulse shown in the other browser at once (${drawn === null ? 'not drawn in 10 s' : `drawn ${(drawn / 1000).toFixed(1)} s in`}; ${says(reads, back)})`);
+        // The other tab, still open: its next read brings the account's layout, and it reads again at once.
+        const rung = Date.now();
+        await ringHome(x2.page);
+        const drawn2 = await x2.page.getByTestId('home-card-pulse').waitFor({ timeout: 8_000 }).then(() => Date.now() - rung, () => null);
+        await wait(1_000);
+        const reads2 = x2.net.since(rung).filter((r) => r.path === '/api/home');
+        check(drawn2 !== null && reads2.length === 2 && withPulse(reads2[1]),
+            `and a tab left open draws it on its next read, not two reads later (${drawn2 === null ? 'not drawn' : `drawn ${(drawn2 / 1000).toFixed(1)} s in`}; ${says(reads2, rung)})`);
+        await x.context.close();
+
+        // ── Sign Out (Device Only) in one tab, her Home open in four more ──
+        console.log('  Ana signs out in one tab, her Home open in four more (one hears it, three hear nothing):');
+        // Five tabs of one browser read from one address: the node's limiters start afresh for each part.
+        await node.ask({ op: 'resetLimits' });
+        const a = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
+        contexts.push(a);
+        const hears = await openTab(a.context, node.origin);
+        const deafHide = await openTab(a.context, node.origin, { deaf: true });
+        const deafRead = await openTab(a.context, node.origin, { deaf: true });
+        const deafChip = await openTab(a.context, node.origin, { deaf: true });
+        const tabs = [a, hears, deafHide, deafRead, deafChip];
+        for (const t of tabs) await land(t.page, node.origin);
+        for (const t of tabs) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
+        await wait(1_500);
+        check((await leftOf(a.page, ana.publicKey)).some((k) => k.endsWith(`|${ana.publicKey}`)), 'before: this browser keeps her Home');
+        // A read still out in two tabs as she signs out (2): signed, answered by the node, not yet handed to the page.
+        const heldHears = await holdNextHomeRead(hears.page);
+        const heldDeaf = await holdNextHomeRead(deafRead.page);
+        await ringHome(hears.page);
+        await ringHome(deafRead.page);
+        await Promise.all([heldHears.fetched, heldDeaf.fetched]);
+        const out = await signOutIn(a.page);
+
+        const gone = await hears.page.getByTestId('home-signed-out').waitFor({ timeout: 5_000 }).then(() => Date.now() - out.at, () => null);
+        check(gone !== null && !(await hears.page.getByText('Unread message from Kofi').count()) && !(await hears.page.getByRole('button', { name: /^Card options for / }).count()),
+            `the tab that hears it drops her Home at once (${gone === null ? 'it stayed' : `${(gone / 1000).toFixed(1)} s after Confirm`}): nothing of hers left to tap`);
+        await noSideScroll(hears.page, 'the signed-out notice');
+        await touchTargets(hears.page, '[data-testid="home-page"]', 'the signed-out notice');
+        await axeClean(hears.page, '[data-testid="home-page"]', 'the signed-out notice');
+        await shot(hears.page, '9-signed-out-in-another-tab');
+
+        // (1) A tab that heard nothing still draws her Home: "…" → Hide there, as the reviewer did.
+        const stillDrawn = !!(await deafHide.page.getByText('Unread message from Kofi').count());
+        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
+        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        // And a chip tap in another (her favourites and the unsaved mark, before).
+        await deafChip.page.getByTestId('home-interest-food').click();
+        const found = await Promise.all([deafHide, deafChip].map((t) => t.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false)));
+        check(stillDrawn && found.every(Boolean), `a tab that heard nothing finds out at its first write, a Hide or a chip tap, and drops her Home there too (${stillDrawn ? 'drawn until then' : 'not drawn'}; ${found.map((f) => (f ? 'dropped' : 'still drawn')).join(', ')})`);
+
+        // (2) The two reads held across the sign-out land now.
+        const released = Date.now();
+        heldHears.release();
+        heldDeaf.release();
+        const deafReadFound = await deafRead.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false);
+        check(deafReadFound && !(await hears.page.getByText('Unread message from Kofi').count()),
+            `a read in flight across the sign-out lands, and nothing of it is drawn (${deafReadFound ? 'the deaf tab drops her Home' : 'the deaf tab still draws it'})`);
+
+        // Nothing more is read as her, however Home is asked.
+        for (const t of [hears, deafHide, deafRead, deafChip]) {
+            await ringHome(t.page);
+            await t.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+        }
+        await out.reloaded;
+        await wait(4_000);
+        const readsAfter = [hears, deafHide, deafRead, deafChip].flatMap((t) => t.net.since(out.at).filter((r) => r.path === '/api/home'));
+        check(readsAfter.length === 0, `no tab reads Home as her after the sign-out (${readsAfter.length} × GET /api/home${readsAfter.length ? `, ${readsAfter.map((r) => (r.signed ? 'signed' : 'unsigned')).join(',')}` : ''})`);
+        const left = await leftOf(a.page, ana.publicKey);
+        check(left.length === 0, `Sign Out (Device Only) with her Home open in other tabs: nothing of hers is put back, ${((Date.now() - released) / 1000).toFixed(0)} s on (${left.join(', ') || 'nothing kept'})`);
+        check(a.seen.violations.length === 0, `no document-policy violations${a.seen.violations.length ? `: ${JSON.stringify(a.seen.violations)}` : ''}`);
+        await a.context.close();
+
+        // ── Force Clear & Re-Sync in one tab: the account stays, the copy goes, and another tab reads afresh ──
+        console.log('  Ana again, in a fresh browser: Force Clear & Re-Sync in one tab, her Home open in two more:');
+        await node.ask({ op: 'resetLimits' });
+        const f = await openContext(browser, node.origin, { identity: ana, installDismissed: true });
+        contexts.push(f);
+        const fHears = await openTab(f.context, node.origin);
+        const fDeaf = await openTab(f.context, node.origin, { deaf: true });
+        for (const t of [f, fHears, fDeaf]) await land(t.page, node.origin);
+        for (const t of [f, fHears, fDeaf]) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
+        await wait(1_500);
+        const fHeld = await holdNextHomeRead(fDeaf.page);
+        await ringHome(fDeaf.page);
+        await fHeld.fetched;
+        f.page.on('dialog', (dlg) => { void dlg.accept(); });
+        await f.page.getByRole('button', { name: 'Settings' }).first().click();
+        await f.page.getByText('Database Health & Stats').click();
+        await node.ask({ op: 'resetLimits' });
+        const fReloaded = f.page.waitForEvent('load', { timeout: 15_000 });
+        const cleared = Date.now();
+        await f.page.getByText('⚡ Force Clear & Re-Sync Database').click();
+        await wait(2_500);
+        const afresh = fHears.net.since(cleared).filter((r) => r.path === '/api/home');
+        check(afresh.length === 1 && afresh[0].tag === null && afresh[0].status === 200,
+            `the tab that hears it reads Home afresh at once, with no tag (${afresh.map((r) => `${r.status}, ${r.tag ? 'tagged' : 'no tag'}, +${((r.at - cleared) / 1000).toFixed(1)} s`).join('; ') || 'no read'})`);
+        await fReloaded;
+        await wait(2_000);
+        fHeld.release();
+        await wait(3_000);
+        const fKept = (await homeEntries(f.page)).filter((e) => e.key.endsWith(`|${ana.publicKey}`));
+        check(fKept.length <= 1 && fKept.every((e) => !e.text.includes('heldFromBefore')),
+            `a read from before the clear, landing after it, is never kept (${fKept.length} kept${fKept.some((e) => e.text.includes('heldFromBefore')) ? ', the held one among them' : ', each read afresh'})`);
+        check(f.seen.violations.length === 0, `no document-policy violations${f.seen.violations.length ? `: ${JSON.stringify(f.seen.violations)}` : ''}`);
+        await f.context.close();
+
+        // ── Permanently Delete Account at the last community, her Home open in two more tabs ──
+        console.log('  Bea deletes her account at the last community in one tab, her Home open in two more:');
+        await node.ask({ op: 'resetLimits' });
+        const d = await openContext(browser, node.origin, { identity: bea, installDismissed: true });
+        contexts.push(d);
+        const dHears = await openTab(d.context, node.origin);
+        const dDeaf = await openTab(d.context, node.origin, { deaf: true });
+        for (const t of [d, dHears, dDeaf]) await land(t.page, node.origin);
+        for (const t of [d, dHears, dDeaf]) await t.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        await wait(1_500);
+        check((await leftOf(d.page, bea.publicKey)).some((k) => k.endsWith(`|${bea.publicKey}`)), 'before: this browser keeps her Home');
+        const dHeld = await holdNextHomeRead(dDeaf.page);
+        await ringHome(dDeaf.page);
+        await dHeld.fetched;
+        await d.page.getByRole('button', { name: 'Settings' }).first().click();
+        await d.page.getByText('⚠️ Account Deletion & Sign Out').click();
+        await d.page.getByRole('button', { name: 'Permanently Delete Account' }).click();
+        await d.page.getByLabel(/Type callsign Bea or DELETE/).fill('DELETE');
+        await d.page.getByTestId('delete-key-plan').getByText(/Your key (and 12 words )?leaves? this browser/).waitFor({ timeout: 15_000 });
+        const dReloaded = d.page.waitForEvent('load', { timeout: 30_000 });
+        await node.ask({ op: 'resetLimits' });
+        const purged = Date.now();
+        await d.page.getByRole('button', { name: /Purge Account/ }).click();
+        const dGone = await dHears.page.getByTestId('home-signed-out').waitFor({ timeout: 25_000 }).then(() => Date.now() - purged, () => null);
+        check(dGone !== null, `the tab that hears it drops her Home (${dGone === null ? 'it stayed' : `${(dGone / 1000).toFixed(1)} s after Purge, the node's answer included`})`);
+        dHeld.release();
+        await dDeaf.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).catch(() => {});
+        await dReloaded;
+        await wait(3_000);
+        const dLeft = await leftOf(d.page, bea.publicKey);
+        check(dLeft.length === 0, `the delete at the last community with her Home open in other tabs: nothing of hers is put back (${dLeft.join(', ') || 'nothing kept'})`);
+        check(d.seen.violations.length === 0, `no document-policy violations${d.seen.violations.length ? `: ${JSON.stringify(d.seen.violations)}` : ''}`);
+        await d.context.close();
+    } finally {
+        for (const c of contexts) await c.context.close().catch(() => {});
+        const blocked = node.log.filter((l) => l.startsWith('BLOCKED-'));
+        check(blocked.length === 0, `the local node reached nothing outside this machine${blocked.length ? `: ${blocked.join('; ')}` : ''}`);
+        await node.stop();
+    }
+}
+
 // ---------- 3 and 4: the global node ----------
 
 async function globalNode(browser, root) {
@@ -529,6 +814,36 @@ async function globalNode(browser, root) {
         await axeClean(m.page, '[data-testid="home-page"]', 'a global member\'s Home');
         await shot(m.page, '8-global-member-home');
         await m.context.close();
+
+        // Two tabs (5, path 3): after Sign Out in one, another tab's next read went out unsigned, and the visitors' answer
+        // was kept under her key, with her layout. No tap needed: a doorbell or coming back to the tab did it.
+        console.log('  Rua signs out in one tab, her Home open in two more (one hears it, one hears nothing):');
+        await node.ask({ op: 'resetLimits' });
+        const g = await openContext(browser, node.origin, { identity: rua, installDismissed: true });
+        try {
+            const gHears = await openTab(g.context, node.origin);
+            const gDeaf = await openTab(g.context, node.origin, { deaf: true });
+            for (const t of [g, gHears, gDeaf]) await land(t.page, node.origin);
+            for (const t of [g, gHears, gDeaf]) await t.page.getByTestId('home-card-find').waitFor({ timeout: 30_000 });
+            await wait(1_500);
+            check((await homeEntries(g.page)).some((e) => e.key.endsWith(`|${rua.publicKey}`)), 'before: this browser keeps her Home');
+            const out = await signOutIn(g.page);
+            const gone = await gHears.page.getByTestId('home-signed-out').waitFor({ timeout: 5_000 }).then(() => Date.now() - out.at, () => null);
+            check(gone !== null, `the tab that hears it drops her Home at once (${gone === null ? 'it stayed' : `${(gone / 1000).toFixed(1)} s after Confirm`})`);
+            await out.reloaded;
+            for (const t of [gHears, gDeaf]) {
+                await ringHome(t.page);
+                await t.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+            }
+            await wait(4_000);
+            const readsAfter = [gHears, gDeaf].flatMap((t) => t.net.since(out.at).filter((r) => r.path === '/api/home'));
+            check(readsAfter.length === 0, `neither tab reads Home again, so no visitors' answer is read in her place (${readsAfter.length} × GET /api/home${readsAfter.length ? `, ${readsAfter.map((r) => `${r.signed ? 'signed' : 'unsigned'} ${r.status}`).join(',')}` : ''})`);
+            const kept = (await homeEntries(g.page)).map((e) => e.key);
+            check(!kept.some((k) => k.includes(rua.publicKey)), `nothing is kept under her key (kept: ${kept.map((k) => k.replace(/^.*\|/, '…|').slice(0, 14)).join(', ') || 'nothing'})`);
+            check(g.seen.violations.length === 0, `no document-policy violations${g.seen.violations.length ? `: ${JSON.stringify(g.seen.violations)}` : ''}`);
+        } finally {
+            await g.context.close();
+        }
     } finally {
         const blocked = node.log.filter((l) => l.startsWith('BLOCKED-'));
         check(blocked.length === 0, `the global node reached nothing outside this machine${blocked.length ? `: ${blocked.join('; ')}` : ''}`);
@@ -543,7 +858,7 @@ async function main() {
         await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
-        for (const run of [localMember, globalNode]) {
+        for (const run of [localMember, twoTabs, globalNode]) {
             try {
                 await run(browser, root);
             } catch (e) {

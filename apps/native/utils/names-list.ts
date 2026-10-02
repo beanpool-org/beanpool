@@ -136,13 +136,40 @@ export type NamesResult<T> =
 export const UNREACHABLE = "Couldn't reach your community. Check your connection and try again.";
 
 /** A signed request to the member's own community. Never throws: a failure is an answer. */
+/**
+ * How long a names-list request may take before it counts as no connection (round 13). React Native's fetch never gives
+ * up by itself (OkHttp's timeouts are 0), and every pin operation waits for the one before it, so one request that never
+ * answers would stop every names-list action until the app is closed. 45 s: the biggest answer, the whole list (at most
+ * 2,000 sealed entries, a few hundred kB), comes in well under that on a slow 2G/EDGE link, and an admin waiting longer
+ * than that on a Remove should be told to try again. A request let go here may still have landed: status 0 is already
+ * read that way (a statement written ahead keeps `pending`; an add keeps its id, so a retry is `entry_exists`).
+ */
+export const NAMES_REQUEST_TIMEOUT_MS = 45_000;
+let requestTimeoutMs = NAMES_REQUEST_TIMEOUT_MS;
+/** For tests: a shorter time limit. */
+export function setNamesRequestTimeout(ms: number): void { requestTimeoutMs = ms; }
+
 async function call<T>(anchorUrl: string, identity: BeanPoolIdentity, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<NamesResult<T>> {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<NamesResult<T>>((resolve) => {
+        timer = setTimeout(() => { controller.abort(); resolve({ ok: false, status: 0, code: null, message: UNREACHABLE }); }, requestTimeoutMs);
+    });
+    try {
+        // The whole request, the answer's body included, within the time limit.
+        return await Promise.race([send<T>(anchorUrl, identity, method, path, body, controller.signal), timedOut]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+async function send<T>(anchorUrl: string, identity: BeanPoolIdentity, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body: unknown, signal: AbortSignal): Promise<NamesResult<T>> {
     try {
         const url = `${anchorUrl.replace(/\/+$/, '')}${path}`;
         const raw = method === 'GET' || method === 'DELETE' ? '' : JSON.stringify(body ?? {});
         const headers = await buildSignedHeaders(method, url, raw, identity.privateKey, identity.publicKey);
         if (method === 'GET' || method === 'DELETE') delete headers['Content-Type'];
-        const res = await fetch(url, { method, headers: { Accept: 'application/json', ...headers }, ...(raw ? { body: raw } : {}) });
+        const res = await fetch(url, { method, headers: { Accept: 'application/json', ...headers }, ...(raw ? { body: raw } : {}), signal });
         const parsed = await res.json().catch(() => null) as Record<string, unknown> | null;
         if (!res.ok) {
             return {
@@ -227,7 +254,10 @@ export function namesPinSecretName(label: string): string {
  * One read-modify-write of a pin at a time (round 12): every function here that saves the pin runs its whole body, reads
  * included, on one promise chain per pin label, after the one before it settles. So an open that reads the pin, waits on
  * the network and saves it can never write back over a Remove, a check or a new key saved while it waited. A failure in
- * one link doesn't wedge the chain. The functions on the chain never call each other (no re-entry).
+ * one link doesn't wedge the chain. The functions on the chain never call each other (no re-entry). Nothing on it waits
+ * for good: every request has a time limit ({@link NAMES_REQUEST_TIMEOUT_MS}), and the rest is local (AsyncStorage, and
+ * SecureStore with no authentication asked for: no prompt, no scan). A link is never let go while it still runs: one let
+ * go with its request out could save its pin later, which is the race this chain is for.
  */
 const pinChains = new Map<string, Promise<void>>();
 function withPin<T>(publicKey: string, anchor: string, fn: () => Promise<T>): Promise<T> {
@@ -757,25 +787,13 @@ export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'gene
 
 /**
  * Of `holders`, the ones this phone checked in person whose phones have sent no header since (round 12): the phone can't
- * know whether they checked it back, so the words say both ways. Never one whose phone the server's history shows
- * dropping this phone (a re-admitted admin needs the holder to check them again): then the plain meeting words.
+ * know whether they checked it back, so the words say both ways.
  */
 export function holdersCheckedHere(state: Pick<NamesState, 'communityId' | 'generations' | 'current'>, me: string, holders: string[], justChecked: string[] = []): string[] {
-    if (!justChecked.length) return [];
-    const mine = me.toLowerCase();
-    const gens = new Map<string, NamesGeneration>();
-    for (const r of Array.isArray(state.generations) ? state.generations : []) {
-        const g = readNamesGeneration(r, state.communityId);
-        if (g) gens.set(g.id, g);
-    }
-    let dropped = false;
-    for (let at: string | null = state.current?.id ?? null, i = 0; at && i <= gens.size; i++) {
-        const g = gens.get(at);
-        if (!g) break;
-        if (g.drops.includes(mine)) { dropped = true; break; }
-        at = g.parentId;
-    }
-    return dropped ? [] : holders.filter((h) => justChecked.includes(h.toLowerCase()));
+    // Round 13: a re-admitted phone too. A check both ways makes the holder's phone trust it again, and one way the
+    // words' "if not, meet them" is the right advice.
+    void state; void me;
+    return holders.filter((h) => justChecked.includes(h.toLowerCase()));
 }
 
 /** Every entry, opened where this phone can; open ones by name, then the locked ones. */
@@ -831,47 +849,67 @@ export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId
     return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyId });
 }
 
-/** Puts an entry id this phone added into its pin's `seen` (ids only; at most NAMES_LIMITS.entries). */
-function rememberSeen(store: NamesPinStore, publicKey: string, anchor: string, id: string): Promise<void> {
-    return withPin(publicKey, anchor, async () => {
-        const pin = await readNamesPinFrom(store, publicKey, anchor);
-        if (pin && !pin.seen.includes(id) && pin.seen.length < 2000) await writeNamesPinTo(store, publicKey, anchor, { ...pin, seen: [...pin.seen, id] });
-    });
-}
 
 /** A new entry's id, chosen when the Add form opens and kept until the add is confirmed (design §8: add is idempotent by id). */
 export const newEntryId = (): string => newNamesEntryId();
 
 /**
- * Writes an entry (rule 4): only when the plan is ready, sealed under this phone's head key. `entryId` is an edit's;
- * `addId` a new entry's, chosen when its form opened ({@link newEntryId}), so a Save after a lost answer sends the same
- * id and the node answers `entry_exists`, which is done: never a second entry. When the node's current moved on (409
- * `stale_key`) the list is opened again and, if ready, sealed under the new head and sent once more.
+ * The removals this phone stands by that no ready key of its own carries yet (round 13): its removals by hand, and every
+ * drop whose statement isn't on its chain. While any stands, it writes nothing.
  */
-export async function saveNamesEntry(
+function removalsPending(pin: NamesPin): string[] {
+    const chainIds = new Set(pin.chain.map((l) => l.id));
+    return [...new Set([...pin.manualDrops, ...Object.entries(pin.dropped).filter(([, id]) => !chainIds.has(id)).map(([k]) => k)])];
+}
+
+/** The removals this phone stands by, by callsign, as the pin has them now (for the screen after an action failed). */
+export function pendingRemovals(store: NamesPinStore, identity: Pick<BeanPoolIdentity, 'publicKey'>, anchor: string, state: Pick<NamesState, 'callsigns' | 'admins'> | null): Promise<string[]> {
+    return withPin(identity.publicKey, anchor, async () => {
+        const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+        return pin ? removalsPending(pin).map((k) => (state ? callsignIn(state, k) : '')) : [];
+    });
+}
+
+/**
+ * Writes an entry (rule 4), deciding from the pin, never from the screen's last open (round 13): on the pin's chain, a
+ * fresh look at the node and the pin; nothing is written while a removal this phone stands by isn't carried by a key of
+ * its own yet (the words say so: open the list again), or while the plan isn't ready; otherwise it is sealed under the
+ * head's key. `entryId` is an edit's; `addId` a new entry's, chosen when its form opened ({@link newEntryId}), so a Save
+ * after a lost answer sends the same id and the node answers `entry_exists`, which is done: never a second entry. When
+ * the node's current moved on (409 `stale_key`) it looks again and tries once more. An add that lands is seen at once.
+ */
+export function saveNamesEntry(
     anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>, text: { name: string; note: string },
     entryId?: string, addId?: string,
 ): Promise<NamesResult<{ id: string; keyId: string; ciphertext: string; opened: NamesOpened | null }>> {
+    void opened; // the screen's snapshot: never the ground for a write
     // One id for every try: an add that landed but whose answer was lost comes back `entry_exists`.
     const id = entryId ?? addId ?? newNamesEntryId();
-    const attempt = async (o: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>) => {
-        const head = o.pin.chain[o.pin.chain.length - 1];
-        if (o.plan.kind !== 'ready' || !head || !o.ring[head.id]) return { ok: false as const, status: 0, code: 'not_ready', message: NAMES_COPY.notReady };
-        const sealed = sealedFor(o.ring[head.id], head.id, text, id);
-        if (!sealed.ok) return { ok: false as const, status: 0, code: 'bad_text', message: sealed.error };
-        const sent = entryId ? await editNamesEntry(anchor, identity, head.id, sealed) : await addNamesEntry(anchor, identity, head.id, sealed);
-        const landed = sent.ok || (sent.code === 'entry_exists' && !entryId);
-        // An add that landed is seen at once (round 11): a take-over that loses it is said, with no read in between.
-        if (landed && !entryId) await rememberSeen(store, identity.publicKey, anchor, sealed.id);
-        return landed ? { ok: true as const, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext } } : sent;
-    };
-    const first = await attempt(opened);
-    if (first.ok) return { ok: true, value: { ...first.value, opened: null } };
-    if (first.code !== 'stale_key') return first;
-    const again = await openNamesList(anchor, identity, store);
-    if (!again.ok) return again;
-    const second = await attempt(again.value);
-    return second.ok ? { ok: true, value: { ...second.value, opened: again.value } } : second;
+    return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<{ id: string; keyId: string; ciphertext: string; opened: NamesOpened | null }>> => {
+        for (let tries = 0; tries < 2; tries++) {
+            const l = await look(anchor, identity, store);
+            if (!l.ok) return l;
+            const { pin, plan, state } = l.value;
+            const removing = removalsPending(pin);
+            if (removing.length) return { ok: false, status: 0, code: 'still_removing', message: NAMES_COPY.stillRemoving(removing.map((k) => callsignIn(state, k))) };
+            const head = pin.chain[pin.chain.length - 1];
+            if (plan.kind !== 'ready' || !head || !pin.ring[head.id]) return { ok: false, status: 0, code: 'not_ready', message: NAMES_COPY.notReady };
+            const sealed = sealedFor(fromHex(pin.ring[head.id]), head.id, text, id);
+            if (!sealed.ok) return { ok: false, status: 0, code: 'bad_text', message: sealed.error };
+            const sent = entryId ? await editNamesEntry(anchor, identity, head.id, sealed) : await addNamesEntry(anchor, identity, head.id, sealed);
+            const landed = sent.ok || (sent.code === 'entry_exists' && !entryId);
+            if (landed) {
+                // Seen at once (round 11): a take-over that loses it is said, with no read in between. On the chain already.
+                if (!entryId) {
+                    const now = await readNamesPinFrom(store, identity.publicKey, anchor);
+                    if (now && !now.seen.includes(sealed.id) && now.seen.length < 2000) await writeNamesPinTo(store, identity.publicKey, anchor, { ...now, seen: [...now.seen, sealed.id] });
+                }
+                return { ok: true, value: { id: sealed.id, keyId: head.id, ciphertext: sealed.ciphertext, opened: null } };
+            }
+            if (sent.code !== 'stale_key') return sent;
+        }
+        return { ok: false, status: 0, code: 'not_ready', message: NAMES_COPY.notReady };
+    });
 }
 
 // ── Confirming ───────────────────────────────────────────────────────────────────────────────
@@ -1140,6 +1178,12 @@ export const NAMES_COPY = {
     tooMany: 'The server sent more of the list’s history than this phone reads. Ask whoever runs the server.',
     lostSinceCopy: (count: number) => `${count} ${count === 1 ? 'entry this phone saw is' : 'entries this phone saw are'} gone from the server: restore them from the paper copy.`,
     notReady: 'This phone can’t write to the list right now. Open it again.',
+    /** A removal this phone stands by isn't carried by a key of its own yet (round 13): nothing is written. */
+    stillRemoving: (who: string[]) => `This phone is still removing ${who.length > 1 ? `the old keys of ${both(who)}` : `${at(who[0] ?? '')}’s old key`}. `
+        + 'Connect and open the names list again before adding or changing a name.',
+    /** While a reload runs with the list on screen. */
+    reloading: 'Opening the list again…',
+    openAgainButton: 'Open the list again',
     checkFirst: (who: string) => `Check ${at(who)}’s phone in person first: the server’s word that a key is ${at(who)}’s isn’t enough.`,
     toCheck: (who: string) => `${at(who)} is an admin, and this phone hasn’t checked their phone. Meet them and check each other’s phones: then this phone sends them the keys.`,
     notShownToMembers: 'Members don’t see these names. Showing real names to members isn’t available yet.',
@@ -1186,12 +1230,25 @@ export const NAMES_COPY = {
         + 'Where nobody else could (an admin confirmed in a community of two admins), one admin is enough.',
 } as const;
 
+/** The removals that would still stand after following the server's history: removals by hand, and drops off its path. */
+function removalsAfterFollow(pin: NamesPin, state: Pick<NamesState, 'communityId' | 'generations' | 'current'>): string[] {
+    const parents = new Map<string, string | null>();
+    for (const r of Array.isArray(state.generations) ? state.generations : []) {
+        const g = readNamesGeneration(r, state.communityId);
+        if (g) parents.set(g.id, g.parentId);
+    }
+    const onPath = new Set<string>();
+    for (let at: string | null = state.current?.id ?? null; at && parents.has(at) && !onPath.has(at);) { onPath.add(at); at = parents.get(at) ?? null; }
+    return [...new Set([...(pin.manualDrops ?? []), ...Object.entries(pin.dropped ?? {}).filter(([, id]) => !onPath.has(id)).map(([k]) => k)])];
+}
+
 /** The plan, in words, for the screen's top card: the refusal or the wait. Null when ready. */
 export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'> & Partial<Pick<NamesOpened, 'justChecked'>>): string | null {
     const { plan, state } = o;
     const name = (k: string) => callsignIn(state, k);
-    // Whether this phone stands by any removal: only then does a follow lead to a new key of its own (J10).
-    const removedAny = Object.keys(o.pin.dropped ?? {}).length > 0 || (o.pin.manualDrops ?? []).length > 0;
+    // Whether a removal this phone stands by will still stand after a follow: only then does a new key of its own follow
+    // (J10, round 13). A drop whose statement is on the server's path stays on the chain after a follow.
+    const removedAny = removalsAfterFollow(o.pin, state).length > 0;
     if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
     if (plan.kind === 'wait') {
         if (plan.canMakeNew) {

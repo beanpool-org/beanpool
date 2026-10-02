@@ -18,7 +18,7 @@
  * the phone makes is logged on the node, so a write updates the list here rather than reading it all again. Every button
  * is at least 48dp tall and every row wraps at 320dp and 1.3× text.
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,7 +36,7 @@ import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
-    logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf,
+    logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 
@@ -59,6 +59,12 @@ export default function NamesListScreen() {
     const [log, setLog] = useState<NamesLogLine[]>([]);
     const [members, setMembers] = useState<CommunityMember[]>([]);
     const [loading, setLoading] = useState(true);
+    /**
+     * Round 13: the list on screen is no longer what the pin says (an action, or a reload, failed after it): null when it
+     * is; else the removals the pin still stands by, by callsign. The ready list isn't offered from a stale snapshot.
+     */
+    const [stale, setStale] = useState<string[] | null>(null);
+    const openedRef = useRef<NamesOpened | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
@@ -93,8 +99,11 @@ export default function NamesListScreen() {
         if (!identity) return;
         if (!result.ok) {
             setError(result.status === 404 ? 'This community keeps no names list.' : result.message);
+            // Show the state the pin is in, not the last list: a Remove whose open failed still stands.
+            if (openedRef.current) setStale(await pendingRemovals(STORE, identity, url, openedRef.current.state).catch(() => []));
             return;
         }
+        setStale(null);
         setOpened(result.value);
         if (result.value.notices.length) setNotice(result.value.notices.join('\n\n'));
         if (!result.value.list) return;
@@ -121,6 +130,7 @@ export default function NamesListScreen() {
 
     useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+    useEffect(() => { openedRef.current = opened; }, [opened]);
     const state = opened?.state ?? null;
     const plan = opened?.plan ?? null;
     const list = opened?.list ?? null;
@@ -190,8 +200,12 @@ export default function NamesListScreen() {
     const sendAgain = async (admin: NamesAdminRow) => {
         if (!identity || !anchor) return;
         if (!begin()) return;
-        const done = await sendKeysAgain(anchor, identity, STORE, admin.pubkey);
-        finish();
+        let done: Awaited<ReturnType<typeof sendKeysAgain>>;
+        try {
+            done = await sendKeysAgain(anchor, identity, STORE, admin.pubkey);
+        } finally {
+            finish();
+        }
         if (!done.ok) { setError(done.message); return; }
         setNotice(`Sent the keys to @${admin.callsign}.`);
     };
@@ -246,9 +260,21 @@ export default function NamesListScreen() {
     const save = async () => {
         if (mode.kind !== 'edit' || !anchor || !identity || !opened || !list) return;
         if (!begin()) return;
-        const sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id, mode.addId);
-        finish();
-        if (!sent.ok) { setFormError(sent.message); return; }
+        let sent: Awaited<ReturnType<typeof saveNamesEntry>>;
+        try {
+            sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id, mode.addId);
+        } finally {
+            finish();
+        }
+        if (!sent.ok) {
+            setFormError(sent.message);
+            // Decided from the pin (round 13): a removal still standing, or the list no longer ready, means the list on
+            // screen is stale.
+            if (sent.code === 'still_removing' || sent.code === 'not_ready') setStale(await pendingRemovals(STORE, identity, anchor, opened.state).catch(() => []));
+            return;
+        }
+        // Sealed under a key the list on screen doesn't show as its head: open it again.
+        if (sent.value.keyId !== opened.pin.chain[opened.pin.chain.length - 1]?.id) void load();
         const base = sent.value.opened ?? opened;
         const body = base.list ?? list;
         const now = new Date().toISOString();
@@ -549,7 +575,7 @@ export default function NamesListScreen() {
                 {myKeyCard}
             </>
         );
-    } else if (plan?.kind === 'ready' && state && opened) {
+    } else if (plan?.kind === 'ready' && state && opened && !stale) {
         const others = state.admins.filter((a) => a.pubkey !== identity?.publicKey);
         body = (
             <>
@@ -633,6 +659,16 @@ export default function NamesListScreen() {
                 {showMyKey ? myKeyCard : null}
             </>
         );
+    } else if (stale && opened) {
+        // The list on screen is stale (round 13): say what the pin stands by, and offer to open it again.
+        body = (
+            <>
+                <View style={styles.warn} accessibilityLiveRegion="polite">
+                    <Text style={styles.warnText}>{stale.length ? COPY.stillRemoving(stale) : COPY.notReady}</Text>
+                </View>
+                <View style={styles.buttonRow}>{btn(COPY.openAgainButton, () => { void load(); }, 'primary')}</View>
+            </>
+        );
     } else if (error) {
         // The server answered nothing usable (a re-keyed account is refused, say): this phone's key can still be shown.
         body = myKeyCard;
@@ -649,6 +685,12 @@ export default function NamesListScreen() {
                 {statusBlocks}
                 {body}
                 {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Working" /> : null}
+                {loading && opened ? (
+                    <View style={styles.notice} accessibilityLiveRegion="polite">
+                        <ActivityIndicator color={colors.brand.primary} accessibilityLabel={COPY.reloading} />
+                        <Text style={styles.noticeText}>{COPY.reloading}</Text>
+                    </View>
+                ) : null}
             </KeyboardAwareScrollView>
             {/* The scanner: full screen, a camera and one button, no text field (so no keyboard provider in a Modal). */}
             <Modal visible={scanning && !!permission?.granted} animationType="slide" onRequestClose={() => setScanning(false)}>

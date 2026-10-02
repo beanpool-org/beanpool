@@ -44,7 +44,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE,
+    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -1533,20 +1533,25 @@ describe('R. Round 11: the claim never vouches for a key being removed; adds are
             expect(planWords(c)!.startsWith(NAMES_COPY.holdersJustChecked(['Owen']))).toBe(true);
             expect(planWords(c)).not.toMatch(/will send/);
         }
-        // A re-admitted admin: Owen's key 2 dropped Cy; Cy's role is given back and Cy scans Owen one way: meet him.
-        {
+        // A re-admitted admin: Owen's key 2 dropped Cy; Cy's role is given back. One way, then both ways: the both-ways
+        // sentence is true in each (round 13: a check both ways makes Owen's phone trust Cy again).
+        for (const both of [false, true]) {
             const { node, phones: [owen, ada, cy] } = await community(['Owen', 'Ada', 'Cy']);
             node.admins = [role(owen, 'owner'), role(ada)];
             await open(owen); // 2 drops Cy
             await open(ada);
             node.admins.push(role(cy));
             await open(cy);
-            expect((await checkEachOther(STORE, cy, COMMUNITY, node.stateFor(cy.publicKey), namesKeyQr(owen.publicKey))).ok).toBe(true);
+            if (both) await meet(node, cy, owen);
+            else expect((await checkEachOther(STORE, cy, COMMUNITY, node.stateFor(cy.publicKey), namesKeyQr(owen.publicKey))).ok).toBe(true);
             const c = await open(cy);
             expect(c.plan.kind).toBe('wait');
-            expect(planWords(c)).not.toMatch(/if you have just checked each other/);
+            expect(planWords(c)!.startsWith(NAMES_COPY.holdersJustChecked(['Owen']))).toBe(true);
             expect(planWords(c)).not.toMatch(/will send/);
-            expect(planWords(c)).toMatch(/meet/);
+            if (both) {
+                await open(owen);
+                expect((await open(cy)).plan.kind).toBe('ready');
+            }
         }
     });
 });
@@ -1654,6 +1659,127 @@ describe('P. Round 12: one pin, one operation at a time; a claim to oneself', ()
     });
 });
 
+describe('J10. Round 13: the card promises a new key only when a removal will stand after the follow', () => {
+    it("J10 (the re-review's :1194) Bea removed nobody of her own; Abe's drop is on the shared history: the card doesn't promise a new key, and none is made", async () => {
+        const { node, phones: [owen, ada, abe, bea] } = await community(['Owen', 'Ada', 'Abe', 'Bea']);
+        node.admins = [role(owen, 'owner'), role(ada), role(bea)];
+        await open(owen); // 2 drops Abe
+        const two = node.current()!.id;
+        for (const p of [ada, bea, owen]) await open(p);
+        // Owen's key 3 (Bea takes it), then the server's current becomes Ada's 3″ off 2.
+        const m3 = makeNamesGeneration({ communityId: CID, n: 3, parentId: two, drops: [] }, owen);
+        node.put(m3);
+        node.head = m3.id;
+        const k3 = newNamesListKey();
+        await writeNamesPinTo(STORE, owen.publicKey, COMMUNITY, { ...(await pinOf(owen))!, pending: { statement: m3.statement, signature: m3.signature, id: m3.id, n: 3, key: bytesToHex(k3) } });
+        await open(owen);
+        await open(bea);
+        const m3pp = makeNamesGeneration({ communityId: CID, n: 3, parentId: two, drops: [] }, ada);
+        node.put(m3pp);
+        node.head = m3pp.id;
+        const k3pp = newNamesListKey();
+        await writeNamesPinTo(STORE, ada.publicKey, COMMUNITY, { ...(await pinOf(ada))!, pending: { statement: m3pp.statement, signature: m3pp.signature, id: m3pp.id, n: 3, key: bytesToHex(k3pp) } });
+        await open(ada);
+        const b = await open(bea);
+        expect(b.plan).toMatchObject({ kind: 'refused', reason: 'different_history', canFollow: true });
+        expect(planWords(b)).toBe(NAMES_COPY.refusedDifferentNone);
+        await followServerHistory(COMMUNITY, bea, STORE);
+        await open(ada);
+        expect((await open(bea)).plan.kind).toBe('ready');
+        expect([...node.gens.values()].filter((g) => g.maker === bea.publicKey)).toEqual([]);
+    });
+});
+
+describe('Q. Round 13: no request waits for good; a write decides from the pin', () => {
+    const never = () => new Promise<void>(() => { /* a request that never answers */ });
+    afterEach(() => setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS));
+
+    it("Q1 (the re-review's :236) a reload whose state request never answers: after the time limit it fails as no connection, and a Remove and a new open run and make a key without Abe", async () => {
+        const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+        const k1 = node.current()!.id;
+        setNamesRequestTimeout(150);
+        let stuck = false;
+        hold = (req) => {
+            if (stuck || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/state' || req.headers['X-Public-Key'] !== owen.publicKey) return null;
+            stuck = true;
+            return never();
+        };
+        const reload = await openNamesList(COMMUNITY, owen, STORE); // the screen's load(): settles, so `loading` clears
+        expect(reload.ok === false && reload.status).toBe(0);
+        hold = null;
+        expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
+        const o = await open(owen);
+        expect(o.plan.kind).toBe('ready');
+        expect(node.current()!).toMatchObject({ maker: owen.publicKey, parentId: k1, drops: [abe.publicKey] });
+        void ada;
+    });
+
+    it('Q2 a name added while a reload is stuck: the add settles and its id reaches `seen`', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada']);
+        const o = await open(owen);
+        setNamesRequestTimeout(150);
+        let stuck = false;
+        hold = (req) => {
+            if (stuck || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries') return null;
+            stuck = true;
+            return never();
+        };
+        const reload = openNamesList(COMMUNITY, owen, STORE);
+        const addId = newEntryId();
+        const added = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' }, undefined, addId);
+        await reload;
+        hold = null;
+        expect(added.ok).toBe(true);
+        expect(node.entries.some((e) => e.id === addId)).toBe(true);
+        expect((await pinOf(owen))!.seen).toContain(addId);
+    });
+
+    for (const how of ['no connection', 'a 502 from a proxy', "the new key's POST lost"] as const) {
+        it(`Q3 (the re-review's :859) Remove @Abe, its re-open fails (${how}), then a name added from the list still on screen: nothing is sealed under key 1; the words say why; once the list opens, the name goes under a key without Abe`, async () => {
+            const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+            const k1 = node.current()!.id;
+            const onScreen = await open(owen); // ready under key 1
+            await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey);
+            if (how === 'no connection') drop = (req) => (new URL(req.url).pathname === '/api/names/state' ? 'before' : null);
+            if (how === 'a 502 from a proxy') answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 502 } : node.answer(req));
+            if (how === "the new key's POST lost") drop = (req) => (new URL(req.url).pathname === '/api/names/generations' ? 'before' : null);
+            const reopen = await openNamesList(COMMUNITY, owen, STORE);
+            expect(reopen.ok).toBe(false);
+            drop = null;
+            answer = (req) => node.answer(req);
+            expect(node.current()!.id).toBe(k1);
+            sent = [];
+            const r = await saveNamesEntry(COMMUNITY, owen, STORE, onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(r.ok).toBe(false);
+            expect(r.ok === false && r.message).toBe(NAMES_COPY.stillRemoving(['Abe']));
+            expect(sentAs('POST', '/api/names/entries')).toEqual([]);
+            expect(node.entries.filter((e) => e.keyId === k1).length).toBe(2); // only the two planted before
+            // The connection is back: the list opens, makes the key without Abe, and the name goes under it.
+            const o = await open(owen);
+            expect(node.current()!).toMatchObject({ drops: [abe.publicKey] });
+            const r2 = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(r2.ok && r2.value.keyId).toBe(node.current()!.id);
+            void ada;
+        });
+    }
+
+    it('Q4 the screen shows the state the pin is in after an action fails: a stale ready list is not offered, and its add/change buttons go', () => {
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/pendingRemovals\(/);
+        expect(screen).toMatch(/plan\?\.kind === 'ready' && state && opened && !stale/);
+        expect(screen).toMatch(/COPY\.reloading/);
+        // sendAgain and save always clear busy.
+        expect(screen).toMatch(/const sendAgain = async[\s\S]{0,400}finally \{\s*finish\(\);/);
+        expect(screen).toMatch(/const save = async[\s\S]{0,500}finally \{\s*finish\(\);/);
+    });
+
+    it('Q5 no link waits on anything but a bounded request: the device store asks for no authentication', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8');
+        expect(src).not.toMatch(/requireAuthentication/);
+        expect(NAMES_REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+    });
+});
+
 describe('E. Rollback, forks', () => {
     for (const [id, what] of [['E1', 'a server put back to key 1'], ['E2', 'a standby that took over from an older copy']] as const) {
         it(`${id} ${what}: phones ahead refuse and read nothing; "Put the key history back" replays it; the lost entries are counted`, async () => {
@@ -1702,7 +1828,7 @@ describe('E. Rollback, forks', () => {
 });
 
 describe('F. Writes, reads, words', () => {
-    it("F1 a write only under the head's key when the server's current is the head: a stale key is answered 409, the list opened again, and the entry sealed under the new head and sent once more", async () => {
+    it("F1 a write only under the head's key when the server's current is the head: from a screen opened before a new key, the write looks first and seals under the new head", async () => {
         const { node, phones: [owen, ada] } = await community(['Owen', 'Ada', 'Abe']);
         const o = await open(owen);
         node.admins = node.admins.slice(0, 2);
@@ -1710,19 +1836,24 @@ describe('F. Writes, reads, words', () => {
         sent = [];
         const saved = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: '' });
         expect(saved.ok && saved.value.keyId).toBe(node.current()!.id);
+        // Round 13: the write decides from a fresh look on the pin's chain, not the screen's old open: one POST, under the
+        // new head; nothing under the old key.
         const posts = sentAs('POST', '/api/names/entries').map((s) => JSON.parse(s.body));
-        expect(posts.map((b) => b.keyId)).toEqual([o.pin.chain[0].id, node.current()!.id]);
-        expect(posts[0].id).toBe(posts[1].id);
+        expect(posts.map((b) => b.keyId)).toEqual([node.current()!.id]);
+        void o;
         for (const s of sent) expect(nothingReadable(s)).toBe(true);
     });
 
-    it('F2 the write freeze: a holder removed, another admin writing before any holder opens: 409 new_key_first; the next holder\'s open makes the key', async () => {
+    it('F2 the write freeze: a holder removed, another admin writing before any holder opens: nothing is written (a new key is due); the next holder\'s open makes the key', async () => {
         const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
         const o = await open(owen);
         node.admins = [role(owen, 'owner'), role(ada)];
         // Ada's phone hasn't opened since: its old open writes, and the node refuses.
+        // Round 13: the write looks first: a new key is due, so nothing is written (the node would refuse it anyway).
+        sent = [];
         const r = await saveNamesEntry(COMMUNITY, ada, STORE, { plan: { kind: 'ready' }, pin: (await pinOf(ada))!, ring: o.ring }, { name: 'X', note: '' });
-        expect(r.ok === false && r.code).toBe('new_key_first');
+        expect(r.ok === false && r.code).toBe('not_ready');
+        expect(sentAs('POST', '/api/names/entries')).toEqual([]);
         await open(owen);
         expect(node.current()!.drops).toEqual([abe.publicKey]);
         expect((await open(ada)).plan.kind).toBe('ready');

@@ -15,12 +15,14 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_CARD_IDS, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
+    invitesForReader,
     hideCard, isHidden, joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     needsLineA11y, resetLayout, safetyWord, sentence, showCard, starredFirst, stepLines, voteLabelHere,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
 import { normalizeCategory } from '@beanpool/core';
+import { mayInviteHere } from '../invite-entries';
 
 const ME = 'a'.repeat(64);
 // A fixed local afternoon, so "tonight" and "tomorrow" are stable wherever the suite runs.
@@ -558,5 +560,61 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
         expect(canTailor(answer())).toBe(true);
         expect(canTailor(answer({ me: null, welcome: true }))).toBe(false);
         expect(canTailor(null)).toBe(false);
+    });
+});
+
+describe('where only a community\'s admins invite, Home asks only them to (PR #1483 review 4166559683)', () => {
+    /** A local community whose door is "Known" (`features.door === 'admins'`, apps/server config/door.ts): every other First step done. */
+    const known = (over: Partial<HomeAnswer> = {}) => answer({
+        features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true, door: 'admins' },
+        me: { ...answer().me!, interests: ['food'], firstOffer: true },
+        cards: {
+            steps: steps({ firstOffer: true, photo: true, interests: true, invited: false }),
+            community: { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 },
+        },
+        ...over,
+    });
+
+    it('a plain member (no role, a moderator, or a role not heard yet): no Grow your community, and First steps completes without an invite', () => {
+        for (const role of [null, 'moderator', undefined] as const) {
+            expect(cardsToDraw(known(), null, ctx({ interests: ['food'], role })), String(role)).toEqual(['community']);
+            expect(cardOnNode('invite', known(), role), String(role)).toBe(false);
+        }
+        // The node sends `invited: false` there whatever the door (routes/home-answer.ts): the phone leaves the line out.
+        expect(stepLines(known().cards.steps!, true, false).map(l => l.id)).toEqual(['offer', 'photo', 'interests']);
+        // With a photo still to add, First steps stays for that, and still has no invite line to press.
+        const photoLeft = known({ cards: { ...known().cards, steps: steps({ firstOffer: true, photo: false, interests: true, invited: false }) } });
+        expect(cardsToDraw(photoLeft, null, ctx({ interests: ['food'], role: null }))).toEqual(['steps', 'community']);
+    });
+
+    it('an owner or admin there: the card and the step, as before', () => {
+        for (const role of ['owner', 'admin'] as const) {
+            expect(cardsToDraw(known(), null, ctx({ interests: ['food'], role }))).toEqual(['steps', 'invite', 'community']);
+            expect(cardOnNode('invite', known(), role)).toBe(true);
+        }
+        expect(stepLines(known().cards.steps!, true, true).map(l => l.id)).toEqual(['offer', 'photo', 'interests', 'invite']);
+    });
+
+    it('Home\'s rule is People → Invites\' own for every role the node has said, on every door (invite-entries.ts mayInviteHere)', () => {
+        for (const invites of [true, false]) {
+            for (const door of [undefined, 'members', 'admins']) {
+                for (const role of ['owner', 'admin', 'moderator', null] as const) {
+                    expect(invitesForReader({ invites, door }, role), `${invites} ${door} ${role}`).toBe(mayInviteHere({ invites, door } as never, role));
+                }
+            }
+        }
+        // Not heard yet: People lets the node decide at the press; Home asks nothing of them where only admins invite.
+        expect(mayInviteHere({ invites: true, door: 'admins' } as never, undefined)).toBe(true);
+        expect(invitesForReader({ invites: true, door: 'admins' }, undefined)).toBe(false);
+    });
+
+    it('any other door, or a node too old to say: every member invites, the role never needed', () => {
+        for (const door of [undefined, 'members', 'open']) {
+            const a = known({ features: { ...known().features, door } });
+            expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['steps', 'invite', 'community']);
+        }
+        // Invites off (the node then sends `invited: null`): neither, whatever the role.
+        const off = known({ features: { ...known().features, invites: false }, cards: { ...known().cards, steps: steps({ firstOffer: true, photo: true, interests: true, invited: null }) } });
+        expect(cardsToDraw(off, null, ctx({ interests: ['food'], role: 'owner' }))).toEqual(['community']);
     });
 });

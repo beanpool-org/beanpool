@@ -77,8 +77,11 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
         getItem: vi.fn(async (k: string) => mem.store.get(k) ?? null),
         setItem: vi.fn(async (k: string, v: string) => { mem.store.set(k, v); }),
         removeItem: vi.fn(async (k: string) => { mem.store.delete(k); }),
+        getAllKeys: vi.fn(async () => [...mem.store.keys()]),
+        multiRemove: vi.fn(async (keys: string[]) => { keys.forEach(k => mem.store.delete(k)); }),
     },
 }));
+vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () => undefined) }));
 const who = vi.hoisted(() => ({ identity: null as any }));
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: who.identity }) }));
 vi.mock('../../app/ThemeContext', async () => {
@@ -113,7 +116,9 @@ vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { i
 import HomeScreen from '../../app/(tabs)/index';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import * as db from '../db';
-import { draftIdentity } from '../identity';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
+import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey } from '../storage-keys';
 import { decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
@@ -153,7 +158,13 @@ function localMember(): HomeAnswer {
     };
 }
 
-const node = { answer: localMember(), status: 200, down: false, hang: false, refuse: 0, requests: [] as { url: string; method: string; headers: Record<string, string>; body: string; status: number }[] };
+const node = {
+    answer: localMember(), status: 200, down: false, hang: false, refuse: 0, requests: [] as { url: string; method: string; headers: Record<string, string>; body: string; status: number }[],
+    /** While set, GET /api/home is answered (as it was when it arrived) only once this settles. */
+    homeGate: null as Promise<void> | null,
+    /** The reader's role, as GET /api/node-admin/me says it (routes/node-admin.ts). */
+    role: null as string | null,
+};
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
     return `W/"home-${createHash('sha256').update(`${pk}\n${JSON.stringify(rest)}`).digest('hex').slice(0, 24)}"`;
@@ -173,6 +184,8 @@ beforeEach(async () => {
     node.hang = false;
     node.refuse = 0;
     node.requests = [];
+    node.homeGate = null;
+    node.role = null;
     manage.start.mockClear();
     vi.mocked(goToNeedsTarget).mockClear();
     vi.mocked(db.getMarketplaceTransactions).mockImplementation(async () => []);
@@ -191,9 +204,15 @@ beforeEach(async () => {
         if (u.pathname === '/api/home') {
             if (node.status !== 200) { record(node.status); return new Response('{"code":"members_only"}', { status: node.status }); }
             const tag = etagOf(who.identity.publicKey, node.answer);
+            const body = JSON.stringify(node.answer);
+            if (node.homeGate) await node.homeGate;
             if (headers['If-None-Match'] === tag) { record(304); return new Response(null, { status: 304 }); }
             record(200);
-            return new Response(JSON.stringify(node.answer), { status: 200, headers: { ETag: tag } });
+            return new Response(body, { status: 200, headers: { ETag: tag } });
+        }
+        if (u.pathname === '/api/node-admin/me') {
+            record(200);
+            return new Response(JSON.stringify({ role: node.role, communityName: 'Mullumbimby' }), { status: 200 });
         }
         if (u.pathname === '/api/members/preferences') {
             if (node.refuse) { record(node.refuse); return new Response('{"error":"Only a member of this community keeps a Home here."}', { status: node.refuse }); }
@@ -795,5 +814,85 @@ describe('Edit home offers only the cards this node can show', () => {
         expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!) } });
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
         expect(editRows()[0]).toBe('safety');
+    });
+});
+
+// ── The account leaving while Home's read is out (PR #1483 review 4166559191) ─────────────────────────────────────────
+
+/** Everything Home keeps on the phone: every key under its prefix, and the stars. */
+const homeKeys = () => [...mem.store.keys()].filter(k => k.startsWith('beanpool_home') || k === 'bp_fav_categories').sort();
+
+describe('the account leaves the phone while Home\'s read is out: the screen writes nothing back for it', () => {
+    /** A first landing whose read is held at the node: the answer would bring the account's stars and its first reveal. */
+    async function landHeld(): Promise<() => void> {
+        node.answer = { ...localMember(), me: { ...localMember().me!, interests: ['food'] } };
+        let release!: () => void;
+        node.homeGate = new Promise<void>(r => { release = r; });
+        await render();
+        expect(homeKeys()).toEqual([]);
+        return release;
+    }
+
+    it('Sign Out\'s wipe, then the read lands while the screen still holds the account: no answer, stars, owed save, reveal or hint come back', async () => {
+        const release = await landHeld();
+        // account-leaves-phone.ts: the key comes off the phone, then the one wipe (identity.ts wipeIdentity).
+        announceAccountOnPhone(null);
+        await act(async () => { await wipeIdentityScopedStorage(AsyncStorage as never); });
+        release();
+        await settle();
+        expect(homeKeys()).toEqual([]);
+        expect(node.requests.filter(r => r.method === 'POST')).toEqual([]);
+    });
+
+    it('Replace: the wipe, the restored account on the phone, then the replaced account\'s read lands: nothing of it is kept', async () => {
+        const release = await landHeld();
+        // restore-account.ts saveRestoredAccount: the wipe, then the restored key written (identity.ts importIdentity announces it).
+        await act(async () => { await wipeIdentityScopedStorage(AsyncStorage as never); });
+        announceAccountOnPhone((await draftIdentity()).publicKey);
+        release();
+        await settle();
+        expect(homeKeys()).toEqual([]);
+        expect(node.requests.filter(r => r.method === 'POST')).toEqual([]);
+    });
+});
+
+// ── Where only a community's admins invite (PR #1483 review 4166559683) ───────────────────────────────────────────────
+
+describe('where only a community\'s admins invite, Home asks only them to', () => {
+    /** A member a while in on a "Known" community (`door: 'admins'`): an Offer posted, a photo, a star; no invite made. */
+    function knownCommunity(): HomeAnswer {
+        const a = localMember();
+        return {
+            ...a,
+            features: { ...a.features, door: 'admins' },
+            me: { ...a.me!, interests: ['food'], firstOffer: true },
+            cards: { ...a.cards, steps: { ...a.cards.steps!, firstOffer: true, firstPost: true, photo: true, interests: true, invited: false } },
+        };
+    }
+
+    it('a plain member: no Grow your community, no invite step (First steps is done), nothing that opens Invites, none offered in Edit home', async () => {
+        node.answer = knownCommunity();
+        node.role = null;
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(cards()).not.toContain('invite');
+        expect(cards()).not.toContain('steps');
+        const { links } = await pressEverything();
+        expect(links.filter(l => l.href.pathname === '/(tabs)/people' && l.href.params?.view === 'invites').map(fmt)).toEqual([]);
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(editRows()).not.toContain('invite');
+    });
+
+    it('an admin there: Grow your community and the invite step, each opening Invites', async () => {
+        node.answer = knownCommunity();
+        node.role = 'admin';
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(cards()).toEqual(expect.arrayContaining(['steps', 'invite']));
+        const { links } = await pressEverything();
+        expect(links.filter(l => l.href.params?.view === 'invites').map(fmt)).toEqual([
+            'home-step-invite → /(tabs)/people view=invites',
+            'home-invite → /(tabs)/people view=invites',
+        ]);
     });
 });

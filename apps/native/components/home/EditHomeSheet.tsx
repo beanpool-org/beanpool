@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppColors } from '../../constants/colors';
 import {
     HOME_CARD_NAMES, canMoveCard, cardOnNode, cardOrder, hideCard, isHidden, marketCaption, moveCard, resetLayout, showCard,
-    type HomeAnswer, type HomeCardId, type HomeLayout,
+    type HomeAnswer, type HomeCardId, type HomeLayout, type HomeRole,
 } from '../../utils/home-cards';
 import { HOME_TARGET_DP } from './HomeParts';
 
@@ -13,13 +13,16 @@ import { HOME_TARGET_DP } from './HomeParts';
  * Edit home (design §4.1): every card with a switch and up/down arrows, the hidden ones greyed under "Hidden" so they come
  * back, and Reset to defaults. Nothing is dragged (fragile on old Android, poor with large text and a screen reader) and
  * nothing is typed. Needs you stays at the top and the community's card at the bottom: they are not in the list. Only the
- * cards this node can show are offered (utils/home-cards.ts `cardOnNode`): no money cards on the global node.
+ * cards this node can show are offered (utils/home-cards.ts `cardOnNode`): no money cards on the global node, and no Grow
+ * your community where only the community's admins invite and the member is not one.
  */
-export function EditHomeSheet({ visible, layout, node, drawnNow, colors, onChange, onClose }: {
+export function EditHomeSheet({ visible, layout, node, role, drawnNow, colors, onChange, onClose }: {
     visible: boolean;
     layout: HomeLayout | null;
     /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
     node: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeAnswer['cards'] };
+    /** The member's role there, for where only admins invite (utils/home-cards.ts `invitesForReader`). */
+    role?: HomeRole;
     /** The cards on Home now; the others say they have nothing to show yet. */
     drawnNow: readonly HomeCardId[];
     colors: AppColors;
@@ -27,7 +30,7 @@ export function EditHomeSheet({ visible, layout, node, drawnNow, colors, onChang
     onClose: () => void;
 }) {
     const insets = useSafeAreaInsets();
-    const listed = cardOrder(layout).filter(id => canMoveCard(id) && cardOnNode(id, node));
+    const listed = cardOrder(layout).filter(id => canMoveCard(id) && cardOnNode(id, node, role));
     const shown = listed.filter(id => !isHidden(layout, id));
     const hidden = listed.filter(id => isHidden(layout, id));
     const name = (id: HomeCardId) => (id === 'market' ? marketCaption(node.profile) : HOME_CARD_NAMES[id]);

@@ -23,21 +23,21 @@ import {
 } from '../../components/home/HomeCardBodies';
 import {
     HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk, cardsToDraw,
-    createDoorbellDebounce, dismissSafety, effectiveInterests, hideCard, isHidden, localNeeds, marketForward, mergeNeeds,
+    createDoorbellDebounce, dismissSafety, effectiveInterests, hideCard, invitesForReader, isHidden, localNeeds, marketForward, mergeNeeds,
     moveCard, pickLayout, safetyWord, starredFirst, stepLines,
-    type HomeCardId, type HomeLayout, type LocalNeeds, type StepLine,
+    type HomeCardId, type HomeLayout, type HomeRole, type LocalNeeds, type StepLine,
 } from '../../utils/home-cards';
 import {
-    SAVE_REFUSED, interestsTurnNow, loadHome, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
-    saveHomePreferences, saveInterests, writePhoneLayout, yieldPhoneLayout, type StoredHome,
+    SAVE_REFUSED, interestsTurnNow, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
+    saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, yieldPhoneLayout, type StoredHome,
 } from '../../utils/home-store';
+import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
+import { cachedNodeRole } from '../../utils/node-admin';
 import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
 import { composeTargetFor } from '../../utils/compose-options';
-import { homeHintStoreKey, homeRevealStoreKey } from '../../utils/storage-keys';
 import type { NeedsYouEntry } from '../../utils/needs-you';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Home (scratch/global-node/DESIGN-home-dashboard-fable.md, slice H2): the screen the app opens on. A short list of cards
@@ -53,6 +53,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *   only: a visitor (a key with no account on the global node, which answers with its public cards) gets none of it, no
  *   hint, and no layout is ever sent for one.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
+ * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
+ *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
+ *   (utils/node-admin.ts `cachedNodeRole`), asked only on such a node.
+ * - **Nothing is written for an account that has left the phone** (PR #1483 review 4166559191): each landing and edit
+ *   takes the account as it begins (utils/home-account.ts), and what it keeps (the answer, the layout, the stars, the
+ *   reveal and hint) is kept only while that account is still the one on the phone.
  * - **"+ ADD POST"** floats as on the Market, and steps aside while a card's buttons, chips or links rest under it.
  */
 
@@ -94,6 +100,8 @@ export default function HomeScreen() {
     const [pollModal, setPollModal] = useState(false);
     const [eventModal, setEventModal] = useState(false);
     const [hint, setHint] = useState(false);
+    /** The member's role here, asked only where only admins invite (undefined: not heard, so no invite asked of them). */
+    const [role, setRole] = useState<HomeRole>(undefined);
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -138,16 +146,15 @@ export default function HomeScreen() {
     // ── The reveal and the hint (§6.2): once per account, never again ──
     const reveal = useRef(new Animated.Value(1)).current;
     const revealChecked = useRef<string | null>(null);
-    const maybeReveal = useCallback(async (publicKey: string) => {
-        if (revealChecked.current === publicKey) return;
-        revealChecked.current = publicKey;
-        const seen = await AsyncStorage.getItem(homeRevealStoreKey(publicKey)).catch(() => '1');
-        if (seen) return;
-        AsyncStorage.setItem(homeRevealStoreKey(publicKey), '1').catch(() => {});
-        const hintSeen = await AsyncStorage.getItem(homeHintStoreKey(publicKey)).catch(() => '1');
-        if (!hintSeen) {
+    const maybeReveal = useCallback(async (whose: HomeAccount) => {
+        if (revealChecked.current === whose.publicKey) return;
+        revealChecked.current = whose.publicKey;
+        if (await seenOnce(whose.publicKey, 'reveal')) return;
+        if (!stillOnPhone(whose)) return;
+        void markSeenOnce(whose, 'reveal');
+        if (!(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
             setHint(true);
-            AsyncStorage.setItem(homeHintStoreKey(publicKey), '1').catch(() => {});
+            void markSeenOnce(whose, 'hint');
         }
         const calm = await AccessibilityInfo.isReduceMotionEnabled().catch(() => true);
         if (calm) return;
@@ -166,24 +173,26 @@ export default function HomeScreen() {
     }, []);
 
     // ── The layout: the phone's copy at once, the account's once it is saved ──
-    const pushLayout = useCallback(async (next: HomeLayout) => {
+    const pushLayout = useCallback(async (next: HomeLayout, whose: HomeAccount) => {
         const id = identityRef.current;
         const u = storedRef.current?.url ?? url;
-        if (!id || !u) return;
+        if (!id || !u || id.publicKey !== whose.publicKey || !stillOnPhone(whose)) return;
         const saved = await saveHomePreferences(u, id, { layout: next });
+        // The account left the phone while the save was out: nothing of it is drawn or kept.
+        if (!stillOnPhone(whose)) return;
         if (saved === SAVE_REFUSED) {
             // The node won't keep it: the account's copy stands, and the phone's is never sent again by itself.
             const account = storedRef.current?.answer.layout ?? null;
             phoneLayout.current = account;
             setLayout(account);
-            await yieldPhoneLayout(id.publicKey, u, account);
+            await yieldPhoneLayout(id.publicKey, u, account, whose);
             return;
         }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
             phoneLayout.current = saved.layout;
             setLayout(saved.layout);
-            await writePhoneLayout(id.publicKey, u, saved.layout);
+            await writePhoneLayout(id.publicKey, u, saved.layout, whose);
         }
     }, [url]);
 
@@ -191,6 +200,7 @@ export default function HomeScreen() {
     const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout') => {
         const id = identityRef.current;
         if (!id) return;
+        const whose = homeAccount(id.publicKey);
         const raw = await anchorUrl().catch(() => null);
         if (!raw) { setStatus('no_community'); return; }
         const u = raw.replace(/\/+$/, '');
@@ -203,6 +213,7 @@ export default function HomeScreen() {
             storedRef.current = copy;
             phoneLayout.current = mine;
             setUrl(u);
+            setRole(undefined);
             setStored(copy);
             setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine).layout : null);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
@@ -211,8 +222,9 @@ export default function HomeScreen() {
         const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout);
         // A star tapped while the node answers is newer than the answer's interests (home-store.ts reconcileInterests).
         const since = interestsTurnNow();
-        const read = await loadHome(u, id, asked, cached);
-        if (identityRef.current?.publicKey !== id.publicKey) return;
+        const read = await loadHome(u, id, asked, cached, { whose });
+        // Another account on the screen, or this one gone from the phone while the read was out (Sign Out, Replace).
+        if (identityRef.current?.publicKey !== id.publicKey || read.kind === 'left' || !stillOnPhone(whose)) return;
         if (read.kind === 'answer') {
             storedRef.current = read.stored;
             setStored(read.stored);
@@ -222,13 +234,19 @@ export default function HomeScreen() {
             const member = canTailor(read.stored.answer);
             const pick = member ? pickLayout(read.stored.answer.layout, phoneLayout.current) : { layout: null, push: false };
             setLayout(pick.layout);
-            if (pick.push && pick.layout) void pushLayout(pick.layout);
+            if (pick.push && pick.layout) void pushLayout(pick.layout, whose);
             else if (pick.layout) {
                 phoneLayout.current = pick.layout;
-                void writePhoneLayout(id.publicKey, u, pick.layout);
+                void writePhoneLayout(id.publicKey, u, pick.layout, whose);
             }
-            if (read.stored.answer.me) setInterests(await reconcileInterests(u, id, read.stored.answer.me.interests, since));
-            if (member) void maybeReveal(id.publicKey);
+            if (read.stored.answer.me) {
+                const drawn = await reconcileInterests(u, id, read.stored.answer.me.interests, since);
+                if (stillOnPhone(whose)) setInterests(drawn);
+            }
+            if (member) void maybeReveal(whose);
+            if (member && read.stored.answer.features.door === 'admins') {
+                void cachedNodeRole(u, id).then(r => { if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setRole(r.role); });
+            }
             if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
         } else if (read.kind === 'members_only') {
             setStatus('members_only');
@@ -270,6 +288,7 @@ export default function HomeScreen() {
         phoneLayout.current = null;
         setStored(null);
         setLayout(null);
+        setRole(undefined);
         setStatus('loading');
         if (focused.current) void refreshRef.current('focus');
     }, [identity?.publicKey]);
@@ -284,10 +303,11 @@ export default function HomeScreen() {
         const id = identityRef.current;
         if (!next || !id || !url || !canTailor(storedRef.current?.answer)) return;
         const before = layoutRef.current;
+        const whose = homeAccount(id.publicKey);
         phoneLayout.current = next;
         setLayout(next);
-        void writePhoneLayout(id.publicKey, url, next);
-        void pushLayout(next);
+        void writePhoneLayout(id.publicKey, url, next, whose);
+        void pushLayout(next, whose);
         // A card that comes back was never asked for: read Home again for it.
         const shownAgain = cardsToAsk(next).some(c => !cardsToAsk(before).includes(c));
         if (shownAgain) void refreshRef.current('layout');
@@ -347,14 +367,14 @@ export default function HomeScreen() {
     const answer = stored?.answer ?? null;
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
-    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length }) : [];
+    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role }) : [];
     const interestsUp = drawn.includes('interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
     const homeWord = word && stored ? { url: stored.url, standing: word } : null;
     const profile = answer?.profile ?? 'local';
     const showsBeans = answer?.features.beans !== false;
-    const invitesOn = answer?.features.invites === true;
+    const invitesOn = !!answer && invitesForReader(answer.features, role);
     const ordered = cardOrder(layout);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
@@ -385,7 +405,7 @@ export default function HomeScreen() {
                         onActionsAt={at => band.report('safety:actions', at)}
                     />
                 );
-            case 'steps': return c.steps ? frame(<StepsBody lines={stepLines(c.steps, interests.length > 0)} colors={colors} onStep={onStep} />) : null;
+            case 'steps': return c.steps ? frame(<StepsBody lines={stepLines(c.steps, interests.length > 0, invitesOn)} colors={colors} onStep={onStep} />) : null;
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
             case 'deals': return c.deals ? frame(<DealsBody card={c.deals} colors={colors} />) : null;
             case 'enterprise': return c.enterprise ? frame(<EnterpriseBody card={c.enterprise} colors={colors} />) : null;
@@ -532,6 +552,7 @@ export default function HomeScreen() {
                     visible={editOpen && tailor && !!answer}
                     layout={layout}
                     node={answer ?? { profile, features: {} }}
+                    role={role}
                     drawnNow={drawn}
                     colors={colors}
                     onChange={changeLayout}

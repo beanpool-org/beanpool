@@ -6,6 +6,7 @@ import {
     type OwnerWordsCheckResult,
 } from '@beanpool/core';
 import { announceAccountOnPhone } from './account-on-phone';
+import { homeAccountLeft } from './home-account';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
@@ -427,7 +428,9 @@ interface WipeableStorage {
  * And everything Home keeps for the account (storage-keys.ts `HOME_STORE_PREFIX`: its last answer, its layout, an
  * interests save it owes, the reveal and hint it has seen) with the phone's copy of its interests
  * (`FAV_CATEGORIES_STORE_KEY`), which names no account: left behind, the next account's first Home landing would send
- * them to its community as its own (PR #1483 review 4165383582).
+ * them to its community as its own (PR #1483 review 4165383582). Home is told first, before anything is removed
+ * (home-account.ts `homeAccountLeft`), so a read or save of it still out writes none of them back when it lands
+ * (PR #1483 review 4166559191).
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
@@ -441,6 +444,7 @@ interface WipeableStorage {
  * phone read back for the same channel (FABLE-sec-native MEDIUM-2, 2026-10-01). They go first, and never hold the rest up.
  */
 export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
+    homeAccountLeft();
     await forgetAllPulseTokens();
     await storage.removeItem('beanpool_anchor_url');
     // No community on the phone: the update screen's block comes down (utils/community-switch.ts).

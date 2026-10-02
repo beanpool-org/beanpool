@@ -410,3 +410,62 @@ describe('Sign Out takes Home\'s copies with the account', () => {
         expect(keys.filter(k => !k.startsWith('beanpool_home:'))).toEqual([]);
     });
 });
+
+describe('an answer older than a save that has landed never overwrites it (PR #1483 review 4166559374)', () => {
+    const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise(r => setTimeout(r, 0)); expect(done()).toBe(true); };
+    const interestPosts = () => node.requests.filter(r => r.method === 'POST' && 'interests' in JSON.parse(r.body).preferences)
+        .map(r => JSON.parse(r.body).preferences.interests);
+
+    it('the review\'s row: two quick stars on a slow link, a read between the saves; the stars stay, and the next star keeps them all', async () => {
+        node.saves = ['hold', 'hold'];
+        // Tap Food (its save goes out and is slow), then Tools (its save waits behind it).
+        const food = saveInterests(NODE, me, ['food']);
+        await until(() => node.held.length === 1);
+        const tools = saveInterests(NODE, me, ['food', 'tools']);
+        // A bell: Home asks the node now (app/(tabs)/index.tsx takes the turn as it asks). The node builds its answer from
+        // the member's row as it is at that moment: nothing starred yet.
+        const since = interestsTurnNow();
+        const read = await loadHome(NODE, me, asked, null);
+        if (read.kind !== 'answer') throw new Error('no answer');
+        expect(read.stored.answer.me!.interests).toEqual([]);
+        // Both saves land, in turn.
+        node.held.shift()!();
+        await until(() => node.held.length === 1);
+        node.held.shift()!();
+        await Promise.all([food, tools]);
+        expect(node.kept.interests).toEqual(['food', 'tools']);
+        // Then the landing takes the answer: it was built before a save that has since landed, so the phone's list stands.
+        const drawn = await reconcileInterests(NODE, me, read.stored.answer.me!.interests, since);
+        expect(drawn).toEqual(['food', 'tools']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food', 'tools']);
+        // The member sees both stars and adds Garden: the row keeps all three (the review measured ["garden"]).
+        expect(await saveInterests(NODE, me, [...drawn, 'garden'])).toBe(true);
+        expect(node.kept.interests).toEqual(['food', 'tools', 'garden']);
+        // The next landing agrees with the row, and sends nothing.
+        const posts = interestPosts().length;
+        expect(await reconcileInterests(NODE, me, ['food', 'tools', 'garden'])).toEqual(['food', 'tools', 'garden']);
+        expect(interestPosts()).toHaveLength(posts);
+    });
+
+    it('an owed save another landing sent after this answer was asked: this answer doesn\'t undo it either', async () => {
+        node.saves = ['fail'];
+        expect(await saveInterests(NODE, me, ['food'])).toBe(false);
+        // Landing A asks; the node's row is still empty.
+        const sinceA = interestsTurnNow();
+        const readA = await loadHome(NODE, me, asked, null);
+        if (readA.kind !== 'answer') throw new Error('no answer');
+        // Landing B (a pull) asks too, and sends the owed list, which lands.
+        expect(await reconcileInterests(NODE, me, [], interestsTurnNow())).toEqual(['food']);
+        expect(node.kept.interests).toEqual(['food']);
+        // Landing A's answer arrives last: older than B's save, so it leaves the phone's list as it is.
+        expect(await reconcileInterests(NODE, me, readA.stored.answer.me!.interests, sinceA)).toEqual(['food']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food']);
+    });
+
+    it('an answer asked with no save out and none since is the account\'s word: it wins (cleared in the web app, say)', async () => {
+        expect(await saveInterests(NODE, me, ['food'])).toBe(true);
+        const since = interestsTurnNow();
+        expect(await reconcileInterests(NODE, me, [], since)).toEqual([]);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual([]);
+    });
+});

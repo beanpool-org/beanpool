@@ -254,7 +254,7 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
  * a node's features (kept here so this file stays pure). Home draws only these whatever an answer holds, and Edit home
  * offers only these: "Nothing to show now" is said of a card that could show, never of one that can't.
  */
-export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }): boolean {
+export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }, role?: HomeRole): boolean {
     if (!HOME_DRAWN.includes(id)) return false;
     const f = answer.features;
     switch (id) {
@@ -263,9 +263,25 @@ export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 
         case 'beans': return f.beans !== false;
         case 'deals': return f.escrow !== false;
         case 'enterprise': return f.enterprises !== false;
-        case 'invite': return answer.profile !== 'global' && f.invites === true;
+        case 'invite': return answer.profile !== 'global' && invitesForReader(f, role);
         default: return true;
     }
+}
+
+/** The reader's role on this node as the node said it (GET /api/node-admin/me, utils/node-admin.ts): null for none, undefined not heard. */
+export type HomeRole = 'owner' | 'admin' | 'moderator' | null | undefined;
+
+/**
+ * Whether the reader can invite on this node (PR #1483 review 4166559683): invites are on, and where only the community's
+ * admins invite (`features.door === 'admins'`, utils/invite-entries.ts `onlyAdminsInvite`) the node has said they are an
+ * owner or admin. People → Invites' own rule for a role the node has said (invite-entries.ts `mayInviteHere`, said again
+ * here so this file stays pure; a test holds the two together). A role not heard yet counts as no here: Home never asks
+ * a member for something they may not be able to do, nor keeps First steps open on it (design §6.3).
+ */
+export function invitesForReader(features: HomeAnswer['features'], role: HomeRole): boolean {
+    if (features.invites !== true) return false;
+    if (features.door !== 'admins') return true;
+    return role === 'owner' || role === 'admin';
 }
 
 /**
@@ -309,6 +325,8 @@ export interface HomeDrawContext {
     safetyUp: boolean;
     /** Lines in Needs you once the phone's own are merged in ({@link mergeNeeds}); absent: the answer's alone. */
     needs?: number;
+    /** The reader's role here, for where only admins invite ({@link invitesForReader}); absent: not heard. */
+    role?: HomeRole;
 }
 
 /**
@@ -326,14 +344,19 @@ export function marketForward(params: { tab?: string | string[]; dealsTab?: stri
 /** The First steps lines of a local community (§3.1), with what is done. */
 export interface StepLine { id: 'offer' | 'photo' | 'interests' | 'invite'; text: string; done: boolean }
 
-export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: boolean): StepLine[] {
+/**
+ * `canInvite`: whether the reader can invite here ({@link invitesForReader}). The node sends `invited: false` wherever
+ * invites are on, whatever its door (routes/home-answer.ts), so where only admins invite a plain member gets no invite
+ * line: First steps finishes on the lines they can do.
+ */
+export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: boolean, canInvite: boolean = true): StepLine[] {
     const lines: StepLine[] = [
         { id: 'offer', text: 'Post your first Offer', done: steps.firstOffer },
         { id: 'photo', text: 'Add a photo to your profile', done: steps.photo },
         { id: 'interests', text: 'Pick a few things you like', done: steps.interests || interestsSet },
     ];
-    // After the first Offer, where invites are on (null: no such step here).
-    if (steps.invited !== null && steps.firstOffer) lines.push({ id: 'invite', text: 'Invite someone', done: steps.invited });
+    // After the first Offer, where invites are on (null: no such step here) and the reader can make one.
+    if (steps.invited !== null && steps.firstOffer && canInvite) lines.push({ id: 'invite', text: 'Invite someone', done: steps.invited });
     return lines;
 }
 
@@ -344,15 +367,16 @@ export function stepLines(steps: NonNullable<HomeCards['steps']>, interestsSet: 
 export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: HomeDrawContext): HomeCardId[] {
     const c = answer.cards;
     const global = answer.profile === 'global';
+    const canInvite = invitesForReader(answer.features, ctx.role);
     const shows = (id: HomeCardId): boolean => {
-        if (!cardOnNode(id, answer)) return false;
+        if (!cardOnNode(id, answer, ctx.role)) return false;
         if (isHidden(layout, id)) return false;
         switch (id) {
             case 'needs': return ctx.needs !== undefined ? ctx.needs > 0 : !!c.needs?.items?.length;
             case 'safety': return ctx.safetyUp;
-            case 'steps': return !global && !!c.steps && stepLines(c.steps, ctx.interests.length > 0).some(l => !l.done);
+            case 'steps': return !global && !!c.steps && stepLines(c.steps, ctx.interests.length > 0, canInvite).some(l => !l.done);
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
-            case 'invite': return !global && answer.features.invites === true && !!answer.me?.firstOffer;
+            case 'invite': return !global && canInvite && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
             case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
             case 'community': return true;

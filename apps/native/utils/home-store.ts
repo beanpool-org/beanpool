@@ -16,13 +16,22 @@
  *   node refuses (it keeps a Home only for its members) is never sent again by itself: the account's copy stands.
  * - **Interests saves go one at a time, and only the latest counts** (PR #1483 review 4165383880): a star tapped while an
  *   earlier save is out waits for it, a save overtaken by a newer star is never sent, and a save that lands after a
- *   newer star was tapped leaves the newer one owed.
+ *   newer star was tapped leaves the newer one owed. The mirror case (review 4166559374): an answer asked while a save was
+ *   waiting or out, or before one was begun, may be older than a save the node has taken since, so it never overwrites
+ *   the phone's stars; the next landing agrees.
+ * - **Nothing is written for an account that has left the phone** (review 4166559191): every read and save takes the
+ *   account it is for as it begins (home-account.ts), and each write here (the answer, the layout, the stars, the owed
+ *   save, the reveal and hint) is made only while that account is still the one on the phone. Sign Out and Replace wipe
+ *   what Home kept; a read or save still out then writes none of it back, and a save waiting its turn is never sent.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
-import { FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey } from './storage-keys';
+import { homeAccount, homeGeneration, onHomeAccountChange, resetHomeAccountForTests, stillOnPhone, type HomeAccount } from './home-account';
+import {
+    FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeHintStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey,
+} from './storage-keys';
 import {
     HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
     type HomeAnswer, type HomeCardId, type HomeLayout,
@@ -68,7 +77,8 @@ export async function readStoredHome(publicKey: string, url: string): Promise<St
     }
 }
 
-async function keep(stored: StoredHome): Promise<void> {
+async function keep(stored: StoredHome, whose: HomeAccount): Promise<void> {
+    if (!stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeAnswerStoreKey(stored.publicKey, stored.url), JSON.stringify(stored));
     } catch {
@@ -82,16 +92,21 @@ export type HomeRead =
     /** 401 or 403: this key is no member here (a guest, or an account the community removed). */
     | { kind: 'members_only' }
     /** No answer, a server error, or a body that isn't one: Home keeps what it had. */
-    | { kind: 'failed' };
+    | { kind: 'failed' }
+    /** The account it was asked for left the phone while it was out: nothing kept, nothing to draw. */
+    | { kind: 'left' };
 
 /**
  * One read of Home. `cached` is sent as `If-None-Match` only when it answers the same cards; a 304 then confirms it.
+ * `whose`: the account it is for, as the landing began (by default, as this read begins); kept only while it is still on
+ * the phone.
  */
 export async function readHomeFromNode(
     url: string, identity: BeanPoolIdentity, asked: readonly HomeCardId[], cached: StoredHome | null,
-    options: { timeoutMs?: number; now?: () => number } = {},
+    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount } = {},
 ): Promise<HomeRead> {
     const now = options.now ?? Date.now;
+    const whose = options.whose ?? homeAccount(identity.publicKey);
     const askedKey = asked.join(',');
     const copy = cached && cached.publicKey === identity.publicKey && norm(cached.url) === norm(url) && cached.asked === askedKey ? cached : null;
     const stop = new AbortController();
@@ -100,16 +115,18 @@ export async function readHomeFromNode(
         const res = await signedGet(url, homePath(asked), identity, stop.signal, copy?.etag ? { 'If-None-Match': copy.etag } : undefined);
         if (res.status === 304) {
             if (!copy) return { kind: 'failed' };
+            if (!stillOnPhone(whose)) return { kind: 'left' };
             const stored = { ...copy, at: now() };
-            await keep(stored);
+            await keep(stored, whose);
             return { kind: 'answer', stored, confirmed: true };
         }
         if (res.status === 401 || res.status === 403) return { kind: 'members_only' };
         if (!res.ok) return { kind: 'failed' };
         const answer = readHomeAnswer(await res.json().catch(() => null));
         if (!answer) return { kind: 'failed' };
+        if (!stillOnPhone(whose)) return { kind: 'left' };
         const stored: StoredHome = { url, publicKey: identity.publicKey, asked: askedKey, etag: res.headers.get('ETag'), answer, at: now() };
-        await keep(stored);
+        await keep(stored, whose);
         return { kind: 'answer', stored, confirmed: false };
     } catch {
         return { kind: 'failed' };
@@ -120,9 +137,15 @@ export async function readHomeFromNode(
 
 // ── One read at a time, and the answer the header reads ─────────────────────────────────────────────────────────
 
-let latest: StoredHome | null = null;
+let latest: { stored: StoredHome; whose: HomeAccount } | null = null;
 let inflight: { key: string; url: string; publicKey: string; promise: Promise<HomeRead> } | null = null;
 const settledListeners = new Set<(read: HomeRead, url: string, publicKey: string) => void>();
+
+// The account left or changed: what is held in memory for it goes (a read still out lands as 'left').
+onHomeAccountChange(() => {
+    latest = null;
+    inflight = null;
+});
 
 /**
  * Home's read, shared: a second call while one for the same account, community and cards is out gets that one's
@@ -130,13 +153,15 @@ const settledListeners = new Set<(read: HomeRead, url: string, publicKey: string
  */
 export function loadHome(
     url: string, identity: BeanPoolIdentity, asked: readonly HomeCardId[], cached: StoredHome | null,
-    options: { timeoutMs?: number; now?: () => number } = {},
+    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount } = {},
 ): Promise<HomeRead> {
-    const key = `${identity.publicKey}|${norm(url)}|${asked.join(',')}`;
+    const whose = options.whose ?? homeAccount(identity.publicKey);
+    const key = `${identity.publicKey}|${whose.generation}|${norm(url)}|${asked.join(',')}`;
     if (inflight?.key === key) return inflight.promise;
-    const promise = readHomeFromNode(url, identity, asked, cached, options).then(read => {
+    const promise = readHomeFromNode(url, identity, asked, cached, { ...options, whose }).then((answered): HomeRead => {
+        const read: HomeRead = answered.kind === 'answer' && !stillOnPhone(whose) ? { kind: 'left' } : answered;
         if (inflight?.promise === promise) inflight = null;
-        if (read.kind === 'answer') latest = read.stored;
+        if (read.kind === 'answer') latest = { stored: read.stored, whose };
         settledListeners.forEach(l => l(read, url, identity.publicKey));
         return read;
     });
@@ -146,9 +171,10 @@ export function loadHome(
 
 /** Home's answer for the header, while it is fresher than {@link HOME_FRESH_FOR_HEADER_MS} and asked for `needs`. */
 export function freshHomeForHeader(url: string | null, publicKey: string | null | undefined, now: number = Date.now()): StoredHome | null {
-    if (!latest || !url || !publicKey || latest.publicKey !== publicKey || norm(latest.url) !== norm(url)) return null;
-    if (!latest.asked.split(',').includes('needs')) return null;
-    return now - latest.at >= 0 && now - latest.at < HOME_FRESH_FOR_HEADER_MS ? latest : null;
+    const kept = latest && stillOnPhone(latest.whose) ? latest.stored : null;
+    if (!kept || !url || !publicKey || kept.publicKey !== publicKey || norm(kept.url) !== norm(url)) return null;
+    if (!kept.asked.split(',').includes('needs')) return null;
+    return now - kept.at >= 0 && now - kept.at < HOME_FRESH_FOR_HEADER_MS ? kept : null;
 }
 
 /**
@@ -182,12 +208,15 @@ export function onHomeRead(listener: (read: HomeRead, url: string, publicKey: st
     return () => { settledListeners.delete(listener); };
 }
 
-/** For the tests: forget the shared read, the latest answer and any interests save under way. */
+/** For the tests: forget the shared read, the latest answer, any interests save under way, and whose Home it was. */
 export function resetHomeStoreForTests(): void {
+    resetHomeAccountForTests();
     latest = null;
     inflight = null;
     settledListeners.clear();
     interestsTurn = 0;
+    interestsSaves = 0;
+    interestsSaving = 0;
     interestsQueue = Promise.resolve();
 }
 
@@ -202,7 +231,9 @@ export async function readPhoneLayout(publicKey: string, url: string): Promise<H
     }
 }
 
-export async function writePhoneLayout(publicKey: string, url: string, layout: HomeLayout): Promise<void> {
+/** The phone's copy of the layout, for `whose` (by default the account as of now) while it is still on the phone. */
+export async function writePhoneLayout(publicKey: string, url: string, layout: HomeLayout, whose: HomeAccount = homeAccount(publicKey)): Promise<void> {
+    if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(homeLayoutStoreKey(publicKey, url), JSON.stringify(layout));
     } catch {
@@ -212,9 +243,12 @@ export async function writePhoneLayout(publicKey: string, url: string, layout: H
 
 /**
  * The phone's copy of the layout made the account's again (null: none): after the node refused the phone's, so the
- * phone's is no longer newer and is never sent again by itself.
+ * phone's is no longer newer and is never sent again by itself. Only while `whose` is still on the phone.
  */
-export async function yieldPhoneLayout(publicKey: string, url: string, account: HomeLayout | null): Promise<void> {
+export async function yieldPhoneLayout(
+    publicKey: string, url: string, account: HomeLayout | null, whose: HomeAccount = homeAccount(publicKey),
+): Promise<void> {
+    if (whose.publicKey !== publicKey || !stillOnPhone(whose)) return;
     try {
         if (account) await AsyncStorage.setItem(homeLayoutStoreKey(publicKey, url), JSON.stringify(account));
         else await AsyncStorage.removeItem(homeLayoutStoreKey(publicKey, url));
@@ -269,6 +303,30 @@ export async function saveHomePreferences(
     }
 }
 
+// ── The one-time reveal and its hint (§6.2) ───────────────────────────────────────────────────────────────────────
+
+export type HomeOnce = 'reveal' | 'hint';
+const onceKey = (which: HomeOnce, publicKey: string) => (which === 'reveal' ? homeRevealStoreKey(publicKey) : homeHintStoreKey(publicKey));
+
+/** Whether the account has seen the reveal or the hint here. A phone that can't say counts as seen: never shown twice. */
+export async function seenOnce(publicKey: string, which: HomeOnce): Promise<boolean> {
+    try {
+        return !!(await AsyncStorage.getItem(onceKey(which, publicKey)));
+    } catch {
+        return true;
+    }
+}
+
+/** The reveal or the hint seen, for `whose` while it is still on the phone. */
+export async function markSeenOnce(whose: HomeAccount, which: HomeOnce): Promise<void> {
+    if (!stillOnPhone(whose)) return;
+    try {
+        await AsyncStorage.setItem(onceKey(which, whose.publicKey), '1');
+    } catch {
+        // Shown once more at the next landing at most.
+    }
+}
+
 // ── The interests ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 export async function readPhoneInterests(): Promise<string[]> {
@@ -281,7 +339,9 @@ export async function readPhoneInterests(): Promise<string[]> {
     }
 }
 
-export async function writePhoneInterests(list: readonly string[]): Promise<void> {
+/** The phone's copy of the stars; for `whose`, only while that account is still on the phone (none: a phone with no account). */
+export async function writePhoneInterests(list: readonly string[], whose?: HomeAccount | null): Promise<void> {
+    if (whose && !stillOnPhone(whose)) return;
     try {
         await AsyncStorage.setItem(FAV_CATEGORIES_STORE_KEY, JSON.stringify(list));
     } catch {
@@ -304,7 +364,8 @@ async function interestsState(publicKey: string, url: string): Promise<Interests
     }
 }
 
-async function setInterestsState(publicKey: string, url: string, state: InterestsState | null): Promise<void> {
+async function setInterestsState(publicKey: string, url: string, state: InterestsState | null, whose: HomeAccount): Promise<void> {
+    if (!stillOnPhone(whose)) return;
     try {
         if (state) await AsyncStorage.setItem(homeInterestsOwedStoreKey(publicKey, url), state);
         else await AsyncStorage.removeItem(homeInterestsOwedStoreKey(publicKey, url));
@@ -321,6 +382,9 @@ const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.
  * (the newer list is still owed). A landing that read the phone before a change leaves that change alone.
  */
 let interestsTurn = 0;
+/** The interests saves begun (counted up as each is made), and how many are waiting their turn or out now. */
+let interestsSaves = 0;
+let interestsSaving = 0;
 /** The interests saves, one at a time in the order made, so the node takes the latest list last. */
 let interestsQueue: Promise<unknown> = Promise.resolve();
 
@@ -330,8 +394,35 @@ function inTurn<T>(job: () => Promise<T>): Promise<T> {
     return run;
 }
 
-/** The count of changes now: Home takes it as it asks the node, and gives it to {@link reconcileInterests}. */
-export const interestsTurnNow = (): number => interestsTurn;
+/** One interests save, counted from the moment it is made until it has its answer (or is never sent). */
+function saveInTurn<T>(job: () => Promise<T>): Promise<T> {
+    interestsSaves += 1;
+    interestsSaving += 1;
+    return inTurn(job).finally(() => { interestsSaving -= 1; });
+}
+
+/**
+ * Where the interests stand as Home asks the node: the changes made, the saves begun and how many were waiting or out,
+ * and the account's generation (home-account.ts). Home takes it as it asks, and gives it to {@link reconcileInterests}.
+ */
+export interface InterestsTurn {
+    readonly changes: number;
+    readonly saves: number;
+    readonly saving: number;
+    readonly generation: number;
+}
+
+export const interestsTurnNow = (): InterestsTurn => ({
+    changes: interestsTurn, saves: interestsSaves, saving: interestsSaving, generation: homeGeneration(),
+});
+
+/**
+ * Whether an answer asked at `since` may be older than what the phone has: a star tapped since, or a save that was
+ * waiting or out as it was asked, or begun after. The node may have built the answer before such a save landed
+ * (review 4166559374: two quick stars on a slow link, a read between the saves), so its list must not overwrite them.
+ */
+const answerMayBeOlder = (since: InterestsTurn): boolean =>
+    since.changes !== interestsTurn || since.saving > 0 || since.saves !== interestsSaves;
 
 /**
  * The member starred or unstarred a category (the interests card, the Market's "Tune" or its For You panel): the
@@ -342,14 +433,16 @@ export const interestsTurnNow = (): number => interestsTurn;
 export async function saveInterests(url: string | null, identity: BeanPoolIdentity | null | undefined, list: readonly string[]): Promise<boolean> {
     const turn = ++interestsTurn;
     const mine = [...list];
-    await writePhoneInterests(mine);
-    if (!url || !identity) return false;
-    await setInterestsState(identity.publicKey, url, 'owed');
-    return inTurn(async () => {
-        if (turn !== interestsTurn) return false;
+    const whose = identity ? homeAccount(identity.publicKey) : null;
+    await writePhoneInterests(mine, whose);
+    if (!url || !identity || !whose) return false;
+    await setInterestsState(identity.publicKey, url, 'owed', whose);
+    return saveInTurn(async () => {
+        // Overtaken by a newer star, or the account has left the phone: never sent.
+        if (turn !== interestsTurn || !stillOnPhone(whose)) return false;
         const saved = await saveHomePreferences(url, identity, { interests: mine });
         if (!saved || turn !== interestsTurn) return false;
-        await setInterestsState(identity.publicKey, url, saved === SAVE_REFUSED ? null : 'synced');
+        await setInterestsState(identity.publicKey, url, saved === SAVE_REFUSED ? null : 'synced', whose);
         return saved !== SAVE_REFUSED;
     });
 }
@@ -357,28 +450,35 @@ export async function saveInterests(url: string | null, identity: BeanPoolIdenti
 /**
  * At a landing, the account's interests (from the answer's `me`) and the phone's made one: an owed save is sent; the
  * stars a member made in the Market before Home existed are sent once to an account that has none; otherwise, or when
- * the node refuses the phone's, the account's win and the phone's copy follows. A star tapped since `since` (the count when the answer was asked, so an
- * answer made before the star can't undo it) is left as it is: its own save carries it. Returns the list Home draws with.
+ * the node refuses the phone's, the account's win and the phone's copy follows. `since` is where the interests stood as
+ * the answer was asked ({@link interestsTurnNow}): a star tapped since, or a save waiting, out or begun since, means the
+ * answer may be older than what the phone has, so the phone's list is left as it is (its own save carries it) and the
+ * next landing agrees. Nothing is written or sent once the account has left the phone. Returns the list Home draws with.
  */
-export async function reconcileInterests(url: string, identity: BeanPoolIdentity, account: readonly string[], since: number = interestsTurn): Promise<string[]> {
-    const turn = since;
+export async function reconcileInterests(
+    url: string, identity: BeanPoolIdentity, account: readonly string[], since: InterestsTurn = interestsTurnNow(),
+): Promise<string[]> {
+    const whose: HomeAccount = { publicKey: identity.publicKey, generation: since.generation };
     const phone = await readPhoneInterests();
     const state = await interestsState(identity.publicKey, url);
-    if (turn !== interestsTurn) return readPhoneInterests();
+    if (!stillOnPhone(whose) || answerMayBeOlder(since)) return readPhoneInterests();
     const push = state === 'owed' || (state === null && account.length === 0 && phone.length > 0);
+    // This landing's own save, once sent, is the one save begun since the answer it is allowed.
+    let mark = since;
     if (push) {
-        const saved = await inTurn(async () => {
-            if (turn !== interestsTurn) return null;
+        const saved = await saveInTurn(async () => {
+            if (since.changes !== interestsTurn || !stillOnPhone(whose)) return null;
             const out = await saveHomePreferences(url, identity, { interests: phone });
-            if (out && out !== SAVE_REFUSED && turn === interestsTurn) await setInterestsState(identity.publicKey, url, 'synced');
+            if (out && out !== SAVE_REFUSED && since.changes === interestsTurn) await setInterestsState(identity.publicKey, url, 'synced', whose);
             return out;
         });
-        if (turn !== interestsTurn) return readPhoneInterests();
+        mark = { ...since, saves: since.saves + 1 };
+        if (!stillOnPhone(whose) || answerMayBeOlder(mark)) return readPhoneInterests();
         // Refused: the account's list stands (below), and the phone's is never sent again by itself.
         if (saved !== SAVE_REFUSED) return phone;
     }
-    if (!sameList(account, phone)) await writePhoneInterests(account);
-    if (turn !== interestsTurn) return readPhoneInterests();
-    if (state !== 'synced') await setInterestsState(identity.publicKey, url, 'synced');
+    if (!sameList(account, phone)) await writePhoneInterests(account, whose);
+    if (!stillOnPhone(whose) || answerMayBeOlder(mark)) return readPhoneInterests();
+    if (state !== 'synced') await setInterestsState(identity.publicKey, url, 'synced', whose);
     return [...account];
 }

@@ -49,8 +49,8 @@ import { signOutOfThisPhone } from '../account-leaves-phone';
 import { draftIdentity, importIdentity, wipeIdentityScopedStorage, type BeanPoolIdentity } from '../identity';
 import { saveRestoredAccount } from '../restore-account';
 import {
-    readHomeFromNode, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests, resetHomeStoreForTests, saveInterests,
-    writePhoneLayout,
+    freshHomeForHeader, interestsTurnNow, loadHome, readHomeFromNode, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
+    resetHomeStoreForTests, saveInterests, writePhoneLayout, yieldPhoneLayout,
 } from '../home-store';
 import { cardsToAsk, type HomeAnswer } from '../home-cards';
 import { homeHintStoreKey, homeRevealStoreKey } from '../storage-keys';
@@ -59,7 +59,14 @@ import { boundSignatureValid } from './server-signature-check';
 const NODE = 'https://mullum.beanpool.org';
 
 /** The community: each signer's own preferences row (routes/community.ts POST /api/members/preferences), and Home. */
-const node = { rows: new Map<string, { interests?: string[] }>(), posts: [] as { signer: string; interests?: string[] }[] };
+const node = {
+    rows: new Map<string, { interests?: string[] }>(),
+    posts: [] as { signer: string; interests?: string[] }[],
+    /** While set, a Home read (its answer built as it arrives) or a preferences save waits here until released. */
+    holdHome: null as Promise<void> | null,
+    holdSave: null as Promise<void> | null,
+    waiting: 0,
+};
 
 function answerFor(pk: string): HomeAnswer {
     return {
@@ -79,6 +86,9 @@ beforeEach(async () => {
     mem.secure.clear();
     node.rows.clear();
     node.posts = [];
+    node.holdHome = null;
+    node.holdSave = null;
+    node.waiting = 0;
     resetHomeStoreForTests();
     zara = await draftIdentity();
     yusuf = await draftIdentity();
@@ -90,10 +100,12 @@ beforeEach(async () => {
         if (u.origin !== NODE || !signer) throw new Error(`No other request may leave the test: ${req.method} ${url}`);
         if (u.pathname === '/api/home' && req.method === 'GET') {
             const a = answerFor(signer.publicKey);
+            if (node.holdHome) { node.waiting++; await node.holdHome; node.waiting--; }
             return new Response(JSON.stringify(a), { status: 200, headers: { ETag: `W/"home-${createHash('sha256').update(JSON.stringify(a.me)).digest('hex').slice(0, 12)}"` } });
         }
         if (u.pathname === '/api/members/preferences' && req.method === 'POST') {
             const { preferences } = JSON.parse(req.body);
+            if (node.holdSave) { node.waiting++; await node.holdSave; node.waiting--; }
             node.posts.push({ signer: signer.publicKey, interests: preferences.interests });
             if (preferences.interests) node.rows.set(signer.publicKey, { ...node.rows.get(signer.publicKey), interests: preferences.interests });
             return new Response(JSON.stringify({ success: true, ...preferences }), { status: 200 });
@@ -176,5 +188,111 @@ describe('a restore that replaces the account on the phone', () => {
         expect(await readPhoneInterests()).toEqual(['food']);
         expect(await reconcileInterests(NODE, zara, ['food'])).toEqual(['food']);
         expect(node.posts.length).toBe(posts);
+    });
+});
+
+// ── A read or a save still out when the account leaves (PR #1483 review 4166559191) ─────────────────────────────────────
+
+const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise(r => setTimeout(r, 0)); expect(done()).toBe(true); };
+
+/** Zara's Home landing as app/(tabs)/index.tsx makes it (the turn taken as it asks, then the read), held at the node. */
+async function zaraLandsSlowly() {
+    let release!: () => void;
+    node.holdHome = new Promise<void>(r => { release = r; });
+    const since = interestsTurnNow();
+    const reading = loadHome(NODE, zara, cardsToAsk(null), await readStoredHome(zara.publicKey, NODE));
+    await until(() => node.waiting === 1);
+    return { since, reading, release };
+}
+
+/**
+ * The read lands and the screen goes on with it: `identityRef` still holds Zara until Settings clears it after
+ * `signOutOfThisPhone` returns (settings.tsx), or welcome.tsx sets the restored account, so it takes her interests
+ * (app/(tabs)/index.tsx: reconcileInterests with the answer's `me.interests`).
+ */
+async function screenTakes(landing: Awaited<ReturnType<typeof zaraLandsSlowly>>) {
+    const read = await landing.reading;
+    await reconcileInterests(NODE, zara, read.kind === 'answer' ? read.stored.answer.me!.interests : ['food'], landing.since);
+}
+
+describe('a Home read or save still out when the account leaves writes nothing back (PR #1483 review 4166559191)', () => {
+    it('Sign Out: the read lands after the wipe; nothing of Zara\'s Home comes back, and Yusuf sends none of her stars', async () => {
+        await zaraUsesHome();
+        const landing = await zaraLandsSlowly();
+        await signOut(zara);
+        expect(homeKeys()).toEqual([]);
+        landing.release();
+        await screenTakes(landing);
+        expect(homeKeys()).toEqual([]);
+        // Nor does the header draw her lines from memory.
+        expect(freshHomeForHeader(NODE, zara.publicKey)).toBeNull();
+        await importIdentity(yusuf);
+        mem.async.set('beanpool_anchor_url', NODE);
+        expect(await yusufLands()).toEqual([]);
+        expect(node.posts.filter(p => p.signer === yusuf.publicKey)).toEqual([]);
+        expect(node.rows.get(yusuf.publicKey)?.interests).toBeUndefined();
+    });
+
+    it('Replace: Zara\'s read lands once Yusuf is on the phone; nothing of hers is kept, and his first landing sends nothing', async () => {
+        await zaraUsesHome();
+        const landing = await zaraLandsSlowly();
+        await saveRestoredAccount({ identity: yusuf, replacesAnother: true }, NODE);
+        landing.release();
+        await screenTakes(landing);
+        expect(homeKeys()).toEqual([]);
+        expect(await yusufLands()).toEqual([]);
+        expect(node.posts.filter(p => p.signer === yusuf.publicKey)).toEqual([]);
+        expect(node.rows.get(yusuf.publicKey)?.interests).toBeUndefined();
+    });
+
+    it('Replace: the read lands in the narrow window, after the wipe and before the restored account is on the phone', async () => {
+        await zaraUsesHome();
+        let landing: Awaited<ReturnType<typeof zaraLandsSlowly>> | null = await zaraLandsSlowly();
+        const set = vi.mocked(AsyncStorage.setItem);
+        const real = set.getMockImplementation()!;
+        // restore-account.ts saveRestoredAccount: the wipe, then the community's address, then the key.
+        set.mockImplementation(async (key: string, value: string) => {
+            if (key === 'beanpool_anchor_url' && landing) {
+                const l = landing;
+                landing = null;
+                expect(homeKeys()).toEqual([]);
+                l.release();
+                await screenTakes(l);
+            }
+            return real(key, value);
+        });
+        try {
+            await saveRestoredAccount({ identity: yusuf, replacesAnother: true }, NODE);
+        } finally {
+            set.mockImplementation(real);
+        }
+        expect(landing).toBeNull();
+        expect(homeKeys()).toEqual([]);
+        expect(await yusufLands()).toEqual([]);
+        expect(node.posts.filter(p => p.signer === yusuf.publicKey)).toEqual([]);
+    });
+
+    it('a star save out at Sign Out marks nothing when it lands, and the one queued behind it is never sent', async () => {
+        await zaraUsesHome();
+        let release!: () => void;
+        node.holdSave = new Promise<void>(r => { release = r; });
+        const tools = saveInterests(NODE, zara, ['food', 'tools']);
+        await until(() => node.waiting === 1);
+        const garden = saveInterests(NODE, zara, ['food', 'tools', 'garden']);
+        await signOut(zara);
+        expect(homeKeys()).toEqual([]);
+        release();
+        await Promise.all([tools, garden]);
+        expect(homeKeys()).toEqual([]);
+        expect(node.posts.filter(p => p.signer === zara.publicKey).map(p => p.interests)).toEqual([['food'], ['food', 'tools']]);
+    });
+
+    it('a layout written for an account that has left (a save landing late, the node\'s copy taken back) is dropped', async () => {
+        await zaraUsesHome();
+        await signOut(zara);
+        const layout = { v: 1 as const, order: ['beans' as const], hidden: [], dismissed: {}, updatedAt: '2026-10-02T10:00:00.000Z' };
+        await writePhoneLayout(zara.publicKey, NODE, layout);
+        await yieldPhoneLayout(zara.publicKey, NODE, layout);
+        expect(homeKeys()).toEqual([]);
     });
 });

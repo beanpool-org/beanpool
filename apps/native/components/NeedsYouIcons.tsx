@@ -9,7 +9,7 @@ import { getUnreadByConversation, getDecisions, getMarketplaceTransactions, sign
 import { createRefreshGate } from '../utils/refresh-gate';
 import { anchorUrl } from '../utils/node-post';
 import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '../utils/node-admin';
-import { getCachedNodeProfile, decisionsOn } from '../utils/node-profile';
+import { getCachedNodeProfile, decisionsOn, type NodeFeatures } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
     buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_SLOT,
@@ -17,7 +17,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import { HOME_HEADER_WAIT_MS, homeForHeader, onHomeRead } from '../utils/home-store';
-import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
+import { decideOnNode, localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
@@ -81,29 +81,30 @@ async function loadAdmin(identity: BeanPoolIdentity): Promise<Pick<NodeParts, 'a
     return { admin: { role: mine.role, queue }, communityName: mine.communityName };
 }
 
-/** Whether the community the phone is on has formal Decisions, as it last said (the tab strip keeps that copy current). */
-async function votesHere(): Promise<boolean> {
+/** The switches of the community the phone is on, as it last said (the tab strip keeps that copy current). No request. */
+async function switchesHere(): Promise<NodeFeatures | null> {
     const profile = await settle((async () => getCachedNodeProfile(await anchorUrl()))());
-    return decisionsOn(profile?.features);
+    return profile?.features ?? null;
 }
 
 /**
- * Two signed requests to the node, plus the admin queue for owners and admins. No Decisions where the node has none
- * (the worldwide community): nothing there is open to a vote, so there is no vote to show, and the 🛡️ words don't
- * say an emergency suspension is being voted on.
+ * Two signed requests to the node, plus the admin queue for owners and admins. A vote is asked for only where it lands
+ * on a screen the node shows, Commons → Decide (home-cards.ts `decideOnNode`: Decisions on, and Beans on so the Commons
+ * tab is there), by the same rule as the lines drawn from Home's answer (`mergeNeeds`), so a vote never opens a hidden
+ * tab and the icon doesn't come and go with the age of Home's answer (PR #1483 review 4166559525). On the worldwide
+ * community nothing is open to a vote, and the 🛡️ words don't say an emergency suspension is being voted on.
  */
 async function loadNode(identity: BeanPoolIdentity): Promise<NodeParts> {
-    const [decisions, yourGroups, admin, votesOn] = await Promise.all([
-        settle(votesHere().then(votes => (votes ? getDecisions('open') : null))),
+    const features = await switchesHere();
+    const [decisions, yourGroups, admin] = await Promise.all([
+        decideOnNode({ ...features }) ? settle(getDecisions('open')) : null,
         settle(signedGet('/api/your-groups').then(r => (r.ok ? r.json() : null))),
         settle(loadAdmin(identity)),
-        // A second read of the phone's own copy: no request.
-        votesHere(),
     ]);
     return {
         decisions: decisions && { ...decisions, signed: decisions.canPropose !== null },
         groupChats: Array.isArray(yourGroups?.items) ? yourGroups.items : null,
-        admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,
+        admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,
         communityName: admin?.communityName ?? null,
     };
 }

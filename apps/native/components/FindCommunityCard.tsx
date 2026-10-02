@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -15,14 +15,34 @@ import { rememberedKnocks, readKnockStatus, cardKnockLines, type KnockStatusResu
  * One request to the global node for everything it shows (`/api/global/home`), plus the answers to this phone's
  * own knocks, read from the communities it asked. Three actions: communities near you, start one, or be told
  * when one starts here. Built as a card so the home dashboard can host it later (D5).
+ *
+ * `onActionsAt`: where the actions rest on screen (window coordinates, dp), so the floating "+ ADD POST" steps aside
+ * while it would cover them (utils/fab-band.ts); null once the card goes.
  */
-export function FindCommunityCard({ point }: { point: Point | null }) {
+export function FindCommunityCard({ point, onActionsAt }: {
+    point: Point | null;
+    onActionsAt?: (at: { top: number; bottom: number } | null) => void;
+}) {
     const { colors } = useTheme();
     const { identity } = useIdentity();
     const [home, setHome] = useState<Fetched<GlobalHome> | null>(null);
     const [asked, setAsked] = useState<RememberedKnock[]>([]);
     const [statuses, setStatuses] = useState<Record<string, KnockStatusResult | null>>({});
     const [watchNote, setWatchNote] = useState<string | null>(null);
+    const actionsRef = useRef<View>(null);
+    const reportAt = useRef(onActionsAt);
+    reportAt.current = onActionsAt;
+    const measureActions = useCallback(() => {
+        actionsRef.current?.measureInWindow?.((_x, y, _w, h) => {
+            if (h > 0) reportAt.current?.({ top: y, bottom: y + h });
+        });
+    }, []);
+    // Measured again shortly after layout, as the feed's top inset settles (as the "one way back" card does).
+    const onActionsLayout = useCallback(() => {
+        measureActions();
+        setTimeout(measureActions, 300);
+    }, [measureActions]);
+    useEffect(() => () => { reportAt.current?.(null); }, []);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         card: { marginHorizontal: 16, marginBottom: 10, borderRadius: 14, borderWidth: 1, borderColor: colors.brand.primary, backgroundColor: colors.brand.tint, padding: 14 },
@@ -81,7 +101,8 @@ export function FindCommunityCard({ point }: { point: Point | null }) {
                 <Text key={l.url} style={styles.line}>{l.invited ? '🎉 ' : '⏳ '}{l.text}</Text>
             ))}
             {!!watchNote && <Text style={styles.line} accessibilityLiveRegion="polite">{watchNote}</Text>}
-            <View style={styles.actions}>
+            {/* Not flattened away (Android), so it can be measured on screen. */}
+            <View style={styles.actions} ref={actionsRef} collapsable={false} onLayout={onActionsLayout}>
                 <Pressable style={[styles.action, styles.actionMain]} onPress={() => router.push('/find-community')} accessibilityRole="button">
                     <MaterialCommunityIcons name="map-marker-radius-outline" size={18} color={colors.text.inverse} />
                     <Text style={[styles.actionText, styles.actionTextMain]}>Communities near you</Text>

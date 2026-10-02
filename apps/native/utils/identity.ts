@@ -9,8 +9,8 @@ import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
-    CANONICAL_PROFILE_STORE_KEY, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY,
-    PUSH_REGISTRATIONS_DUE_STORE_KEY,
+    CANONICAL_PROFILE_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY,
+    PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
 } from './storage-keys';
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
@@ -453,8 +453,9 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem(PUSH_REGISTRATIONS_DUE_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
+    // Home's copies hold the account's own Beans, deals and who wrote to it (utils/home-store.ts).
     const accountKeys = allKeys.filter((k: string) =>
-        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('bp_offline_invites_'));
+        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX));
     if (accountKeys.length > 0) {
         await storage.multiRemove(accountKeys);
     }

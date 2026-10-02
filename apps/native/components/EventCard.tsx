@@ -129,7 +129,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         >
             {/*
               * The host's photo, the same size, crop and cache policy the offer card beside it uses in the list
-              * (index.tsx list view): a 96dp square on the left, with the lines beside it. It sits inside the
+              * (market.tsx list view): a 96dp square on the left, with the lines beside it. It sits inside the
               * card's own Pressable and has no onPress of its own, so it never becomes a second tap target.
               * Without a photo the card is exactly the stack it has always been.
               */}

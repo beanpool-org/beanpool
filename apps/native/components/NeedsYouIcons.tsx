@@ -16,10 +16,17 @@ import {
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
+import { HOME_HEADER_WAIT_MS, homeForHeader, onHomeRead } from '../utils/home-store';
+import { localNeeds, mergeNeeds, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
 // wording live in utils/needs-you.ts.
+//
+// Home's answer (GET /api/home, utils/home-store.ts) carries the same lines (design §5.2 "The header reads Home's
+// answer"): while one is fresher than two minutes the node's part (admin work, votes, group lines) is drawn from it and
+// the header asks the node nothing; on Home it waits a moment for the read Home has under way. The phone's own deals
+// and unread messages still come from its database.
 
 const ICON: Record<NeedsYouKind, React.ComponentProps<typeof MaterialCommunityIcons>['name']> = {
     admin: 'shield-account-outline',
@@ -41,11 +48,11 @@ const SAFETY_POLL_MS = 120_000;
 // writes it there, so read a moment later rather than immediately.
 const WS_SETTLE_MS = 3_000;
 
-/** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). */
-function go(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
+/** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). Home's Needs you card too. */
+export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
     switch (target.to) {
         case 'deal': return router.push({ pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } });
-        case 'my-deals': return router.push({ pathname: '/(tabs)/', params: { tab: 'deals' } });
+        case 'my-deals': return router.push({ pathname: '/(tabs)/market', params: { tab: 'deals' } });
         // Commons has no route or param for one Decision, so every vote lands on its Decide section.
         case 'decide': return router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
         // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
@@ -146,14 +153,23 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
 
     const local = useRef<LocalParts>({ transactions: null, conversations: null });
     const node = useRef<NodeParts>({ decisions: null, groupChats: null, admin: null, communityName: null });
+    /** The node's lines from Home's answer, while the header draws from it (null: from its own reads). */
+    const home = useRef<HomeNeedsItem[] | null>(null);
     const localBusy = useRef(false);
     const localAgain = useRef(false);
     const nodeBusy = useRef(false);
     const gate = useRef<ReturnType<typeof createRefreshGate> | null>(null);
+    const pathnameRef = useRef(pathname);
+    pathnameRef.current = pathname;
 
     const rebuild = useCallback(() => {
         if (!me) { setEntries([]); return; }
-        setEntries(buildNeedsYou({ me, now: Date.now(), ...local.current, ...node.current }));
+        const now = Date.now();
+        if (home.current) {
+            setEntries(mergeNeeds(home.current, localNeeds(me, now, local.current.transactions, local.current.conversations), now));
+            return;
+        }
+        setEntries(buildNeedsYou({ me, now, ...local.current, ...node.current }));
     }, [me]);
 
     const refreshLocal = useCallback(async () => {
@@ -173,16 +189,35 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     useEffect(() => {
         local.current = { transactions: null, conversations: null };
         node.current = { decisions: null, groupChats: null, admin: null, communityName: null };
+        home.current = null;
         setEntries([]);
         if (!me) return;
         const g = createRefreshGate(NODE_MIN_GAP_MS, async () => {
             const id = identityRef.current;
             if (nodeBusy.current || !id || id.publicKey !== me) return;
             nodeBusy.current = true;
-            try { node.current = await loadNode(id); rebuild(); } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
+            try {
+                // Home's answer when it is fresh (or, on Home, the one its read is about to bring): no request of our own.
+                const url = await anchorUrl();
+                const fromHome = await homeForHeader(url, me, pathnameRef.current === '/' ? HOME_HEADER_WAIT_MS : 0);
+                if (fromHome) {
+                    home.current = fromHome.answer.cards.needs?.items ?? [];
+                    node.current = { ...node.current, communityName: fromHome.answer.cards.community?.name ?? node.current.communityName };
+                } else {
+                    home.current = null;
+                    node.current = await loadNode(id);
+                }
+                rebuild();
+            } catch { /* keep what we had */ } finally { nodeBusy.current = false; }
         });
         gate.current = g;
-        return () => { g.cancel(); if (gate.current === g) gate.current = null; };
+        // Home's read landed: draw from it at once (its lines are the node's, as fresh as they come).
+        const off = onHomeRead((read, _url, publicKey) => {
+            if (read.kind !== 'answer' || publicKey !== me || !read.stored.asked.split(',').includes('needs')) return;
+            home.current = read.stored.answer.cards.needs?.items ?? [];
+            rebuild();
+        });
+        return () => { g.cancel(); off(); if (gate.current === g) gate.current = null; };
     }, [me, rebuild]);
 
     const poke = useCallback(() => {
@@ -213,7 +248,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
     // 🛡️ is the Settings "Manage" press, landing at the item's /settings section; the rest are app routes.
     const open = (t: NeedsYouTarget) => {
         if (t.to === 'admin') { manage.start(node.current.communityName || 'this community', t.section); return; }
-        go(t);
+        goToNeedsTarget(t);
     };
 
     const fit = fitNeedsYou(entries, width);

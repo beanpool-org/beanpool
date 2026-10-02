@@ -147,3 +147,37 @@ export function oneWayBackStoreKey(publicKey: string): string {
 export function oneWayBackAskedStoreKey(publicKey: string): string {
     return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;
 }
+
+/**
+ * Home (app/(tabs)/index.tsx, utils/home-store.ts): one account's last answer from one community, its copy of the layout,
+ * and an interests save still owed to the node. They hold the account's own things (its Beans, its deals, who wrote to
+ * it), so every key starts with {@link HOME_STORE_PREFIX} and Sign Out wipes them with the account (utils/identity.ts
+ * wipeIdentityScopedStorage); each also names the account, so another account on the phone never reads one.
+ */
+export const HOME_STORE_PREFIX = 'beanpool_home:';
+
+const homeCommunity = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
+
+export function homeAnswerStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}answer:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+export function homeLayoutStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}layout:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+export function homeInterestsOwedStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}interests-owed:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+/**
+ * Home's one-time reveal and its one-line hint (design §6.2), per account: '1' once each has been seen. Kept through Sign
+ * Out on purpose, as the "one way back" card is: the same account restored here doesn't get the welcome again.
+ */
+export function homeRevealStoreKey(publicKey: string): string {
+    return `beanpool_home_reveal:${publicKey.toLowerCase()}`;
+}
+
+export function homeHintStoreKey(publicKey: string): string {
+    return `beanpool_home_hint:${publicKey.toLowerCase()}`;
+}

@@ -59,7 +59,7 @@ An account made with 12 words also starts slower than one made with a sign-in, f
 
 ### Adding a sign-in later
 
-You can add a sign-in at any time. It becomes a second way back, and it lifts the 12-words limits at once.
+You can add a sign-in later, from the phone you joined on (a phone you restored your account onto with the 12 words does not offer it), and not while your account is suspended. It becomes a second way back, and it lifts the 12-words limits at once.
 
 - Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. At **Safety Backup** the button says **Add a sign-in as a second way back**.
 - Tap **Continue with Google**, **Continue with Facebook** or, on an iPhone, **Continue with Apple**, and sign in once. The app may ask for your phone's lock first.

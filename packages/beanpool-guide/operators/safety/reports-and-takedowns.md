@@ -72,7 +72,7 @@ A post is hidden when reporters from **three independent circles** count towards
 
 Reporters who joined through the open door from the same internet address within **24 hours** of each other are one circle, and so are reporters who came in on invites traced back to the same member. The trace stops at an owner, admin or moderator, who let each of those people in themselves.
 
-So established members from three circles can hide a newcomer's spam, but not the posts of someone who has been there for months unless they are at least half as established themselves: otherwise those reports wait in the list like any other. That is also why reports can't put an established member back on the new-account limits.
+So established members from three circles can hide a newcomer's spam, but not the posts of someone who has been there for months unless they are at least half as established themselves: otherwise those reports wait in the list like any other. A post they hide stops counting towards its author's 3 posts until a moderator keeps it, so it can put someone who has only just passed the new-account limits back on them.
 
 A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**: one report from an established member hides it. Their account cost nothing to make, so what protects the community is how cheaply a real member can hide its spam. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's.
 

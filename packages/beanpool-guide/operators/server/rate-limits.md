@@ -9,7 +9,7 @@ When someone goes over a limit the server answers "too many requests" (HTTP 429)
 
 ## The limits
 
-- **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.
+- **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted, and neither are the two public reads other servers make (/api/community/info and /api/community/health). A member's own requests are counted wherever they go, buying from another community included.
 - **Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.
 - **The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.
 - **New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.
@@ -26,7 +26,7 @@ On a community whose door is open (the global community), a 12-words join asks t
 
 How the level is set:
 
-- **A 12-words join**: how many of the connection's steps it has reached, plus how many of the community's, at most 5. From a connection you removed a newcomer from in the last 7 days (see Members and invites), at least removedNetworkLevel.
+- **A 12-words join**: how many of the connection's steps it has reached, plus how many of the community's, at most 5. From a connection where a newcomer joined in the last 7 days and was removed within a day of joining (see Members and invites), at least removedNetworkLevel.
 - **A sign-in join**: no work before the connection's signInWorkFrom-th join in the hour. From there, the connection's steps less signInDiscount, never below 0.
 
 The numbers, by name, with their defaults:
@@ -35,7 +35,7 @@ The numbers, by name, with their defaults:
 - **nodeSteps**, 500,2000,5000: the 12-words joins on the whole community in the last 10 minutes, this one included, at which each of the community's steps starts. Counted in memory, so a restart starts it again at 0.
 - **signInWorkFrom**, 30: the join from one connection in an hour from which a sign-in join asks for any work.
 - **signInDiscount**, 2: how many steps less a sign-in join asks for.
-- **removedNetworkLevel**, 4: the least a 12-words join asks for from a connection you removed a newcomer from in the last 7 days.
+- **removedNetworkLevel**, 4: the least a 12-words join asks for from a connection where a newcomer joined in the last 7 days and was removed within a day of joining.
 - **wordsPerHour**, 500, and **wordsPerDay**, 2000: past these many 12-words accounts from one connection, a 12-words join from it is refused, with how long to wait. The sign-in way stays open there.
 - **signInPerHour**, 1000, and **signInPerDay**, 5000: the same for sign-ins. Each way counts only its own joins.
 
@@ -89,7 +89,7 @@ If it keeps happening, someone is guessing your password. The logs name the addr
 
 ## Many people on one connection
 
-A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away.
+A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal.
 
 If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
 
@@ -98,7 +98,7 @@ If your server sits behind a proxy on another machine, list that proxy in TRUSTE
 The message says which:
 
 - "Gateway rate limit exceeded": the gateway.
-- "Too many attempts": sign-in and recovery attempts, or checking invite codes.
+- "Too many attempts": sign-in and recovery attempts, checking invite codes, or the open door's 600 requests a minute from one address.
 - "A very large number of 12-words accounts were made from your network", or "Too many new accounts have joined from your network": the open door's ceilings, for 12 words and for sign-ins.
 - "Too many administrative requests": Settings, 300 a minute.
 - "You're sending messages too fast": chats, direct messages included.

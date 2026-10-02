@@ -21,17 +21,17 @@ Joining with a code is signed by the new member's own key, from the app or the w
 
 For each member who joined through the open door, your server keeps a small record beside their account:
 
-- **How they came in**: 12 words, Google, Apple or Facebook. The Onboarding Funnel counts joins by it, and it sets which new-account limits they have (see A member's page, below).
+- **How they came in**: 12 words, Google, Apple or Facebook. It sets which new-account limits they have (see A member's page, below), and adding a sign-in later changes it (below). The Onboarding Funnel counts joins by the way people first came in, which never changes.
 - **For a sign-in, a scrambled reference to that sign-in account**: never its email, its name or the provider's id for it. It is made with a key kept in a file beside the database, data/open-join.key, never in the database. It is what makes one sign-in account one member, and what turns a removed member's sign-in away. **For 12 words there is nothing like it**: the person is only their key and the name they chose.
 - **When they joined.** Their new-account limits are counted from it.
 - **A scrambled reference to the internet connection they joined from**, for a day, never the address. It sets how much setting up a join from that connection asks, and the ceilings (see Rate limits). For a member you remove within a day of their joining it is kept for 7 days from the join (below), and never longer for someone who deleted their own account. A standby never copies it.
-- **A random label shared by everyone who joined from one connection within a day of each other**: not the address, and not worked out from it. It makes their reports count as one, and shows you who joined together (see Reports and takedowns). It is cleared when a member who is not suspended or removed deletes their own account.
+- **A random label shared by everyone who joined from one connection within a day of the first of them**: not the address, and not worked out from it. It makes their reports count as one, and shows you who joined together (see Reports and takedowns). It is cleared when a member who is not suspended or removed deletes their own account.
 
 The setting up itself is not kept. The server checks it, and remembers only that it was used, until it runs out 10 minutes after it was handed out. The key it is checked with lives in memory: a restart, or a standby taking over, makes any setting up still in progress start again, which the apps do by themselves.
 
 A standby copies these records (all but the connection's reference), and so does the take-over bundle, so a server that takes over still knows who joined which way. A 12-words join needs no door key: a server without data/open-join.key turns sign-ins away and still takes 12-words joins.
 
-**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from the app at any time. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does.
+**Adding a sign-in later.** A member who joined with 12 words can add a sign-in from the phone they joined on (not from a phone they later restored the account onto), and not while they are suspended. Their record then reads as that sign-in's, with the same join time, and they move to the usual new-account limits at once. The server refuses a sign-in account that is already another member's here, or that belonged to a member you removed, and nothing changes. Adding one needs data/open-join.key, as a sign-in join does.
 
 ## Who may invite
 

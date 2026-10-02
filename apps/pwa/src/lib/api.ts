@@ -2401,8 +2401,11 @@ export async function getHome(params: { cards?: readonly string[]; lat?: number;
     return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };
 }
 
-/** What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew. */
-export interface SavedHomePreferences { success: boolean; 'home.layout'?: HomeLayout; interests?: string[] }
+/**
+ * What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew, and when those last
+ * changed there (lib/home-interests.ts compares it with the stamp an unsaved change was made on).
+ */
+export interface SavedHomePreferences { success: boolean; 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string }
 
 /** Save the member's Home layout and/or interests on their account (H1's two preference keys). */
 export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayout; interests?: string[] }): Promise<SavedHomePreferences> {

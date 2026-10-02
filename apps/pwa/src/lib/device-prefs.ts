@@ -10,6 +10,7 @@
  * account data and no secret — this survives sign-out by design.
  */
 import { clearHomeCache } from './home-cache';
+import { ACCOUNT_EPOCH_KEY } from './account-epoch';
 
 const DEVICE_KEYS = [
     'beanpool-install-dismissed',
@@ -22,10 +23,15 @@ const DEVICE_KEYS = [
  * IndexedDB besides the key (lib/identity.ts `wipeIdentity` takes the key): Home's last answer (lib/home-cache.ts),
  * which holds the member's Beans, who wrote to them, their groups and their layout. Every sign-out and delete runs this
  * one routine, so a new store of account state belongs here, not beside a caller.
+ *
+ * First of all, the account's epoch ends (lib/account-epoch.ts, inside clearHomeCache before its first wait): no page of
+ * this web address, another tab still on Home among them, writes the account's state back after this. Its value is
+ * kept across the wipe, as the device preferences are, so every tab can still tell.
  */
 export async function clearAccountStorage(): Promise<void> {
+    const home = clearHomeCache('signed-out');
     const keep = new Map<string, string>();
-    for (const key of DEVICE_KEYS) {
+    for (const key of [...DEVICE_KEYS, ACCOUNT_EPOCH_KEY]) {
         const value = localStorage.getItem(key);
         if (value !== null) keep.set(key, value);
     }
@@ -33,5 +39,5 @@ export async function clearAccountStorage(): Promise<void> {
     for (const [key, value] of keep) {
         try { localStorage.setItem(key, value); } catch { /* quota/private mode — not worth failing sign-out over */ }
     }
-    await clearHomeCache();
+    await home;
 }

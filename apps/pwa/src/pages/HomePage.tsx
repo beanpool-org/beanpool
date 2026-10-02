@@ -9,7 +9,10 @@
  *   drawn at once while the node is asked again; offline, it stays, and the page says so.
  * - **When it asks again:** on landing, on coming back to the tab, once after a doorbell (a sync, a live post, a notice;
  *   debounced 3 s), once the member's notices are marked seen, when a layout change shows a card the answer in hand
- *   wasn't built for, and a 120 s safety poll while the tab is in front. Never a per-card timer.
+ *   wasn't built for (made here, or the account's newer layout arriving in an answer), and a 120 s safety poll while the
+ *   tab is in front. Never a per-card timer.
+ * - **Sign-out in another tab** (lib/account-epoch.ts): this page drops the member's Home at once, reads nothing more as
+ *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh.
  * - **Tailoring** (§4): "…" on a card (Hide · Move up · Move down) and Edit home (components/HomeEditDialog.tsx); the
  *   layout is saved on the account (`home.layout`, H1) with this browser's copy, last write wins. The rules are
  *   lib/home-cards.ts.
@@ -29,7 +32,8 @@ import {
     type HomeAnswer, type HomeCardId, type HomeLayout, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
-import { resendUnsavedInterests, settleInterests, shareInterests } from '../lib/home-interests';
+import { settleInterests, shareInterests } from '../lib/home-interests';
+import { accountEpoch, accountEpochHolds, onAccountEpochEnd } from '../lib/account-epoch';
 import { onSocketOpen, onSyncActivity, onSystemAnnouncement } from '../lib/sync';
 import { onLivePostChange } from '../lib/live-posts';
 import { withJitter } from '../lib/jitter';
@@ -55,6 +59,8 @@ const SOCKET_OPEN_QUIET_MS = 10_000;
 export const HOME_HINT = 'This is your Home. Tap … on any card to move or hide it.';
 export const HOME_OFFLINE = "Couldn't reach your community; showing what we had.";
 export const HOME_FAILED = "Couldn't reach your community. Your other tabs still work.";
+/** The member signed out in another tab: this page shows and keeps nothing of theirs any more. */
+export const HOME_SIGNED_OUT = 'You signed out of this browser in another tab. Reload this page to carry on.';
 /** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
 export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
 /** Said politely once a card is hidden: where it went, and how it comes back. */
@@ -66,7 +72,9 @@ const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
 function readFlag(key: string): boolean {
     try { return localStorage.getItem(key) === '1'; } catch { return true; }
 }
+/** A member's own flag: never written once their account has left this browser (lib/account-epoch.ts). */
 function writeFlag(key: string): void {
+    if (!accountEpochHolds()) return;
     try { localStorage.setItem(key, '1'); } catch { /* a private window: shown again next time */ }
 }
 function reducedMotion(): boolean {
@@ -104,11 +112,13 @@ interface Props {
 
 export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
-    const cacheKey = useMemo(() => homeCacheKey(publicKey), [publicKey]);
+    // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
+    const [landing, setLanding] = useState(0);
+    const cacheKey = useMemo(() => homeCacheKey(publicKey), [publicKey, landing]);
 
     const [answer, setAnswer] = useState<HomeAnswer | null>(null);
     const [layout, setLayout] = useState<HomeLayout | null>(null);
-    const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed'>('loading');
+    const [status, setStatus] = useState<'loading' | 'ready' | 'offline' | 'failed' | 'signed-out'>('loading');
     const [failure, setFailure] = useState<string | null>(null);
     const [live, setLive] = useState('');
     // The interests the page holds after a tap (saved in the background); null: the answer's.
@@ -142,24 +152,33 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const pageRef = useRef<HTMLDivElement | null>(null);
     // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
     const focusAfterHide = useRef<HomeCardId[] | null>(null);
+    // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
+    const skipCopy = useRef(false);
 
     useEffect(() => {
         mounted.current = true;
         return () => { mounted.current = false; };
     }, []);
 
-    const keep = useCallback((a: HomeAnswer, l: HomeLayout | null) => {
-        void writeCachedHome(cacheKey, { answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() });
+    // Whether what was read or started under `epoch` may still be drawn and kept (lib/account-epoch.ts): nothing cleared
+    // since, and for a member, still signed in here. The lobby's visitor holds no account.
+    const holds = useCallback((epoch: number) => (publicKey ? accountEpochHolds(epoch) : epoch === accountEpoch()), [publicKey]);
+
+    // Kept only while it may be (writeCachedHome checks the epoch, `epoch` being the one the answer was read under).
+    const keep = useCallback((a: HomeAnswer, l: HomeLayout | null, epoch: number = accountEpoch()) => {
+        void writeCachedHome(cacheKey, { answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() }, epoch);
     }, [cacheKey]);
 
     const saveLayout = useCallback((next: HomeLayout) => {
-        if (!publicKey) return;
+        // Signed out, here or in another tab: nothing more is sent as that account.
+        if (!publicKey || !accountEpochHolds()) return;
         const seq = ++layoutSeq.current;
+        const epoch = accountEpoch();
         savingLayout.current += 1;
         saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
-                if (!mounted.current || seq !== layoutSeq.current) return;
+                if (!mounted.current || seq !== layoutSeq.current || !holds(epoch)) return;
                 unsavedRef.current = false;
                 // What the node kept: this layout with its stamp, or a newer one saved from another device.
                 const kept = normalizeLayout(r['home.layout']);
@@ -167,10 +186,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     layoutRef.current = kept;
                     setLayout(kept);
                 }
-                if (answerRef.current) keep(answerRef.current, layoutRef.current);
+                if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);
             })
             .catch(() => { /* kept in this browser, sent again after the next read */ });
-    }, [publicKey, keep]);
+    }, [publicKey, keep, holds]);
 
     // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
     // and sent again after the next read, whichever page made it.
@@ -180,21 +199,32 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }, [publicKey]);
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
+        // Signed out, here or in another tab: nothing more is read as that account.
+        if (publicKey && !accountEpochHolds()) return;
         if (inFlight.current) { again.current = true; return; }
         inFlight.current = true;
         lastStart.current = Date.now();
+        const epoch = accountEpoch();
         try {
             const p = pointRef.current;
             const sent = askedCards(layoutRef.current, answerRef.current);
             const read = await getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
-            if (!mounted.current) return;
+            // The page has gone, or a sign-out or a clear came while the read was out: what it brought is not this
+            // page's to draw or keep any more.
+            if (!mounted.current || !holds(epoch)) return;
             // 304: the copy drawn is still the answer, layout and all (its tag covers the cards asked). Anything not sent
             // since is sent again.
             if (read?.notModified && answerRef.current) {
                 builtForRef.current = cardsBuiltFor(sent, answerRef.current);
                 if (unsavedRef.current && layoutRef.current && savingLayout.current === 0) saveLayout(layoutRef.current);
-                if (publicKey) resendUnsavedInterests(publicKey);
+                // The account's interests are the ones in the copy drawn: a change made here that never reached them is
+                // sent again while they are unchanged since (lib/home-interests.ts).
+                const me = answerRef.current.me;
+                if (publicKey && me) {
+                    const settled = settleInterests(publicKey, me.interests, me.interestsUpdatedAt);
+                    setInterests(settled.movedUp ? settled.interests : null);
+                }
                 if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
                 statusRef.current = 'ready';
                 setStatus('ready');
@@ -212,9 +242,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             else if (merged === fromNode) unsavedRef.current = false;
             if (publicKey && a.me) {
                 // The account's interests are this browser's Market favourites too; a change made here that never reached
-                // the account, and ones an older build kept only here, are sent up instead.
-                const settled = settleInterests(publicKey, a.me.interests);
-                if (settled.movedUp) setInterests(settled.interests);
+                // the account (while it is unchanged since), and ones an older build kept only here, are sent up instead.
+                const settled = settleInterests(publicKey, a.me.interests, a.me.interestsUpdatedAt);
+                setInterests(settled.movedUp ? settled.interests : null);
             }
             builtForRef.current = cardsBuiltFor(sent, a);
             answerRef.current = a;
@@ -225,9 +255,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             statusRef.current = 'ready';
             setStatus('ready');
             setFailure(null);
-            keep(a, merged);
+            keep(a, merged, epoch);
+            // The account's layout, newer than this browser's (saved on another device or tab), shows a card this answer
+            // wasn't built for: read again at once with it in `cards=`, not at the next poll or doorbell.
+            if (merged && layoutNeedsRead(null, merged, a, builtForRef.current)) again.current = true;
         } catch (e) {
-            if (!mounted.current) return;
+            if (!mounted.current || !holds(epoch)) return;
             if (answerRef.current) {
                 statusRef.current = 'offline';
                 setStatus('offline');
@@ -247,7 +280,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 void fetchHomeRef.current?.('doorbell');
             }
         }
-    }, [keep, saveLayout, publicKey]);
+    }, [keep, saveLayout, publicKey, holds]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
 
@@ -259,9 +292,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         layoutRef.current = null;
         builtForRef.current = null;
         setAnswer(null);
+        // Signed out (here or in another tab) since this page loaded: nothing of the member's is read or drawn.
+        if (publicKey && !accountEpochHolds()) {
+            statusRef.current = 'signed-out';
+            setStatus('signed-out');
+            return;
+        }
         statusRef.current = 'loading';
         setStatus('loading');
-        readCachedHome(cacheKey).then((cached) => {
+        const afterClear = skipCopy.current;
+        skipCopy.current = false;
+        (afterClear ? Promise.resolve(null) : readCachedHome(cacheKey)).then((cached) => {
             if (cancelled || !mounted.current) return;
             if (cached && !answerRef.current) {
                 answerRef.current = cached.answer;
@@ -276,7 +317,28 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             if (!cancelled) void fetchHomeRef.current('landing');
         });
         return () => { cancelled = true; };
-    }, [cacheKey]);
+    }, [cacheKey, landing, publicKey]);
+
+    // A sign-out or a clear, here or in another tab (lib/account-epoch.ts): what this page holds goes at once, and it
+    // lands again, which reads nothing as a member who signed out, and reads afresh after a clear.
+    useEffect(() => onAccountEpochEnd((end) => {
+        answerRef.current = null;
+        etagRef.current = null;
+        layoutRef.current = null;
+        builtForRef.current = null;
+        unsavedRef.current = false;
+        setAnswer(null);
+        setLayout(null);
+        setInterests(null);
+        setEditOpen(false);
+        // Said in the same render as her Home goes, never a moment of "Loading" between.
+        if (end === 'signed-out' && publicKey) {
+            statusRef.current = 'signed-out';
+            setStatus('signed-out');
+        }
+        skipCopy.current = true;
+        setLanding((n) => n + 1);
+    }), [publicKey]);
 
     // Doorbells, the tab coming back, and the safety poll.
     useEffect(() => {
@@ -400,7 +462,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         return (
             <div className="max-w-xl mx-auto px-4 pt-2 pb-6" data-testid="home-page">
                 {visitor?.joinCard}
-                {status === 'failed' ? (
+                {status === 'signed-out' ? (
+                    <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
+                        <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{HOME_SIGNED_OUT}</p>
+                        <button type="button" onClick={() => window.location.reload()}
+                            className="min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            Reload
+                        </button>
+                    </div>
+                ) : status === 'failed' ? (
                     <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                         <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{failure}</p>
                         <button type="button" onClick={() => void fetchHome('retry')}

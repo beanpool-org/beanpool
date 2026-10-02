@@ -84,6 +84,8 @@ export interface HomeMe {
     isKeeper: boolean;
     probation: HomeProbation | null;
     interests: string[];
+    /** When `interests` last changed on the node; null when it keeps none, absent from a node before the stamp. */
+    interestsUpdatedAt?: string | null;
     area: { lat: number; lng: number } | null;
     firstOffer: boolean;
     standing: 'member' | 'suspended';

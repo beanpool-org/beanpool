@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type { HomeAnswer, HomeLayout } from '../lib/home-cards';
 import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 
 const hooks = vi.hoisted(() => ({ sync: [] as Array<() => unknown>, open: [] as Array<() => void>, announce: [] as Array<(a: unknown) => void> }));
 
@@ -26,9 +26,11 @@ vi.mock('../lib/sync', () => ({
 }));
 
 import * as api from '../lib/api';
-import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, hiddenWords } from './HomePage';
+import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, hiddenWords } from './HomePage';
 import { NOTICES_SEEN_EVENT } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
+import { resetAccountEpochForTest } from '../lib/account-epoch';
+import { clearInAnotherTab, signOutInAnotherTab, signOutOnChannelOnly } from '../lib/another-tab';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
 const NOW = new Date().toISOString();
@@ -68,6 +70,7 @@ beforeEach(() => {
     vi.stubGlobal('indexedDB', memoryIndexedDB());
     resetHomeCacheForTest();
     localStorage.clear();
+    resetAccountEpochForTest();
     hooks.sync = [];
     hooks.open = [];
     hooks.announce = [];
@@ -459,6 +462,8 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
  */
 function nodeKeepingLayout(full: HomeAnswer) {
     let account: HomeLayout | null = null;
+    /** The member's other device (or tab) saves `l` on the account. */
+    const savedElsewhere = (l: HomeLayout) => { account = l; };
     vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
         const l = prefs['home.layout'];
         if (l && (!account || Date.parse(l.updatedAt!) >= Date.parse(account.updatedAt!))) account = l;
@@ -469,7 +474,7 @@ function nodeKeepingLayout(full: HomeAnswer) {
         const cards = Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id)));
         return fresh({ ...full, layout: account, cards }, `W/"home-${asked.join('.')}-${account?.updatedAt ?? ''}"`);
     });
-    return { reads: () => vi.mocked(api.getHome).mock.calls.map(c => c[0]?.cards ?? null) };
+    return { reads: () => vi.mocked(api.getHome).mock.calls.map(c => c[0]?.cards ?? null), savedElsewhere };
 }
 
 describe('a card hidden on an earlier visit comes back at once (PR #1479 review, BLOCKING 2)', () => {
@@ -636,5 +641,145 @@ describe('First steps on the global node, on the web (PR #1479 review)', () => {
         const steps = await screen.findByTestId('home-card-steps');
         expect(within(steps).getByRole('button', { name: 'To do: Post something free or for swap' })).toBeInTheDocument();
         expect(within(steps).getByRole('link', { name: 'To do: Ask Byron Shire BeanPool to let you in' })).toHaveAttribute('href', 'https://byron.example.org');
+    });
+});
+
+describe('a card shown on another device is drawn on this browser\'s next read, at once (PR #1479 review, round 2)', () => {
+    /** This browser hid the Pulse; the member's phone then showed it again, saved on the account with a later stamp. */
+    async function hiddenHereShownElsewhere() {
+        const node = nodeKeepingLayout(answer());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const pulse = await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Card options for The Pulse' }));
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Hide' }));
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        node.savedElsewhere({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: new Date(Date.now() + 60_000).toISOString() });
+        return node;
+    }
+
+    it('the next landing: its first read leaves the Pulse out, so Home reads again with it, and draws it, no poll waited for', async () => {
+        const node = await hiddenHereShownElsewhere();
+        cleanup();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3), { timeout: 2_000 });
+        expect(node.reads()[1]).not.toContain('pulse');
+        expect(node.reads()[2]).toContain('pulse');
+        expect(await screen.findByTestId('home-card-pulse')).toHaveTextContent('How our LETS started');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(api.getHome).toHaveBeenCalledTimes(3);
+    });
+
+    it('two tabs: the doorbell read that brings the newer layout reads again at once', async () => {
+        const node = await hiddenHereShownElsewhere();
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3), { timeout: 2_000 });
+        expect(node.reads()[2]).toContain('pulse');
+        expect(await screen.findByTestId('home-card-pulse')).toBeInTheDocument();
+    });
+
+    it('a newer layout that only hides or moves a card needs no second read', async () => {
+        const node = nodeKeepingLayout(answer());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-pulse');
+        node.savedElsewhere({ v: 1, order: ['beans'], hidden: ['pulse'], dismissed: {}, updatedAt: new Date(Date.now() + 60_000).toISOString() });
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('Sign Out in another tab: this tab drops her Home, reads nothing more as her, and writes nothing back (PR #1479 review, round 2)', () => {
+    const idb = () => globalThis.indexedDB as unknown as MemoryIndexedDB;
+    const kept = () => idb().peek('beanpool-home', 'answers', homeCacheKey(ME.publicKey)) as { etag?: string } | undefined;
+    const storedKeys = () => Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!);
+    /** What the reviewer found written back: her Beans, "Unread message from Kofi", her group, her layout. */
+    const herHome = (over: Partial<HomeAnswer> = {}) => answer({ layout: { v: 1, order: [], hidden: ['joined'], dismissed: {}, updatedAt: NOW }, ...over }, {
+        needs: { items: [{ kind: 'message', count: 1, accent: false, label: 'Unread message from Kofi', target: { to: 'unread-messages' } }] },
+        groups: { items: [{ id: 'g1', kind: 'group', name: 'Garden group', unread: 2, muted: false }], total: 1 },
+    });
+
+    async function onHome(a: HomeAnswer = herHome()) {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(a));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByText('Unread message from Kofi');
+        await waitFor(() => expect(kept()).toBeDefined());
+    }
+    const settle = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
+
+    it('a Hide in this tab afterwards has nothing to write back: her Home is gone from the page at once', async () => {
+        await onHome();
+        await act(async () => { await signOutInAnotherTab(); });
+        expect(kept()).toBeUndefined();
+        // What the reviewer did in tab B: "…" → Hide.
+        const menu = screen.queryAllByRole('button', { name: /^Card options for / })[0];
+        if (menu) {
+            fireEvent.click(menu);
+            fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[0]);
+        }
+        await settle();
+        expect(kept()).toBeUndefined();
+        expect(storedKeys().filter(k => k.includes(ME.publicKey))).toEqual([]);
+        expect(screen.queryByText(/Unread message from Kofi/)).toBeNull();
+        expect(screen.getByTestId('home-signed-out')).toHaveTextContent(HOME_SIGNED_OUT);
+    });
+
+    it('a read still out when she signs out lands afterwards: nothing of it is drawn or kept', async () => {
+        await onHome();
+        let answerNode!: (r: HomeRead) => void;
+        vi.mocked(api.getHome).mockReturnValueOnce(new Promise(r => { answerNode = r; }));
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+        await act(async () => { await signOutInAnotherTab(); });
+        await act(async () => { answerNode(fresh(herHome({}))); });
+        await settle();
+        expect(kept()).toBeUndefined();
+        expect(screen.queryByText(/Unread message from Kofi/)).toBeNull();
+    });
+
+    it('her next read is never made: on global, an unsigned one would have kept the visitors\' answer under her key, with her layout', async () => {
+        await onHome(herHome({ profile: 'global', features: { beans: false, guestListingsOnly: true } }));
+        await act(async () => { await signOutInAnotherTab(); });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ profile: 'global', welcome: true, me: null, layout: null })));
+        // A doorbell, the notices put away, the tab coming back: every way Home asks again.
+        vi.useFakeTimers();
+        hooks.sync.forEach(cb => cb());
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await vi.advanceTimersByTimeAsync(130_000);
+        vi.useRealTimers();
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+        await settle();
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+        expect(kept()).toBeUndefined();
+    });
+
+    it('a Home opened after it (the Market was in front) reads nothing and shows nothing of hers', async () => {
+        await signOutInAnotherTab();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(herHome()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await settle();
+        expect(api.getHome).not.toHaveBeenCalled();
+        expect(screen.getByTestId('home-signed-out')).toHaveTextContent(HOME_SIGNED_OUT);
+        expect(kept()).toBeUndefined();
+    });
+
+    it('heard on the BroadcastChannel alone (a browser whose storage the tabs can\'t share), it is the same', async () => {
+        await onHome();
+        signOutOnChannelOnly();
+        await waitFor(() => expect(screen.queryByText(/Unread message from Kofi/)).toBeNull(), { timeout: 2_000 });
+        expect(screen.getByTestId('home-signed-out')).toBeInTheDocument();
+    });
+
+    it('Force Clear (or leaving a community) in another tab: the copy drawn goes, and Home is read afresh, with no tag', async () => {
+        await onHome();
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { community: { name: 'Read afresh', members: 82 } }), 'W/"home-fresh"'));
+        await act(async () => { await clearInAnotherTab(); });
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+        expect(vi.mocked(api.getHome).mock.calls[1][1]).toBeNull();
+        expect(await screen.findByText('Read afresh')).toBeInTheDocument();
+        expect(screen.queryByText(/Unread message from Kofi/)).toBeNull();
+        await waitFor(() => expect(kept()?.etag).toBe('W/"home-fresh"'));
     });
 });

@@ -8,9 +8,12 @@
  *
  * The copy is the member's own (their Beans, who wrote to them, their groups, their layout), so it goes wherever this
  * browser's account storage goes: {@link clearHomeCache} is part of lib/device-prefs.ts `clearAccountStorage`, which
- * every sign-out and delete runs.
+ * every sign-out and delete runs. And once it has gone, nothing puts it back: a page still open in another tab, holding
+ * the answer in memory or with a read still out, may write a member's copy only while lib/account-epoch.ts says the
+ * account is still this browser's and nothing was cleared since that answer was read.
  */
 import { getNodeApiUrl } from './api';
+import { accountEpoch, accountEpochHolds, endAccountEpoch, type AccountEpochEnd } from './account-epoch';
 import { isHomeCardId, normalizeLayout, type HomeAnswer, type HomeCardId, type HomeLayout } from './home-cards';
 
 const DB_NAME = 'beanpool-home';
@@ -97,14 +100,36 @@ export async function readCachedHome(key: string): Promise<CachedHome | null> {
     });
 }
 
-/** Keep `value` as the copy for `key`. A write that fails is dropped: the next answer is kept instead. */
-export async function writeCachedHome(key: string, value: CachedHome): Promise<void> {
+/**
+ * Keep `value` as the copy for `key`. A write that fails is dropped: the next answer is kept instead.
+ *
+ * A member's copy is dropped too once this page may no longer write their state (lib/account-epoch.ts): signed out,
+ * here or in another tab, or, given the `epoch` the answer was read under, cleared since. One that lands as that
+ * happens is taken out again. The lobby's copy holds no account, so only a clear since `epoch` drops it.
+ */
+export async function writeCachedHome(key: string, value: CachedHome, epoch?: number): Promise<void> {
+    const holds = () => key.endsWith('|visitor') ? epoch === undefined || epoch === accountEpoch() : accountEpochHolds(epoch);
+    if (!holds()) return;
     const db = await openDb();
-    if (!db) return;
-    await new Promise<void>((resolve) => {
+    if (!db || !holds()) return;
+    const kept = await new Promise<boolean>((resolve) => {
         try {
             const tx = db.transaction(STORE, 'readwrite');
             tx.objectStore(STORE).put(value, key);
+            tx.oncomplete = () => resolve(true);
+            tx.onerror = () => resolve(false);
+            tx.onabort = () => resolve(false);
+        } catch {
+            resolve(false);
+        }
+    });
+    if (!kept || holds()) return;
+    // Signed out or cleared while it was written: out again. A connection already let go of is in a database that is
+    // being deleted, this copy with it.
+    await new Promise<void>((resolve) => {
+        try {
+            const tx = db.transaction(STORE, 'readwrite');
+            tx.objectStore(STORE).delete(key);
             tx.oncomplete = () => resolve();
             tx.onerror = () => resolve();
             tx.onabort = () => resolve();
@@ -119,13 +144,16 @@ const CLEAR_WAIT_MS = 2_000;
 
 /**
  * Every copy this file keeps, for every community and reader, gone: part of lib/device-prefs.ts `clearAccountStorage`
- * (Sign Out (Device Only), a delete at the last community) and of leaving a community the web app was pointed at.
+ * (Sign Out (Device Only), a delete at the last community: `'signed-out'`), of leaving a community the web app was
+ * pointed at, and of Force Clear & Re-Sync (`'cleared'`: the account stays).
  *
- * The store is emptied first, through a connection (that works even while another tab holds the database open, which
- * holds up a delete), then the database itself is deleted; other tabs of this app let go of it when asked. Never
- * throws, and never waits long: a browser with no IndexedDB has nothing to clear.
+ * The epoch ends first (lib/account-epoch.ts), so no page, here or in another tab, writes back what it holds; Home
+ * pages still open drop it at once. Then the store is emptied, through a connection (that works even while another tab
+ * holds the database open, which holds up a delete), then the database itself is deleted; other tabs of this app let
+ * go of it when asked. Never throws, and never waits long: a browser with no IndexedDB has nothing to clear.
  */
-export async function clearHomeCache(): Promise<void> {
+export async function clearHomeCache(end: AccountEpochEnd): Promise<void> {
+    endAccountEpoch(end);
     const held = dbPromise;
     dbPromise = null;
     const db = held ? await held : await openDb().then((d) => { dbPromise = null; return d; });

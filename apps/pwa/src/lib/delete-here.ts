@@ -159,11 +159,12 @@ export async function purgeHere(
 /**
  * Once the node the web app is pointed at has deleted the account ({@link WebDeletePlan} 'this-one'): the web app goes
  * back to the page's own node. The key, its 12 words and the browser's settings stay. Home's kept answers go (the
- * deleted account's Beans, messages and groups at that community among them); the page's own Home is read again.
+ * deleted account's Beans, messages and groups at that community among them), and a Home still open in another tab
+ * drops what it holds and reads the page's own community's afresh; the page's own Home is read again.
  */
 export async function leaveThisCommunity(): Promise<void> {
     setNodeApiUrl(null);
-    await clearHomeCache();
+    await clearHomeCache('cleared');
 }
 
 // ── What the web app says ──────────────────────────────────────────────────────────────────────────────────────

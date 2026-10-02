@@ -528,8 +528,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             setSuccess(null);
             try {
                 sessionStorage.clear();
-                // Home's last answer is this browser's cache of the community too (lib/home-cache.ts).
-                await clearHomeCache();
+                // Home's last answer is this browser's cache of the community too (lib/home-cache.ts); a Home still open in
+                // another tab drops its copy and reads afresh, never writing the old one back.
+                await clearHomeCache('cleared');
                 clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);

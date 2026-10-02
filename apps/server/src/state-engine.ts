@@ -210,6 +210,7 @@ import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
+    getMemberDirectoryRows as getMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -231,6 +232,7 @@ import {
     rowToMember,
     rowToProfile,
     type Member,
+    type DirectoryRow,
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
@@ -1579,6 +1581,11 @@ export function getMembers(): Member[] {
 
 export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
+}
+
+/** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
+export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
+    return getMemberDirectoryRowsEngine(db, updatedAfter);
 }
 
 // ===================== INVITE CODES =====================

@@ -34,7 +34,7 @@ import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, verifyBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { SOURCE_FREE_FAILURES } from './password-brake.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { pairingMessage } from './settings-signin-pairing.js';
 
 let run = 0, passed = 0;
@@ -52,6 +52,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Reply { status: number; headers: Headers; json: any; text: string }
 async function req(path: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown; raw?: string } = {}): Promise<Reply> {
+    forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
     const raw = opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined);
     const r = await fetch(`${BASE}${path}`, {
         method: opts.method || 'GET',

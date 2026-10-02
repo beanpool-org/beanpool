@@ -19,6 +19,7 @@ export * from './sync.js';
 export * from './archetypes.js';
 export * from './groups.js';
 export * from './geo.js';
+export * from './like.js';
 
 
 

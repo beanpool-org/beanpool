@@ -28,7 +28,9 @@
  *      - a reader is refused after the wait, or at once with the line full, with Retry-After, no-store and no ETag;
  *      - a reader who leaves the line leaves it and isn't counted;
  *      - a light answer goes past the line, and an answer bigger than the whole budget is served alone;
- *      - the log gets one line, not one per refusal.
+ *      - the log gets one line, not one per refusal;
+ *      - an answer let in has 180 s to be sent: a reader who stops reading is cut off when it is up, its weight comes
+ *        back, and the one waiting behind it is served.
  *
  * Every server binds port 0. The children use directories under this run's data dir, and the runner's TMPDIR.
  *
@@ -493,6 +495,39 @@ async function theCapItself(): Promise<void> {
         hold2.hangUp();
         const q = await queued.done;
         assert(q.status === 200 && built.includes('L') === false, `and the one waiting is served once the budget frees (${q.status})`);
+        assert(await free() && stats().waiting === 0, `nothing is left in flight (${inFlight()}) or waiting (${stats().waiting})`);
+
+        // A deadline on every answer let in: a reader who stops reading is cut off when it is up, so its weight comes
+        // back and the one waiting behind it is served. Without it, readers who stop reading held the budget for as long
+        // as they kept the connection open (#1492's deciding review: 4 of them, 45 MB of 48 MB, 45 s and more).
+        setHeavyReadsForTests(undefined);
+        const deadline = heavyReadSettings().deadlineMs;
+        assert(deadline === 180_000, `an answer let in has 180 s to be sent, 12 MB at 0.56 Mbit/s (${deadline} ms)`);
+        setHeavyReadsForTests({ budgetBytes: BUDGET, waitMs: 5000, maxQueue: 3, deadlineMs: 1500 });
+        const cutLines = () => (db.prepare(`SELECT COUNT(*) AS n FROM system_logs WHERE message LIKE 'Heavy list reads:%cut off%'`).get() as { n: number }).n;
+        const cutLinesBefore = cutLines();
+        built.length = 0;
+        await get(`key=stall&size=${7 * MB}&tag=first`).done;
+        const stalledAt = performance.now();
+        const stalled = get(`key=stall&size=${7 * MB}&tag=S`, { hold: true });
+        await stalled.headers;
+        const stalling = await until(() => inFlight() === 7 * MB, 3000);
+        const behind = get(`key=stall&size=${7 * MB}&tag=B`);
+        await until(() => stats().waiting === 1, 3000);
+        const cutInTime = await until(() => stats().cutOff === 1, 4500);
+        const cutMs = performance.now() - stalledAt;
+        assert(stalling && cutInTime && cutMs >= 1400 && cutMs < 4000,
+            `a reader who stops reading holds its 7 MB until its 1.5 s are up, and is then cut off (${cutInTime ? `after ${Math.round(cutMs)} ms` : 'still held after 4.5 s'}; ${stats().cutOff} cut off)`);
+        const next = await behind.done;
+        assert(next.status === 200 && next.bytes === 7 * MB && next.ms < 4500 && built.join(',') === 'first,S,B',
+            `its weight comes back, and the one waiting behind it is served before its own 5 s wait is up (${next.status} after ${Math.round(next.ms)} ms; built ${built.join(',')})`);
+        // A phone that reads again finds the answer cut short, never a whole one: what was on its way, then the end.
+        stalled.resume();
+        const cut = await Promise.race([stalled.done, sleep(3000).then(() => null)]);
+        assert(cut !== null && cut.status === 'error' && cut.bytes < 7 * MB,
+            `the reader cut off, reading again, gets an answer cut short (${cut ? `${cut.status}, ${(cut.bytes / MB).toFixed(1)} of 7 MB` : 'nothing within 3 s'})`);
+        assert(cutLines() - cutLinesBefore === 1, `the log says one was cut off (${cutLines() - cutLinesBefore} line)`);
+        stalled.hangUp();
         assert(await free() && stats().waiting === 0, `nothing is left in flight (${inFlight()}) or waiting (${stats().waiting})`);
     } finally {
         setHeavyReadsForTests(undefined);

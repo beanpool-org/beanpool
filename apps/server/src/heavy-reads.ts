@@ -24,7 +24,10 @@
  *   - The weight comes back when the last byte is written ('finish'), when the connection closes first ('close': a
  *     phone that gives up mid-answer must not keep it), and when the build throws. A reader who leaves while waiting
  *     leaves the line.
- *   - While it refuses, the log gets one line a minute saying how many.
+ *   - An answer let in has DEADLINE_MS to be sent. Then its connection is closed and its weight comes back. The server
+ *     has no write timeout of its own, so a reader who stops reading (a phone put away mid-download, or one doing it on
+ *     purpose) held its share for as long as it kept the connection open: four held 45 of the 48 MB.
+ *   - While it refuses or cuts answers off, the log gets one line a minute saying how many.
  *
  * Only a request the routes would answer gets here. The read gate, the signature and each route's own checks run first,
  * and a 304 costs nothing, so an unsigned or refused read never takes budget.
@@ -50,6 +53,14 @@ const MB = 2 ** 20;
 const WAIT_MS = 6_000;
 /** How many may wait at once. Past this, one would wait only to be refused. */
 const MAX_QUEUE = 64;
+/**
+ * How long an answer let in has to be sent before its connection is closed (see above). A 12 MB answer (a 30,000-member
+ * directory or roster) takes about 100 s on a poor 1 Mbit/s mobile link, so 180 s still carries it at 0.56 Mbit/s, and
+ * the web app's 15.4 MB directory at 0.72 Mbit/s. Generous on purpose: a reader cut off loses the whole download, while
+ * one who stops reading on purpose can open another connection anyway, so the deadline is there to get back what a
+ * stalled connection holds, not to hurry a slow one. Under server-limits.ts' 300 s for receiving a whole request.
+ */
+const DEADLINE_MS = 180_000;
 /** Below this, a route's answer isn't heavy (see above). */
 const LIGHT_BYTES = 512 * 1024;
 /** A route not yet measured weighs this share of the budget. */
@@ -65,6 +76,7 @@ interface HeavyReadSettings {
     budgetBytes: number;
     waitMs: number;
     maxQueue: number;
+    deadlineMs: number;
 }
 
 interface Waiter {
@@ -81,7 +93,9 @@ const line: Waiter[] = [];
 const lastSize = new Map<string, number>();
 let admittedCount = 0;
 let refusedCount = 0;
+let cutOffCount = 0;
 let refusedSinceLog = 0;
+let cutOffSinceLog = 0;
 let lastLogAt = 0;
 let logTimer: NodeJS.Timeout | null = null;
 
@@ -95,15 +109,18 @@ function budgetFromEnv(): number {
     return DEFAULT_HEAVY_READ_BUDGET_MB * MB;
 }
 
-/** What the cap runs with: the .env's budget (read once) and the fixed wait and line, under any test overrides. */
+/** What the cap runs with: the .env's budget (read once) and the fixed wait, line and deadline, under any test overrides. */
 export function heavyReadSettings(): Readonly<HeavyReadSettings> {
-    resolved ??= { budgetBytes: budgetFromEnv(), waitMs: WAIT_MS, maxQueue: MAX_QUEUE, ...testOverrides };
+    resolved ??= { budgetBytes: budgetFromEnv(), waitMs: WAIT_MS, maxQueue: MAX_QUEUE, deadlineMs: DEADLINE_MS, ...testOverrides };
     return resolved;
 }
 
-/** What is in flight and waiting now, and how many were let through and refused since the server started. */
-export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number } {
-    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount };
+/**
+ * What is in flight and waiting now, and how many were let through, refused and cut off at the deadline since the server
+ * started.
+ */
+export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number; cutOff: number } {
+    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount };
 }
 
 /** The size of the last answer a route gave, as a heavy read counts it; undefined before its first. */
@@ -112,8 +129,8 @@ export function heavyReadWeight(key: string): number | undefined {
 }
 
 /**
- * Tests only: other settings (a smaller budget, a shorter wait), and a clean slate: no sizes known, nothing counted. Call
- * it with nothing in flight. `undefined` puts the defaults back.
+ * Tests only: other settings (a smaller budget, a shorter wait or deadline), and a clean slate: no sizes known, nothing
+ * counted, the log's minute begun again. Call it with nothing in flight. `undefined` puts the defaults back.
  */
 export function setHeavyReadsForTests(overrides: Partial<HeavyReadSettings> | undefined): void {
     testOverrides = { ...(overrides ?? {}) };
@@ -121,6 +138,12 @@ export function setHeavyReadsForTests(overrides: Partial<HeavyReadSettings> | un
     lastSize.clear();
     admittedCount = 0;
     refusedCount = 0;
+    cutOffCount = 0;
+    refusedSinceLog = 0;
+    cutOffSinceLog = 0;
+    lastLogAt = 0;
+    if (logTimer) clearTimeout(logTimer);
+    logTimer = null;
 }
 
 function fits(weight: number): boolean {
@@ -148,17 +171,33 @@ function answerBytes(ctx: Koa.Context): number | null {
 function noteRefusal(): void {
     refusedCount++;
     refusedSinceLog++;
-    const now = Date.now();
-    if (now - lastLogAt >= LOG_EVERY_MS) writeRefusalLine(now);
-    else logTimer ??= setTimeout(() => { logTimer = null; if (refusedSinceLog > 0) writeRefusalLine(Date.now()); }, lastLogAt + LOG_EVERY_MS - now).unref();
+    noteForLog();
 }
 
-function writeRefusalLine(now: number): void {
+function noteCutOff(): void {
+    cutOffCount++;
+    cutOffSinceLog++;
+    noteForLog();
+}
+
+/** At most one log line a minute, for the refusals and cut-offs since the last. */
+function noteForLog(): void {
+    const now = Date.now();
+    if (now - lastLogAt >= LOG_EVERY_MS) writeLogLine(now);
+    else logTimer ??= setTimeout(() => { logTimer = null; if (refusedSinceLog + cutOffSinceLog > 0) writeLogLine(Date.now()); }, lastLogAt + LOG_EVERY_MS - now).unref();
+}
+
+function writeLogLine(now: number): void {
     const s = heavyReadSettings();
-    logger.warn('SYS', `Heavy list reads: ${refusedSinceLog} answered "busy" (503) in the last minute. `
+    const what = [
+        refusedSinceLog > 0 ? `${refusedSinceLog} answered "busy" (503)` : '',
+        cutOffSinceLog > 0 ? `${cutOffSinceLog} cut off, not sent within ${s.deadlineMs / 1000} s` : '',
+    ].filter(Boolean).join('; ');
+    logger.warn('SYS', `Heavy list reads: ${what} in the last minute. `
         + `${(inFlightBytes / MB).toFixed(1)} MB of ${(s.budgetBytes / MB).toFixed(0)} MB in flight, ${line.length} waiting. `
         + `${HEAVY_READ_BUDGET_ENV} sets the budget (apps/server/src/heavy-reads.ts).`);
     refusedSinceLog = 0;
+    cutOffSinceLog = 0;
     lastLogAt = now;
 }
 
@@ -200,14 +239,25 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
     if (watched && (res.destroyed || res.writableEnded)) return;
 
     // This answer: waiting in line, in flight holding `held` bytes of the budget, or out (refused, left or done).
-    const ticket: { phase: 'waiting' | 'in' | 'out'; held: number; waiter: Waiter | null } = { phase: 'waiting', held: 0, waiter: null };
+    const ticket: { phase: 'waiting' | 'in' | 'out'; held: number; waiter: Waiter | null; deadline: NodeJS.Timeout | null } =
+        { phase: 'waiting', held: 0, waiter: null, deadline: null };
     const take = () => {
         ticket.phase = 'in';
         ticket.held = weight;
         inFlightBytes += weight;
         admittedCount++;
+        if (watched) ticket.deadline = setTimeout(cutOff, heavyReadSettings().deadlineMs).unref();
+    };
+    // Not sent by its deadline: the connection is closed, and the weight comes back now rather than whenever its reader
+    // hangs up. The reader gets an answer cut short, and keeps what it had.
+    const cutOff = () => {
+        if (ticket.phase !== 'in') return;
+        res.destroy();
+        giveBack();
+        noteCutOff();
     };
     const giveBack = () => {
+        if (ticket.deadline) clearTimeout(ticket.deadline);
         if (ticket.phase === 'waiting') ticket.waiter?.leave();
         const wasIn = ticket.phase === 'in';
         ticket.phase = 'out';

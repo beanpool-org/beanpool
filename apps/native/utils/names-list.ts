@@ -291,19 +291,37 @@ function withPin<T>(publicKey: string, anchor: string, fn: () => Promise<T>): Pr
     return run;
 }
 
-/** This phone's pin for the community, or null: none kept, or one that doesn't open (then it starts from an empty pin). */
-export async function readNamesPinFrom(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesPin | null> {
+/**
+ * A pin read before a write (round 15). `pin` is null when none is kept, or when the one kept doesn't open (`kept`: its
+ * key is gone from the secure store, or the blob was altered; an open then starts from an empty pin). `failed`: a store
+ * read threw (a storage error, which may pass), so nothing may be written over what is kept: an empty pin saved then
+ * would lose the phone's history, keys, trust and removals.
+ */
+type PinRead = { failed: false; pin: NamesPin | null; kept: boolean } | { failed: true };
+async function readPin(store: NamesPinStore, publicKey: string, anchor: string): Promise<PinRead> {
+    const label = namesTrustStoreKey(publicKey, anchor);
+    let blob: string | null;
+    let secret: string | null;
     try {
-        const label = namesTrustStoreKey(publicKey, anchor);
-        const blob = await store.getItem(label);
-        if (!blob) return null;
-        const secret = await store.getSecret(namesPinSecretName(label));
-        if (!secret || !/^[0-9a-f]{64}$/.test(secret)) return null;
-        const json = openNamesPinBlob(blob, fromHex(secret), label);
-        return json ? readNamesPin(JSON.parse(json), publicKey) : null;
+        blob = await store.getItem(label);
+        if (!blob) return { failed: false, pin: null, kept: false };
+        secret = await store.getSecret(namesPinSecretName(label));
     } catch {
-        return null;
+        return { failed: true };
     }
+    try {
+        if (!secret || !/^[0-9a-f]{64}$/.test(secret)) return { failed: false, pin: null, kept: true };
+        const json = openNamesPinBlob(blob, fromHex(secret), label);
+        return { failed: false, pin: json ? readNamesPin(JSON.parse(json), publicKey) : null, kept: true };
+    } catch {
+        return { failed: false, pin: null, kept: true };
+    }
+}
+
+/** This phone's pin for the community, or null: none kept, one that doesn't open, or a read that failed. */
+export async function readNamesPinFrom(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesPin | null> {
+    const read = await readPin(store, publicKey, anchor);
+    return read.failed ? null : read.pin;
 }
 
 /** Seals and keeps the pin; false when it couldn't be kept (then nothing that depends on it is sent). */
@@ -327,6 +345,7 @@ export async function writeNamesPinTo(store: NamesPinStore, publicKey: string, a
 const fromHex = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16));
 
 const NOT_KEPT: NamesResult<never> = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
+const NOT_READ: NamesResult<never> = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t read the names list’s keys just now. Nothing was sent or changed. Try again.' };
 
 // ── Checking each other in person ────────────────────────────────────────────────────────────
 
@@ -347,7 +366,8 @@ export function inPersonResult(scannedOrTyped: string, pubkey: string): 'match' 
 export type EachOtherCheck =
     /** `pinned`: the key this phone now trusts. `mismatch`: it isn't the key the server lists for the admin picked. */
     | { ok: true; pinned: string; mismatch: boolean }
-    | { ok: false; reason: 'unreadable' | 'mismatch' | 'self' | 'no_match' };
+    /** `not_kept`: this phone couldn't read or keep its pin, so the check wasn't saved and everything kept stays as it was. */
+    | { ok: false; reason: 'unreadable' | 'mismatch' | 'self' | 'no_match' | 'not_kept' };
 
 /**
  * "Check each other" (design §3.3): what was scanned (a QR code: the other phone's key) or typed (its 20 digits). A QR
@@ -376,9 +396,13 @@ export async function checkEachOther(
     }
     if (key === identity.publicKey.toLowerCase()) return { ok: false, reason: 'self' };
     return withPin(identity.publicKey, anchor, async (): Promise<EachOtherCheck> => {
-        const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-        const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
-        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
+        // Round 15: an empty pin only where none is kept. A read that failed, a kept pin that doesn't open, or one for
+        // another community is never written over here: the check fails and the phone's history, keys, trust and
+        // removals stay as they are (an open is what starts again from a pin that will never open).
+        const read = await readPin(store, identity.publicKey, anchor);
+        if (read.failed || (read.kept && read.pin?.communityId !== state.communityId)) return { ok: false, reason: 'not_kept' };
+        const base = read.pin ?? emptyNamesPin(state.communityId, identity.publicKey);
+        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'not_kept' };
         await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
         return { ok: true, pinned: key, mismatch };
     });
@@ -504,8 +528,10 @@ async function takeUnsaid(store: NamesPinStore, publicKey: string, anchor: strin
 async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false): Promise<NamesResult<Synced & { kept: boolean }>> {
     const s = await fetchNamesState(anchor, identity);
     if (!s.ok) return s;
-    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-    const r = syncNames({ pin, state: s.value, me: identity });
+    // A read that failed is no pin to start again from (round 15): the sync would save an empty one over the kept one.
+    const read = await readPin(store, identity.publicKey, anchor);
+    if (read.failed) return NOT_READ;
+    const r = syncNames({ pin: read.pin, state: s.value, me: identity });
     if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {
         return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true } };
     }
@@ -550,18 +576,22 @@ async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: Na
     // The node counts a holder on its own word (design Addendum 4): a phone that took the head's key from a box but has
     // sent no header since isn't one, and its own new key is refused (409 `ask_for_share`). It says so by sending its
     // signed header to the admins it trusts (never to a key this statement drops), then sends the statement once more.
-    if (first.code === 'ask_for_share' && (await claimHeldKey(anchor, identity, synced, drops))) {
-        return sendGeneration(anchor, identity, store, made.pin, made.generation);
-    }
+    const claim = first.code === 'ask_for_share' ? await claimHeldKey(anchor, identity, synced, drops) : null;
+    if (claim?.ok) return sendGeneration(anchor, identity, store, made.pin, made.generation);
     if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...made.pin, pending: null });
-    return first;
+    // A claim that ran out of time (round 15): its status 0 stops the open, with no second look at the node.
+    return claim ?? first;
 }
 
-/** Sends this phone's ring, under its signed header, to every trusted listed admin but `drops`: true when one landed. */
-async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<boolean> {
+/**
+ * Sends this phone's ring, under its signed header, to every trusted listed admin but `drops`. Ok when one landed; the
+ * timed-out answer when a share ran out of time (round 15: the open stops at it, as it does at a share's, so one open
+ * waits one limit); null when none landed.
+ */
+async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<NamesResult<true> | null> {
     const { pin, state } = synced;
     const head = pin.chain[pin.chain.length - 1];
-    if (!head || !pin.ring[head.id]) return false;
+    if (!head || !pin.ring[head.id]) return null;
     let landed = false;
     for (const a of state.admins) {
         const to = a.pubkey.toLowerCase();
@@ -571,14 +601,16 @@ async function claimHeldKey(anchor: string, identity: BeanPoolIdentity, synced: 
         if (!share) continue;
         const done = await postShare(anchor, identity, share);
         if (done.ok) landed = true;
-        else if (done.code === NAMES_TIMED_OUT) return false; // the connection stopped answering: stop here (round 14)
+        else if (done.code === NAMES_TIMED_OUT) return done; // the connection stopped answering: stop here
     }
     // Nobody else to tell (the only other holder is the key being dropped): a claim to itself (design Addendum 5).
     if (!landed) {
         const self = namesSelfClaim(pin, state, identity, drops);
-        if (self && (await postShare(anchor, identity, self)).ok) landed = true;
+        const done = self ? await postShare(anchor, identity, self) : null;
+        if (done && done.ok) landed = true;
+        else if (done && done.code === NAMES_TIMED_OUT) return done;
     }
-    return landed;
+    return landed ? { ok: true, value: true } : null;
 }
 
 /**
@@ -591,25 +623,58 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     return readTheList(anchor, identity, store, await withPin(identity.publicKey, anchor, () => openUnlocked(anchor, identity, store)));
 }
 
-/** The open, on the pin's chain (the caller holds it). */
+/**
+ * The open, on the pin's chain (the caller holds it). The notices kept for it are taken at the start and said by its
+ * result. If it fails before that, they go back, with this open's own words, for the next open (round 15): every failure
+ * return goes through `fail`. A notice is said once, and never lost to a failed open.
+ */
 async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
     let l = await look(anchor, identity, store, true);
     if (!l.ok) return l;
     const unsaid = await takeUnsaid(store, identity.publicKey, anchor);
-    if (!l.value.kept) return NOT_KEPT;
+    // The walk wasn't kept, so the next look takes the same statements and gives the same notices: only `unsaid` goes back.
+    if (!l.value.kept) { await keepUnsaid(store, identity.publicKey, anchor, unsaid); return NOT_KEPT; }
+    let state = l.value.state;
     const notices: NamesNotice[] = [...l.value.notices];
     let made: string[] | null = null;
     let carried: string[] = [];
     let madeN = 0;
     let askedFor = '';
+    const sentTo: string[] = [];
+    const due: string[] = [];
+    const words = (): string[] => {
+        const out = [...unsaid, ...noticeWords(notices, state)];
+        if (askedFor) out.push(askedFor);
+        if (made && made.length) {
+            // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
+            // sent" only for the admins the key reached; the rest get it on the next open.
+            const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
+            const rest = made.filter((k) => !carried.includes(k));
+            const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
+            const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
+            const sending = NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)));
+            out.unshift(...[
+                carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
+                gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
+                // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
+                ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
+            ].filter((w) => w));
+        }
+        return [...new Set(out)];
+    };
+    const fail = async (r: NamesResult<never>): Promise<NamesResult<NamesOpened>> => {
+        await keepUnsaid(store, identity.publicKey, anchor, words());
+        return r;
+    };
     const pend = l.value.pin.pending;
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
         // Ours, never landed, and the node is still where it was: the same statement again (never a second key).
         const sent = await sendGeneration(anchor, identity, store, l.value.pin, pend);
-        if (!sent.ok && sent.status === 0) return sent;
+        if (!sent.ok && sent.status === 0) return fail(sent);
         l = await look(anchor, identity, store, true);
-        if (!l.ok) return l;
+        if (!l.ok) return fail(l);
+        state = l.value.state;
         notices.push(...l.value.notices);
     } else if (l.value.plan.kind === 'make_first' || l.value.plan.kind === 'make_new') {
         const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
@@ -620,17 +685,16 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
         const chainIds = new Set(before.chain.map((x) => x.id));
         carried = drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k]));
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
-        if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return sent;
+        if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return fail(sent);
         if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
         if (!sent.ok && sent.code === 'ask_for_share') askedFor = askForShareWords(l.value.state, identity.publicKey);
         l = await look(anchor, identity, store, true);
-        if (!l.ok) return l;
+        if (!l.ok) return fail(l);
+        state = l.value.state;
         notices.push(...l.value.notices);
     }
-    const { state, pin, plan, generations } = l.value;
-    const sentTo: string[] = [];
+    const { pin, plan, generations } = l.value;
     const kept = pin;
-    const due: string[] = [];
     if (plan.kind === 'ready') {
         for (const share of namesSharesToSend(pin, state, identity)) {
             due.push(share.to);
@@ -638,34 +702,18 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
             if (done.ok) sentTo.push(share.to);
             // A request ran out of time (round 14): stop here, so one open waits one limit, not one per request. The next
             // open sends any share still due; the list isn't read. A connection that fails at once costs nothing: go on.
-            else if (done.code === NAMES_TIMED_OUT) return done;
+            else if (done.code === NAMES_TIMED_OUT) return fail(done);
         }
     }
-    const words = [...unsaid, ...noticeWords(notices, state)];
-    if (askedFor) words.push(askedFor);
-    if (made && made.length) {
-        // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
-        // sent" only for the admins the key reached; the rest get it on the next open.
-        const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
-        const rest = made.filter((k) => !carried.includes(k));
-        const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
-        const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
-        const sending = NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)));
-        words.unshift(...[
-            carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
-            gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
-            // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
-            ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
-        ].filter((w) => w));
-    }
+    const said = words();
     // The rolled-back card's estimate, before anything is read; the exact count comes on the ready read after it.
     const estimate = plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.seen.length - (state.counts?.entries ?? 0)) : 0;
-    if (estimate) words.push(NAMES_COPY.lostSinceCopy(estimate));
+    if (estimate) said.push(NAMES_COPY.lostSinceCopy(estimate));
     const justChecked = await justCheckedNow(store, identity.publicKey, anchor, state);
     return {
         ok: true,
         value: {
-            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: words, made, sentTo, justChecked,
+            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: said, made, sentTo, justChecked,
             toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
             lost: estimate,
         },
@@ -675,19 +723,27 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
 /**
  * The list read, after the pin's chain is let go (round 14): a big list on a slow link can take minutes, and nothing it
  * does needs the chain until it saves `seen`, which is a short link of its own that reads the pin afresh. So a Remove or
- * a check tapped during a long read isn't held up, and isn't written over (round 12's race stays closed).
+ * a check tapped during a long read isn't held up, and isn't written over (round 12's race stays closed). Where the pin
+ * can't be read afresh, nothing is saved (round 15): `seen` stays as it was, and the next ready read catches up.
+ * A read that fails puts the open's words back for the next open: they were never said (round 15).
  */
 async function readTheList(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: NamesResult<NamesOpened>): Promise<NamesResult<NamesOpened>> {
     if (!opened.ok || opened.value.plan.kind !== 'ready') return opened;
     const o = opened.value;
     const got = await fetchNamesList(anchor, identity, false, o.state.counts?.entries ?? 2000);
-    if (!got.ok) return got;
+    if (!got.ok) {
+        await withPin(identity.publicKey, anchor, () => keepUnsaid(store, identity.publicKey, anchor, o.notices));
+        return got;
+    }
     const list = got.value;
     return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<NamesOpened>> => {
         // Names this phone saw that are neither on the node nor deleted by an admin: a loss, said with its count.
         // Only what the pin had seen when the read began can be missing from it; an id seen since (a Save that landed during
-        // the read) is kept, never counted lost.
-        const now = (await readNamesPinFrom(store, identity.publicKey, anchor)) ?? o.pin;
+        // the read) is kept, never counted lost. Never the open's own pin saved instead: it would undo a Remove, a check or
+        // a new key saved during the read, or bring back a pin removed since.
+        const fresh = await readPin(store, identity.publicKey, anchor);
+        if (fresh.failed || !fresh.pin) return { ok: true, value: { ...o, list } };
+        const now = fresh.pin;
         const before = new Set(o.pin.seen ?? []);
         const since = (now.seen ?? []).filter((id) => !before.has(id));
         const read = namesSeenAfterRead({ ...now, seen: o.pin.seen ?? [] }, list.entries.map((e) => e.id), list.deleted ?? []);
@@ -789,7 +845,8 @@ async function followUnlocked(anchor: string, identity: BeanPoolIdentity, store:
         ? NAMES_COPY.checkAgain(callsignIn(state, d.key), d.n)
         : NAMES_COPY.newKeyBy(callsignIn(state, d.maker), [callsignIn(state, d.key)])));
     const opened = await openUnlocked(anchor, identity, store);
-    if (!opened.ok) return opened;
+    // The follow's own words go back for the next open when its open fails (round 15), as the open's own do.
+    if (!opened.ok) { await keepUnsaid(store, identity.publicKey, anchor, said); return opened; }
     return { ok: true, value: { ...opened.value, notices: [...new Set([...said, ...opened.value.notices])] } };
 }
 
@@ -1323,6 +1380,8 @@ export const NAMES_COPY = {
     codeMismatch: (who: string) => `Those digits aren’t ${at(who)}’s key as the server lists it. Nothing was trusted. Scan their QR code instead, and tell your other admins.`,
     noMatch: 'Those digits aren’t the key of any admin the server lists. Scan their QR code instead.',
     self: 'That is this phone’s own key.',
+    /** A check whose pin couldn't be read or kept (round 15): nothing was saved, and what the phone kept is unchanged. */
+    checkNotKept: 'This phone couldn’t read or keep its names list’s keys just now, so the check wasn’t saved. Nothing else changed. Try the check again.',
     matched: (who: string) => `Checked: this phone now trusts ${at(who)}’s phone.`,
     exportTitle: 'Export the list as a PDF?',
     export: 'The PDF holds every name you can open here. Once it leaves this phone it’s yours to keep safe, like a paper list. '

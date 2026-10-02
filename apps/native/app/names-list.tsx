@@ -233,7 +233,8 @@ export default function NamesListScreen() {
         const r = await checkEachOther(STORE, identity, anchor, state, text, picked).finally(finish);
         if (!r.ok) {
             const who = picked?.callsign ?? '';
-            setCheckError(r.reason === 'mismatch' ? COPY.codeMismatch(who) : r.reason === 'self' ? COPY.self : r.reason === 'no_match' ? COPY.noMatch : COPY.unreadable);
+            setCheckError(r.reason === 'mismatch' ? COPY.codeMismatch(who) : r.reason === 'self' ? COPY.self : r.reason === 'no_match' ? COPY.noMatch
+                : r.reason === 'not_kept' ? COPY.checkNotKept : COPY.unreadable);
             setTimeout(() => { scanLock.current = false; }, 600);
             return;
         }

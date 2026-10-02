@@ -44,7 +44,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, followRemovesAny,
+    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -68,8 +68,14 @@ let drop: ((req: Sent) => 'before' | 'after' | null) | null = null;
 /** Set to hold a request's answer (already computed by the node) until the returned promise settles: a slow connection. */
 let hold: ((req: Sent) => Promise<void> | null) | null = null;
 
+/** Set to make the store's next reads of one key throw, as a storage error would (round 15). */
+let failGets: { key: string; times: number } | null = null;
 const STORE: NamesPinStore = {
-    getItem: async (k) => mem.get(k) ?? null, setItem: async (k, v) => { mem.set(k, v); },
+    getItem: async (k) => {
+        if (failGets && failGets.key === k && failGets.times > 0) { failGets.times--; throw new Error('a storage error'); }
+        return mem.get(k) ?? null;
+    },
+    setItem: async (k, v) => { mem.set(k, v); },
     getSecret: async (k) => secrets.get(k) ?? null, setSecret: async (k, v) => { secrets.set(k, v); },
 };
 
@@ -83,6 +89,7 @@ beforeEach(() => {
     sent = [];
     drop = null;
     hold = null;
+    failGets = null;
     (globalThis as any).fetch = vi.fn(async (url: string, init: any) => {
         const req = { url, method: init?.method ?? 'GET', headers: init?.headers ?? {}, body: init?.body ?? '' };
         sent.push(req);
@@ -1556,20 +1563,21 @@ describe('R. Round 11: the claim never vouches for a key being removed; adds are
     });
 });
 
-describe('P. Round 12: one pin, one operation at a time; a claim to oneself', () => {
-    /** Holds the next list read (GET /api/names/entries) by `who`, its answer already made: a reload on a slow connection. */
-    const holdListRead = (who: BeanPoolIdentity) => {
-        let release!: () => void;
-        const gate = new Promise<void>((r) => { release = r; });
-        let used = false;
-        hold = (req) => {
-            if (used || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries' || req.headers['X-Public-Key'] !== who.publicKey) return null;
-            used = true;
-            return gate;
-        };
-        return () => { hold = null; release(); };
+/** Holds the next list read (GET /api/names/entries) by `who`, its answer already made: a reload on a slow connection. */
+const holdListRead = (who: BeanPoolIdentity) => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    let used = false;
+    hold = (req) => {
+        if (used || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries' || req.headers['X-Public-Key'] !== who.publicKey) return null;
+        used = true;
+        return gate;
     };
-    const ticks = async (n = 60) => { for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0)); };
+    return () => { hold = null; release(); };
+};
+const ticks = async (n = 60) => { for (let i = 0; i < n; i++) await new Promise<void>((r) => setTimeout(r, 0)); };
+
+describe('P. Round 12: one pin, one operation at a time; a claim to oneself', () => {
 
     it("P1 (the re-review's :533) Remove @Abe's old key tapped while the list reloads and its read is slow: the Remove still makes a key without Abe, and it stays in the ring", async () => {
         const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
@@ -1782,7 +1790,9 @@ describe('Q. Round 13: no request waits for good; a write decides from the pin',
 });
 
 describe('S. Round 14: one check per statement and header per state', () => {
-    it("S1 (the re-review's :812) drawing 1,000 locked entries in a community of 8 admins and 30 keys checks each statement and header once: under 500 ms", async () => {
+    // Round 15 (the re-review's :1820): counted, not timed. A check reads its record's `signature` once (readNamesGeneration,
+    // readNamesShare), so a getter on it counts the checks, and getters on the state count its reads, at any machine load.
+    it("S1 (the re-review's :812 and :1820) drawing locked entries in a community of 8 admins and 30 keys checks each statement and header once per state: the counts don't grow with the entries", async () => {
         const admins = await Promise.all(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((n) => admin(n)));
         const gens: NamesGeneration[] = [];
         const ring: Record<string, Uint8Array> = {};
@@ -1798,30 +1808,64 @@ describe('S. Round 14: one check per statement and header per state', () => {
             shares.push(makeNamesShare({ communityId: CID, from, to: to.publicKey, headId: head.id, ring, trusts: admins.map((a) => a.publicKey) }));
         }
         const me = admins[0];
-        const state = {
-            communityId: CID, current: { id: head.id, n: head.n },
-            generations: gens.map((g) => ({ statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parentId, maker: g.maker, drops: g.drops })),
-            shares: shares.map((x) => ({ header: x.header, signature: x.signature, from: x.from, to: x.to, headId: x.headId, keyIds: x.keyIds, trusts: x.trusts })),
-            admins: admins.map((a) => ({ pubkey: a.publicKey, callsign: a.callsign, role: 'admin' as const, keyIds: gens.map((g) => g.id), holdsCurrent: true })),
-            holdersOfCurrent: admins.map((a) => a.publicKey), droppedHolders: [], nobodyHoldsKey: false, newKeyNeeded: false, callsigns: {},
-            settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
-            counts: { entries: 1000, confirmed: 0, awaitingSecond: 0, byKey: {}, locked: 0 },
-            me: { pubkey: me.publicKey, role: 'admin' as const, owner: false },
-        } as unknown as NamesState;
+        /** Checks of each record (`g:` statements, `s:` headers), and reads of the state's two lists, across every state made. */
+        const checks = new Map<string, number>();
+        const reads = { generations: 0, shares: 0 };
+        const counted = <T extends { signature: string }>(tag: string, row: T): T => {
+            const { signature, ...rest } = row;
+            return Object.defineProperty({ ...rest }, 'signature', {
+                enumerable: true, get: () => { checks.set(tag, (checks.get(tag) ?? 0) + 1); return signature; },
+            }) as T;
+        };
+        /** A fresh answer from the node: a new state object, as every open parses. */
+        const answered = (): NamesState => {
+            const generations = gens.map((g) => counted(`g:${g.id}`, { statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parentId, maker: g.maker, drops: g.drops }));
+            const shareRows = shares.map((x) => counted(`s:${x.from}>${x.to}`, { header: x.header, signature: x.signature, from: x.from, to: x.to, headId: x.headId, keyIds: x.keyIds, trusts: x.trusts }));
+            const s = {
+                communityId: CID, current: { id: head.id, n: head.n },
+                admins: admins.map((a) => ({ pubkey: a.publicKey, callsign: a.callsign, role: 'admin' as const, keyIds: gens.map((g) => g.id), holdsCurrent: true })),
+                holdersOfCurrent: admins.map((a) => a.publicKey), droppedHolders: [], nobodyHoldsKey: false, newKeyNeeded: false, callsigns: {},
+                settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
+                counts: { entries: 1000, confirmed: 0, awaitingSecond: 0, byKey: {}, locked: 0 },
+                me: { pubkey: me.publicKey, role: 'admin' as const, owner: false },
+            };
+            Object.defineProperty(s, 'generations', { enumerable: true, get: () => { reads.generations++; return generations; } });
+            Object.defineProperty(s, 'shares', { enumerable: true, get: () => { reads.shares++; return shareRows; } });
+            return s as unknown as NamesState;
+        };
         const pin = { ...emptyNamesPin(CID, me.publicKey), trusted: admins.map((a) => a.publicKey).sort() };
-        const entries: SealedEntryRow[] = Array.from({ length: 1000 }, (_, i) => ({
+        const entries = (count: number): SealedEntryRow[] => Array.from({ length: count }, (_, i) => ({
             id: newNamesEntryId(), ciphertext: 'sealed', keyId: gens[i % 30].id, createdBy: me.publicKey, createdAt: '2026-10-02', updatedBy: null, updatedAt: '',
         }));
-        const t0 = performance.now();
-        const drawn = openEntries({ current: head.id, entries, confirmations: [] }, { ring: {}, pin, generations: new Map(), state, justChecked: [] });
-        const ms = performance.now() - t0;
-        expect(drawn.length).toBe(1000);
+        const draw = (state: NamesState, count: number) => openEntries({ current: head.id, entries: entries(count), confirmations: [] }, { ring: {}, pin, generations: new Map(), state, justChecked: [] });
+        const once = () => [...checks.values()].every((c) => c === 1);
+        const records = gens.length + shares.length; // 30 statements and 56 headers
+
+        // One locked entry per key: every statement and header is checked once.
+        const small = draw(answered(), 30);
+        expect(small.every((e) => e.locked === 'no_key' && e.holders.length === 7)).toBe(true);
+        expect(checks.size).toBe(records);
+        expect(once()).toBe(true);
+        const readsForOne = { ...reads };
+        // A fresh answer and ten times the entries: still one check each, and the same number of reads of the state.
+        checks.clear();
+        reads.generations = 0; reads.shares = 0;
+        const state = answered();
+        const drawn = draw(state, 300);
+        expect(drawn.length).toBe(300);
         expect(drawn.every((e) => e.locked === 'no_key' && e.holders.length === 7)).toBe(true);
-        expect(ms).toBeLessThan(500);
-        // The refusal card's words reuse the same checks.
-        const t1 = performance.now();
+        expect(checks.size).toBe(records);
+        expect(once()).toBe(true);
+        expect(reads).toEqual(readsForOne);
+        expect(reads.shares).toBeLessThanOrEqual(2); // the re-review counted 2 at f8d11de4 and 600 at a49088a3
+        // The same state drawn again with 1,000 entries, and the refusal card's words: no check and no read more.
+        expect(draw(state, 1000).length).toBe(1000);
         planWords({ plan: { kind: 'wait', keyId: head.id, n: 30, holders: admins.slice(1).map((a) => a.publicKey), newKeyNeeded: false, canMakeNew: false, drops: [] }, state, pin, justChecked: [] });
-        expect(performance.now() - t1).toBeLessThan(200);
+        expect(once()).toBe(true);
+        expect(reads).toEqual(readsForOne);
+        // A new answer is checked afresh (the cache is keyed on the state object, never a verdict carried over): once more each.
+        draw(answered(), 30);
+        expect([...checks.values()].every((c) => c === 2)).toBe(true);
     }, 20_000);
 });
 
@@ -1832,21 +1876,25 @@ describe('T. Round 14: limits that fit the request, one limit per open, notices 
 
     it("T1 (the re-review's :147) a list read slower than a small request's limit but still arriving completes; and a Remove tapped during it isn't held up", async () => {
         const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
-        setNamesRequestTimeout(100, { listPerEntryMs: 300 });
+        // The list's limit: 100 ms and 1 s per entry the state counts (2): far from the 250 ms the read is held.
+        setNamesRequestTimeout(100, { listPerEntryMs: 1000 });
         let release!: () => void;
         const gate = new Promise<void>((r) => { release = r; });
-        let used = false;
+        let readStarted = false;
         hold = (req) => {
-            if (used || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries') return null;
-            used = true;
+            if (readStarted || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries') return null;
+            readStarted = true;
             return gate;
         };
-        const opening = openNamesList(COMMUNITY, owen, STORE);
-        await sleep(30);
-        const t0 = performance.now();
+        let settled = false;
+        const opening = openNamesList(COMMUNITY, owen, STORE).finally(() => { settled = true; });
+        for (let i = 0; i < 5000 && !readStarted; i++) await ticks(1);
+        expect(readStarted).toBe(true);
+        // Round 15 (the re-review's :1848): ordered, not timed. The Remove is done while the list read is still out.
         expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
-        expect(performance.now() - t0).toBeLessThan(100); // the slow read holds no pin operation
+        expect(settled).toBe(false); // the slow read holds no pin operation
         await sleep(250); // slower than the 100 ms small-request limit
+        expect(settled).toBe(false);
         release();
         const o = await opening;
         expect(o.ok && o.value.plan.kind).toBe('ready');
@@ -1855,25 +1903,30 @@ describe('T. Round 14: limits that fit the request, one limit per open, notices 
         void node; void ada;
     });
 
-    it("T2 (the re-review's :584) the connection stops answering partway through an open that owes three shares: the open stops at the first request that runs out, and a Remove tapped during it starts after one limit, not four", async () => {
+    it("T2 (the re-review's :584 and :1876) the connection stops answering partway through an open that owes three shares: the open stops at the first request that runs out (one share, no list read), and a Remove tapped during it runs after that one request, not four", async () => {
         const { node, phones: [owen, ada, bea, cy, zed] } = await community(['Owen', 'Ada', 'Bea', 'Cy', 'Zed']);
         node.admins = node.admins.filter((a) => a.pubkey !== zed.publicKey); // Owen's open makes key 2 and owes 3 shares
         setNamesRequestTimeout(100, { stateMs: 100, listPerEntryMs: 0 });
+        // Round 15: counted, not timed. `cut`: where the connection stops answering (after the open's second state read).
         let stateReads = 0;
+        let cut = -1;
         hold = (req) => {
             if (req.headers['X-Public-Key'] !== owen.publicKey) return null;
-            if (req.method === 'GET' && new URL(req.url).pathname === '/api/names/state') { stateReads++; return stateReads > 2 ? never() : null; }
-            return stateReads >= 2 && new URL(req.url).pathname !== '/api/names/generations' ? never() : null;
+            if (cut >= 0) return never();
+            if (req.method === 'GET' && new URL(req.url).pathname === '/api/names/state' && ++stateReads === 2) cut = sent.length;
+            return null;
         };
-        const t0 = performance.now();
+        const owens = () => sent.slice(cut).filter((x) => x.headers['X-Public-Key'] === owen.publicKey).map((x) => `${x.method} ${new URL(x.url).pathname}`);
         const opening = openNamesList(COMMUNITY, owen, STORE);
-        await sleep(20);
-        await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
-        const removedAt = performance.now() - t0;
+        await ticks(1);
+        let whenRemoved: string[] = [];
+        const removing = removeOldKey(STORE, owen, COMMUNITY, ada.publicKey).then((ok) => { whenRemoved = owens(); return ok; });
         const o = await opening;
+        expect(await removing).toBe(true);
         hold = null;
-        expect(o.ok === false && o.status).toBe(0);
-        expect(removedAt).toBeLessThan(250); // one 100 ms limit and the open's own work, not three shares and a read
+        expect(owens()).toEqual(['POST /api/names/shares']); // a49088a3: three shares, then the list read
+        expect(whenRemoved).toEqual(['POST /api/names/shares']); // the Remove waited one limit, not four
+        expect(o.ok === false && [o.status, o.code]).toEqual([0, NAMES_TIMED_OUT]);
         void bea; void cy;
     });
 
@@ -1896,6 +1949,177 @@ describe('T. Round 14: limits that fit the request, one limit per open, notices 
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
         expect(screen).toMatch(/followRemovesAny\(opened\) \? COPY\.follow : COPY\.followNone/);
         expect(NAMES_COPY.followNone.replace(/’/g, "'")).toBe("This phone follows the key history the server shows, from the last key both share. It keeps the keys it holds, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them.");
+    });
+});
+
+describe('U. Round 15: notices outlive a failed open; a claim stops at one limit; a pin read that fails writes nothing', () => {
+    const never = () => new Promise<void>(() => { /* never answers */ });
+    afterEach(() => setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS));
+    const pinLabel = (who: BeanPoolIdentity) => namesTrustStoreKey(who.publicKey, COMMUNITY);
+    const times = (said: string[], words: string) => said.filter((w) => w === words).length;
+    const at = (who: BeanPoolIdentity, method: string, p: string) => (req: Sent) =>
+        req.headers['X-Public-Key'] === who.publicKey && req.method === method && new URL(req.url).pathname === p;
+
+    for (const how of ['control: it works', 'the list read answers 502', 'the list read runs out of time', 'its share to Owen runs out of time'] as const) {
+        it(`U1 (the re-review's :598) notices a save kept, when the next open fails after taking them (${how}): said once, on the open that works`, async () => {
+            const { node, phones: [owen, ada, cy] } = await community(['Owen', 'Ada', 'Cy']);
+            const onScreen = await open(ada); // Ada's list is open
+            node.admins = [role(owen, 'owner'), role(ada)];
+            await open(owen); // Cy removed: Owen's key 2 drops Cy and goes to Ada
+            node.admins.push(role(cy)); // Cy's role comes back
+            // Ada saves a name: its look takes key 2 and keeps the walk's notices for the next open.
+            const s = await saveNamesEntry(COMMUNITY, ada, STORE, onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(s.ok).toBe(true);
+            const newKey = NAMES_COPY.newKeyBy('Owen', ['Cy']);
+            const again = NAMES_COPY.checkAgain('Cy', 2);
+            setNamesRequestTimeout(100, { stateMs: 100, listPerEntryMs: 0 });
+            if (how === 'the list read answers 502') answer = (req) => (at(ada, 'GET', '/api/names/entries')(req) ? { status: 502 } : node.answer(req));
+            if (how === 'the list read runs out of time') hold = (req) => (at(ada, 'GET', '/api/names/entries')(req) ? never() : null);
+            if (how === 'its share to Owen runs out of time') hold = (req) => (at(ada, 'POST', '/api/names/shares')(req) ? never() : null);
+            sent = [];
+            const first = await openNamesList(COMMUNITY, ada, STORE);
+            answer = (req) => node.answer(req);
+            hold = null;
+            if (how !== 'control: it works') {
+                expect(first.ok).toBe(false);
+                // The failure it was meant to be: the open owed a share, and the list was asked for only where it got that far.
+                expect(sentAs('POST', '/api/names/shares').length).toBe(1);
+                expect(sentAs('GET', '/api/names/entries').length).toBe(how === 'its share to Owen runs out of time' ? 0 : 1);
+            }
+            const said = [...(first.ok ? first.value.notices : []), ...(await open(ada)).notices, ...(await open(ada)).notices];
+            expect([times(said, newKey), times(said, again)]).toEqual([1, 1]); // f8d11de4: [0, 0] in each failing case
+        });
+    }
+
+    it("U1 (the re-review's :598) a follow whose open fails: the follow's own words are said once, by the next open", async () => {
+        const { node, phones: [owen, bea, dan, abe, zed] } = await community(['Owen', 'Bea', 'Dan', 'Abe', 'Zed']);
+        const standby = { gens: new Map(node.gens), shares: new Map(node.shares) };
+        node.admins = [role(owen, 'owner'), role(bea), role(dan), role(zed)];
+        await open(owen); // Abe removed on the main server: Owen's 2 drops Abe
+        await open(bea);
+        node.gens = new Map(standby.gens); node.shares = new Map(standby.shares); // a standby takes over from a copy before it
+        node.admins = [role(owen, 'owner'), role(bea), role(dan), role(abe)]; // Zed removed there
+        await open(dan); // Dan's 2″ drops Zed
+        expect((await open(bea)).plan).toEqual({ kind: 'refused', reason: 'different_history', canFollow: true });
+        let stateReads = 0;
+        answer = (req) => (at(bea, 'GET', '/api/names/state')(req) && ++stateReads === 2 ? { status: 502 } : node.answer(req));
+        const f = await followServerHistory(COMMUNITY, bea, STORE); // the follow is saved; its open's look answers 502
+        answer = (req) => node.answer(req);
+        expect(f.ok).toBe(false);
+        expect(stateReads).toBe(2);
+        const words = NAMES_COPY.newKeyBy('Dan', ['']); // Zed is no admin on the standby, so the server names him to nobody
+        const said = [...(await open(bea)).notices, ...(await open(bea)).notices];
+        expect(times(said, words)).toBe(1); // f8d11de4: 0
+    });
+
+    it("U2 (the re-review's :574) a claim that runs out of time stops the open: one share after the 409, no second look at the node", async () => {
+        const { node, phones: [owen, ada, bea, zed] } = await community(['Owen', 'Ada', 'Bea', 'Zed']);
+        node.admins = [role(owen, 'owner'), role(ada), role(bea)];
+        await open(ada); // Zed removed: Ada's key 2 drops Zed and goes to Owen and Bea
+        await open(owen); // Owen takes 2 and says so in a header: a holder on his own word
+        const two = node.current()!.id;
+        // Bea taps Remove @Owen's old key, on a screen opened before key 2. Her open: her key gets 409 `ask_for_share`
+        // (she hasn't said she holds 2), and after that answer the connection stops answering.
+        await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey);
+        setNamesRequestTimeout(100, { stateMs: 100, listPerEntryMs: 0 });
+        let cut = -1;
+        let refusal: unknown = null;
+        answer = (req) => {
+            const a = node.answer(req);
+            if (cut < 0 && at(bea, 'POST', '/api/names/generations')(req)) { cut = sent.length; refusal = a.body; }
+            return a;
+        };
+        hold = (req) => (req.headers['X-Public-Key'] === bea.publicKey && cut >= 0 && sent.indexOf(req) >= cut ? never() : null);
+        const r = await openNamesList(COMMUNITY, bea, STORE);
+        hold = null;
+        answer = (req) => node.answer(req);
+        expect(refusal).toMatchObject({ code: 'ask_for_share' });
+        const after = sent.slice(cut).filter((x) => x.headers['X-Public-Key'] === bea.publicKey).map((x) => `${x.method} ${new URL(x.url).pathname}`);
+        expect(after).toEqual(['POST /api/names/shares']); // f8d11de4: the share, then GET /api/names/state
+        expect(r.ok === false && [r.status, r.code]).toEqual([0, NAMES_TIMED_OUT]);
+        // The node never stored it: no statement waits, so the next open makes one key, never two.
+        expect(node.current()!.id).toBe(two);
+        expect((await pinOf(bea))!.pending).toBeNull();
+        // The connection is back: the claim lands, and Bea's key without Owen with it.
+        expect((await open(bea)).plan.kind).toBe('ready');
+        expect(node.current()!).toMatchObject({ maker: bea.publicKey, parentId: two, drops: [owen.publicKey] });
+    });
+
+    for (const how of ['a pin read that fails once', 'a pin removed during the read'] as const) {
+        it(`U3 (the re-review's :690) the list read's own save, after ${how}: saves nothing, so a Remove tapped during the read stands and nothing is sealed under key 1`, async () => {
+            const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+            const k1 = node.current()!.id;
+            const onScreen = await open(owen);
+            const release = holdListRead(owen);
+            const reload = openNamesList(COMMUNITY, owen, STORE);
+            await ticks();
+            // Abe's phone is stolen: Owen taps Remove during the read, and it is saved.
+            expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
+            expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]);
+            if (how === 'a pin read that fails once') failGets = { key: pinLabel(owen), times: 1 };
+            else mem.delete(pinLabel(owen));
+            release();
+            const r = await reload;
+            expect(r.ok && r.value.list?.entries.length).toBe(2); // the list still shows
+            expect(failGets?.times ?? 0).toBe(0);
+            if (how === 'a pin removed during the read') {
+                expect(mem.has(pinLabel(owen))).toBe(false); // f8d11de4: the open's old pin is back, its ring included
+                return;
+            }
+            expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]); // f8d11de4: []
+            // A name saved from the list on screen: refused until the key without Abe is made; nothing under key 1.
+            const s = await saveNamesEntry(COMMUNITY, owen, STORE, onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(s.ok === false && s.code).toBe('still_removing'); // f8d11de4: it lands under key 1
+            expect(node.entries.filter((e) => e.keyId === k1).length).toBe(2);
+            // The next open makes the key without Abe, and the next ready read catches `seen` up.
+            await open(owen);
+            expect(node.current()!).toMatchObject({ maker: owen.publicKey, parentId: k1, drops: [abe.publicKey] });
+            void ada;
+        });
+    }
+
+    for (const how of ['a pin read that fails once', 'a kept pin whose key is gone'] as const) {
+        it(`U4 (the re-review's :380) a check in person after ${how}: refused with words that say so; the history, keys, trust and removals stay`, async () => {
+            const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+            const cy = await admin('Cy');
+            node.admins.push(role(cy));
+            await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey);
+            const before = (await pinOf(owen))!;
+            expect([before.chain.length, Object.keys(before.ring).length, before.trusted.length, before.manualDrops.length]).toEqual([1, 1, 3, 1]);
+            const blob = mem.get(pinLabel(owen));
+            const secretName = namesPinSecretName(pinLabel(owen));
+            const secret = secrets.get(secretName)!;
+            if (how === 'a pin read that fails once') failGets = { key: pinLabel(owen), times: 1 };
+            else secrets.delete(secretName);
+            const c = await checkEachOther(STORE, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey));
+            expect(c).toEqual({ ok: false, reason: 'not_kept' }); // f8d11de4: ok, and an empty pin with Cy alone saved
+            expect(mem.get(pinLabel(owen))).toBe(blob);
+            if (how === 'a kept pin whose key is gone') secrets.set(secretName, secret);
+            expect(await pinOf(owen)).toEqual(before);
+            // Tried again: the check is saved on top of everything kept.
+            expect((await checkEachOther(STORE, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey))).ok).toBe(true);
+            const after = (await pinOf(owen))!;
+            expect(after.chain).toEqual(before.chain);
+            expect(after.ring).toEqual(before.ring);
+            expect(after.manualDrops).toEqual([abe.publicKey]);
+            expect(after.trusted).toEqual(expect.arrayContaining([owen.publicKey, ada.publicKey, cy.publicKey]));
+        });
+    }
+
+    it("U4 the screen says why a check wasn't saved; an open whose pin read fails once writes nothing either", async () => {
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/r\.reason === 'not_kept' \? COPY\.checkNotKept/);
+        expect(NAMES_COPY.checkNotKept.replace(/’/g, "'")).toBe("This phone couldn't read or keep its names list's keys just now, so the check wasn't saved. Nothing else changed. Try the check again.");
+        // The same hole in the open's look: a read that failed is no pin to start again from.
+        const { phones: [owen] } = await community(['Owen', 'Ada']);
+        const before = (await pinOf(owen))!;
+        failGets = { key: pinLabel(owen), times: 1 };
+        sent = [];
+        const r = await openNamesList(COMMUNITY, owen, STORE);
+        expect(r.ok === false && r.code).toBe('not_kept'); // f8d11de4: an empty pin saved over the kept one
+        expect(onlyStateRead()).toBe(true);
+        expect(await pinOf(owen)).toEqual(before);
+        expect((await open(owen)).plan.kind).toBe('ready');
     });
 });
 

@@ -357,6 +357,19 @@ describe('the cached answer, the 304, and states that never block', () => {
         expect(cards()).toContain('community');
     });
 
+    it('the account loads after the screen did: Home reads it then, without waiting for another focus', async () => {
+        const account = who.identity;
+        who.identity = null;
+        await render();
+        expect(node.requests).toHaveLength(0);
+        expect(document.body.textContent).toContain('Getting your Home…');
+        who.identity = account;
+        await act(async () => { root!.render(createElement(HomeScreen) as unknown as Parameters<Root['render']>[0]); });
+        await settle();
+        expect(homeReads()).toHaveLength(1);
+        expect(cards()).toContain('community');
+    });
+
     it('a key that is no member here: a plain sentence, nothing else asked', async () => {
         node.status = 403;
         await render();

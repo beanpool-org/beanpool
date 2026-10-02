@@ -246,13 +246,18 @@ export default function HomeScreen() {
         return () => { bell.cancel(); ws.remove(); app.remove(); };
     }, []);
 
-    // A new account on the phone starts from nothing.
+    // Another account on the phone (or the account loading after the screen did) starts from nothing, and reads its own
+    // Home at once when Home is in front.
+    const shownFor = useRef(identity?.publicKey);
     useEffect(() => {
+        if (shownFor.current === identity?.publicKey) return;
+        shownFor.current = identity?.publicKey;
         storedRef.current = null;
         phoneLayout.current = null;
         setStored(null);
         setLayout(null);
         setStatus('loading');
+        if (focused.current) void refreshRef.current('focus');
     }, [identity?.publicKey]);
 
     const onPull = useCallback(async () => {
@@ -274,13 +279,15 @@ export default function HomeScreen() {
         if (shownAgain) void refreshRef.current('layout');
     }, [url, pushLayout]);
 
+    const interestsRef = useRef(interests);
+    interestsRef.current = interests;
     const toggleInterest = useCallback((category: string) => {
-        setInterests(prev => {
-            const next = prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category];
-            // Shown the same moment (the Market card reorders in place); saved to the phone and the account behind it.
-            void saveInterests(url, identityRef.current, next);
-            return next;
-        });
+        const prev = interestsRef.current;
+        const next = prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category];
+        interestsRef.current = next;
+        // Shown the same moment (the Market card reorders in place); saved to the phone and the account behind it.
+        setInterests(next);
+        void saveInterests(url, identityRef.current, next);
     }, [url]);
 
     const openTune = useCallback(() => {

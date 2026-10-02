@@ -181,7 +181,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
-            `SELECT public_key, callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_ref, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
             !(r.status === 'suspended' || r.status === 'disabled')
             || (!!viewer && canAdministerTreasury(viewer, r.public_key))
@@ -232,7 +232,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     publicKey: r.public_key, name: r.callsign,
                     callsign: r.callsign,
                     avatar: avatarUrlOf(r.public_key, r.avatar_ref),
-                    avatarUrl: r.avatar_url,
+                    // The photo's URL, as `avatar` (#1478): both apps read `avatar` first and this only where it is empty.
+                    avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     allowance: floorInfo.allowance,
                     derivedAllowance: floorInfo.derivedAllowance,
@@ -297,7 +298,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     // there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
         const rows = db.prepare(
-            `SELECT public_key, callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
+            `SELECT public_key, callsign, avatar_ref, purpose, lat, lng, paused, status, wind_up_finalised_at
              FROM members
              WHERE is_treasury = 1
                AND lat IS NOT NULL
@@ -312,7 +313,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 name: r.callsign || 'Unnamed',
                 callsign: r.callsign || 'Unnamed',
                 avatar: avatarUrlOf(r.public_key, r.avatar_ref),
-                avatarUrl: r.avatar_url,
+                avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref), // as `avatar` (#1478), as in the list
                 purpose: r.purpose ?? null,
                 lat: Number(r.lat),
                 lng: Number(r.lng),
@@ -383,10 +384,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             "SELECT id, amount, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
         ).all(treasury) as any[]);
 
-        const pendingBids = isOperator ? (db.prepare(`
+        // Each deal's other party's photo as its URL, never the photo (#1478): up to 50 rows of each kind. `peer_avatar`
+        // keeps its place in the row (the NULL each SELECT puts there).
+        const withPeerAvatars = (rows: any[]) => rows.map(({ peer_avatar_ref, ...r }) => ({
+            ...r, peer_avatar: avatarUrlOf(r.buyer_pubkey === treasury ? r.seller_pubkey : r.buyer_pubkey, peer_avatar_ref),
+        }));
+        const pendingBids = isOperator ? withPeerAvatars(db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) as peer_avatar
+                   m.callsign as peer_callsign, NULL as peer_avatar, m.avatar_ref as peer_avatar_ref
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
             LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
@@ -394,10 +400,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ORDER BY t.created_at DESC
             LIMIT 50
         `).all(treasury, treasury, treasury) as any[]) : [];
-        const activeDeals = isOperator ? (db.prepare(`
+        const activeDeals = isOperator ? withPeerAvatars(db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) as peer_avatar,
+                   m.callsign as peer_callsign, NULL as peer_avatar, m.avatar_ref as peer_avatar_ref,
                    CASE WHEN t.buyer_pubkey = ? THEN 'pay' ELSE 'fulfill' END as action_required
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id

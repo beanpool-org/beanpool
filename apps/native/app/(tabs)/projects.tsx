@@ -15,6 +15,7 @@ import { YourGroupsRows, YourGroupsLoading, YourGroupsError, useCreateGroupFlow 
 import { useYourGroups, yourGroupsStore } from '../../components/useYourGroups';
 import { groupsYouCouldJoin, chatEmoji, inviteLandingHref, yourGroupsPaneState } from '../../utils/your-groups';
 import { GroupDetailModal } from '../../components/GroupDetailModal';
+import { MemberAvatar } from '../../components/MemberAvatar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme, useStyles } from '../ThemeContext';
 import { palette } from '../../constants/colors';
@@ -361,7 +362,9 @@ export default function ProjectsScreen() {
             >
                 <View style={styles.cardHeader}>
                     {item.avatar ? (
-                        <Image source={{ uri: item.avatar }} style={styles.avatar} accessibilityLabel="Enterprise avatar" />
+                        // The node's URL for the photo, relative to it, or a shipped picture: MemberAvatar resolves both,
+                        // which React Native's Image cannot.
+                        <MemberAvatar avatarUrl={item.avatar} pubkey={item.publicKey} callsign={item.name || item.callsign || ''} size={44} />
                     ) : (
                         <View style={[styles.avatar, styles.avatarPlaceholder]}>
                             <Text style={{ fontSize: 22 }}>{hasGoal ? '🌱' : '🏛️'}</Text>

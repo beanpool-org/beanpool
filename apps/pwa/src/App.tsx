@@ -147,6 +147,9 @@ export function App() {
     // "Check now" on the owners' 12-words prompt opens Settings with that card open; closing Settings resets it.
     const [ownerWordsOpen, setOwnerWordsOpen] = useState(false);
     useEffect(() => { if (!showSettings) setOwnerWordsOpen(false); }, [showSettings]);
+    // Where Settings opens is for that one open ("See my 12 words" → the words, Edit profile → the profile): closing
+    // Settings, by any way, sets it back, so the next open from the header is the menu, never the 12 words on screen.
+    useEffect(() => { if (!showSettings) setSettingsInitialMode('menu'); }, [showSettings]);
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
     const [openNewPost, setOpenNewPost] = useState(false);

@@ -762,6 +762,9 @@ export async function browserCanHoldKey(): Promise<boolean> {
     }
 }
 
+/** A nonce lives ten minutes on the node; one held longer than this is fetched again before it is sent to a provider. */
+export const NONCE_FRESH_MS = 5 * 60 * 1000;
+
 /**
  * Ask the browser to keep this site's storage (design §4.2): Chrome grants it quietly to an installed or much-used
  * site, Firefox asks, Safari ignores it. Nothing waits on the answer, and the words warning stays either way.

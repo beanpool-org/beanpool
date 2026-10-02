@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCommunityMe } from '../lib/api';
 import { hasMnemonic, type BeanPoolIdentity } from '../lib/identity';
-import { offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
+import { NONCE_FRESH_MS, offeredProviders, providerLabel, type JoinNonce } from '../lib/web-join';
 import { leaveForLink, linkResultMessage, requestLinkNonce, type LinkResult } from '../lib/link-signin';
 
 export const ONE_WAY_BACK = 'Your account has one way back: your 12 words. Check you still have them, or add a sign-in.';
@@ -150,6 +150,9 @@ interface AddSignInProps {
  */
 export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin, onLeaving, autoStart = false }: AddSignInProps) {
     const [nonce, setNonce] = useState<JoinNonce | null>(null);
+    // When the nonce came: one held past NONCE_FRESH_MS is asked for again before the trip (time spent reading the
+    // tour, say, must not come back from the provider as a failed sign-in), as WebJoin does.
+    const nonceAt = useRef(0);
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const mounted = useRef(true);
@@ -165,7 +168,7 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
         if (!mounted.current) return;
         setBusy(false);
         if ('message' in got) setMessage(got.message);
-        else setNonce(got.nonce);
+        else { nonceAt.current = Date.now(); setNonce(got.nonce); }
     }
 
     const started = useRef(false);
@@ -182,22 +185,37 @@ export function AddSignIn({ identity, label = 'Add a sign-in', navigate, origin,
         if (!out.ok) { setMessage(out.message); setNonce(null); }
     }
 
+    const fresh = () => Date.now() - nonceAt.current < NONCE_FRESH_MS;
+
     async function choose(provider: Parameters<typeof leaveForLink>[1]) {
         if (!nonce || busy) return;
-        // Nothing to finish first: straight from the tap.
-        if (!onLeaving) return leave(provider, nonce);
+        // Nothing to finish first and a fresh nonce: straight from the tap.
+        if (!onLeaving && fresh()) return leave(provider, nonce);
         setBusy(true);
         let stay = false;
         try {
-            stay = (await onLeaving()) === false;
+            stay = onLeaving ? (await onLeaving()) === false : false;
         } catch (e) {
             console.error('[AddSignIn] could not get ready to leave:', e);
             setMessage('Something went wrong on this page, so the sign-in didn\'t start. Try again.');
             stay = true;
         }
+        let n: JoinNonce | null = nonce;
+        if (!stay && !fresh()) {
+            // Checked last, just before the trip: anything awaited above counts too.
+            const got = await requestLinkNonce(identity);
+            if ('message' in got) {
+                setMessage(got.message);
+                n = null;
+            } else {
+                nonceAt.current = Date.now();
+                setNonce(got.nonce);
+                n = got.nonce;
+            }
+        }
         if (!mounted.current) return;
         setBusy(false);
-        if (!stay) leave(provider, nonce);
+        if (!stay && n) leave(provider, n);
     }
 
     const offered = nonce ? offeredProviders(nonce) : [];

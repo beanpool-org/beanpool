@@ -43,6 +43,7 @@ import {
 } from '../lib/identity';
 import {
     browserCanHoldKey,
+    NONCE_FRESH_MS,
     captureAuthReturn,
     checkCallsign,
     checkSentJoin,
@@ -192,8 +193,6 @@ export type Notice = { tone: 'error' | 'info'; text: string } | null;
 export const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
 const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
-/** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
-const NONCE_FRESH_MS = 5 * 60 * 1000;
 /**
  * What joining takes, said on the door's first screen (here, and the global lobby's Join card): both doors where the
  * node takes 12 words alone (two-doors design §2.6), one sign-in where it does not.

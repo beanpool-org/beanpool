@@ -165,6 +165,49 @@ describe('adding a sign-in from the card', () => {
         expect(loadPendingLink()).toMatchObject({ publicKey: identity.publicKey, provider: 'google', nonce: 'link-n' });
     });
 
+    // Review 4162062801: the node keeps a nonce ten minutes; one held over five is asked for again before the trip, as
+    // WebJoin does, so time spent reading (the tour) doesn't come back as a failed sign-in.
+    it('a nonce held more than five minutes is fetched again before the trip; a fresh one is used as it is', async () => {
+        vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words'));
+        let n = 0;
+        const asked: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+            asked.push(String(input));
+            n++;
+            return new Response(JSON.stringify({
+                nonce: `link-${n}`, expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null,
+            }), { status: 200 });
+        }));
+        const t0 = Date.now();
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(t0);
+        const navigate = vi.fn();
+        render(<OneWayBackCard identity={identity} placement="settings" onSeeWords={() => {}} navigate={navigate} origin="https://global.beanpool.org" />);
+        fireEvent.click(await screen.findByTestId('add-sign-in-start'));
+        await screen.findByTestId('add-sign-in-google');
+        // Six minutes on the page.
+        clock.mockReturnValue(t0 + 6 * 60_000);
+        fireEvent.click(screen.getByTestId('add-sign-in-google'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+        expect(asked.filter((p) => p === '/api/join/link/sso-nonce')).toHaveLength(2);
+        expect(new URL(navigate.mock.calls[0][0]).searchParams.get('state')).toBe('link-2');
+        expect(loadPendingLink(t0 + 6 * 60_000)).toMatchObject({ nonce: 'link-2' });
+        cleanup();
+        localStorage.clear();
+
+        // Four minutes: the one held goes.
+        navigate.mockClear();
+        asked.length = 0;
+        clock.mockReturnValue(t0);
+        render(<OneWayBackCard identity={identity} placement="settings" onSeeWords={() => {}} navigate={navigate} origin="https://global.beanpool.org" />);
+        fireEvent.click(await screen.findByTestId('add-sign-in-start'));
+        await screen.findByTestId('add-sign-in-google');
+        clock.mockReturnValue(t0 + 4 * 60_000);
+        fireEvent.click(screen.getByTestId('add-sign-in-google'));
+        await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1));
+        expect(asked.filter((p) => p === '/api/join/link/sso-nonce')).toHaveLength(1);
+        clock.mockRestore();
+    });
+
     it("a refusal is a sentence beside the button; the result of one that came back is said", async () => {
         vi.mocked(api.getCommunityMe).mockResolvedValue(standing('words'));
         vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'This account already has a sign-in.', code: 'already_linked' }), { status: 409 })));

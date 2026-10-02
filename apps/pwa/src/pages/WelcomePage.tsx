@@ -271,8 +271,11 @@ function doorOf(info: CommunityInfo | null | undefined): Door {
     return info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite';
 }
 
-/** Before leaving for a provider at the end of onboarding: how long the browser's "keep this site's data" ask is given. */
-const PERSIST_WAIT_MS = 5_000;
+/**
+ * Before leaving for a provider at the end of onboarding: how long the guide's count and the browser's "keep this site's
+ * data" ask are given, together. Both never fail (recordOnboardingEvent and askPersistentStorage swallow errors).
+ */
+const LEAVE_WAIT_MS = 5_000;
 
 export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
@@ -1125,19 +1128,19 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // that started it. Both branches above bail out early with an error, so counting
             // on the tap booked a completion for people who never got in — and booked it
             // again each time they retried.
-            recordOnboardingEvent('guide_complete');
+            const counted = recordOnboardingEvent('guide_complete');
 
             // Onboarding complete — explicitly ask for location once
             if (!leaving && 'geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
-            // Nothing waits on the answer, and the words warning stays either way; before leaving the page, the ask is
-            // given a moment to be answered (never a gate: the page leaves either way).
-            if (joinedByDoor) {
-                const asked = askPersistentStorage();
-                if (leaving) await Promise.race([asked, new Promise((r) => setTimeout(r, PERSIST_WAIT_MS))]);
-            }
+            // Nothing waits on the answer, and the words warning stays either way.
+            const asked = joinedByDoor ? askPersistentStorage() : Promise.resolve(null);
+            // Before leaving the page for a provider, the count's request and the storage ask are given a moment to
+            // finish (review 4162062917: a count sent as the page left was lost 1 time in 8). Never a gate: the page
+            // leaves after LEAVE_WAIT_MS whatever has answered.
+            if (leaving) await Promise.race([Promise.all([counted, asked]), new Promise((r) => setTimeout(r, LEAVE_WAIT_MS))]);
             onboardingFinished.current = true;
             return true;
         } finally {

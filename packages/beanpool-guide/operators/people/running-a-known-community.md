@@ -25,7 +25,7 @@ Whoever runs the server can change what it stores and what it tells each phone, 
 
 What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; a PDF or a note an admin writes; and an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had.
 
-Every admin's phone learns of a removal when it opens the list, unless the server hides it. To be sure, meet and check each other: each phone that can add names shows the list key it adds them under. Open the list on both phones; they should show the same one. If they don't, the server is showing them different things. Add no names until they match, and tell your admins.
+Every admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, each admin looks at the admins their phone shows: a phone that still shows the removed admin taps Remove @X's old key. Whatever the server says, that phone then makes a new key without them or writes nothing. Two phones that show different list keys are being shown different things: add no names until they match, and tell your admins.
 
 Members don't see the names. Showing real names to members, as some LETS directories do, isn't available yet.
 

@@ -15,7 +15,7 @@ An entry holds your name and, sometimes, a short note an admin writes, like how 
 
 **Only your community's owners and admins, on their own phones.** Your name is sealed on an admin's phone before it is sent to your community's server. The server keeps scrambled text: a backup, a copy, BeanPool, or anyone who steals the database holds nothing readable.
 
-Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. Admins check for that by meeting and comparing their phones.
+Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. An admin whose phone still shows the removed admin removes their key by hand, and that phone then makes a new key without them or writes nothing.
 
 **Other members don't see the names.** They see your BeanPool name, as always.
 

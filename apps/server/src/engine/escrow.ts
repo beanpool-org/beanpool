@@ -871,8 +871,10 @@ export function completePostTransaction(
     }
     assertDealRowAmount(row.credits, 'pending');
     const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
-    // The way out of either refusal below: the booked quantity pays what the escrow holds, with no rate worked out.
-    const wayOut = `Confirm the ${units} you booked, or cancel the deal and the Beans held for it go back.`;
+    // Each refusal below names the way out that works in the only states that reach it (#1445 re-review, measured):
+    // a booked quantity outside 0.01–10000 is itself refused as a final quantity, and neither app can confirm a per-unit
+    // deal with none, so only the cancel works there; a row whose credits were set near the largest number by hand can't
+    // be completed or cancelled (its escrow holds what was really paid), and only a moderator's removal clears it.
     let releaseCredits = row.credits;
     if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
         // The rate must be one the row really holds (#1445 review, BLOCKING 2): its booked quantity a real one (a row from
@@ -882,7 +884,8 @@ export function completePostTransaction(
         const rate = row.credits / bookedHours;
         const roundTrips = Number.isFinite(rate) && Math.abs(rate * bookedHours - row.credits) <= 1e-9 * Math.max(1, row.credits);
         if (!isDealQuantity(bookedHours) || !roundTrips) {
-            throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. ${wayOut}`);
+            throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. `
+                + 'Cancel the deal, and the Beans held for it go back.');
         }
         releaseCredits = rate * finalHours;
     }
@@ -890,7 +893,9 @@ export function completePostTransaction(
     // near the largest number): the row is fine and the deal can still be cancelled, so the words say that, not
     // assertDealRowAmount's "can't be cancelled" (sync check F2).
     if (!isBeanAmount(releaseCredits)) {
-        throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. ${wayOut}`);
+        throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. `
+            + "This deal holds an amount the Beans held for it can't cover, so it can't be completed or cancelled. "
+            + 'Ask a moderator to remove the listing to clear it: the Beans held for it go back to whoever paid them.');
     }
 
     const completedAt = new Date().toISOString();

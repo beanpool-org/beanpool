@@ -33,7 +33,7 @@
  *   9. Whoever runs the server: a statement and a share written straight into the tables (A1), a key the owner password
  *      makes an admin signing a real statement (A2), the same key added properly by a check and a vouch (B3), and the
  *      owner password moving Ada's account to the operator's key, over HTTP (A3).
- *  10. Two admins to confirm with exactly two admins: each can confirm the other, and a member waits for the second.
+ *  10. Two admins to confirm with exactly two admins (F7): each can confirm the other, and a member waits for the second.
  *  11. The only holder of the newest key, made a moderator and an admin again, makes a new key dropping nobody (C6); a
  *      server put back to an older history is refused by a phone that took a newer one, and the phone puts it back
  *      (E1), after which what it writes is under a key the removed admin never had.
@@ -574,20 +574,20 @@ async function main(): Promise<void> {
     const allOpen = (await entries(adaReal)).body.entries.every((e: any) => { try { return !!openNamesEntry(adaRealP.key(e.keyId), e.id, e.keyId, e.ciphertext).name; } catch { return false; } });
     assert(adaRealOpen.plan.kind === 'ready' && allOpen, "9. A3 and it opens every entry");
 
-    // ── 10. Two admins to confirm, with exactly two admins ───────────────────────────────────────
+    // ── 10. Two admins to confirm, with exactly two admins (F7) ──────────────────────────────────
     for (const gone of [oscar, bea]) require_((await call(null, 'DELETE', `/api/local/admin/node-roles/${gone.pk}/admin`, undefined, PASSWORD)).status === 200, `10. ${gone.name} stops being an admin`);
     require_((await owenP.open()).plan.kind === 'ready' && (await adaRealP.open()).plan.kind === 'ready', '10. Owen and Ada are the only two, and both phones are ready');
     require_((await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: true })).status === 200, '10. Owen asks for two admins to confirm');
     const free = (db.prepare('SELECT e.id FROM names_entries e WHERE NOT EXISTS (SELECT 1 FROM confirmations c WHERE c.entry_id = e.id AND c.revoked_at IS NULL) ORDER BY e.id').all() as { id: string }[]).map((r) => r.id);
     require_(free.length >= 3, `10. three entries with nobody confirmed against them (${free.length})`);
     const owenConfirmsAda = await confirm(owen, adaReal, free[0]);
-    assert(owenConfirmsAda.status === 201 && owenConfirmsAda.body?.status === 'confirmed', `10. Owen confirms Ada: confirmed, since no admin but Owen could (${show(owenConfirmsAda)})`);
+    assert(owenConfirmsAda.status === 201 && owenConfirmsAda.body?.status === 'confirmed', `10. F7 Owen confirms Ada: confirmed, since no admin but Owen could (${show(owenConfirmsAda)})`);
     const adaConfirmsOwen = await confirm(adaReal, owen, free[1]);
-    assert(adaConfirmsOwen.status === 201 && adaConfirmsOwen.body?.status === 'confirmed', `10. and Ada confirms Owen the same way (${show(adaConfirmsOwen)})`);
+    assert(adaConfirmsOwen.status === 201 && adaConfirmsOwen.body?.status === 'confirmed', `10. F7 and Ada confirms Owen the same way (${show(adaConfirmsOwen)})`);
     const moWaits = await confirm(owen, mo, free[2]);
-    assert(moWaits.status === 201 && moWaits.body?.status === 'awaiting_second', `10. a member still waits for a second admin (${show(moWaits)})`);
+    assert(moWaits.status === 201 && moWaits.body?.status === 'awaiting_second', `10. F7 a member still waits for a second admin (${show(moWaits)})`);
     const adaSeconds = await call(adaReal, 'POST', `/api/names/confirmations/${moWaits.body.id}/second`, {});
-    assert(adaSeconds.status === 200 && adaSeconds.body?.status === 'confirmed', `10. whom Ada gives (${show(adaSeconds)})`);
+    assert(adaSeconds.status === 200 && adaSeconds.body?.status === 'confirmed', `10. F7 whom Ada gives (${show(adaSeconds)})`);
 
     // ── 11. The only holder out and back (C6), and a rollback (E1) ───────────────────────────────
     // Ada's phone makes key N and dies before sending it: she is its only holder. Then she is made a moderator and an admin again.

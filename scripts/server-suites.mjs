@@ -84,6 +84,8 @@ export const SUITES = [
     'test-home',
     'test-knock',
     'test-commons-conservation',
+    'test-commons-pot-edges',
+    'test-commons-pot-unknown',
     'test-ledger-rollback',
     'test-treasury-keepership',
     'test-treasury-eggs',

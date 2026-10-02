@@ -707,11 +707,28 @@ export function initStateEngine(): void {
     // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
     // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
     // empty. It has to survive a restart to mean anything.
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && typeof commonsRow.balance === 'number') {
-        setCommonsBalance(commonsRow.balance);
-        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
+    //
+    // A row that holds no number (NULL, or text such as 'NaN') makes the pot UNKNOWN in memory: NaN, never 0 (#1445
+    // confirmation, NB-1). Left at the module's 0, the boot's own flush wrote 0 over the row, the audit then found no
+    // broken pot, a take-over reported the old pot as drift, and a rebaseline accepted it. As NaN it is the non-finite pot
+    // every path already handles: nothing writes it (engine/audit.ts persistCommonsBalance), the audit counts the row as
+    // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
+    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
+    //
+    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
+    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
+    if (restoredPot !== null && !Number.isFinite(restoredPot)) {
+        setCommonsBalance(restoredPot);
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+            + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
+            + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
+            + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
+    } else if (restoredPot !== null) {
+        setCommonsBalance(restoredPot);
+        const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -1133,7 +1150,11 @@ function sweepSettledEscrowAccounts(): void {
           )
     `).get(DUST_THRESHOLD) as { dustSum: number };
 
-    if (dustSumRow && dustSumRow.dustSum !== 0) {
+    // Not while the pot is unknown or not finite (its row holds no number, or ±Infinity): the absorb below is a raw
+    // `balance + ?` on the pot's row, which SQLite reads as 0 + dust for text and would write over it (NB-1 on #1445), and
+    // zeroing the dust without crediting a pot would destroy it. The dust stays where it is until the pot is mended.
+    const potKnown = Number.isFinite(COMMONS_BALANCE);
+    if (potKnown && dustSumRow && dustSumRow.dustSum !== 0) {
         setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
         db.prepare(`
             UPDATE accounts 
@@ -1143,7 +1164,7 @@ function sweepSettledEscrowAccounts(): void {
         `).run(dustSumRow.dustSum);
     }
 
-    db.prepare(`
+    if (potKnown) db.prepare(`
         UPDATE accounts 
         SET balance = 0,
             last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -2496,6 +2517,21 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
+ * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ */
+function commonsPotFromRow(balance: unknown): number {
+    return typeof balance === 'number' ? balance : NaN;
+}
+
+/** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
+function describeRowBalance(balance: unknown): string {
+    if (balance === null || balance === undefined) return 'NULL';
+    if (Buffer.isBuffer(balance)) return 'a BLOB';
+    return typeof balance === 'string' ? `text '${balance}'` : String(balance);
+}
+
+/**
  * Put the in-memory ledger back to what the rows say, or halt.
  *
  * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
@@ -2521,8 +2557,9 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
         if (commonsSnapshot !== null) {
             setCommonsBalance(commonsSnapshot);
         } else {
-            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+            // A row holding no number makes the pot unknown (NaN), as at boot: memory never keeps a pot the rows don't hold.
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+            if (row) setCommonsBalance(commonsPotFromRow(row.balance));
         }
     } catch (resyncError: any) {
         // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
@@ -2632,7 +2669,7 @@ export function moveToCommons(
  *
  * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
  * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
- * null if the pot cannot cover it — the Commons never goes into debt.
+ * null if the pot cannot cover it (unless `allowDeficit`), and always when the pot is not a finite number: nothing moves.
  */
 export function payFromCommons(
     to: string,
@@ -2657,48 +2694,59 @@ export function payFromCommons(
     // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
     const recipientNow = ledger.getAccount(to).balance;
     if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
-    if (!ledger.deductFromCommons(amount)) {
-        if (!opts?.allowDeficit) return null;
-        setCommonsBalance(getCommonsBalanceExact() - amount);
-        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    // A pot that is unknown (its row held no number at boot, so it is NaN) or not finite pays nothing, `allowDeficit` or
+    // not, and nothing moves (#1445 confirmation, NB-3). `allowDeficit` used to go on to credit the recipient and write the
+    // history row, and only the flush at the end refused the pot: called outside a conservingTransaction, the credit stayed
+    // and the pot's debit was never written, Beans minted (measured, test-commons-pot-edges: 1 Bean per call). Before
+    // anything moves, so a caller inside a conservingTransaction gets a plain refusal, not a throw and a ledger resync.
+    if (!Number.isFinite(getCommonsBalanceExact())) {
+        console.warn(`[Commons] Refused to pay ${amount} from a Commons pot that is not a number (${String(getCommonsBalanceExact())}). Memo: ${memo}`);
+        return null;
     }
+    // The pot can't cover it and no deficit is allowed: refused here, before anything moves (deductFromCommons's own test).
+    if (!opts?.allowDeficit && getCommonsBalanceExact() < amount) return null;
 
-    const toAcc = ledger.getAccount(to);
-    toAcc.balance += amount;
+    // THE WHOLE MOVE IN ONE conservingTransaction (NB-3): the pot drawn down and the recipient credited in memory, the
+    // history row, the recipient's row and the pot's row all commit together or not at all, and a failure puts memory back
+    // to the rows. It used to be the history row and the recipient's row as separate autocommits, then the pot's row in
+    // the flush: only a caller that held a conservingTransaction itself was safe. Nested in one (a prune, a settlement
+    // reversal, an escrow write-off), it is a savepoint, as transfer() is.
+    const txn = conservingTransaction((): Transaction | null => {
+        if (!ledger.deductFromCommons(amount)) {
+            if (!opts?.allowDeficit) return null;
+            setCommonsBalance(getCommonsBalanceExact() - amount);
+            console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from: 'COMMONS_POOL', to, amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-        authSigner: opts?.authSigner ?? null,
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+        const toAcc = ledger.getAccount(to);
+        toAcc.balance += amount;
 
-    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
-    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
-    // them and this must too (review finding).
-    //
-    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
-    // to land separately, or a crash between them destroys beans on disk.
-    //
-    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
-    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
-    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
-    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
-    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
-    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
-    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
-    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
-    persistDecayAndCommons();
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from: 'COMMONS_POOL', to, amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(built.id, built.from, built.to, built.amount, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, built.timestamp);
+
+        // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this they are
+        // stranded and the transactions table drifts from account balances — `moveToCommons` persists them and this must
+        // too (review finding). The decay debits and the pot's row, which carries both their credit and this payment's
+        // debit, land in the same commit as everything above.
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the pot's debit durable
+        return built;
+    });
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);

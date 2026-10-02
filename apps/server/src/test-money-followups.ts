@@ -424,7 +424,8 @@ async function main(): Promise<void> {
     try { persistCommonsBalance(); } catch (e: any) { potThrew = e?.message || String(e); }
     let flushThrew = '';
     try { persistDecayAndCommons(); } catch (e: any) { flushThrew = e?.message || String(e); }
-    assert(/not a finite number/.test(potThrew) && /not a finite number/.test(flushThrew),
+    // In the words a member reads while the pot is unknown (engine/audit.ts COMMONS_POT_PAUSED, #1465 review); the detail is logged.
+    assert(/^Payments are paused on this community/.test(potThrew) && /^Payments are paused on this community/.test(flushThrew),
         `writing a pot that is NaN is refused, alone and with the demurrage flush (${JSON.stringify([potThrew, flushThrew])})`);
     assert(potRow() === potBefore, `and the Commons row keeps its value, not 0 (${potBefore} → ${potRow()})`);
     setCommonsBalance(potMemory);

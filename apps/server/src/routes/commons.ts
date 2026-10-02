@@ -117,10 +117,17 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         return;
     }
     
+    const projectExists = getProjects().some(p => p.id === projectId);
+    if (!projectExists) {
+        ctx.status = 404;
+        ctx.body = { error: 'Project not found' };
+        return;
+    }
+
     const success = deleteProject(actor, projectId);
     if (!success) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed to delete project. It might not exist, you might not own it, or it is no longer in a proposed state.' };
+        ctx.body = { error: 'Failed to delete project. You might not own it, or it is no longer in a proposed state.' };
         return;
     }
     ctx.body = { success: true };

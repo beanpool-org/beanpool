@@ -150,12 +150,12 @@ async function main() {
     const treasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
     assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
 
-    // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 400
+    // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 404
     const repeatDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', proposer, {
         proposerPubkey: proposer.pubKeyHex,
         projectId,
     });
-    assert(repeatDeleteRes.status === 400, `Deleting non-existent project returns 400 (got ${repeatDeleteRes.status})`);
+    assert(repeatDeleteRes.status === 404, `Deleting non-existent project returns 404 (got ${repeatDeleteRes.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

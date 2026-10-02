@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./api', () => ({ saveHomePreferences: vi.fn(async () => ({ success: true })) }));
 
 import * as api from './api';
-import { FAV_CATEGORIES_KEY, readBrowserInterests, settleInterests, shareInterests } from './home-interests';
+import { FAV_CATEGORIES_KEY, interestsUnsaved, readBrowserInterests, resendUnsavedInterests, settleInterests, shareInterests } from './home-interests';
 
 const PK = 'b'.repeat(64);
 const browser = () => JSON.parse(localStorage.getItem(FAV_CATEGORIES_KEY) || 'null');
@@ -52,6 +52,52 @@ describe('interests, one truth', () => {
         expect(readBrowserInterests()).toEqual(['energy']);
         expect(settleInterests(PK, [])).toEqual({ interests: ['energy'], movedUp: true });
         expect(api.saveHomePreferences).toHaveBeenLastCalledWith(PK, { interests: ['energy'] });
+    });
+
+    it('a change made offline, on an account that has some, is not overwritten by the next answer: it is sent (PR #1479 review)', async () => {
+        // The account has ['food'], and this browser matches it.
+        expect(settleInterests(PK, ['food'])).toEqual({ interests: ['food'], movedUp: false });
+        vi.mocked(api.saveHomePreferences).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        expect(await shareInterests(PK, ['food', 'energy'])).toBe(false);
+        expect(browser()).toEqual(['food', 'energy']);
+        expect(interestsUnsaved(PK)).toBe(true);
+        // The next answer still says ['food']: this browser's change stays, and goes up.
+        vi.mocked(api.saveHomePreferences).mockClear();
+        expect(settleInterests(PK, ['food'])).toEqual({ interests: ['food', 'energy'], movedUp: true });
+        expect(browser()).toEqual(['food', 'energy']);
+        expect(api.saveHomePreferences).toHaveBeenCalledTimes(1);
+        expect(api.saveHomePreferences).toHaveBeenCalledWith(PK, { interests: ['food', 'energy'] });
+        // Taken: the account's answer is this browser's again.
+        await vi.waitFor(() => expect(interestsUnsaved(PK)).toBe(false));
+        vi.mocked(api.saveHomePreferences).mockClear();
+        expect(settleInterests(PK, ['food', 'energy', 'arts'])).toEqual({ interests: ['food', 'energy', 'arts'], movedUp: false });
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+    });
+
+    it('cleared offline, after the account had some: the empty list is sent, never filled back in', async () => {
+        settleInterests(PK, ['food']);
+        vi.mocked(api.saveHomePreferences).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        expect(await shareInterests(PK, [])).toBe(false);
+        expect(settleInterests(PK, ['food'])).toEqual({ interests: [], movedUp: true });
+        expect(api.saveHomePreferences).toHaveBeenLastCalledWith(PK, { interests: [] });
+    });
+
+    it('an earlier save that lands after a later change was made does not clear the later change\'s mark', async () => {
+        let first!: () => void;
+        vi.mocked(api.saveHomePreferences)
+            .mockImplementationOnce(() => new Promise(r => { first = () => r({ success: true }); }))
+            .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        const a = shareInterests(PK, ['food']);
+        expect(await shareInterests(PK, ['food', 'tools'])).toBe(false);
+        first();
+        expect(await a).toBe(true);
+        expect(interestsUnsaved(PK)).toBe(true);
+        // After a 304 (no interests in it), the change is sent again.
+        vi.mocked(api.saveHomePreferences).mockClear();
+        expect(resendUnsavedInterests(PK)).toBe(true);
+        expect(api.saveHomePreferences).toHaveBeenCalledWith(PK, { interests: ['food', 'tools'] });
+        await vi.waitFor(() => expect(interestsUnsaved(PK)).toBe(false));
+        expect(resendUnsavedInterests(PK)).toBe(false);
     });
 
     it('a browser that can keep nothing still saves on the account', async () => {

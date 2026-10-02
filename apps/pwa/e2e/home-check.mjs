@@ -5,8 +5,10 @@
  *
  *   1. a member of a local community lands on Home: one GET /api/home, the cards the node says, no sideways scroll, every
  *      control at least 44 px tall, axe clean (light and dark); a tap on an interest reorders the Market card in place
- *      and saves on the account; "…" Hide survives a reload (the account's layout); Edit home is a real dialog (axe
- *      clean, Escape gives focus back); with the node unreachable the kept answer is drawn and the page says so;
+ *      and saves on the account; "…" Hide gives focus to the next card and survives a reload (the account's layout);
+ *      Edit home is a real dialog (axe clean, Escape gives focus back), and its Show brings a card hidden on an earlier
+ *      visit back at once; with the node unreachable the kept answer is drawn and the page says so; Sign Out (Device
+ *      Only) leaves no cached Home in the browser;
  *   2. the cost (§5.4): the landing's requests against what the Market reads when it is opened, and an idle Home tab's
  *      traffic over a window with one doorbell (a new listing) in it, by Chromium's own byte counts;
  *   3. a visitor in the global lobby: Home first, the Join card, then the public cards from one unsigned read, axe clean;
@@ -314,6 +316,13 @@ async function localMember(browser, root) {
         await page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
         await layoutSaved;
         check(!(await page.getByTestId('home-card-pulse').count()), 'Hide takes the Pulse card away');
+        await wait(300);
+        const focusAfter = await page.evaluate(() => {
+            const el = document.activeElement;
+            return el === document.body || !el ? 'BODY' : `${el.closest('section[data-testid^="home-card-"]')?.getAttribute('data-testid')} ${el.getAttribute('aria-label') || el.textContent}`;
+        });
+        check(focusAfter === 'home-card-beans Card options for Your Beans', `focus goes to the next card's "…", never <body> (${focusAfter})`);
+        check(/The Pulse is hidden\. Edit home brings it back\./.test(await page.getByTestId('home-live').innerText()), 'and the page says, politely, where the card went');
         const fresh = await openContext(browser, node.origin, { identity: ana });
         await land(fresh.page, node.origin);
         await fresh.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
@@ -322,6 +331,15 @@ async function localMember(browser, root) {
         const freshRows = await marketRows(fresh.page);
         check(/Sourdough/.test(freshRows[0] ?? ''), 'and the node orders the Market card by them (food first)');
         await fresh.context.close();
+
+        // Leave and come back (a reload): the landing leaves the hidden Pulse out of `cards=`, so the node leaves it out.
+        const tr = net.mark();
+        await page.reload({ waitUntil: 'load' });
+        await scaleText(page);
+        await page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        await wait(1_000);
+        const back = net.since(tr).filter((r) => r.path === '/api/home').at(-1);
+        check(!!back && !new URLSearchParams(back.search).get('cards')?.split(',').includes('pulse'), `coming back, Home is read without the hidden Pulse (cards=${new URLSearchParams(back?.search ?? '').get('cards')})`);
 
         // Edit home: a real dialog.
         const edit = page.getByTestId('home-edit-open');
@@ -344,11 +362,17 @@ async function localMember(browser, root) {
         await shot(page, '3-member-edit-home', { window: true });
         for (let i = 0; i < 40; i++) await page.keyboard.press('Tab');
         check(await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')), 'Tab keeps focus inside the dialog');
+        const shownAt = net.mark();
         await dialog.getByRole('switch', { name: 'Show The Pulse' }).click();
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'detached' });
         check(await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'home-edit-open'), 'Escape closes it and gives focus back to Edit home');
-        check(!!(await page.getByTestId('home-card-pulse').count()), 'the Pulse is back');
+        // Shown on a visit whose answer was built without it: Home is read again with it, at once (not at the 120 s poll).
+        await page.getByTestId('home-card-pulse').waitFor({ timeout: 8_000 }).catch(() => {});
+        const showRead = net.since(shownAt).filter((r) => r.path === '/api/home');
+        const pulseBack = !!(await page.getByTestId('home-card-pulse').count());
+        check(pulseBack && showRead.length === 1 && new URLSearchParams(showRead[0].search).get('cards')?.split(',').includes('pulse'),
+            `Show brings the Pulse back at once: one read with it in cards= (${showRead.map((r) => `${r.status} ${Math.round((r.at - shownAt) / 100) / 10} s`).join(', ') || 'no read'}), the card ${pulseBack ? 'drawn' : 'missing'}`);
 
         // The Market's own reads when it is opened: what a Market landing makes beyond the shell's.
         const tm = net.mark();
@@ -390,6 +414,34 @@ async function localMember(browser, root) {
         check(!!(await page.getByTestId('home-card-market').count()), 'the node not answering: the answer this browser kept is drawn, and the page says so');
         await shot(page, '4-member-home-node-unreachable');
         await page.unroute('**/api/home*');
+
+        // Sign Out (Device Only): nothing of her Home is left in this browser (her Beans, who wrote to her, her groups).
+        const homeKept = () => page.evaluate(async () => {
+            const names = (await indexedDB.databases()).map((d) => d.name);
+            if (!names.includes('beanpool-home')) return 0;
+            return new Promise((resolve) => {
+                const open = indexedDB.open('beanpool-home');
+                open.onsuccess = () => {
+                    const db = open.result;
+                    if (!db.objectStoreNames.contains('answers')) { db.close(); resolve(0); return; }
+                    const count = db.transaction('answers').objectStore('answers').count();
+                    count.onsuccess = () => { db.close(); resolve(count.result); };
+                    count.onerror = () => { db.close(); resolve(-1); };
+                };
+                open.onerror = () => resolve(-1);
+            });
+        });
+        check((await homeKept()) > 0, 'before signing out, this browser keeps her Home (the copy drawn offline)');
+        await page.getByRole('button', { name: 'Settings' }).first().click();
+        await page.getByText('⚠️ Account Deletion & Sign Out').click();
+        await page.getByRole('button', { name: 'Sign Out (Device Only)' }).click();
+        const reloaded = page.waitForEvent('load', { timeout: 15_000 });
+        await page.getByRole('button', { name: 'Confirm Sign Out' }).click();
+        await reloaded;
+        await wait(1_000);
+        const left = await homeKept();
+        const keys = await page.evaluate(() => Object.keys(localStorage));
+        check(left === 0, `Sign Out (Device Only): no cached Home is left in the browser (${left} kept; localStorage: ${keys.join(', ') || 'empty'})`);
 
         check(seen.violations.length === 0, `no document-policy violations${seen.violations.length ? `: ${JSON.stringify(seen.violations)}` : ''}`);
         await context.close();

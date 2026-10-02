@@ -4,7 +4,8 @@
  *
  * The menu is a labelled button ("Card options for Coming up") that opens a short list of buttons under it: the first
  * item takes focus, the arrow keys move between them, Escape or a tap elsewhere closes it, and focus goes back to the
- * "…" afterwards. Each item is a full-width button at least 44 px tall.
+ * "…" afterwards (after Hide, which takes the card and its "…" away, the page moves it to the nearest card left). Each
+ * item is a full-width button at least 44 px tall.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
@@ -75,7 +76,8 @@ function CardMenu({ title, canMoveUp, canMoveDown, onHide, onMove }: MenuProps) 
             {open && (
                 <div ref={list} id={menuId} role="group" aria-label={`Options for ${title}`} onKeyDown={onKeyDown}
                     className="absolute right-0 top-full z-30 w-48 max-w-[calc(100vw-2rem)] py-1 rounded-xl shadow-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700">
-                    <button type="button" className={item} onClick={() => { close(true); onHide(); }}>Hide</button>
+                    {/* The card goes with its "…": the page gives focus to the nearest card left (pages/HomePage.tsx). */}
+                    <button type="button" className={item} onClick={() => { close(false); onHide(); }}>Hide</button>
                     <button type="button" className={item} disabled={!canMoveUp} onClick={() => { close(true); onMove('up'); }}>Move up</button>
                     <button type="button" className={item} disabled={!canMoveDown} onClick={() => { close(true); onMove('down'); }}>Move down</button>
                 </div>
@@ -104,7 +106,8 @@ export function HomeCard({ id, title, titleAside, menu, accent, children, style 
         <section aria-labelledby={headingId} data-testid={`home-card-${id}`} style={style}
             className={`bg-white dark:bg-nature-900 rounded-2xl shadow-sm border p-4 mb-3 min-w-0 ${accent ? 'border-amber-300 dark:border-amber-700' : 'border-nature-200 dark:border-nature-800'}`}>
             <div className="flex items-start justify-between gap-2 mb-1">
-                <h2 id={headingId} className="m-0 min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
+                {/* Focusable from the page (never by Tab): where focus goes when the card above it is hidden. */}
+                <h2 id={headingId} tabIndex={-1} className="m-0 min-w-0 break-words text-[0.7rem] font-extrabold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                     {title}
                 </h2>
                 <div className="flex items-start gap-1 shrink-0">

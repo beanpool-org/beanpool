@@ -18,7 +18,7 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
-import type { HomeAnswer, HomeLayout } from './home-cards';
+import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeLayout } from './home-cards';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
 import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
@@ -384,9 +384,14 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
-/** Marks the signer's own notices seen; the node ignores an id that is not theirs. */
+/**
+ * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
+ * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
+ */
 export async function markNoticesSeen(ids: string[]): Promise<{ success: boolean; marked: number }> {
-    return request('POST', '/api/notices/seen', { ids });
+    const answer = await request<{ success: boolean; marked: number }>('POST', '/api/notices/seen', { ids });
+    try { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); } catch { /* no window: nothing listens */ }
+    return answer;
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {

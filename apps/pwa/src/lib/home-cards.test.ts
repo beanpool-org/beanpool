@@ -5,9 +5,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    HOME_CARD_IDS, askedCards, beansLines, canTailor, closesWords, communityFacts, communityLine, decideLine, editableCards, effectiveOrder,
-    findBody, findPinned, hideCard, joinedLine, moveCard, newerLayout, normalizeLayout, probationSentence, resetLayout,
-    shownCards, showCard, starredFirst, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe,
+    HOME_CARD_IDS, askedCards, beansLines, canTailor, cardsBuiltFor, closesWords, communityFacts, communityLine, decideLine, editableCards,
+    effectiveOrder, findBody, findPinned, hideCard, joinedLine, layoutNeedsRead, moveCard, newerLayout, normalizeLayout, probationSentence,
+    resetLayout, shownCards, showCard, starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards,
+    type HomeLayout, type HomeMe,
 } from './home-cards';
 
 const NOW = Date.parse('2026-10-02T09:00:00.000Z');
@@ -272,5 +273,102 @@ describe('the words (§3.1, §9)', () => {
         expect(probationSentence(p(168, 2, 3))).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
         expect(probationSentence(null)).toBeNull();
         expect(probationSentence({ ...p(72, 3, 10), onProbation: false })).toBeNull();
+    });
+});
+
+describe('an edit is never older than the layout it was made from (a slow clock, PR #1479 review)', () => {
+    // The layout in hand was saved by a device whose clock runs ahead; this device's clock is 3 minutes slow.
+    const base = normalizeLayout({ v: 1, order: [], hidden: [], dismissed: {}, updatedAt: '2026-10-02T09:59:00.000Z' })!;
+    const slow = Date.parse('2026-10-02T09:57:00.000Z');
+
+    it('Hide, Show, Move and Reset each win over their base, so the node keeps them and the card stays as tapped', () => {
+        const among = ['events', 'market', 'pulse'] as const;
+        for (const edited of [
+            hideCard(base, 'pulse', slow),
+            showCard({ ...base, hidden: ['pulse'] }, 'pulse', slow),
+            moveCard(base, 'market', 'down', [...among], slow),
+            resetLayout({ ...base, hidden: ['beans'] }, slow),
+        ]) {
+            expect(Date.parse(edited.updatedAt!)).toBeGreaterThan(Date.parse(base.updatedAt!));
+            expect(newerLayout(base, edited)).toBe(edited);
+        }
+    });
+
+    it('a right clock stamps its own now; a layout never saved has nothing to be after', () => {
+        const now = Date.parse('2026-10-02T10:30:00.000Z');
+        expect(hideCard(base, 'pulse', now).updatedAt).toBe('2026-10-02T10:30:00.000Z');
+        expect(hideCard(null, 'pulse', slow).updatedAt).toBe('2026-10-02T09:57:00.000Z');
+    });
+});
+
+describe('a layout change that brings a card back reads Home again, and only then (PR #1479 review)', () => {
+    const hidPulse: HomeLayout = { v: 1, order: [], hidden: ['pulse'], dismissed: {}, updatedAt: daysAgo(1) };
+    // What the node answers when asked without the Pulse: no pulse card.
+    const withoutPulse = answer({ market, events, community, beans }, { layout: hidPulse });
+    // What that answer was built for (worked out in each test, so each fails on its own where the rule is missing).
+    const builtWithoutPulse = () => cardsBuiltFor(askedCards(hidPulse, withoutPulse, NOW), withoutPulse, NOW);
+
+    it('Show, or Reset to defaults, of a card the answer was not built for needs a read', () => {
+        const builtWithout = builtWithoutPulse();
+        expect(builtWithout).not.toContain('pulse');
+        expect(layoutNeedsRead(hidPulse, showCard(hidPulse, 'pulse', NOW), withoutPulse, builtWithout, NOW)).toBe(true);
+        expect(layoutNeedsRead(hidPulse, resetLayout(hidPulse, NOW), withoutPulse, builtWithout, NOW)).toBe(true);
+    });
+
+    it('a Hide, a move, or a Show the answer was built with needs none', () => {
+        const builtWithout = builtWithoutPulse();
+        const all = answer({ market, events, pulse, community, beans });
+        const builtAll = cardsBuiltFor(undefined, all, NOW);
+        expect(builtAll).toContain('pulse');
+        const hid = hideCard(null, 'pulse', NOW);
+        expect(layoutNeedsRead(null, hid, all, builtAll, NOW)).toBe(false);
+        expect(layoutNeedsRead(hid, showCard(hid, 'pulse', NOW), all, builtAll, NOW)).toBe(false);
+        expect(layoutNeedsRead(hidPulse, hideCard(hidPulse, 'beans', NOW), withoutPulse, builtWithout, NOW)).toBe(false);
+        expect(layoutNeedsRead(hidPulse, moveCard(hidPulse, 'market', 'up', ['events', 'market'], NOW), withoutPulse, builtWithout, NOW)).toBe(false);
+    });
+
+    it("read with no cards=, the answer was built from the account's own layout", () => {
+        expect(cardsBuiltFor(undefined, withoutPulse, NOW)).toEqual(builtWithoutPulse());
+        expect(cardsBuiltFor(['needs', 'community'], withoutPulse, NOW)).toEqual(['needs', 'community']);
+    });
+
+    it("not known what the answer was built for (an older copy): a card shown again that the answer doesn't hold", () => {
+        expect(layoutNeedsRead(hidPulse, showCard(hidPulse, 'pulse', NOW), withoutPulse, null, NOW)).toBe(true);
+        expect(layoutNeedsRead(hidPulse, showCard(hidPulse, 'beans', NOW), withoutPulse, null, NOW)).toBe(false);
+    });
+});
+
+describe('First steps goes when it has nothing to say on the web (§6.1, PR #1479 review)', () => {
+    const august = '2026-08-10T00:00:00.000Z';
+    const globalMember = (stepsOver: Partial<typeof steps>, findCard = { ...find, communities: [] as typeof find.communities }, meOver: Partial<HomeMe> = {}) =>
+        answer({ find: findCard, steps: { ...steps, joinedAt: august, area: false, ...stepsOver }, community },
+            { profile: 'global', features: GLOBAL_FEATURES, me: me({ joinedAt: august, interests: ['food'], ...meOver }) });
+
+    it('a global member a month in who has posted: the node still sends it (no area), the web leaves it out', () => {
+        const a = globalMember({ firstPost: true });
+        expect(a.cards.steps).toBeDefined();
+        expect(stepLines(a, ['food'])).toEqual([{ key: 'firstPost', done: true, text: 'Post something free or for swap' }]);
+        expect(stepsSaySomething(a, ['food'], NOW)).toBe(false);
+        expect(shownCards(a, null, { now: NOW })).not.toContain('steps');
+    });
+
+    it('"Ask X to let you in" is a suggestion the web can never tick: it keeps no card on its own', () => {
+        const a = globalMember({ firstPost: true }, find);
+        expect(stepLines(a, ['food']).map(l => l.key)).toEqual(['firstPost', 'ask']);
+        expect(shownCards(a, null, { now: NOW })).not.toContain('steps');
+    });
+
+    it('it stays while a line is undone, the member is new, or the new-account limits apply', () => {
+        expect(shownCards(globalMember({ firstPost: false }), null, { now: NOW })).toContain('steps');
+        expect(shownCards(globalMember({ firstPost: true, joinedAt: daysAgo(3) }, find, { joinedAt: daysAgo(3) }), null, { now: NOW })).toContain('steps');
+        const limits = { onProbation: true, ageEndsAt: null, keptPosts: 1, keptPostsNeeded: 3, limits: { posts: { limit: 3 }, new_dm_recipients: { limit: 10 } }, endsWhen: { hours: 72, keptPosts: 3 } };
+        expect(shownCards(globalMember({ firstPost: true }, undefined, { probation: limits }), null, { now: NOW })).toContain('steps');
+    });
+
+    it('locally, by the same lines: a chip tapped ticks "Pick a few things you like" at once', () => {
+        const a = answer({ steps: { ...steps, joinedAt: august, firstOffer: true, photo: true, interests: false, invited: true }, community },
+            { me: me({ joinedAt: august, firstOffer: true }) });
+        expect(shownCards(a, null, { now: NOW, interests: [] })).toContain('steps');
+        expect(shownCards(a, null, { now: NOW, interests: ['food'] })).not.toContain('steps');
     });
 });

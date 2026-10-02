@@ -10,7 +10,7 @@ import type { HomeRead } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 
-const hooks = vi.hoisted(() => ({ sync: [] as Array<() => unknown>, open: [] as Array<() => void> }));
+const hooks = vi.hoisted(() => ({ sync: [] as Array<() => unknown>, open: [] as Array<() => void>, announce: [] as Array<(a: unknown) => void> }));
 
 vi.mock('../lib/api', () => ({
     getNodeApiUrl: vi.fn(() => ''),
@@ -22,10 +22,12 @@ vi.mock('../lib/api', () => ({
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
+    onSystemAnnouncement: vi.fn((cb: (a: unknown) => void) => { hooks.announce.push(cb); return () => { hooks.announce = hooks.announce.filter(c => c !== cb); }; }),
 }));
 
 import * as api from '../lib/api';
-import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE } from './HomePage';
+import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, hiddenWords } from './HomePage';
+import { NOTICES_SEEN_EVENT } from '../lib/home-cards';
 import { homeCacheKey, resetHomeCacheForTest, writeCachedHome } from '../lib/home-cache';
 
 const ME: BeanPoolIdentity = { publicKey: 'a'.repeat(64), privateKey: '00'.repeat(32), callsign: 'Ana', createdAt: '2026-01-01T00:00:00.000Z' } as BeanPoolIdentity;
@@ -68,8 +70,10 @@ beforeEach(() => {
     localStorage.clear();
     hooks.sync = [];
     hooks.open = [];
+    hooks.announce = [];
     vi.mocked(api.getHome).mockReset();
-    vi.mocked(api.saveHomePreferences).mockClear();
+    // As the mock's own default: a test that stood a node in (nodeKeepingLayout) leaves nothing behind.
+    vi.mocked(api.saveHomePreferences).mockReset().mockImplementation(async (_pk, prefs) => ({ success: true, ...prefs }) as never);
     window.matchMedia = ((q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
 });
 afterEach(() => {
@@ -446,5 +450,191 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         fireEvent.click(await screen.findByTestId('home-share-area'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
         expect(vi.mocked(api.getHome).mock.calls[1][0]).toEqual({ lat: -28.6, lng: 153.5 });
+    });
+});
+
+/**
+ * The node as the server is: it keeps the account's layout (the last write by `updatedAt` wins, an equal one replaces),
+ * and builds only the cards asked for (`cards=`), or, asked for none, every card the account's layout doesn't hide.
+ */
+function nodeKeepingLayout(full: HomeAnswer) {
+    let account: HomeLayout | null = null;
+    vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+        const l = prefs['home.layout'];
+        if (l && (!account || Date.parse(l.updatedAt!) >= Date.parse(account.updatedAt!))) account = l;
+        return { success: true, ...(l ? { 'home.layout': account } : {}), ...(prefs.interests ? { interests: prefs.interests } : {}) } as never;
+    });
+    vi.mocked(api.getHome).mockImplementation(async (params = {}) => {
+        const asked = params.cards ?? Object.keys(full.cards).filter(id => !(account?.hidden ?? []).includes(id as never));
+        const cards = Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id)));
+        return fresh({ ...full, layout: account, cards }, `W/"home-${asked.join('.')}-${account?.updatedAt ?? ''}"`);
+    });
+    return { reads: () => vi.mocked(api.getHome).mock.calls.map(c => c[0]?.cards ?? null) };
+}
+
+describe('a card hidden on an earlier visit comes back at once (PR #1479 review, BLOCKING 2)', () => {
+    async function hidePulseThenComeBack() {
+        const node = nodeKeepingLayout(answer());
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const pulse = await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Card options for The Pulse' }));
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Hide' }));
+        await waitFor(() => expect(screen.queryByTestId('home-card-pulse')).toBeNull());
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalled());
+        // A Hide is drawn from the answer in hand: no read for it.
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+        // Leave Home (the Market), and come back: the landing leaves the Pulse out of `cards=`, and the node with it.
+        cleanup();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(node.reads()[1]).not.toContain('pulse');
+        await screen.findByTestId('home-card-market');
+        return node;
+    }
+
+    it('Show in Edit home reads Home again with the Pulse in cards=, and the card is drawn, no timer waited for', async () => {
+        const node = await hidePulseThenComeBack();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        const dialog = screen.getByRole('dialog', { name: 'Edit home' });
+        fireEvent.click(within(dialog).getByRole('switch', { name: 'Show The Pulse' }));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
+        expect(node.reads()[2]).toContain('pulse');
+        fireEvent.click(within(dialog).getByTestId('home-edit-done'));
+        expect(await screen.findByTestId('home-card-pulse')).toHaveTextContent('How our LETS started');
+        // Hiding it again and showing it again needs no read: the answer in hand has it now.
+        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByRole('button', { name: 'Card options for The Pulse' }));
+        fireEvent.click(within(screen.getByTestId('home-card-pulse')).getByRole('button', { name: 'Hide' }));
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByRole('switch', { name: 'Show The Pulse' }));
+        expect(await screen.findByTestId('home-card-pulse')).toBeInTheDocument();
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(api.getHome).toHaveBeenCalledTimes(3);
+    });
+
+    it('Reset to defaults does the same', async () => {
+        const node = await hidePulseThenComeBack();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByTestId('home-edit-reset'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
+        expect(node.reads()[2]).toContain('pulse');
+        expect(await screen.findByTestId('home-card-pulse')).toBeInTheDocument();
+    });
+
+    it('a Move, or a Hide of another card, after coming back reads nothing', async () => {
+        await hidePulseThenComeBack();
+        const market = screen.getByTestId('home-card-market');
+        fireEvent.click(within(market).getByRole('button', { name: 'Card options for New in the Market' }));
+        fireEvent.click(within(market).getByRole('button', { name: 'Move up' }));
+        const beans = screen.getByTestId('home-card-beans');
+        fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
+        fireEvent.click(within(beans).getByRole('button', { name: 'Hide' }));
+        await waitFor(() => expect(screen.queryByTestId('home-card-beans')).toBeNull());
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+    });
+
+    it('a layout save on its way is not sent twice by the read Show starts', async () => {
+        await hidePulseThenComeBack();
+        vi.mocked(api.saveHomePreferences).mockClear();
+        fireEvent.click(screen.getByTestId('home-edit-open'));
+        fireEvent.click(within(screen.getByRole('dialog', { name: 'Edit home' })).getByRole('switch', { name: 'Show The Pulse' }));
+        await screen.findByTestId('home-card-pulse');
+        expect(vi.mocked(api.saveHomePreferences).mock.calls.filter(c => c[1]['home.layout'])).toHaveLength(1);
+    });
+});
+
+describe('after Hide, focus goes to the nearest card left, and the page says where the card went (PR #1479 review)', () => {
+    it("the next card's \"…\"; Edit home when the hidden card was the last above the community card", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const pulse = await screen.findByTestId('home-card-pulse');
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Card options for The Pulse' }));
+        fireEvent.click(within(pulse).getByRole('button', { name: 'Hide' }));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Card options for Your Beans' })).toHaveFocus());
+        expect(screen.getByTestId('home-live')).toHaveTextContent(hiddenWords('The Pulse'));
+        await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
+        expect(document.activeElement).not.toBe(document.body);
+        const beans = screen.getByTestId('home-card-beans');
+        fireEvent.click(within(beans).getByRole('button', { name: 'Card options for Your Beans' }));
+        fireEvent.click(within(beans).getByRole('button', { name: 'Hide' }));
+        await waitFor(() => expect(screen.getByTestId('home-edit-open')).toHaveFocus());
+        expect(screen.getByTestId('home-live')).toHaveTextContent(hiddenWords('Your Beans'));
+    });
+});
+
+describe('the doorbells Home answers (§5.2, PR #1479 review)', () => {
+    it('a new notice (system_announcement) rings Home: one read 3 s later', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(hooks.announce).toHaveLength(1);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { notices: { unseen: 1, first: { id: 'n1', title: 'Market day moved', line: 'Saturday, not Sunday.' } } })));
+        vi.useFakeTimers();
+        hooks.announce.forEach(cb => cb({ type: 'system_announcement', title: 'Market day moved' }));
+        await vi.advanceTimersByTimeAsync(2_900);
+        expect(api.getHome).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(200);
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+        vi.useRealTimers();
+        expect(await screen.findByTestId('home-card-notices')).toHaveTextContent('Market day moved');
+    });
+
+    it('a notice put away (the alert, or Mark as read) reads Home at once, so the card goes with it', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { notices: { unseen: 1, first: { id: 'n1', title: 'Market day moved', line: '' } } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-notices');
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
+        await act(async () => { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); });
+        await waitFor(() => expect(screen.queryByTestId('home-card-notices')).toBeNull());
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('interests changed while the node is out of reach (PR #1479 review)', () => {
+    it('tapped on Home while saves fail, then the Market opened: back on Home, the change is sent, not overwritten', async () => {
+        localStorage.setItem('bp_fav_categories', JSON.stringify(['food']));
+        localStorage.setItem(`beanpool_interests_synced_${ME.publicKey}`, '1');
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: ['food'] } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        fireEvent.click(screen.getByTestId('home-tune'));
+        vi.mocked(api.saveHomePreferences).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        fireEvent.click(await screen.findByTestId('home-interest-arts'));
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledWith(ME.publicKey, { interests: ['food', 'arts'] }));
+        // The Market tab: Home is not drawn while another tab is.
+        cleanup();
+        vi.mocked(api.saveHomePreferences).mockClear();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledWith(ME.publicKey, { interests: ['food', 'arts'] }));
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories')!)).toEqual(['food', 'arts']);
+        // Starred first: Pottery (arts) and Sourdough (food) before the drill.
+        expect(marketTitles()[2]).toBe('Need, Borrow a drill, Free');
+    });
+});
+
+describe('First steps on the global node, on the web (PR #1479 review)', () => {
+    const globalAnswer = (stepsOver: Partial<NonNullable<HomeAnswer['cards']['steps']>>) => answer({
+        profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true },
+        me: { ...answer().me!, joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true },
+    }, {
+        beans: undefined,
+        find: { point: 'area', communities: [{ key: 'b', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', memberCount: 40, distanceKm: 12 }], communityCount: 2, nearbyPosts: null, watches: null, knock: null, directoryFetchedAt: null },
+        steps: { joinedAt: '2026-08-10T00:00:00.000Z', firstOffer: true, firstPost: true, photo: false, interests: true, invited: null, area: false, knocked: null, ...stepsOver },
+    });
+
+    it('a member a month in who has posted: no First steps, though the node sends it for the area the web cannot set', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({})));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-find');
+        expect(screen.queryByTestId('home-card-steps')).toBeNull();
+    });
+
+    it('before the first post it is there, with the ask as a link to the community', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(globalAnswer({ firstPost: false })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        const steps = await screen.findByTestId('home-card-steps');
+        expect(within(steps).getByRole('button', { name: 'To do: Post something free or for swap' })).toBeInTheDocument();
+        expect(within(steps).getByRole('link', { name: 'To do: Ask Byron Shire BeanPool to let you in' })).toHaveAttribute('href', 'https://byron.example.org');
     });
 });

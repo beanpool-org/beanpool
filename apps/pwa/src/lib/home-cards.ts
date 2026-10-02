@@ -28,6 +28,12 @@ export type HomeCardId = typeof HOME_CARD_IDS[number];
 const CARD_IDS: ReadonlySet<string> = new Set(HOME_CARD_IDS);
 export const isHomeCardId = (id: unknown): id is HomeCardId => typeof id === 'string' && CARD_IDS.has(id);
 
+/**
+ * Said on the page once the member's notices are marked seen (lib/api.ts markNoticesSeen: an alert put away, or Home's
+ * own "Mark as read"): Home reads again, so "From your community" goes with the alert.
+ */
+export const NOTICES_SEEN_EVENT = 'beanpool:notices-seen';
+
 /** The cards a visitor's Home is made of (§5.3), besides the Join card. */
 export const VISITOR_CARDS: readonly HomeCardId[] = ['find', 'market', 'events', 'community'];
 
@@ -210,27 +216,57 @@ export function askedCards(layout: HomeLayout | null, answer: Pick<HomeAnswer, '
     return HOME_CARD_IDS.filter(id => DATA_CARDS.has(id) && !hidden.has(id));
 }
 
+/**
+ * The data cards an answer was built for: the `cards=` it was read with, or, read with none, the node's own choice from
+ * the account's layout (which the answer carries).
+ */
+export function cardsBuiltFor(asked: HomeCardId[] | undefined, answer: HomeAnswer, now: number = Date.now()): HomeCardId[] {
+    return asked ?? askedCards(normalizeLayout(answer.layout) ?? emptyLayout(), answer, now) ?? [];
+}
+
+/**
+ * Whether drawing `next` needs Home read again (Show in Edit home, Reset to defaults): it asks for a data card the answer
+ * in hand wasn't built for, so the answer can't say whether that card has something to say. Nothing else does: a Hide,
+ * a move, or showing a card the answer was built with is drawn from the answer in hand. With `builtFor` not known (a
+ * copy kept by an older build), a card that `next` shows and `prev` didn't, and that the answer doesn't hold, counts.
+ */
+export function layoutNeedsRead(prev: HomeLayout | null, next: HomeLayout, answer: HomeAnswer, builtFor: readonly HomeCardId[] | null, now: number = Date.now()): boolean {
+    const want = askedCards(next, answer, now) ?? [];
+    if (builtFor) return want.some(id => !builtFor.includes(id));
+    const before = new Set(askedCards(prev ?? emptyLayout(), answer, now) ?? []);
+    return want.some(id => !before.has(id) && !answer.cards[id as keyof HomeCards]);
+}
+
 /** Where a layout keeps nothing yet: the default, stamped `now` once changed. */
 export function emptyLayout(): HomeLayout {
     return { v: 1, order: [], hidden: [], dismissed: {}, updatedAt: null };
 }
 
-const stamp = (layout: HomeLayout, now: number): HomeLayout => ({ ...layout, updatedAt: new Date(now).toISOString() });
+/**
+ * An edit's date: this device's clock, but always after the layout it was made from. A device whose clock runs slow
+ * would otherwise stamp an edit before its own base (saved by a device that runs ahead), and the node, which keeps the
+ * later one, would keep the base and send it back: the card would come back right after the tap. The node holds a date
+ * in its future to its own now, and an equal date replaces, so the edit is kept either way.
+ */
+const stamp = (base: HomeLayout | null, next: HomeLayout, now: number): HomeLayout => {
+    const after = base?.updatedAt ? Date.parse(base.updatedAt) + 1 : -Infinity;
+    return { ...next, updatedAt: new Date(Math.max(now, after)).toISOString() };
+};
 
 export function hideCard(layout: HomeLayout | null, id: HomeCardId, now: number = Date.now()): HomeLayout {
     const l = layout ?? emptyLayout();
     if (id === 'needs' || id === 'community') return l;
-    return stamp({ ...l, hidden: l.hidden.includes(id) ? l.hidden : [...l.hidden, id] }, now);
+    return stamp(l, { ...l, hidden: l.hidden.includes(id) ? l.hidden : [...l.hidden, id] }, now);
 }
 
 export function showCard(layout: HomeLayout | null, id: HomeCardId, now: number = Date.now()): HomeLayout {
     const l = layout ?? emptyLayout();
-    return stamp({ ...l, hidden: l.hidden.filter(h => h !== id) }, now);
+    return stamp(l, { ...l, hidden: l.hidden.filter(h => h !== id) }, now);
 }
 
 /** Reset to defaults (§4.1): the default order, nothing hidden; a dismissal stays (it is a schedule, not a choice of cards). */
 export function resetLayout(layout: HomeLayout | null, now: number = Date.now()): HomeLayout {
-    return stamp({ v: 1, order: [], hidden: [], dismissed: layout?.dismissed ?? {}, updatedAt: null }, now);
+    return stamp(layout, { v: 1, order: [], hidden: [], dismissed: layout?.dismissed ?? {}, updatedAt: null }, now);
 }
 
 /**
@@ -248,7 +284,7 @@ export function moveCard(layout: HomeLayout | null, id: HomeCardId, direction: '
     const a = order.indexOf(id);
     const b = order.indexOf(other);
     [order[a], order[b]] = [order[b], order[a]];
-    return stamp({ ...l, order: order.filter(x => x !== 'community') }, now);
+    return stamp(l, { ...l, order: order.filter(x => x !== 'community') }, now);
 }
 
 // ── what is shown ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -281,11 +317,66 @@ export function shownCards(answer: HomeAnswer, layout: HomeLayout | null, opts: 
             case 'invite':
                 // §3.1 "after the first Offer", where invites are on (a node that says nothing takes them).
                 return answer.me.standing === 'member' && answer.features.invites !== false && answer.me.firstOffer;
+            case 'steps':
+                return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? answer.me.interests, now);
             default:
                 return !!answer.cards[id as keyof HomeCards];
         }
     };
     return effectiveOrder(layout).filter(id => has(id) && (!hidden.has(id) || (id === 'interests' && !!opts.interestsOpen)));
+}
+
+// ── First steps ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A member is new for this long: First steps stays while they are, even with every line done (the node's own rule). */
+export const STEPS_NEW_DAYS = 14;
+
+export interface StepLine {
+    key: 'firstOffer' | 'photo' | 'interests' | 'invite' | 'firstPost' | 'ask';
+    done: boolean;
+    text: string;
+    /** A line the web app can never tick: it keeps no card on its own. */
+    untracked?: true;
+    /** A link to another community's own page. */
+    href?: string;
+}
+
+/**
+ * The lines First steps draws on the web (§3.1, §7). Local: a first Offer, a photo, interests (the chips' taps count at
+ * once), and an invite once there is an Offer. Global: a first post, and "Ask X to let you in" where a community is
+ * near. The web leaves out "Set your area" (it can't set the account's area), and can't tick the ask: a knock is kept on
+ * the community knocked on, so it is a suggestion, never a step that holds the card.
+ */
+export function stepLines(answer: HomeAnswer, interests: readonly string[]): StepLine[] {
+    const s = answer.cards.steps;
+    if (!s) return [];
+    if (answer.profile === 'global') {
+        const near = answer.cards.find?.communities[0];
+        return [
+            { key: 'firstPost', done: s.firstPost, text: 'Post something free or for swap' },
+            ...(near?.url ? [{ key: 'ask' as const, done: false, text: `Ask ${near.name ?? 'a community'} to let you in`, untracked: true as const, href: near.url }] : []),
+        ];
+    }
+    return [
+        { key: 'firstOffer', done: s.firstOffer, text: 'Post your first Offer' },
+        { key: 'photo', done: s.photo, text: 'Add a photo to your profile' },
+        { key: 'interests', done: s.interests || interests.length > 0, text: 'Pick a few things you like' },
+        ...(s.invited !== null && (s.firstOffer || answer.me?.firstOffer) ? [{ key: 'invite' as const, done: s.invited, text: 'Invite someone' }] : []),
+    ];
+}
+
+/**
+ * Whether First steps has something to say here (§6.1 "a card with nothing to say disappears", §3.1 "member < 14 days
+ * or any line undone"): the member is new, a line the web can tick is undone, or the new-account limits apply. The node
+ * keeps sending the card while the account's area is unset, which the web can't set, so the web decides by its own lines.
+ */
+export function stepsSaySomething(answer: HomeAnswer, interests: readonly string[], now: number = Date.now()): boolean {
+    const s = answer.cards.steps;
+    if (!s) return false;
+    const joined = Date.parse(s.joinedAt ?? answer.me?.joinedAt ?? '');
+    if (Number.isFinite(joined) && now - joined < STEPS_NEW_DAYS * DAY_MS) return true;
+    if (stepLines(answer, interests).some(l => !l.done && !l.untracked)) return true;
+    return probationSentence(answer.me?.probation) !== null;
 }
 
 /** The cards Edit home lists (§4.1): those that can be tailored and could appear on this node, shown and hidden apart. */

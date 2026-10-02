@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
+import { clearHomeCache } from '../lib/home-cache';
 import {
     WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, purgeHere, webDeleteFailedLine,
     webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, type WebDeletePlan,
@@ -527,6 +528,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             setSuccess(null);
             try {
                 sessionStorage.clear();
+                // Home's last answer is this browser's cache of the community too (lib/home-cache.ts).
+                await clearHomeCache();
                 clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
@@ -1080,7 +1083,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setIsPurging(true);
                                                 try {
                                                     await wipeIdentity();
-                                                    clearAccountStorage();
+                                                    await clearAccountStorage();
                                                     setDeletionMode('purged');
                                                     setTimeout(() => window.location.reload(), 1500);
                                                 } finally {
@@ -1165,12 +1168,12 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         }
                                                         if (plan.kind === 'this-one') {
                                                             // The page's own community keeps the key: back to it, key and settings kept.
-                                                            leaveThisCommunity();
+                                                            await leaveThisCommunity();
                                                             setPurgedNote(`Account deleted at ${hostOf(plan.here)}. This browser keeps your key for ${hostOf(plan.keeps.url)}. Reloading app...`);
                                                         } else {
                                                             try {
                                                                 await wipeIdentity();
-                                                                clearAccountStorage();
+                                                                await clearAccountStorage();
                                                             } catch (e) {
                                                                 setPurgeError(webDeletedButLine(e instanceof Error ? e.message : String(e)));
                                                                 return;

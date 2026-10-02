@@ -7,8 +7,9 @@
  * - **One request.** The whole screen is GET /api/home (lib/api.ts getHome), signed for a member, unsigned for a visitor.
  *   The node tags it, so an unchanged Home is a 304 (§5.2). The last answer is kept in IndexedDB (lib/home-cache.ts) and
  *   drawn at once while the node is asked again; offline, it stays, and the page says so.
- * - **When it asks again:** on landing, on coming back to the tab, once after a doorbell (debounced 3 s), and a 120 s
- *   safety poll while the tab is in front. Never a per-card timer.
+ * - **When it asks again:** on landing, on coming back to the tab, once after a doorbell (a sync, a live post, a notice;
+ *   debounced 3 s), once the member's notices are marked seen, when a layout change shows a card the answer in hand
+ *   wasn't built for, and a 120 s safety poll while the tab is in front. Never a per-card timer.
  * - **Tailoring** (§4): "…" on a card (Hide · Move up · Move down) and Edit home (components/HomeEditDialog.tsx); the
  *   layout is saved on the account (`home.layout`, H1) with this browser's copy, last write wins. The rules are
  *   lib/home-cards.ts.
@@ -21,14 +22,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
-    askedCards, beansLines, canTailor, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
-    decideLine, distanceText, editableCards, findBody, hideCard, joinedLine, moveCard, nearbyLine, newerLayout, normalizeLayout,
-    probationSentence, resetLayout, shownCards, showCard, starredFirst, toggleInterest,
-    type HomeAnswer, type HomeCardId, type HomeLayout, type NeedsItem,
+    NOTICES_SEEN_EVENT, askedCards, beansLines, canTailor, cardTitle, cardsBuiltFor, closesWords, communityFacts, communityLine,
+    communityName, dayLabel, dealsLine, decideLine, distanceText, editableCards, findBody, hideCard, joinedLine, layoutNeedsRead,
+    moveCard, nearbyLine, newerLayout, normalizeLayout, probationSentence, resetLayout, shownCards, showCard, starredFirst,
+    stepLines, toggleInterest,
+    type HomeAnswer, type HomeCardId, type HomeLayout, type NeedsItem, type StepLine,
 } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
-import { settleInterests, shareInterests } from '../lib/home-interests';
-import { onSocketOpen, onSyncActivity } from '../lib/sync';
+import { resendUnsavedInterests, settleInterests, shareInterests } from '../lib/home-interests';
+import { onSocketOpen, onSyncActivity, onSystemAnnouncement } from '../lib/sync';
 import { onLivePostChange } from '../lib/live-posts';
 import { withJitter } from '../lib/jitter';
 import { loadRadiusSettings } from '../lib/geo';
@@ -55,6 +57,8 @@ export const HOME_OFFLINE = "Couldn't reach your community; showing what we had.
 export const HOME_FAILED = "Couldn't reach your community. Your other tabs still work.";
 /** A community's server older than Home (a web app pointed at another server in Settings): the tabs work as before. */
 export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. The Market and the other tabs work as before.";
+/** Said politely once a card is hidden: where it went, and how it comes back. */
+export const hiddenWords = (title: string) => `${title} is hidden. Edit home brings it back.`;
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
@@ -124,7 +128,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const layoutRef = useRef<HomeLayout | null>(null);
     const unsavedRef = useRef(false);
     const layoutSeq = useRef(0);
-    const pendingInterests = useRef<string[] | null>(null);
+    // Layout saves still on their way: a read meanwhile doesn't send the same layout again.
+    const savingLayout = useRef(0);
+    // The data cards the answer drawn was built for (lib/home-cards.ts cardsBuiltFor); null: not known.
+    const builtForRef = useRef<HomeCardId[] | null>(null);
     const inFlight = useRef(false);
     const again = useRef(false);
     const lastStart = useRef(0);
@@ -132,6 +139,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const pointRef = useRef(point);
     pointRef.current = point;
     const interestsCardRef = useRef<HTMLDivElement | null>(null);
+    const pageRef = useRef<HTMLDivElement | null>(null);
+    // After a Hide: the cards to give focus to, nearest first (the card itself is gone, and so is its "…").
+    const focusAfterHide = useRef<HomeCardId[] | null>(null);
 
     useEffect(() => {
         mounted.current = true;
@@ -139,13 +149,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }, []);
 
     const keep = useCallback((a: HomeAnswer, l: HomeLayout | null) => {
-        void writeCachedHome(cacheKey, { answer: a, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() });
+        void writeCachedHome(cacheKey, { answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() });
     }, [cacheKey]);
 
     const saveLayout = useCallback((next: HomeLayout) => {
         if (!publicKey) return;
         const seq = ++layoutSeq.current;
+        savingLayout.current += 1;
         saveHomePreferences(publicKey, { 'home.layout': next })
+            .finally(() => { savingLayout.current -= 1; })
             .then((r) => {
                 if (!mounted.current || seq !== layoutSeq.current) return;
                 unsavedRef.current = false;
@@ -160,26 +172,29 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             .catch(() => { /* kept in this browser, sent again after the next read */ });
     }, [publicKey, keep]);
 
-    // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is sent again after the next read.
+    // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
+    // and sent again after the next read, whichever page made it.
     const saveInterests = useCallback((next: string[]) => {
         if (!publicKey) return;
-        pendingInterests.current = next;
-        void shareInterests(publicKey, next).then((ok) => { if (ok && pendingInterests.current === next) pendingInterests.current = null; });
+        void shareInterests(publicKey, next);
     }, [publicKey]);
 
-    const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point') => {
+    const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
         if (inFlight.current) { again.current = true; return; }
         inFlight.current = true;
         lastStart.current = Date.now();
         try {
             const p = pointRef.current;
-            const read = await getHome({ cards: askedCards(layoutRef.current, answerRef.current), ...(p ? { lat: p.lat, lng: p.lng } : {}) },
+            const sent = askedCards(layoutRef.current, answerRef.current);
+            const read = await getHome({ cards: sent, ...(p ? { lat: p.lat, lng: p.lng } : {}) },
                 answerRef.current ? etagRef.current : null);
             if (!mounted.current) return;
-            // 304: the copy drawn is still the answer, layout and all. Anything not sent since is sent again.
+            // 304: the copy drawn is still the answer, layout and all (its tag covers the cards asked). Anything not sent
+            // since is sent again.
             if (read?.notModified && answerRef.current) {
-                if (unsavedRef.current && layoutRef.current) saveLayout(layoutRef.current);
-                if (pendingInterests.current) saveInterests(pendingInterests.current);
+                builtForRef.current = cardsBuiltFor(sent, answerRef.current);
+                if (unsavedRef.current && layoutRef.current && savingLayout.current === 0) saveLayout(layoutRef.current);
+                if (publicKey) resendUnsavedInterests(publicKey);
                 if (statusRef.current === 'offline' || why === 'retry') setLive('Home updated.');
                 statusRef.current = 'ready';
                 setStatus('ready');
@@ -192,14 +207,16 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             const fromNode = normalizeLayout(a.layout);
             const local = layoutRef.current;
             const merged = newerLayout(fromNode, local);
-            if (merged && merged === local && unsavedRef.current) saveLayout(merged);
+            // This browser's newer layout, not on the account yet, is sent again (unless its save is still on its way).
+            if (merged && merged === local && unsavedRef.current) { if (savingLayout.current === 0) saveLayout(merged); }
             else if (merged === fromNode) unsavedRef.current = false;
-            if (pendingInterests.current) saveInterests(pendingInterests.current);
-            else if (publicKey && a.me) {
-                // The account's interests are this browser's Market favourites too; ones only kept here move up, once.
+            if (publicKey && a.me) {
+                // The account's interests are this browser's Market favourites too; a change made here that never reached
+                // the account, and ones an older build kept only here, are sent up instead.
                 const settled = settleInterests(publicKey, a.me.interests);
                 if (settled.movedUp) setInterests(settled.interests);
             }
+            builtForRef.current = cardsBuiltFor(sent, a);
             answerRef.current = a;
             layoutRef.current = merged;
             setAnswer(a);
@@ -230,7 +247,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 void fetchHomeRef.current?.('doorbell');
             }
         }
-    }, [keep, saveLayout, saveInterests, publicKey]);
+    }, [keep, saveLayout, publicKey]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
 
@@ -240,6 +257,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         answerRef.current = null;
         etagRef.current = null;
         layoutRef.current = null;
+        builtForRef.current = null;
         setAnswer(null);
         statusRef.current = 'loading';
         setStatus('loading');
@@ -247,6 +265,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             if (cancelled || !mounted.current) return;
             if (cached && !answerRef.current) {
                 answerRef.current = cached.answer;
+                builtForRef.current = cached.asked ?? null;
                 etagRef.current = cached.etag;
                 layoutRef.current = cached.layout;
                 unsavedRef.current = cached.layoutUnsaved;
@@ -276,6 +295,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             ring();
         });
         const offLive = onLivePostChange(() => ring());
+        // A new notice (an announcement, a moderation notice): "From your community" comes with the alert (§5.2).
+        const offNotice = onSystemAnnouncement(() => ring());
+        // The member put a notice away (the alert, or Home's own Mark as read): the card goes now, not at the next poll.
+        const onSeen = () => { void fetchHomeRef.current('doorbell'); };
+        window.addEventListener(NOTICES_SEEN_EVENT, onSeen);
         const onVisibility = () => {
             if (document.hidden) return;
             if (stale || Date.now() - lastStart.current > HOME_RETURN_STALE_MS) {
@@ -290,6 +314,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             offOpen();
             offSync();
             offLive();
+            offNotice();
+            window.removeEventListener(NOTICES_SEEN_EVENT, onSeen);
             document.removeEventListener('visibilitychange', onVisibility);
             clearInterval(poll);
         };
@@ -314,12 +340,33 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     }, [shown.includes('interests')]);
 
     function changeLayout(next: HomeLayout) {
+        const prev = layoutRef.current;
         unsavedRef.current = true;
         layoutRef.current = next;
         setLayout(next);
         if (answerRef.current) keep(answerRef.current, next);
         saveLayout(next);
+        // Show, or Reset to defaults, brought back a card the answer in hand wasn't built for (a hidden card is left out
+        // of `cards=`, and the node builds only what it is asked for): read Home again with the new `cards=`, now.
+        // Nothing else needs a read: a Hide or a move is drawn from the answer in hand.
+        if (answerRef.current && layoutNeedsRead(prev, next, answerRef.current, builtForRef.current)) void fetchHomeRef.current('layout');
     }
+
+    // After a Hide, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
+    // never to the page's <body>.
+    useEffect(() => {
+        const order = focusAfterHide.current;
+        if (!order) return;
+        focusAfterHide.current = null;
+        for (const id of order) {
+            const card = pageRef.current?.querySelector<HTMLElement>(`[data-testid="home-card-${id}"]`);
+            if (!card) continue;
+            const target = card.querySelector<HTMLElement>('[data-testid="home-card-menu"]')
+                ?? card.querySelector<HTMLElement>('[data-testid="home-edit-open"]')
+                ?? card.querySelector<HTMLElement>('h2');
+            if (target) { target.focus(); return; }
+        }
+    }, [layout]);
 
     function toggleChip(id: string) {
         const next = toggleInterest(myInterests, id);
@@ -381,6 +428,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             canMoveUp: i > 0,
             canMoveDown: i >= 0 && i < movable.length - 1,
             onHide: () => {
+                const at = shown.indexOf(id);
+                focusAfterHide.current = [...shown.slice(at + 1), ...shown.slice(0, Math.max(at, 0)).reverse()];
+                setLive(hiddenWords(cardTitle(id, a)));
                 if (id === 'interests') setInterestsOpen(false);
                 changeLayout(hideCard(layoutRef.current, id));
             },
@@ -468,19 +518,16 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 );
             }
             case 'steps': {
-                const s = c.steps!;
-                const global = profile === 'global';
-                const lines: { done: boolean; text: string; go?: () => void; href?: string }[] = global
-                    ? [
-                        { done: s.firstPost, text: 'Post something free or for swap', go: () => onNavigate('map-post') },
-                        ...(a.cards.find?.communities[0]?.url ? [{ done: false, text: `Ask ${a.cards.find.communities[0].name ?? 'a community'} to let you in`, href: a.cards.find.communities[0].url! }] : []),
-                    ]
-                    : [
-                        { done: s.firstOffer, text: 'Post your first Offer', go: () => onNavigate('map-post') },
-                        { done: s.photo, text: 'Add a photo to your profile', go: () => onNavigate('settings-profile') },
-                        { done: s.interests || myInterests.length > 0, text: 'Pick a few things you like', go: openTune },
-                        ...(s.invited !== null && (s.firstOffer || a.me?.firstOffer) ? [{ done: s.invited, text: 'Invite someone', go: () => onNavigate('people-invites') }] : []),
-                    ];
+                // The lines and when the card goes are lib/home-cards.ts stepLines / stepsSaySomething; here, where each leads.
+                const goes: Record<StepLine['key'], (() => void) | undefined> = {
+                    firstOffer: () => onNavigate('map-post'),
+                    firstPost: () => onNavigate('map-post'),
+                    photo: () => onNavigate('settings-profile'),
+                    interests: openTune,
+                    invite: () => onNavigate('people-invites'),
+                    ask: undefined,
+                };
+                const lines = stepLines(a, myInterests).map(l => ({ ...l, go: goes[l.key] }));
                 const limits = probationSentence(a.me?.probation);
                 return (
                     <HomeCard key={id} {...common}>
@@ -701,7 +748,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                         <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
                         {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
                         {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">and {n.unseen - 1} more</p>}
-                        <HomeMore onClick={() => { void markNoticesSeen([n.first.id]).finally(() => fetchHome('doorbell')); }} testId="home-notice-seen">Mark as read</HomeMore>
+                        <HomeMore onClick={() => { void markNoticesSeen([n.first.id]).catch(() => { /* still unseen: the card stays */ }); }} testId="home-notice-seen">Mark as read</HomeMore>
                     </HomeCard>
                 );
             }
@@ -735,7 +782,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const editable = editOpen ? editableCards(a, layout, now) : null;
 
     return (
-        <div className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
+        <div ref={pageRef} className="max-w-xl mx-auto px-4 pt-2 pb-6 min-w-0" data-testid="home-page">
             {reveal && <style>{'@keyframes home-card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }'}</style>}
             <p className="sr-only" aria-live="polite" data-testid="home-live">{live}</p>
             {status === 'offline' && (

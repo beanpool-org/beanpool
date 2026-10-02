@@ -427,7 +427,7 @@ function bringMembersToSchemaRules(schemaSql: string): void {
  * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
  * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
  * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
- * persistCommonsBalance); it relies on every primitive that moves the pot refusing a non-finite amount, not on this.
+ * persistCommonsBalance), so that write refuses a pot that is not a finite number itself, before it binds anything.
  *
  * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
  * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its

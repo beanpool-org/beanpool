@@ -11,6 +11,7 @@ import { COMMONS_BALANCE } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
     runConservationCheck,
+    BROKEN_BALANCE_SQL,
     computeWashSybilMetrics,
     getReplicaConsistency as engineGetReplicaConsistency,
     summariseLedger,
@@ -45,10 +46,23 @@ export type { ReplicaConsistency, AuditSyncPayload };
  *
  * Throws on a standby (config/node-role.ts), as persistDecayEvents does: every caller is a move a standby refuses first,
  * or the flush below, which returns before it, so reaching either there is a path that missed the rule.
+ *
+ * Throws, too, when the pot in memory is not a finite number, and writes nothing (decide N1 on #1379, 2026-10-02). The
+ * column is NOT NULL, but this write is an INSERT OR REPLACE, and SQLite's REPLACE puts the column DEFAULT (0) in place
+ * of the NULL that better-sqlite3 binds for NaN: the pot would be stored as 0 with no error. Every primitive that moves
+ * the pot already refuses a non-finite amount, so this is the last line, not the first. Inside a conservingTransaction
+ * the throw rolls the move back; the timer and the audit log it.
  */
 export function persistCommonsBalance(): void {
     assertLedgerWritable();
+    assertCommonsPotFinite();
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
+}
+
+function assertCommonsPotFinite(): void {
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        throw new Error(`The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written`);
+    }
 }
 
 /**
@@ -102,6 +116,9 @@ export function persistDecayEvents(): void {
  */
 export function persistDecayAndCommons(): void {
     if (getNodeRole() === 'backup') return;
+    // Before the decay queue is drained: a refusal inside the transaction would roll its rows back after they had left
+    // the queue, and they would never be written.
+    assertCommonsPotFinite();
     db.transaction(() => {
         persistDecayEvents();
         persistCommonsBalance();
@@ -111,13 +128,65 @@ export function persistDecayAndCommons(): void {
 /**
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
+ *
+ * A Commons pot in memory that is not a finite number (its `COMMONS_POOL` row ±9e999, restored at boot) can't be
+ * written (persistCommonsBalance refuses it), and the flush used to throw here before anything was counted: a
+ * take-over's audit then never recorded and the take-over stalled at `restarting`, and the operator's audit answered
+ * 500 (#1445 re-review, BLOCKING 1). Now the flush is skipped, nothing is written, and the pot is counted as a balance
+ * that is not a number (its row already is, by BROKEN_BALANCE_SQL, when the row itself is broken). Never throws for it.
  */
 export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        console.error(`⚠️ [LedgerAudit] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}): nothing was written, `
+            + 'and the pot is counted as a balance that is not a number.');
+        const r = runConservationCheck(db);
+        return { ...r, badBalances: r.badBalances + (commonsRowIsBroken() ? 0 : 1), ok: false };
+    }
     // ONE commit for the pair — the audit runs at boot and on a timer, and a flush that tore here would
     // destroy exactly what the audit exists to detect.
     persistDecayAndCommons();
     return runConservationCheck(db);
 }
+
+function commonsRowIsBroken(): boolean {
+    return !!db.prepare(`SELECT 1 FROM accounts WHERE public_key = 'COMMONS_POOL' AND (${BROKEN_BALANCE_SQL})`).get();
+}
+
+/** One account whose balance is not a finite number, as an operator needs it to mend the row. */
+export interface BrokenBalance {
+    /** The `accounts.public_key`: a member's key, an enterprise's, `COMMONS_POOL`, `escrow_<deal id>`, … */
+    account: string;
+    /** The member's or enterprise's name, when the account is one. */
+    callsign: string | null;
+    /** What it holds, in words: "Infinity", "-Infinity", "NULL", "text 'abc'", or "in memory: NaN" for the pot. */
+    holds: string;
+}
+
+/**
+ * The accounts whose balance is not a finite number, at most `limit` of them (#1445 re-review, NON-BLOCKING 3): the
+ * conservation check gives only a count, and on a node whose `accounts.balance` is already NOT NULL nothing else names
+ * them. The Commons pot is listed too when the row is fine but the pot in memory isn't.
+ */
+export function listBrokenBalances(limit = 50): { total: number; accounts: BrokenBalance[] } {
+    const rows = db.prepare(`
+        SELECT a.public_key AS account, m.callsign AS callsign, a.balance AS balance, typeof(a.balance) AS t
+        FROM accounts a LEFT JOIN members m ON m.public_key = a.public_key
+        WHERE ${BROKEN_BALANCE_SQL.replace(/\bbalance\b/g, 'a.balance')}
+        ORDER BY a.public_key`).all() as { account: string; callsign: string | null; balance: unknown; t: string }[];
+    const accounts: BrokenBalance[] = rows.map((r) => ({
+        account: r.account,
+        callsign: r.callsign ?? (r.account === 'COMMONS_POOL' ? 'the Commons pot' : null),
+        holds: r.t === 'null' ? 'NULL' : r.t === 'text' ? `text ${JSON.stringify(String(r.balance)).replace(/^"|"$/g, "'")}` : String(r.balance),
+    }));
+    if (!Number.isFinite(COMMONS_BALANCE) && !rows.some((r) => r.account === 'COMMONS_POOL')) {
+        accounts.unshift({ account: 'COMMONS_POOL', callsign: 'the Commons pot', holds: `in memory: ${String(COMMONS_BALANCE)}` });
+    }
+    return { total: accounts.length, accounts: accounts.slice(0, limit) };
+}
+
+/** What an operator does about them, in the words the audit, the rebaseline and the operator manual use. */
+export const BROKEN_BALANCE_REPAIR = 'Stop the server, set each one\'s balance in state.db to what its transactions say, start it again, '
+    + 'then set a new baseline for any difference left.';
 
 /**
  * Computes and persists wash trading/Sybil metrics to the system_metrics table.

@@ -1,6 +1,6 @@
 /**
  * The phone's own door code against a REAL global-profile node on this machine (two-doors design §7.3, phone part):
- * apps/server/src/phone-door-test-node.ts, the real HTTPS server, signature middleware, door routes and door work,
+ * apps/server/src/phone-door-test-harness.ts, the real HTTPS server, signature middleware, door routes and door work,
  * started from the packages' sources and killed by its PID. Memory `phone-e2e-localhost-nodes`.
  *
  *   1. a global-profile node says it has the 12-words door, and the phone's door check reads it so
@@ -134,14 +134,14 @@ beforeAll(async () => {
     google.mint = mintGoogle;
     const jwk = { ...pair.publicKey.export({ format: 'jwk' }), kid: GOOGLE_KID, alg: 'RS256', use: 'sig' };
     dataDir = mkdtempSync(join(tmpdir(), 'phone-door-e2e-'));
-    node = spawn(process.execPath, ['--import', 'tsx', 'src/phone-door-test-node.ts'], {
+    node = spawn(process.execPath, ['--import', 'tsx', 'src/phone-door-test-harness.ts'], {
         cwd: SERVER_DIR,
         env: {
             ...process.env,
             BEANPOOL_DATA_DIR: dataDir,
             PHONE_DOOR_GOOGLE_JWK: JSON.stringify(jwk),
             // From the packages' sources: never waits on, or races, a build of core, engine or signin.
-            TSX_TSCONFIG_PATH: 'tsconfig.phone-door-test-node.json',
+            TSX_TSCONFIG_PATH: 'tsconfig.phone-door-test-harness.json',
         },
         stdio: 'pipe',
     });

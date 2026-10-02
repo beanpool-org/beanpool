@@ -4,7 +4,7 @@
  * (routes/open-join.ts) and the real door work, so the phone's own code is measured against the node it will meet.
  * A test fixture only: nothing in the server imports it, and no suite runs it on its own.
  *
- * Started by that test with `node --import tsx src/phone-door-test-node.ts`, in its own data folder
+ * Started by that test with `node --import tsx src/phone-door-test-harness.ts`, in its own data folder
  * (BEANPOOL_DATA_DIR), and killed by its PID. Contacts nothing: every fetch to a host that isn't this machine throws,
  * and says so (`BLOCKED-FETCH`). No provider is asked either: the test's Google key is primed into sso.ts's cache from
  * PHONE_DOOR_GOOGLE_JWK, as the server suites do.
@@ -34,7 +34,7 @@ globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     const host = new URL(href).hostname;
     if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host)) {
         console.error(`BLOCKED-FETCH ${href}`);
-        return Promise.reject(new Error(`phone-door-test-node: no contact with ${host}`));
+        return Promise.reject(new Error(`phone-door-test-harness: no contact with ${host}`));
     }
     return realFetch(input, init);
 }) as typeof fetch;
@@ -121,6 +121,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((e) => {
-    console.error('phone-door-test-node failed to start:', e);
+    console.error('phone-door-test-harness failed to start:', e);
     process.exit(1);
 });

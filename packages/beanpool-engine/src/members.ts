@@ -267,27 +267,48 @@ export function memberPhotoColumnsOf(stored: string | null | undefined): MemberP
  * names the photo held. Writes nothing when both already hold it. Any change writes the row's two columns, whose touch
  * trigger (members_touch_updated_at names them, and fires on a column SET even to the value it held) stamps the row,
  * so a standby's delta carries the change: member_photos travels in the member's row (engine/replication-manifest.ts).
- * Call it inside the caller's transaction when the member's row is written with it. Returns whether anything changed.
+ * Call it inside the caller's transaction when the member's row is written with it (it is one transaction of its own,
+ * nested as a savepoint in the caller's). Returns whether anything changed.
+ *
+ * On a node whose boot has not yet finished moving photos out of the rows (the server's db.ts
+ * moveMemberPhotosOutOfRows, stopped part way, so `members.avatar_url` is still there), it also clears the member's old
+ * inline photo, on every call: a set, a change, a removal, and a removal of a photo the move had not reached yet (which
+ * no app showed, so nothing else changes). The resumed move moves only a row whose `avatar_url` is still set, so a
+ * member's own change since the move began is never overwritten by the photo they had before it. Clearing it counts as
+ * a change, and the row is stamped, so a standby whose copy carried that old photo (@beanpool/engine sync.ts withPhoto)
+ * hears it is gone.
  */
 export function setMemberPhoto(db: Db, publicKey: string, stored: string | null | undefined): boolean {
-    const next = memberPhotoColumnsOf(stored);
-    const held = db.prepare('SELECT avatar_ref, avatar_bytes FROM members WHERE public_key = ?').get(publicKey) as
-        { avatar_ref: string | null; avatar_bytes: number | null } | undefined;
-    const heldPhoto = getMemberPhoto(db, publicKey);
-    const setRow = db.prepare('UPDATE members SET avatar_ref = ?, avatar_bytes = ? WHERE public_key = ?');
-    if (next === null) {
-        if (heldPhoto === null && (!held || (held.avatar_ref === null && held.avatar_bytes === null))) return false;
-        db.prepare('DELETE FROM member_photos WHERE public_key = ?').run(publicKey);
-        setRow.run(null, null, publicKey);
+    return db.transaction(() => {
+        const next = memberPhotoColumnsOf(stored);
+        const held = db.prepare('SELECT avatar_ref, avatar_bytes FROM members WHERE public_key = ?').get(publicKey) as
+            { avatar_ref: string | null; avatar_bytes: number | null } | undefined;
+        const heldPhoto = getMemberPhoto(db, publicKey);
+        const clearedInline = clearInlineMemberPhoto(db, publicKey);
+        const setRow = db.prepare('UPDATE members SET avatar_ref = ?, avatar_bytes = ? WHERE public_key = ?');
+        if (next === null) {
+            if (!clearedInline && heldPhoto === null && (!held || (held.avatar_ref === null && held.avatar_bytes === null))) return false;
+            db.prepare('DELETE FROM member_photos WHERE public_key = ?').run(publicKey);
+            setRow.run(null, null, publicKey);
+            return true;
+        }
+        if (!clearedInline && heldPhoto === next.photo && held && held.avatar_ref === next.ref && held.avatar_bytes === next.bytes) return false;
+        if (heldPhoto !== next.photo) {
+            db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)
+                        ON CONFLICT(public_key) DO UPDATE SET photo = excluded.photo`).run(publicKey, next.photo);
+        }
+        setRow.run(next.ref, next.bytes, publicKey);
         return true;
-    }
-    if (heldPhoto === next.photo && held && held.avatar_ref === next.ref && held.avatar_bytes === next.bytes) return false;
-    if (heldPhoto !== next.photo) {
-        db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)
-                    ON CONFLICT(public_key) DO UPDATE SET photo = excluded.photo`).run(publicKey, next.photo);
-    }
-    setRow.run(next.ref, next.bytes, publicKey);
-    return true;
+    })();
+}
+
+/**
+ * Clears a member's photo from their row (`members.avatar_url`) where that column is still there: a node whose boot
+ * stopped part way through moving photos out of the rows (setMemberPhoto). Returns whether one was there.
+ */
+function clearInlineMemberPhoto(db: Db, publicKey: string): boolean {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return false;
+    return db.prepare('UPDATE members SET avatar_url = NULL WHERE public_key = ? AND avatar_url IS NOT NULL').run(publicKey).changes > 0;
 }
 
 /**

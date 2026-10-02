@@ -1321,8 +1321,13 @@ function writeMemberStanding(
     return 'updated';
 }
 
-/** The members columns a copy never writes as they come: the avatar's reference and size, made here from its photo. */
-const MEMBER_PHOTO_COLUMNS: ReadonlySet<string> = new Set(['avatar_ref', 'avatar_bytes']);
+/**
+ * The members columns a copy never writes as they come: the avatar's reference and size, made here from its photo; and
+ * `avatar_url`, which the copy carries the photo in but which, here, is only the old inline column of a standby whose boot
+ * has not finished moving photos out of the rows (db.ts moveMemberPhotosOutOfRows). Written there, it would be moved
+ * over the photo importMemberPhoto just wrote (or back after a removal) by the next boot.
+ */
+const MEMBER_PHOTO_COLUMNS: ReadonlySet<string> = new Set(['avatar_ref', 'avatar_bytes', 'avatar_url']);
 
 /**
  * A member's avatar as the main server holds it: `avatar_url` in its row (`standing`, or the named `avatarUrl` from a main

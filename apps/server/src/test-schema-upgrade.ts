@@ -1638,6 +1638,79 @@ END`;
             && standby.rows.get(p.pk)!.updated_at === STAMP),
             'and it holds every photo in member_photos, its rows unstamped, as its main server will');
         fs.rmSync(standbyDir, { recursive: true, force: true });
+
+        // 5. A move that STOPS part way (a batch throws: a full disk, an I/O error), and the node runs on. Meanwhile one
+        // member the move had not reached sets a new photo and another removes theirs. The next boot carries on, and must
+        // not put either member's old photo back (#1475's deciding review: measured, it did both).
+        const stopDir = tmp('legacy-member-photos-stopped');
+        const stopPlanted = plantLegacy(stopDir);
+        const STOP_BATCH = 50;
+        // The rows the move walks (a value in avatar_url), in rowid order, and so which batch each is in.
+        const walked = stopPlanted.filter((p) => p.value !== null);
+        const inBatch = (n: number) => walked.slice((n - 1) * STOP_BATCH, n * STOP_BATCH).filter((p) => p.kind === 'moved');
+        const failing = inBatch(2)[10];
+        const [x, y] = [inBatch(3)[20], inBatch(3)[30]];
+        {
+            // The failure: one member's photo in batch 2 can't be written. The move creates member_photos IF NOT EXISTS,
+            // so it is made here first, as the move makes it, to hang the trigger on.
+            const d = new Database(path.join(stopDir, 'state.db'));
+            d.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL);
+                    CREATE TRIGGER injected_failure BEFORE INSERT ON member_photos WHEN NEW.public_key = '${failing.pk}'
+                    BEGIN SELECT RAISE(ABORT, 'injected: database or disk is full'); END;`);
+            d.close();
+        }
+        const NEW_PHOTO = `data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='}`;
+        // Boot 1, then the node runs on: the disk is freed (the trigger goes), and X and Y change their photos by the
+        // profile route's own writer (state-engine updateProfile), as members do on a running node.
+        const boot1 = bootInto(stopDir, { MEMBER_PHOTO_MOVE_BATCH: String(STOP_BATCH) }, `
+            console.error = (...a) => console.log(...a);
+            const se = await import(${JSON.stringify(path.join(__dirname, 'state-engine.ts'))});
+            const { db } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            se.initStateEngine();
+            // The planted members' photos only: the boot also makes the community's own enterprise, with its shipped picture.
+            console.log('COMMITTED=' + db.prepare("SELECT COUNT(*) AS n FROM member_photos mp JOIN members m USING (public_key) WHERE m.callsign LIKE 'Photo%'").get().n);
+            db.exec('DROP TRIGGER injected_failure');
+            se.updateProfile(${JSON.stringify(x.pk)}, { avatar: ${JSON.stringify(NEW_PHOTO)} });
+            se.updateProfile(${JSON.stringify(y.pk)}, { avatar: null });
+            console.log('BOOT_OK');
+            process.exit(0);
+        `);
+        const stopped = /the move out of their rows stopped after (\d+)/.exec(boot1.output);
+        const committed = /COMMITTED=(\d+)/.exec(boot1.output);
+        assert(boot1.ok && !!stopped && boot1.output.includes('injected: database or disk is full'),
+            `a batch that throws stops the move, loudly, and the node runs on (${stopped ? stopped[0] : boot1.output.split('\n').slice(-4).join(' | ')})`);
+        assert(!!stopped && !!committed && Number(stopped[1]) === Number(committed[1]) && Number(committed[1]) === inBatch(1).length,
+            `the count it logs is what was committed: batch 1's ${inBatch(1).length} (logged ${stopped?.[1]}, member_photos holds ${committed?.[1]} of theirs)`);
+        const between = heldIn(stopDir);
+        const xNow = between.rows.get(x.pk)!;
+        assert(between.cols.includes('avatar_url') && xNow.photo !== null && xNow.photo !== x.value && xNow.avatar_ref !== null
+            && between.rows.get(y.pk)!.photo === null && between.rows.get(y.pk)!.avatar_ref === null,
+            'on the running node X holds the new photo and Y none, with the old column still there');
+
+        // Boot 2 carries on and finishes.
+        const boot2 = bootInto(stopDir, { MEMBER_PHOTO_MOVE_BATCH: String(STOP_BATCH) }, `
+            console.error = (...a) => console.log(...a);
+            const { initSchema } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
+            initSchema();
+            console.log('BOOT_OK');
+        `);
+        const end = heldIn(stopDir);
+        assert(boot2.ok && /Members' photos are in member_photos now/.test(boot2.output) && !end.cols.includes('avatar_url'),
+            'the next boot finishes the move and drops the column');
+        const xEnd = end.rows.get(x.pk)!, yEnd = end.rows.get(y.pk)!;
+        assert(xEnd.photo === xNow.photo && xEnd.avatar_ref === xNow.avatar_ref && xEnd.avatar_bytes === xNow.avatar_bytes,
+            `X keeps the photo they set after the move stopped, not the one from before it (ref ${xEnd.avatar_ref}, set ${xNow.avatar_ref}, old ${versionOf(x.value!)})`);
+        assert(yEnd.photo === null && yEnd.avatar_ref === null && yEnd.avatar_bytes === null,
+            `Y's removal holds: no photo comes back (ref ${yEnd.avatar_ref}, ${yEnd.photo === null ? 'no photo' : `a photo of ${yEnd.photo.length} chars`})`);
+        const untouchedWrong = stopPlanted.filter((p) => p.pk !== x.pk && p.pk !== y.pk).filter((p) => {
+            const r = end.rows.get(p.pk)!;
+            if (p.kind === 'none') return r.photo !== null || r.avatar_ref !== null || r.avatar_bytes !== null;
+            const ref = p.value!.trim().startsWith('bundled://') ? p.value : versionOf(p.value!);
+            return r.photo !== p.value || r.avatar_ref !== ref || r.avatar_bytes !== Buffer.byteLength(p.value!) || r.updated_at !== STAMP;
+        });
+        assert(untouchedWrong.length === 0,
+            `every other member's photo moved whole, the one that failed in batch 2 included, rows unstamped (${untouchedWrong.length} wrong: ${untouchedWrong.slice(0, 3).map((p) => p.label).join(', ')})`);
+        fs.rmSync(stopDir, { recursive: true, force: true });
     })();
 
     freshDb.close();

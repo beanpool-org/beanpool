@@ -21,9 +21,11 @@ What your server does keep in the clear: that an entry exists, which admin made 
 
 ### Whoever runs your server
 
-Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when, but can't read a name without an admin checking the wrong phone in person.
+Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone in person, or an admin who was removed to work with it (below).
 
-What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; and a PDF or a note an admin writes.
+What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; a PDF or a note an admin writes; and an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had.
+
+Every admin's phone learns of a removal when it opens the list, unless the server hides it. To be sure, meet and check each other: each phone that can add names shows the list key it adds them under. Open the list on both phones; they should show the same one. If they don't, the server is showing them different things. Add no names until they match, and tell your admins.
 
 Members don't see the names. Showing real names to members, as some LETS directories do, isn't available yet.
 
@@ -45,7 +47,7 @@ If you scan a phone whose key isn't the one the server lists for that admin, the
 
 - **The first admin to open the list** makes its first key, on their phone.
 - **An admin you add later** sees that nobody they trust holds the keys yet. Make them an admin first, then meet and check each other once. Your phone sends them the keys at once, and every other admin's phone that trusts you sends its keys on its next open.
-- When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on can be read with the keys the person had. What they already saw, they keep, as with a paper list.
+- When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on by a phone that has taken the new key can be read with the keys the person had. What they already saw, they keep, as with a paper list.
 - When an admin loses their phone, tell another admin the same day: they tap Remove @X's old key. Until that is done, whoever has the phone can read what is written. The admin's new phone is checked in person once, and the keys are sent to it. Names written under a key that only the lost phone held can't be opened by anyone: the app counts them, and your paper copy is how they come back.
 - **The 12 words alone aren't enough for an admin whose phone was lost** rather than broken: whoever has the lost phone has the same key. Remove the old key, have an owner move the account to a new key, and check the new phone in person once. An admin who restores the same 12 words on a new phone after the old one broke only needs the check in person.
 - **Nothing is sealed again when the key changes.** Each name stays sealed under the key it was written with, and every admin's phone holds every key it was sent.
@@ -54,7 +56,7 @@ If you scan a phone whose key isn't the one the server lists for that admin, the
 
 The app reads and writes nothing whenever it can't check what the server says, and tells you why:
 
-- **A key made by someone no admin your phone trusts has checked.** Meet that admin, or an admin who trusts them, and check each other's phones.
+- **A key made by someone no admin your phone trusts has checked.** Meet that admin, or an admin whose phone already opens the list, and check each other's phones.
 - **The server offers an older key history than your phone has.** A server put back to an older copy does that, a standby that took over from an older copy too. Tap **Put the key history back**: your phone sends the history back to the server. Names written since that copy are gone from the server: the app says how many, and your paper copy is how they come back.
 - **The server shows a key history your phone didn't take.** Whoever runs the server changed it. Talk to them and to your admins. An admin whose phone has the server's history can meet you; after you check each other, the app offers **Take @name's history**. The keys your phone held from the other history stay on it, for reading.
 - **Part of the key history is missing on the server.** Ask whoever runs the server, or an admin.

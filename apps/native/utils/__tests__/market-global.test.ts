@@ -209,7 +209,7 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
     it('the Market: every Beans figure, the "Beans only" chip and the first-offer quest are gated', () => {
-        const src = read('../../app/(tabs)/index.tsx');
+        const src = read('../../app/(tabs)/market.tsx');
         const lines = src.split('\n');
         const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(3);
@@ -220,7 +220,8 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(src).toContain("{rowExtras.includes('beans') && (");
         expect(src).not.toContain("secondRow.extras.includes('beans')");
         expect(src).toContain('{showFirstOfferQuest && showsBeans && !categoryPanel.open && (');
-        expect(src).toContain('{isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}');
+        // It tells the floating button where its actions rest (utils/fab-band.ts), so the button steps aside for them.
+        expect(src).toContain('{isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} onActionsAt={onCardActionsAt} />}');
     });
 
     it('a post’s page: the price card and the edit form’s price field are gated, and there is no escrow accept', () => {

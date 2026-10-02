@@ -208,22 +208,67 @@ export interface OneWayBackAsked {
     joinedAt?: number | null;
 }
 
+/**
+ * Every ask this run of the app, per account, beside the phone's storage: a phone whose storage refuses every write
+ * would otherwise never record an ask, and ask the node at every focus. The newer of the two is the one kept.
+ */
+const askedThisRun = new Map<string, OneWayBackAsked>();
+
 export async function readOneWayBackAsked(publicKey: string): Promise<OneWayBackAsked | null> {
+    const inMemory = askedThisRun.get(publicKey.toLowerCase()) ?? null;
+    let stored: OneWayBackAsked | null = null;
     try {
         const raw = await AsyncStorage.getItem(oneWayBackAskedStoreKey(publicKey));
         const parsed = raw ? JSON.parse(raw) : null;
-        return parsed && typeof parsed.at === 'number' && typeof parsed.answer === 'string' ? parsed as OneWayBackAsked : null;
+        stored = parsed && typeof parsed.at === 'number' && typeof parsed.answer === 'string' ? parsed as OneWayBackAsked : null;
     } catch {
-        return null;
+        stored = null;
     }
+    if (!inMemory) return stored;
+    return stored && stored.at > inMemory.at ? stored : inMemory;
 }
 
 export async function noteOneWayBackAsked(publicKey: string, asked: OneWayBackAsked): Promise<void> {
+    askedThisRun.set(publicKey.toLowerCase(), asked);
     try {
         await AsyncStorage.setItem(oneWayBackAskedStoreKey(publicKey), JSON.stringify(asked));
     } catch {
-        // Not kept: asked again at the next focus. Never a gate.
+        // Not kept on the phone: this run still remembers it (askedThisRun). Never a gate.
     }
+}
+
+/** The asks under way, per account and community: overlapping refreshes (a focus and a re-render that meet) share one. */
+const askingNow = new Map<string, Promise<OneWayBackStanding | 'not_member' | null>>();
+
+/** {@link askOneWayBackStanding}, one request for every caller that asks while it is out. */
+export function askOneWayBackStandingShared(
+    url: string, identity: BeanPoolIdentity, options: { timeoutMs?: number } = {},
+): Promise<OneWayBackStanding | 'not_member' | null> {
+    const key = `${identity.publicKey.toLowerCase()}|${url.trim().replace(/\/+$/, '').toLowerCase()}`;
+    const out = askingNow.get(key);
+    if (out) return out;
+    const ask = askOneWayBackStanding(url, identity, options).finally(() => { askingNow.delete(key); });
+    askingNow.set(key, ask);
+    return ask;
+}
+
+/** For the tests: forget this run's asks. */
+export function resetOneWayBackAsksForTests(): void {
+    askedThisRun.clear();
+    askingNow.clear();
+}
+
+/**
+ * The record with the account's own dismissal (Home's `home.layout` `dismissed.safety`, design §3.1), when it is newer
+ * than the phone's: the card was put away on another phone or in the web app. It counts as put away then, and a return
+ * that was waiting then counts as used (the first post's too, if the member has posted by now), so a dismissal anywhere
+ * never brings the card back beyond the stated schedule.
+ */
+export function withAccountDismissal(record: OneWayBack | null, dismissedIso: string | null | undefined, hasPosted: boolean): OneWayBack | null {
+    if (!record || record.done || !dismissedIso) return record;
+    const at = Date.parse(dismissedIso);
+    if (!Number.isFinite(at) || (record.dismissedAt !== undefined && record.dismissedAt >= at)) return record;
+    return dismissedOneWayBack(record, at, hasPosted);
 }
 
 /**

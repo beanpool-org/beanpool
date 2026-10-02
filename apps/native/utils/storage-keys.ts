@@ -147,3 +147,47 @@ export function oneWayBackStoreKey(publicKey: string): string {
 export function oneWayBackAskedStoreKey(publicKey: string): string {
     return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;
 }
+
+/**
+ * Home (app/(tabs)/index.tsx, utils/home-store.ts): one account's last answer from one community, its copy of the layout,
+ * an interests save still owed to the node, and whether it has seen the one-time reveal and hint. They hold the
+ * account's own things (its Beans, its deals, who wrote to it), so every key starts with {@link HOME_STORE_PREFIX} and
+ * Sign Out and a replacing restore wipe them all with the account (utils/identity.ts wipeIdentityScopedStorage): a new
+ * Home key needs no line of its own there. Each also names the account, so another account on the phone never reads one.
+ */
+export const HOME_STORE_PREFIX = 'beanpool_home:';
+
+const homeCommunity = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
+
+export function homeAnswerStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}answer:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+export function homeLayoutStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}layout:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+export function homeInterestsOwedStoreKey(publicKey: string, url: string): string {
+    return `${HOME_STORE_PREFIX}interests-owed:${publicKey.toLowerCase()}:${homeCommunity(url)}`;
+}
+
+/**
+ * The phone's copy of the account's interests: the categories starred in the Market's For You and on Home's interests
+ * card (utils/home-store.ts, design §4.3), so For You works offline. It holds what one person cares about and names no
+ * account, and the first Home landing of an account with none sends it as that account's, so Sign Out and a replacing
+ * restore wipe it with the account (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const FAV_CATEGORIES_STORE_KEY = 'bp_fav_categories';
+
+/**
+ * Home's one-time reveal and its one-line hint (design §6.2), per account: '1' once each has been seen. They go with the
+ * account like the rest of Home's keys (PR #1483 fix round 1: everything Home keeps for an account leaves with it), so
+ * the same account restored here later sees the hint once more.
+ */
+export function homeRevealStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}reveal:${publicKey.toLowerCase()}`;
+}
+
+export function homeHintStoreKey(publicKey: string): string {
+    return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
+}

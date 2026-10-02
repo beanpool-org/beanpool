@@ -38,9 +38,19 @@ import {
     isGroupCategory,
     isGroupMemberStatus,
     DEFAULT_GROUP_CATEGORY,
-    avatarUrlOf
+    avatarUrlOf,
+    groupPictureUrlOf,
+    isSelfGroupPictureUrl,
+    MAX_PICTURE_BYTES,
+    GROUP_DESCRIPTION_LIMIT,
+    GROUP_DESCRIPTION_TOO_LONG,
+    GROUP_NAME_LIMIT,
+    LIST_PREVIEW_CHARS,
+    fitsTextLimit,
+    isPreviewed,
+    previewText
 } from '@beanpool/core';
-import { isSuspendedAccount } from './members.js';
+import { isSuspendedAccount, memberPhotoColumnsOf, type MemberPhotoColumns } from './members.js';
 import { likeContains } from './like.js';
 
 export type {
@@ -108,11 +118,74 @@ export function ensureUniqueSlug(db: Db, baseSlug: string): string {
     }
 }
 
-export function createGroup(db: Db, params: CreateGroupParams): Group {
-    const trimmedName = params.name?.trim();
-    if (!trimmedName || trimmedName.length < 1 || trimmedName.length > 100) {
-        throw new Error('Group name must be between 1 and 100 characters');
+// ===================== THE GROUP'S WORDS (#1493) =====================
+//
+// A group's name and description are held to their limits (@beanpool/core text-limits.ts) where a member writes them:
+// here, in createGroup and updateGroup, which every route goes through. Unbounded, one description could be the whole
+// 2 MB request body, and every group read sent it: 100 open groups at 1.9 MB ran a node held to a 256 MB heap out of memory
+// on one read of the list of groups (#1490's deciding review).
+//
+// A row stored before the limit, longer than it, is kept as it is: nothing on disk is cut, a standby's import copies it
+// as the main node holds it (the server's engine/sync.ts, as #1486 left group pictures), and an edit that sends it back
+// unchanged, or sends back the preview a list gave for it, leaves it as it is. A list of groups sends at most
+// LIST_PREVIEW_CHARS of it (listGroups, groupAsListed); the group's own card sends it whole.
+
+const GROUP_NAME_LENGTH = `Group name must be between 1 and ${GROUP_NAME_LIMIT.chars} characters`;
+/** The refusal of a description that is not text. */
+export const GROUP_DESCRIPTION_NOT_TEXT = "A group's description must be text.";
+
+/** A group's name as it is stored (trimmed), or a refusal. */
+function groupNameIn(name: unknown): string {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    if (trimmed.length < 1 || !fitsTextLimit(trimmed, GROUP_NAME_LIMIT)) throw new Error(GROUP_NAME_LENGTH);
+    return trimmed;
+}
+
+/** A new description as it is stored (trimmed; empty is none), or a refusal: not text, or over GROUP_DESCRIPTION_LIMIT. */
+function groupDescriptionIn(description: unknown): string | null {
+    if (description === undefined || description === null) return null;
+    if (typeof description !== 'string') throw new Error(GROUP_DESCRIPTION_NOT_TEXT);
+    const trimmed = description.trim();
+    if (!fitsTextLimit(trimmed, GROUP_DESCRIPTION_LIMIT)) throw new Error(GROUP_DESCRIPTION_TOO_LONG);
+    return trimmed || null;
+}
+
+/**
+ * An edit's description against the one stored: `undefined` when it leaves it as it is (the same text, or the preview a
+ * list gave for a longer one, sent back by an app that read the list), else the new one, held to the limit.
+ */
+function editedGroupDescription(sent: unknown, stored: string | null): string | null | undefined {
+    if (typeof sent === 'string' && stored !== null) {
+        const trimmed = sent.trim();
+        if (trimmed === stored.trim()) return undefined;
+        if (isPreviewed(stored) && (sent === previewText(stored) || trimmed === previewText(stored).trim())) return undefined;
     }
+    return groupDescriptionIn(sent);
+}
+
+/**
+ * A description as a standby's import stores it (the server's engine/sync.ts): exactly as the main node holds it, longer
+ * than GROUP_DESCRIPTION_LIMIT included. The limit is on a member's new words, and a copy writes none: it is the rule for
+ * a row stored before the limit, applied to a row stored elsewhere. Never cut and never refused, so no row is dropped and
+ * the copy hashes as the main node's (replica-hashes.ts). A value that is not text (no node stores one) is none, rather
+ * than a throw that would roll the whole copy back.
+ */
+export function groupDescriptionAsCopied(value: unknown): string | null {
+    return typeof value === 'string' ? value : null;
+}
+
+/**
+ * A group as a list or a broadcast sends it: its description cut to LIST_PREVIEW_CHARS and marked `descriptionTruncated`
+ * when it is longer. The group's own card (getGroup) sends it whole.
+ */
+export function groupAsListed<T extends Group>(group: T): T {
+    if (!isPreviewed(group.description)) return group;
+    return { ...group, description: previewText(group.description!), descriptionTruncated: true };
+}
+
+export function createGroup(db: Db, params: CreateGroupParams): Group {
+    const trimmedName = groupNameIn(params.name);
+    const description = groupDescriptionIn(params.description);
 
     const category: GroupCategory = params.category ?? DEFAULT_GROUP_CATEGORY;
     if (!isGroupCategory(category)) {
@@ -133,6 +206,8 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     // and no route deletes a group. Same refusal as joining one.
     if (isSuspendedAccount(db, params.createdBy)) throw new Error(`UNAUTHORIZED: ${GROUP_START_PAUSED}`);
 
+    assertGroupPictureFits(params.avatarUrl);
+
     const rawSlug = params.slug ? slugifyGroupName(params.slug) : slugifyGroupName(trimmedName);
     const slug = ensureUniqueSlug(db, rawSlug);
     const id = params.id || crypto.randomUUID();
@@ -140,14 +215,13 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
     db.transaction(() => {
         db.prepare(`
-            INSERT INTO groups (id, name, slug, description, avatar_url, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO groups (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id,
             trimmedName,
             slug,
-            params.description?.trim() || null,
-            params.avatarUrl || null,
+            description,
             category,
             params.createdBy,
             // The creator is the first lead convenor. Nothing else is special about them — exactly the enterprise
@@ -163,6 +237,11 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
             INSERT INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at, role_since)
             VALUES (?, ?, 'convenor', 'active', ?, ?, ?)
         `).run(id, params.createdBy, now, now, now);
+
+        // The picture by its one writer; the row keeps the stamp it was made with (the writer's touch would move it).
+        if (setGroupPicture(db, id, params.avatarUrl || null)) {
+            db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, id);
+        }
     })();
 
     const created = getGroup(db, id, params.createdBy);
@@ -182,11 +261,116 @@ function memberAvatarUrl(publicKey: string | null | undefined, avatarRef: string
     return publicKey ? avatarUrlOf(publicKey, avatarRef) ?? undefined : undefined;
 }
 
+// ===================== THE GROUP'S OWN PICTURE (#1486) =====================
+//
+// Kept as members' photos are since #1475: the picture in its own table (`group_pictures`), and in the group's row only
+// its reference (`avatar_ref`, @beanpool/core avatarRefOf) and size (`avatar_bytes`), written together by one writer
+// (setGroupPicture). A list of groups, a group's card, "your groups", the chat's header and every group_created /
+// group_updated carry `groupPictureUrlOf(id, avatar_ref)`, never the picture: stored in the row and sent with it, 100
+// open groups with a 1.84 MB picture each ran a 256 MB heap out of memory on one read of the list (#1484's deciding
+// review). The URL opens the picture at `/api/groups/:id/picture`, only with its key (the server's engine/avatar-keys.ts).
+
+/** A picture refused for its size: more image bytes than a member's photo may hold (MAX_PICTURE_BYTES). */
+export const GROUP_PICTURE_TOO_LARGE = 'That picture is too large. Please choose a smaller one.';
+
+/**
+ * The image bytes a stored picture value holds: a data URL's or bare base64's decoded size (worked out from its length,
+ * nothing decoded), any other text's own size.
+ */
+export function pictureBytesOf(value: string): number {
+    const trimmed = value.trim();
+    const data = /^data:[^,]*;base64,([\s\S]*)$/i.exec(trimmed);
+    if (data) return Buffer.byteLength(data[1].replace(/\s+/g, ''), 'base64');
+    if (/^[A-Za-z0-9+/=_\-\s]+$/.test(trimmed)) return Buffer.byteLength(trimmed.replace(/\s+/g, ''), 'base64');
+    return Buffer.byteLength(trimmed, 'utf8');
+}
+
+/** Refuses a group picture bigger than a member's photo may be (MAX_PICTURE_BYTES), before anything is written. */
+function assertGroupPictureFits(value: unknown): void {
+    if (typeof value === 'string' && !isSelfGroupPictureUrl(value) && pictureBytesOf(value) > MAX_PICTURE_BYTES) {
+        throw new Error(GROUP_PICTURE_TOO_LARGE);
+    }
+}
+
+/**
+ * What a group's picture is kept as (memberPhotoColumnsOf's rule): the picture exactly as set, its reference and its
+ * size. Null for a value the node does not serve: empty, a member's avatar URL or this node's own group picture URL sent
+ * back. Such a group has no picture.
+ */
+export function groupPictureColumnsOf(stored: string | null | undefined): MemberPhotoColumns | null {
+    if (isSelfGroupPictureUrl(stored)) return null;
+    return memberPhotoColumnsOf(stored);
+}
+
+/** A group's picture as it was set (group_pictures.picture), or null when it has none. */
+export function getGroupPicture(db: Db, groupId: string): string | null {
+    const row = db.prepare('SELECT picture FROM group_pictures WHERE group_id = ?').get(groupId) as { picture: string } | undefined;
+    return row?.picture ?? null;
+}
+
+/**
+ * Sets a group's picture to `stored` (null, or a value the node does not serve: none): its group_pictures row and the
+ * group row's `avatar_ref` and `avatar_bytes`, together. The ONE writer of a group's picture, so the reference always
+ * names the picture held. Writes nothing when both already hold it, or when there is no such group. Any change writes the
+ * row's two columns, which the touch trigger (schema.sql groups_touch_updated_at) stamps, so a standby's delta carries
+ * it: group_pictures travels in its group's row (the server's engine/replication-manifest.ts). One transaction of its
+ * own, nested as a savepoint in a caller's. Returns whether anything changed.
+ *
+ * On a node whose boot has not finished moving pictures out of the rows (the server's db.ts moveGroupPicturesOutOfRows,
+ * stopped part way, so `groups.avatar_url` is still there), it also clears the group's old inline picture on every call,
+ * as setMemberPhoto does: the resumed move moves only a row whose `avatar_url` is still set, so a picture set or removed
+ * since the move began is never overwritten by the one before it.
+ */
+export function setGroupPicture(db: Db, groupId: string, stored: string | null | undefined): boolean {
+    return db.transaction(() => {
+        const held = db.prepare('SELECT avatar_ref, avatar_bytes FROM groups WHERE id = ?').get(groupId) as
+            { avatar_ref: string | null; avatar_bytes: number | null } | undefined;
+        if (!held) return false;
+        const next = groupPictureColumnsOf(stored);
+        const heldPicture = getGroupPicture(db, groupId);
+        const clearedInline = clearInlineGroupPicture(db, groupId);
+        const setRow = db.prepare('UPDATE groups SET avatar_ref = ?, avatar_bytes = ? WHERE id = ?');
+        if (next === null) {
+            if (!clearedInline && heldPicture === null && held.avatar_ref === null && held.avatar_bytes === null) return false;
+            db.prepare('DELETE FROM group_pictures WHERE group_id = ?').run(groupId);
+            setRow.run(null, null, groupId);
+            return true;
+        }
+        if (!clearedInline && heldPicture === next.photo && held.avatar_ref === next.ref && held.avatar_bytes === next.bytes) return false;
+        if (heldPicture !== next.photo) {
+            db.prepare(`INSERT INTO group_pictures (group_id, picture) VALUES (?, ?)
+                        ON CONFLICT(group_id) DO UPDATE SET picture = excluded.picture`).run(groupId, next.photo);
+        }
+        setRow.run(next.ref, next.bytes, groupId);
+        return true;
+    })();
+}
+
+/** Clears a group's picture from its row (`groups.avatar_url`) where that column is still there (setGroupPicture). */
+function clearInlineGroupPicture(db: Db, groupId: string): boolean {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('groups') WHERE name = 'avatar_url'`).get()) return false;
+    return db.prepare('UPDATE groups SET avatar_url = NULL WHERE id = ? AND avatar_url IS NOT NULL').run(groupId).changes > 0;
+}
+
+/** The group row's columns a group read is made from, never the picture (not in the row) nor any column it doesn't use. */
+const GROUP_COLUMNS = 'g.id, g.name, g.slug, g.description, g.avatar_ref, g.category, g.created_by, g.join_policy, g.created_at, g.updated_at';
+/**
+ * The same for a list, with no more of a description than its preview needs (#1493): SQLite's substr counts characters
+ * (code points), and LIST_PREVIEW_CHARS + 1 of them always hold the preview (previewText counts UTF-16 units, never fewer)
+ * and show whether there is more. The rest of a long one never leaves the database.
+ */
+const LISTED_GROUP_COLUMNS = GROUP_COLUMNS.replace('g.description', `substr(g.description, 1, ${LIST_PREVIEW_CHARS + 1}) AS description`);
+
+/** A group's picture as every group read hands it out: its URL (groupPictureUrlOf), or undefined for none. */
+function groupPictureUrl(row: { id: string; avatar_ref?: string | null }): string | undefined {
+    return groupPictureUrlOf(row.id, row.avatar_ref) ?? undefined;
+}
+
 export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group | null {
     // convenor_pubkey is the LEAD convenor: "the group's convenor", wherever one name is shown, is the person who
     // leads it. Group info in both apps reads these fields, so naming the lead there needs no second query.
     const row = db.prepare(`
-        SELECT g.*,
+        SELECT ${GROUP_COLUMNS},
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
@@ -227,7 +411,7 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
         name: row.name,
         slug: row.slug,
         description: row.description || undefined,
-        avatarUrl: row.avatar_url || undefined,
+        avatarUrl: groupPictureUrl(row),
         category: row.category as GroupCategory,
         createdBy: row.created_by,
         joinPolicy: row.join_policy as JoinPolicy,
@@ -245,9 +429,13 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
     };
 }
 
+/**
+ * A page of groups. Each description is its preview (groupAsListed): a list of 200 groups is at most 200 previews, however
+ * long a description stored before its limit is (#1493). The group's own card (getGroup) sends it whole.
+ */
 export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: string): Group[] {
     let query = `
-        SELECT g.*,
+        SELECT ${LISTED_GROUP_COLUMNS},
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
@@ -312,12 +500,12 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
         }
     }
 
-    return rows.map(row => ({
+    return rows.map(row => groupAsListed({
         id: row.id,
         name: row.name,
         slug: row.slug,
         description: row.description || undefined,
-        avatarUrl: row.avatar_url || undefined,
+        avatarUrl: groupPictureUrl(row),
         category: row.category as GroupCategory,
         createdBy: row.created_by,
         joinPolicy: row.join_policy as JoinPolicy,
@@ -817,23 +1005,23 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     const params: any[] = [];
 
     if (updates.name !== undefined) {
-        const name = updates.name.trim();
-        if (name.length < 1 || name.length > 100) {
-            throw new Error('Group name must be between 1 and 100 characters');
-        }
         sets.push('name = ?');
-        params.push(name);
+        params.push(groupNameIn(updates.name));
     }
 
     if (updates.description !== undefined) {
-        sets.push('description = ?');
-        params.push(updates.description.trim() || null);
+        const stored = db.prepare('SELECT description FROM groups WHERE id = ?').get(groupId) as { description: string | null } | undefined;
+        const description = editedGroupDescription(updates.description, stored?.description ?? null);
+        if (description !== undefined) {
+            sets.push('description = ?');
+            params.push(description);
+        }
     }
 
-    if (updates.avatarUrl !== undefined) {
-        sets.push('avatar_url = ?');
-        params.push(updates.avatarUrl || null);
-    }
+    // The picture by its one writer (setGroupPicture), below. This node's own picture URL sent back by an editor that read
+    // the group means "unchanged", as a member's own avatar URL does on a profile save.
+    const picture = updates.avatarUrl !== undefined && !isSelfGroupPictureUrl(updates.avatarUrl) ? updates.avatarUrl || null : undefined;
+    assertGroupPictureFits(picture);
 
     if (updates.category !== undefined) {
         if (!isGroupCategory(updates.category)) {
@@ -851,7 +1039,7 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
         params.push(updates.joinPolicy);
     }
 
-    if (sets.length === 0) {
+    if (sets.length === 0 && picture === undefined) {
         return getGroup(db, groupId, convenorPubkey)!;
     }
 
@@ -859,7 +1047,11 @@ export function updateGroup(db: Db, groupId: string, convenorPubkey: string, upd
     sets.push('updated_at = ?');
     params.push(now, groupId);
 
-    db.prepare(`UPDATE groups SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    db.transaction(() => {
+        // The picture first: its writer's touch stamps the row, and the UPDATE after it sets the stamp this edit is.
+        if (picture !== undefined) setGroupPicture(db, groupId, picture);
+        db.prepare(`UPDATE groups SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    })();
 
     const updated = getGroup(db, groupId, convenorPubkey);
     if (!updated) throw new Error('Group not found');

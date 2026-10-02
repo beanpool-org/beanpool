@@ -716,7 +716,7 @@ export default function ChatsScreen() {
             <Text style={styles.emptyText}>No conversations yet.</Text>
             <Pressable
                 accessibilityRole="button"
-                onPress={() => router.push('/')}
+                onPress={() => router.push('/(tabs)/market')}
                 style={{ marginTop: 12, backgroundColor: colors.accent.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
             >
                 <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>Browse Market</Text>

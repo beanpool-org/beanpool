@@ -258,11 +258,14 @@ function readSlice(
 
 /**
  * What a row of `step` brings into the page that its own columns don't: a member's avatar, which their row carries twice
- * (`standing.avatar_url` and the named `avatarUrl`, @beanpool/engine sync.ts withPhoto) but no longer holds, counted from
- * its size in the row (avatar_bytes), so a slice of members with photos still holds about a page.
+ * (`standing.avatar_url` and the named `avatarUrl`, @beanpool/engine sync.ts withPhoto) but no longer holds, and a group's
+ * picture, which its row carries once (`avatarUrl`, groupsWithPictures), each counted from its size in the row
+ * (avatar_bytes), so a slice of members with photos or groups with pictures still holds about a page.
  */
 function carriedBytes(step: Step, row: any): number {
-    return step.table === 'members' ? 2 * (Number(row.avatar_bytes) || 0) : 0;
+    if (step.table === 'members') return 2 * (Number(row.avatar_bytes) || 0);
+    if (step.table === 'groups') return Number(row.avatar_bytes) || 0;
+    return 0;
 }
 
 /** Whether any row of this copy is left to send; moves past the tables that have none. */

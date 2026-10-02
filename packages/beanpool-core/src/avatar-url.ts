@@ -155,3 +155,46 @@ export function avatarUrlOf(id: string, ref: string | null | undefined): string 
     const url = `/api/avatar/${id}?size=thumb&v=${ref}`;
     return avatarKeyer ? `${url}&k=${avatarKeyer(id, ref)}` : url;
 }
+
+/**
+ * The most image bytes a picture the node serves may hold: a member's photo (the server's `/api/avatar` answers 413 past
+ * it) and a group's picture, which is also refused past it on the way in (@beanpool/engine groups.ts).
+ */
+export const MAX_PICTURE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * A GROUP's own picture, as members' photos are kept since #1475: in its own table (the server's `group_pictures`), with
+ * its reference in the group's row (`groups.avatar_ref`, avatarRefOf), so a list of groups, a group's card and every
+ * broadcast carry a URL made from the reference alone and never read the picture (#1486). Its route is
+ * `/api/groups/:id/picture`, which serves it only to a URL carrying its key: a group is read by members only on every
+ * node, and an `<img>` cannot sign, so the key rides in the URL. The server installs the keyer at every boot.
+ */
+export type GroupPictureKeyer = (groupId: string, version: string) => string;
+let groupPictureKeyer: GroupPictureKeyer | null = null;
+
+/** Installs (or, with null, removes) the key every emitted group picture URL carries. */
+export function configureGroupPictureKeys(keyer: GroupPictureKeyer | null): void {
+    groupPictureKeyer = keyer;
+}
+
+/**
+ * The URL to emit for a group's own picture, from the group row's `avatar_ref` (avatarRefOf): null for none, a shipped
+ * picture's `bundled://…` unchanged, otherwise `/api/groups/<id>/picture?v=<version>` with its key where one is installed
+ * (configureGroupPictureKeys). Relative, as a member's photo URL is: both apps draw it against their node.
+ */
+export function groupPictureUrlOf(groupId: string, ref: string | null | undefined): string | null {
+    if (!ref) return null;
+    if (isBundledAvatar(ref)) return ref;
+    const url = `/api/groups/${encodeURIComponent(groupId)}/picture?v=${ref}`;
+    return groupPictureKeyer ? `${url}&k=${groupPictureKeyer(groupId, ref)}` : url;
+}
+
+/**
+ * Is this string one of this node's own group picture URLs sent back (relative, or absolute on any host, with or without
+ * its query)? An editor that read the group back holds the URL, not the picture: it means "unchanged", as
+ * isSelfAvatarUrl's does for a member's photo.
+ */
+export function isSelfGroupPictureUrl(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/groups\/[^/?#\s]+\/picture(?:[?#]\S*)?$/i.test(value.trim());
+}

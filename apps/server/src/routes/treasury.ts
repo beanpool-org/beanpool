@@ -38,8 +38,9 @@ import { createEventFromBody } from './event-post.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlOf, isSyntheticAccount } from '@beanpool/core';
@@ -522,6 +523,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
+        if (respondIfNoteTooLong(ctx, memo)) return;
         if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
@@ -577,6 +579,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         }
         photoUrl = stripImageValue(photoUrl);
         const enterprisePurpose = String(purpose || description || enterpriseName).trim();
+        // Its name and purpose are sent whole by every list of enterprises (#1493): each held to its limit.
+        try { assertEnterpriseText(enterpriseName, enterprisePurpose); } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message };
+            return;
+        }
         const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
         const parsedDeadline = deadlineAt ? String(deadlineAt) : null;

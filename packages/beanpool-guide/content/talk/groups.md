@@ -22,7 +22,7 @@ The same list is in **Commons**, under **Groups**, as **Your groups**, without t
 ## Starting a group
 
 - In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.
-- Give it a **Group Name** and, if you like, a **Purpose / Description**.
+- Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
 - Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat.
@@ -70,7 +70,7 @@ Anything else the server turns down, it turns down in its own words, and the app
 
 ## Joining a group
 
-In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Open a group, then:
+In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.

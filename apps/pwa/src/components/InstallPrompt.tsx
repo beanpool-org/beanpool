@@ -121,6 +121,8 @@ export function InstallPrompt() {
                     background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
                     fontSize: '1rem', cursor: 'pointer', padding: '0.4rem 0.6rem',
                     borderRadius: '8px', lineHeight: 1,
+                    minWidth: '44px', minHeight: '44px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 aria-label="Dismiss install prompt"
@@ -145,6 +147,7 @@ export function InstallPrompt() {
                             background: '#2563eb', color: 'var(--text-primary)', border: 'none',
                             fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer',
                             fontFamily: 'inherit', whiteSpace: 'nowrap',
+                            minWidth: '44px', minHeight: '44px',
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
@@ -160,6 +163,7 @@ export function InstallPrompt() {
                             background: showSteps ? '#333' : '#2563eb', color: 'var(--text-primary)',
                             border: 'none', fontSize: '0.85rem', fontWeight: 600,
                             cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                            minWidth: '44px', minHeight: '44px',
                         }}
                         className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
@@ -178,6 +182,7 @@ export function InstallPrompt() {
                     background: 'none', border: 'none', color: '#94a3b8',
                     fontSize: '0.78rem', fontFamily: 'inherit', cursor: 'pointer',
                     textDecoration: 'underline', textUnderlineOffset: '2px',
+                    minHeight: '44px', display: 'inline-flex', alignItems: 'center',
                 }}
                 className="focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >

@@ -21,10 +21,12 @@ If you came from a link someone shared to a listing or an event, it opens first.
 
 - Tap **Join**, then **I'm new to BeanPool**.
 - Choose the name people will see. It needs at least 2 letters, and at most 20.
-- Sign in once, with one of the accounts the page shows: **Google**, **Apple** or **Facebook**. The page takes you to that company's own sign-in and brings you back.
-- Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in**, **Your Photo**, **Safety Backup** and **How it Works**.
+- Choose how to join. **Create an account with 12 secret words** needs no other account. Or, under **Or sign in**, sign in once with one of the accounts the page shows: **Google**, **Apple** or **Facebook**. The page takes you to that company's own sign-in and brings you back. Where the community takes sign-ins only, the page shows the sign-ins alone.
+- Then the same steps as everyone: a photo, your 12 words and a short tour. The bar at the top says **Sign in** (or **Your Name**, when you joined with 12 words), **Your Photo**, **Safety Backup** and **How it Works**.
 
-The sign-in stops one person making many accounts. The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
+**Joining with 12 words.** No Google, Apple or Facebook account is needed, and the community keeps nothing about you but your name and, for a day, a scrambled reference to the network you joined from. While you type your name, the page does a small piece of work for the community in the background, so nobody can make accounts endlessly fast. You don't wait for it: if you tap before it is done, the page says **Setting up your account…** with a bar of 8 steps. When lots of people are joining, it takes longer, and the page says about how long in this browser: signing in is quicker then. **← Choose another way** goes back to both ways in, with the work still going. Your 12 words are then your only way back in. Nobody can reset them, not us and not the community: **Safety Backup** says so, and offers **Add a sign-in as a second way back**: you choose the sign-in at the end of the short tour, once your photo is saved (see "Adding a sign-in later" below). Both are up to you.
+
+**Joining with a sign-in.** The community keeps only a scrambled reference to it, never your email or your name from that account. One sign-in account can join once.
 
 The same sign-in is also kept as a way back to your account. While the page says **Securing your account…**, it locks a copy of your account, with its 12 words, and the join hands it to the community. That sign-in account can open it. The people who run the server can open it too, because their server checks your sign-in, as with a sign-in account linked on the phone app: see "Getting your account back". Settings then shows **Sign-in recovery: connected** and which one. If the copy can't be made or kept, you still join, and Settings says **Sign-in recovery: not connected**: your 12 words are then your only way back.
 
@@ -32,7 +34,7 @@ If you would rather the community did not keep that copy, the web app can't remo
 
 If someone else here already has the name you chose, you get it with a number added. You can change it in Settings.
 
-**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page asks you to sign in once, and it joins as the account you already have. If you joined the global community before with a sign-in, choose **I joined with a sign-in before** (see below).
+**Already use BeanPool?** Don't make a second account. After **Join**, choose **I use BeanPool on my phone** to link from the phone app, or **I have my 12 words**. If that account has not joined the global community yet, the page offers the same ways in (your 12 words, or a sign-in once), and it joins as the account you already have. If you joined the global community before with a sign-in, choose **I joined with a sign-in before** (see below).
 
 If you close the page halfway, open it again within 10 minutes and it carries on with the same name.
 
@@ -42,11 +44,11 @@ If you close the page halfway, open it again within 10 minutes and it carries on
 
 If something goes wrong on the page after your join went out, it says so and offers **Reload page**. Your join is kept on this browser, and the reload checks whether you are in.
 
-**Too many new accounts from this network:** the global community takes only so many new accounts an hour from one internet connection. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Try again later.
+**Many people joining from one network:** when lots of new accounts come from one internet connection, joining asks a little more work of the browser rather than turning people away. Everyone on the same network counts together, so at a campus, an office or a meetup it may be other people joining, not you. Only past a very large number does the page say no for now, and how many minutes to wait. When it says that about 12-words accounts, joining with a sign-in still works.
 
 ## A new account's limits
 
-On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. See "Reporting a problem" for why.
+On the global community a new account has a few daily limits for its first 3 days, and until 3 of its posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words alone has smaller ones for its first 7 days: 2 posts, 4 photos and 3 new people to message. Adding a sign-in moves it to the usual ones at once. Replying to someone who wrote to you first is never limited. See "Reporting a problem" for why.
 
 - After you join, a card called **Your account is new** shows how many of each are left and when more come back. Tap **✕** to put it away. It stays in **Settings** until the limits are over.
 - If you reach a limit, **New Post** or the chat says which one and when it lets up, and **New Post** shows the same card.
@@ -73,6 +75,14 @@ If you joined with GitHub, it can't bring your account back: BeanPool no longer 
 If you sign in with an account that isn't the one you joined with, the page says so and lets you choose again. If you tap **Join** and sign in with an account that has already joined, the page says **You're already here** and offers **Restore with** (that sign-in).
 
 **One account per browser** holds here too. If this browser already has another account, nothing replaces it: the page says **This browser already has an account** and offers to open it. To bring yours here instead, sign out of that one first. If this browser already has your account, the page says it is already here.
+
+## Adding a sign-in later
+
+If you joined the global community with 12 words, they are your only way back. After you join, a card called **One way back** says so, with **See my 12 words** and **Add a sign-in**. Tap **✕** to put it away: it comes back once after one of your posts has stayed up, and once when your first week is over. It stays in **Settings** until you add a sign-in.
+
+- Tap **Add a sign-in**, then **Google**, **Apple** or **Facebook**. As when joining, the page takes you to that company's own sign-in and brings you back.
+- **Settings** opens and says whether it was added. From then on that sign-in also brings your account back: the community keeps a locked copy of your account for it, as when you join with a sign-in, and the people who run its server can open that copy. Your new-account limits become the usual ones at once.
+- A sign-in account that already has another BeanPool account here, or that belonged to an account the community removed, can't be added: the page says so, and nothing changes.
 
 ## Different names and places
 

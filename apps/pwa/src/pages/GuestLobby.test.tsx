@@ -385,6 +385,20 @@ describe('a visitor with no key on the global node', () => {
         }
     });
 
+    it('the Join card names the two doors on a node that takes 12 words alone, and one sign-in where it does not (review 4161723961)', async () => {
+        stubNode({ ...GLOBAL, features: { ...GLOBAL.features, wordsDoor: true } });
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        expect(card).toHaveTextContent('It takes a name, and 12 secret words or a sign-in. No invite needed.');
+        expect(card).not.toHaveTextContent(/one sign-in/);
+        cleanup();
+        resetCommunityInfoOnce();
+
+        stubNode(GLOBAL);
+        await openLobby();
+        expect(await screen.findByTestId('lobby-join-card')).toHaveTextContent('It takes a name and one sign-in. No invite needed.');
+    });
+
     it('Join in the header opens screen 1 over the lobby, and ← Back returns to the listings', async () => {
         stubNode(GLOBAL);
         await openLobby();

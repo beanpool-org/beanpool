@@ -211,6 +211,7 @@ import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
+    getMemberDirectoryRows as getMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -232,6 +233,7 @@ import {
     rowToMember,
     rowToProfile,
     type Member,
+    type DirectoryRow,
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
@@ -1588,6 +1590,11 @@ export function getMembers(): Member[] {
 
 export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
+}
+
+/** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
+export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
+    return getMemberDirectoryRowsEngine(db, updatedAfter);
 }
 
 // ===================== INVITE CODES =====================
@@ -6554,7 +6561,9 @@ function countHealth(t: ReturnType<typeof getThresholds>): HealthCounts {
 function healthBody(counts: HealthCounts, reportCount: number, watchdog: WatchdogStatus): Omit<CommunityHealth, 'flags'> {
     const config = getLocalConfig();
     return {
-        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
+        // The name alone (directoryName): getDirectoryInfo also counts the members, a scan this read threw away, and every
+        // phone asks it every 30 s (members' photos are inline, so the count read them all: the global load rehearsal).
+        nodeName: directoryName(),
         version: getVersion(),
         // The app reads both of these. `minAppVersion` is this node's floor — below it
         // the app says so and will not let you dismiss it. `appVersions` is what the
@@ -7831,6 +7840,12 @@ export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.co
     return host ? `https://${host}` : null;
 }
 
+/** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */
+export function directoryName(): string {
+    const localConfig = getLocalConfig();
+    return localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node';
+}
+
 /**
  * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
  * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
@@ -7841,7 +7856,7 @@ export function getDirectoryInfo(): any {
     const config = getNodeConfig();
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
+        name: directoryName(),
         publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
         communityName: localConfig.communityName || null,
     };
@@ -7853,7 +7868,10 @@ export function getDirectoryInfo(): any {
     }
 
     if (config.publishMembers) {
-        info.memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
+        // The same count (members not pruned) from communityCountsCached: GET /api/directory/info is public and ran the
+        // scan on every hit. Counted afresh once a member changes (the members version), else at most
+        // COMMUNITY_COUNTS_TTL_MS old.
+        info.memberCount = communityCountsCached().memberCount;
     } else {
         info.memberCount = null;
     }

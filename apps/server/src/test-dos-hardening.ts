@@ -24,7 +24,10 @@
  *      members behind one address each keep their own.
  *   6. F4: /api/community/info and /health have a per-address bucket (429 past five times the minute's limit); a burst of
  *      50 of each runs the member and transaction counts once, not 50 times, and never the fraud analysis; a new member
- *      shows at once (the members version); /ws greetings use the same cached counts.
+ *      shows at once (the members version); /ws greetings use the same cached counts. 50 health reads count the members
+ *      at most once (its name no longer comes with a member count), and so do 50 each of /api/node/info and
+ *      /api/directory/info, which still answer the members not pruned and count a new one at once; with 3,000 members'
+ *      25 KB photos inline (the global load rehearsal), each of those reads costs under half the CPU of one member count.
  *   7. F5, in part: a nearest-first read from a point far from every post measures at most ONE_PASS_MAX_MEASURED posts
  *      on a node holding more, and pages past the bound are empty; a page for a filter few posts match is still the
  *      brute-force page. With a radius or a filter only the distance CALLS are bounded, not the scan and sort before
@@ -472,8 +475,67 @@ async function main() {
                 `50 reads of /api/community/health count the active members once and never run the fraud analysis (activity ${activity}, funnel queries ${fraud})`);
             assert(healths.every(h => h && h.flags === undefined && typeof h.minAppVersion === 'string' && typeof h.activity?.totalTransactions === 'number' && h.tree?.totalMembers >= 1),
                 'each answers the fields the apps read, and no flags');
+
+            // The health's name came from getDirectoryInfo, which also counted the members (publishMembers is on by
+            // default) on every read and threw the count away: members' photos are inline, so that count read every
+            // photo's bytes, 94% of the health read's CPU in the global load rehearsal. /api/node/info and
+            // /api/directory/info are public too and counted afresh on every hit.
+            assert(se.getNodeConfig().publishMembers === true, 'the node publishes its member count (the default)');
+            prepared.length = 0;
+            se.resetCommunityReadCaches?.();
+            for (let i = 0; i < 50; i++) healths.push((await call('GET', '/api/community/health', `198.51.105.${i}`)).json);
+            assert(memberCounts() <= 1, `50 reads of /api/community/health count the members at most once (${memberCounts()} times)`);
+            prepared.length = 0;
+            const infos: any[] = [], dirs: any[] = [];
+            for (let i = 0; i < 50; i++) {
+                infos.push((await call('GET', '/api/node/info', `198.51.106.${i}`)).json);
+                dirs.push((await call('GET', '/api/directory/info', `198.51.107.${i}`)).json);
+            }
+            assert(memberCounts() <= 1, `50 reads each of /api/node/info and /api/directory/info count the members at most once (${memberCounts()} times)`);
+            const total = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
+            assert(infos.every(b => b?.memberCount === total && typeof b?.postCount === 'number') && dirs.every(b => b?.memberCount === total),
+                `each answers the members not pruned (${total}): node info ${[...new Set(infos.map(b => b?.memberCount))].join(',')}, directory ${[...new Set(dirs.map(b => b?.memberCount))].join(',')}`);
+            assert(healths.every(h => h?.nodeName === dirs[0]?.name && typeof h?.nodeName === 'string'),
+                `the health still names the community as the directory does (${dirs[0]?.name})`);
+            member('DosNewer');
+            se.bumpMembersVersion();
+            const [infoAfter, dirAfter] = [(await call('GET', '/api/node/info', '198.51.106.200')).json, (await call('GET', '/api/directory/info', '198.51.107.200')).json];
+            assert(infoAfter?.memberCount === total + 1 && dirAfter?.memberCount === total + 1,
+                `a new member is counted at once there too (${total} → ${infoAfter?.memberCount}, ${dirAfter?.memberCount})`);
         } finally {
             delete (db as any).prepare;
+        }
+
+        // And the time it saves, against the count itself: 3,000 members with a 25 KB photo each, inline as the app
+        // sends them. Every one of these reads paid at least one count on origin/main; now a read costs a small part of one.
+        {
+            const photo = `data:image/jpeg;base64,${crypto.randomBytes(18_750).toString('base64')}`;
+            const keys: string[] = [];
+            const ins = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
+                                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', ?)`);
+            db.transaction(() => {
+                for (let i = 0; i < 3_000; i++) { const k = crypto.randomBytes(32).toString('hex'); keys.push(k); ins.run(k, `DosPhoto${i}`, photo); }
+            })();
+            se.bumpMembersVersion();
+            // CPU time, not wall-clock (the server is in this process): a busy neighbour in the pool slows both alike.
+            // On origin/main every read runs at least one count, so it can't come in under half of one.
+            const cpuMs = (since: NodeJS.CpuUsage) => { const u = process.cpuUsage(since); return (u.user + u.system) / 1000; };
+            const count = db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'");
+            count.get();
+            let t = process.cpuUsage();
+            for (let i = 0; i < 20; i++) count.get();
+            const perCount = cpuMs(t) / 20;
+            se.resetCommunityReadCaches?.();
+            const paths = ['/api/community/health', '/api/node/info', '/api/directory/info'];
+            t = process.cpuUsage();
+            for (let i = 0; i < 120; i++) await call('GET', paths[i % 3], `198.51.108.${i}`);
+            const perRead = cpuMs(t) / 120;
+            assert(perRead < perCount / 2,
+                `with 3,000 members' photos inline, a read of the health, node info or directory info costs ${perRead.toFixed(2)} ms of CPU, under half of one member count (${perCount.toFixed(2)} ms)`);
+            const del = db.prepare('DELETE FROM members WHERE public_key = ?');
+            db.transaction(() => { for (const k of keys) del.run(k); })();
+            se.bumpMembersVersion();
+            se.resetCommunityReadCaches?.();
         }
     }
 

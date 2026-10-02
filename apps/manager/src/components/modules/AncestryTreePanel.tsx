@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
-import { pruneInviteBranch, getTfaSessionToken, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
+import { pruneInviteBranch, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
 
 export interface AncestryTreePanelProps {
@@ -88,7 +88,8 @@ export function AncestryTreePanel({
         for (const r of reports) {
             const status = typeof r?.status === 'string' ? r.status : 'pending';
             if (status === 'pending') {
-                const target = typeof r?.targetPubkey === 'string' ? r.targetPubkey : (typeof r?.target_pubkey === 'string' ? r.target_pubkey : '');
+                // On a post, its author as the node read it from the post (reportSubject).
+                const target = r && typeof r === 'object' ? reportSubject(r) : null;
                 if (target) counts[target] = (counts[target] || 0) + 1;
             }
         }

@@ -107,7 +107,7 @@ async function askPhoneLock(reason: string, door: boolean): Promise<boolean> {
             promptMessage: reason,
             fallbackLabel: 'Use Passcode',
             disableDeviceFallback: false,
-        });
+        }, door ? 'door' : 'app-lock');
 
         return res.success && passCounts();
     } catch (e) {
@@ -123,8 +123,8 @@ async function askPhoneLock(reason: string, door: boolean): Promise<boolean> {
  * apart from a door's. It takes the app out of the front while it is open (iOS's Face ID and passcode make it inactive,
  * Android 8-10's PIN screen backgrounds it), and the full-screen "Update required" (utils/force-update.ts) must not take
  * that for the member leaving: it comes at the very moments the update screen waits for, a cold start and a return. A
- * door's prompt is the member in the middle of something (their words, a payment), so it is not counted here: the
- * update screen never lands on it.
+ * door's prompt is the member in the middle of something (their words, a payment), so it is not counted here but in
+ * doorPrompts below, as a leave: the update screen never lands on it.
  */
 let openAppLockPrompts = 0;
 let appLockCloseWaiters: Array<() => void> = [];
@@ -153,16 +153,43 @@ export function whenAppLockPromptsClose(): Promise<void> {
 }
 
 /**
+ * The phone's lock prompts opened for anything but App Lock's unlock: a door's (the 12 words, a payment, pairing a
+ * computer, Manage community, leaving), so far on this run, and whether one is open now.
+ *
+ * For the full-screen "Update required" (utils/force-update.ts), which must never land on what the member started. On
+ * iOS and on Android 8-10's PIN screen a prompt takes the app out of the front, and the update screen counts that as the
+ * member leaving. On Android 11 and later (and with a fingerprint on 8-10) it doesn't: expo-local-authentication asks
+ * through androidx BiometricPrompt, a system window over the app, so the app is never paused and AppState never changes
+ * (#1415's third deciding review). So the update screen counts these instead, whatever AppState did: a door's prompt
+ * opened since its safe moment, or open now, is a leave. App Lock's own prompt is not one (isAppLockPromptOpen above).
+ */
+let doorPromptsSoFar = 0;
+let openDoorPrompts = 0;
+
+export function doorPrompts(): { opened: number; open: boolean } {
+    return { opened: doorPromptsSoFar, open: openDoorPrompts > 0 };
+}
+
+/**
  * The phone's own lock prompt, the one way the app opens it: authenticateAsync, with the prompt marker below around it so
  * the return lock knows the time it was open is not time away. authenticateUser and node-admin's requireDeviceUnlock
  * (Manage community, sign in on a computer, take over with this phone) both ask through here, each with its own rule for
  * a phone with no lock, and both act only on a pass that reached the app in time (timeDoorPrompt). Answers and throws what
  * authenticateAsync does; the marker closes either way.
+ *
+ * `kind`: 'app-lock' for App Lock's own unlock (authenticateForAppLock) only. Every other prompt is a door's and is
+ * counted in doorPrompts: the default, so that no new caller is missed.
  */
 export async function phoneLockPrompt(
     options: LocalAuthentication.LocalAuthenticationOptions,
+    kind: 'door' | 'app-lock' = 'door',
 ): Promise<LocalAuthentication.LocalAuthenticationResult> {
     promptOpened();
+    const door = kind !== 'app-lock';
+    if (door) {
+        doorPromptsSoFar++;
+        openDoorPrompts++;
+    }
     let passed = false;
     try {
         const res = await LocalAuthentication.authenticateAsync(options);
@@ -170,6 +197,7 @@ export async function phoneLockPrompt(
         return res;
     } finally {
         promptClosed(passed);
+        if (door) openDoorPrompts = Math.max(0, openDoorPrompts - 1);
     }
 }
 

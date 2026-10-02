@@ -20,7 +20,7 @@ The report form tells members their note goes to moderators. It goes to everyone
 Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below).
 
 - In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
-- Each row shows which post the report is about, who wrote it, and whether it has already been removed.
+- Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -91,7 +91,7 @@ Anyone can join the global community with a sign-in, so one person can make seve
 - Before anything happens you are told again how many accounts, their standing, and which of them are established.
 - The server acts only on the accounts you ticked: one that joined after you opened the list is never included. It does nothing at all if one of them is no longer in the group, or if an established account is included without your saying so. The list then loads again as the group is now, with the reason on screen; **Load again** reads it again at any time.
 
-**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, "Your posts are hidden for review", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden.
+**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, "Your posts are hidden for review", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up; then every post of it again, as the last round left them, until nothing changes: a post kept hidden lowers the bar for its author's other posts, and can put its author back on probation, so a report of theirs no longer counts and a post they reported comes back), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden.
 
 **Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with can't join again. You type the number of accounts to confirm. A removal can't be undone.
 

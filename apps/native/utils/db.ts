@@ -4663,9 +4663,15 @@ async function _signedRequest(endpoint: string, payload: any) {
         // Whether the body carried a JSON `error` field, which is what tells a node ANSWERING from a node
         // that has no such route to answer with — see utils/chat-actions.chatActionErrorMessage.
         let nodeAnswered = false;
+        // The node's sentence for the member, when its body has one beside the code (`{ error: 'not_found', message:
+        // 'That post is not here any more.' }`). Carried as `nodeMessage`, not put in `message`: callers match on the
+        // code in `message` (chatActionErrorMessage's old-node refusals, the profile-photo heal below), so a caller whose
+        // error the member reads puts it there itself (reportAbuse).
+        let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
+            if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
             try {
                 const txt = await res.text();
@@ -4696,6 +4702,7 @@ async function _signedRequest(endpoint: string, payload: any) {
         const err: any = new Error(errorMsg);
         err.status = res.status;
         err.nodeAnswered = nodeAnswered;
+        err.nodeMessage = nodeMessage;
         throw err;
     }
 
@@ -5000,8 +5007,22 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
     return res;
 }
 
+/**
+ * Report a member, a post or an event (and, from the enterprise screen, an enterprise). The post and event screens show
+ * a failure's message to the member, so it is the node's sentence when it sent one ("That post is not here any more."),
+ * never its code (`not_found`), which stays on the error as `code`, with `status`.
+ */
 export async function reportAbuse(reporterPublicKey: string, targetPublicKey: string, reason: string, postId?: string) {
-    return _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    try {
+        return await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    } catch (e: any) {
+        if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
+        const said: any = new Error(e.nodeMessage);
+        said.status = e.status;
+        said.code = e.message;
+        said.nodeAnswered = e.nodeAnswered;
+        throw said;
+    }
 }
 
 

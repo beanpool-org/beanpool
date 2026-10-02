@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
@@ -854,7 +854,8 @@ export default function TreasuryDetailScreen() {
                         {/* Identity */}
                         <View style={styles.identityRow}>
                             {avatar ? (
-                                <Image source={{ uri: avatar }} style={styles.avatar} accessibilityLabel="Enterprise avatar" />
+                                // The node's URL for the photo, relative to it, or a shipped picture (MemberAvatar resolves both).
+                                <MemberAvatar avatarUrl={avatar} pubkey={treasuryKey ?? ''} callsign={name} size={56} />
                             ) : (
                                 <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>{detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}</Text></View>
                             )}

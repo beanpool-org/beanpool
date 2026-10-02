@@ -22,6 +22,7 @@ import { db } from './db/db.js';
 import * as stateEngine from './state-engine.js';
 import { initStateEngine, exportSyncState, dismissReport, actionReport, submitReport, createPost } from './state-engine.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 // Read through the namespace so this file still loads against a tree without the limit.
 const REPORTS_PER_REPORTER_PER_HOUR: number = (stateEngine as any).REPORTS_PER_REPORTER_PER_HOUR ?? 10;
@@ -76,7 +77,7 @@ async function main(): Promise<void> {
     const report = (actor: string, body: Record<string, unknown>) => callRouter(community, 'POST', '/api/reports', actor, body);
 
     const target = makeMember('Target');
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(target);
+    setMemberPhoto(db, target, 'https://example.com/a.jpg');
     // The posts these reports name: a report on a post id no post here has is refused (section 6).
     const postBy = (author: string, id: string) => createPost('offer', 'other', `Post ${id}`, 'for sale', 0, 'fixed', author,
         undefined, undefined, undefined, undefined, id);

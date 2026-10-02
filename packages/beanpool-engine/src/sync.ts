@@ -828,6 +828,60 @@ function preferencesOfMembers(db: Db, keys?: readonly string[]): Map<string, Rec
     return preferencesOf;
 }
 
+/**
+ * Each member's avatar as they set it (member_photos.photo), by key: of the members `keys` names, or of every member. Empty
+ * on a schema without the table.
+ */
+function photosOfMembers(db: Db, keys?: readonly string[]): Map<string, string> {
+    try {
+        const rows = (keys
+            ? db.prepare('SELECT public_key, photo FROM member_photos WHERE public_key IN (SELECT value FROM json_each(?))').all(JSON.stringify(keys))
+            : db.prepare('SELECT public_key, photo FROM member_photos').all()
+        ) as { public_key: string; photo: string }[];
+        return new Map(rows.map((r) => [r.public_key, r.photo]));
+    } catch {
+        return new Map();
+    }
+}
+
+/**
+ * A member's row as a copy carries it: with their avatar in it as `avatar_url`, where the row held it before photos moved
+ * to their own table (the server's member_photos), so a standby of any version reads it where it always has (`standing`,
+ * and the named `avatarUrl`): one from before the move writes it into its own column, one after it into its photos
+ * (apps/server engine/sync.ts). A row that still holds its photo itself (a database whose move has not reached it yet,
+ * apps/server db.ts moveMemberPhotosOutOfRows) carries that one.
+ */
+function withPhoto(row: any, photos: ReadonlyMap<string, string>): any {
+    return { ...row, avatar_url: photos.get(row.public_key) ?? row.avatar_url ?? null };
+}
+
+/**
+ * Each group's own picture as it was set (group_pictures.picture), by id: of the groups `ids` names. Empty on a schema
+ * without the table.
+ */
+function picturesOfGroups(db: Db, ids: readonly string[]): Map<string, string> {
+    if (ids.length === 0) return new Map();
+    try {
+        const rows = db.prepare('SELECT group_id, picture FROM group_pictures WHERE group_id IN (SELECT value FROM json_each(?))')
+            .all(JSON.stringify(ids)) as { group_id: string; picture: string }[];
+        return new Map(rows.map((r) => [r.group_id, r.picture]));
+    } catch {
+        return new Map();
+    }
+}
+
+/**
+ * Groups' rows as a copy carries them: each with its own picture in it as `avatar_url`, where the row held it before
+ * pictures moved to their own table (the server's group_pictures, #1486), so a standby of any version reads it where it
+ * always has (SyncGroup `avatarUrl`): one from before the move writes it into its own column, one after it into its
+ * pictures (apps/server engine/sync.ts). A row that still holds its picture itself (a database whose move has not reached
+ * it yet) carries that one.
+ */
+function groupsWithPictures(db: Db, rows: any[]): SyncGroup[] {
+    const pictures = picturesOfGroups(db, rows.map((r) => r.id));
+    return rows.map((r) => groupOfRow({ ...r, avatar_url: pictures.get(r.id) ?? r.avatar_url ?? null }));
+}
+
 // The whole row travels as `standing` (design G2a), so a promoted standby is every column of the main server's, and a
 // column added later travels without anyone listing it; rowToMember leaves most of them out because the member
 // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
@@ -1349,8 +1403,10 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
     {
         key: 'members', table: 'members', delta: { watermark: 'updated_at' },
         shape: (db, rows) => {
-            const prefs = preferencesOfMembers(db, rows.map((r) => r.public_key));
-            return rows.map((r) => memberOfRow(r, prefs));
+            const keys = rows.map((r) => r.public_key);
+            const prefs = preferencesOfMembers(db, keys);
+            const photos = photosOfMembers(db, keys);
+            return rows.map((r) => memberOfRow(withPhoto(r, photos), prefs));
         },
     },
     { key: 'posts', table: 'posts', delta: { watermark: 'updated_at' }, shape: eachRow(postOfRow) },
@@ -1379,7 +1435,8 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
     { key: 'settlements', table: 'settlements', delta: { watermark: 'updated_at' }, shape: eachRow(settlementOfRow) },
     { key: 'pollVotes', table: 'poll_votes', delta: { watermark: 'created_at' }, shape: eachRow(pollVoteOfRow) },
     { key: 'eventRsvps', table: 'event_rsvps', delta: { watermark: 'updated_at' }, shape: eachRow(eventRsvpOfRow) },
-    { key: 'groups', table: 'groups', delta: { watermark: 'updated_at' }, shape: eachRow(groupOfRow) },
+    // Each group's picture in its row (groupsWithPictures).
+    { key: 'groups', table: 'groups', delta: { watermark: 'updated_at' }, shape: groupsWithPictures },
     { key: 'groupMembers', table: 'group_members', delta: { watermark: 'updated_at' }, shape: eachRow(groupMemberOfRow) },
     { key: 'openJoins', table: 'open_joins', delta: { watermark: 'updated_at' }, shape: eachRow(openJoinOfRow) },
     { key: 'placeWatches', table: 'place_watches', delta: { watermark: 'updated_at' }, shape: eachRow(placeWatchOfRow) },
@@ -1425,10 +1482,13 @@ export function exportSyncState(
         // Table absent on older schema/fixtures
     }
 
-    const members = (delta
+    const memberRows = (delta
         ? db.prepare("SELECT * FROM members WHERE updated_at >= ?").all(since) as any[]
         : db.prepare("SELECT * FROM members").all() as any[]
-    ).map((row) => memberOfRow(row, preferencesOf));
+    );
+    // Each one's avatar in their row (withPhoto): of the members a delta carries, or of all.
+    const memberPhotos = photosOfMembers(db, delta ? memberRows.map((r) => r.public_key) : undefined);
+    const members = memberRows.map((row) => memberOfRow(withPhoto(row, memberPhotos), preferencesOf));
 
     const treasuryOperators = exportTreasuryOperators(db);
     let enterprisePledges: SyncEnterprisePledge[] = [];
@@ -1515,7 +1575,7 @@ export function exportSyncState(
     let groups: SyncGroup[] = [];
     let groupMembers: SyncGroupMember[] = [];
     try {
-        groups = sel('groups', 'updated_at').map(groupOfRow);
+        groups = groupsWithPictures(db, sel('groups', 'updated_at'));
         groupMembers = sel('group_members', 'updated_at').map(groupMemberOfRow);
     } catch {
         // Tables absent on older schema/fixtures

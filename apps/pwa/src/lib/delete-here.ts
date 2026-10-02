@@ -15,6 +15,7 @@
  * - Otherwise this is the last community this copy serves: the delete wipes it, as before.
  */
 import { fetchMembershipAt, getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
+import { clearHomeCache } from './home-cache';
 
 /** How long the page's own node has to answer, as the phone waits for each community. */
 export const MEMBERSHIP_TIMEOUT_MS = 8000;
@@ -157,10 +158,13 @@ export async function purgeHere(
 
 /**
  * Once the node the web app is pointed at has deleted the account ({@link WebDeletePlan} 'this-one'): the web app goes
- * back to the page's own node. The key, its 12 words and the browser's settings stay.
+ * back to the page's own node. The key, its 12 words and the browser's settings stay. Home's kept answers go (the
+ * deleted account's Beans, messages and groups at that community among them), and a Home still open in another tab
+ * drops what it holds and reads the page's own community's afresh; the page's own Home is read again.
  */
-export function leaveThisCommunity(): void {
+export async function leaveThisCommunity(): Promise<void> {
     setNodeApiUrl(null);
+    await clearHomeCache('cleared');
 }
 
 // ── What the web app says ──────────────────────────────────────────────────────────────────────────────────────

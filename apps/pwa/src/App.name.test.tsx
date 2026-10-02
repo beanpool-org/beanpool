@@ -7,7 +7,7 @@
  *
  * The whole App, with the stored identity real (an in-memory IndexedDB) and the node's reads mocked at lib/api.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { App } from './App';
@@ -72,6 +72,10 @@ const shownName = () => screen.getByTestId('marketplace-page').textContent;
 /** Opened, and every read the app makes on opening settled. */
 async function openApp() {
     render(<App />);
+    // Members land on Home (DESIGN-home-dashboard-fable.md §8); the Market's stand-in, which shows the name the app
+    // hands its pages, is one tap away.
+    const nav = await screen.findByTestId('mobile-bottom-nav');
+    fireEvent.click(within(nav).getByText('Market'));
     await screen.findByTestId('marketplace-page');
     await waitFor(() => expect(api.checkMembership).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));

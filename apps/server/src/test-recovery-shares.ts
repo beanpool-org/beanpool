@@ -30,6 +30,7 @@ import {
 } from './engine/recovery-shares.js';
 import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -50,9 +51,10 @@ function throws(fn: () => void, needle: string, msg: string): void {
 
 function seedMember(pk: string) {
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at)
-         VALUES (?, ?, 'a.png', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pk, pk.slice(0, 8));
+    setMemberPhoto(db, pk, 'a.png');
 }
 
 /** A fragment with sane defaults, so each test only states what it actually cares about. */

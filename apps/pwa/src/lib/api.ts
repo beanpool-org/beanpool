@@ -18,6 +18,7 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
+import { NOTICES_SEEN_EVENT, type HomeAnswer, type HomeLayout } from './home-cards';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
 import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
@@ -383,9 +384,14 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
-/** Marks the signer's own notices seen; the node ignores an id that is not theirs. */
+/**
+ * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
+ * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
+ */
 export async function markNoticesSeen(ids: string[]): Promise<{ success: boolean; marked: number }> {
-    return request('POST', '/api/notices/seen', { ids });
+    const answer = await request<{ success: boolean; marked: number }>('POST', '/api/notices/seen', { ids });
+    try { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); } catch { /* no window: nothing listens */ }
+    return answer;
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
@@ -2349,6 +2355,61 @@ export async function getNotificationPreferences(pubkey: string): Promise<any> {
 
 export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean | number[] | string>): Promise<any> {
     return request<any>('POST', '/api/members/preferences', { publicKey: pubkey, preferences });
+}
+
+// ===================== HOME =====================
+
+/** A Home read: the answer and its tag, or the node saying the copy whose tag was sent is still the answer. */
+export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | null } | { notModified: true; etag: string };
+
+/**
+ * The whole Home screen in one read (GET /api/home, routes/home.ts): signed for a member, unsigned in the global lobby.
+ * `cards` is what the member's layout shows; absent, the node uses the account's own layout.
+ *
+ * The node tags each answer (`private, max-age=0, must-revalidate`). With `etag`, the tag of the copy the app keeps
+ * (lib/home-cache.ts), an unchanged Home is a 304 and costs headers only (design §5.2). The app sends the tag itself
+ * rather than leaning on the browser's cache, which keeps nothing in a private window, in some in-app browsers, or over a
+ * certificate the browser was told to accept; and only to the node that served this page: another origin's preflight
+ * refuses the header and doesn't let the page read the tag, so there the browser revalidates on its own, if it can.
+ */
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
+    const q = new URLSearchParams();
+    if (params.cards) q.set('cards', params.cards.join(','));
+    if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
+        q.set('lat', String(params.lat));
+        q.set('lng', String(params.lng));
+    }
+    const qs = q.toString();
+    const path = `/api/home${qs ? `?${qs}` : ''}`;
+    const base = getNodeApiUrl();
+    const sameOrigin = !base || (typeof window !== 'undefined' && base === window.location.origin);
+    const headers: Record<string, string> = {};
+    // Signed as request() signs: by the member when there is one, nothing for a visitor.
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        try {
+            Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey));
+        } catch (e) {
+            console.warn('[API] Could not sign request:', e);
+        }
+    }
+    const conditional = !!etag && sameOrigin;
+    if (conditional) headers['If-None-Match'] = etag!;
+    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
+    if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
+    if (!res.ok) throw await refusalError(res);
+    return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };
+}
+
+/**
+ * What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew, and when those last
+ * changed there (lib/home-interests.ts compares it with the stamp an unsaved change was made on).
+ */
+export interface SavedHomePreferences { success: boolean; 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string }
+
+/** Save the member's Home layout and/or interests on their account (H1's two preference keys). */
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayout; interests?: string[] }): Promise<SavedHomePreferences> {
+    return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 
 // ===================== DIAGNOSTICS & NODE STATS =====================

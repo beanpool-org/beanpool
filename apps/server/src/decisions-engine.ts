@@ -40,6 +40,7 @@
 
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
@@ -715,6 +716,10 @@ function assertGrantWithinCap(params: any): void {
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────
 
+/** A Decision's title or description over its limit, in the words both apps show (#1493). */
+export const DECISION_TITLE_TOO_LONG = textTooLongMessage("A Decision's title", DECISION_TITLE_LIMIT);
+export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's description", DECISION_DESCRIPTION_LIMIT);
+
 export interface CreateDecisionOptions {
     authorPubkey: string;
     title: string;
@@ -743,6 +748,11 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     const check = checkCanProposeDecision(opts.authorPubkey);
     if (!check.ok) {
         throw new Error(check.error || 'Cannot propose decision');
+    }
+    // The list of Decisions sends every one's title and description whole, unpaged (#1493): each held to its limit.
+    if (typeof opts.title === 'string' && !fitsTextLimit(opts.title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    if (typeof opts.description === 'string' && !fitsTextLimit(opts.description, DECISION_DESCRIPTION_LIMIT)) {
+        throw new Error(DECISION_DESCRIPTION_TOO_LONG);
     }
 
     if (!Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) {

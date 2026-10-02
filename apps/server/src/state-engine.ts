@@ -208,7 +208,7 @@ import {
     redeemInvite as redeemInviteEngine,
     redeemOfflineTicket as redeemOfflineTicketEngine
 } from './engine/invites.js';
-import { avatarUrlFor, isServableAvatarValue } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
@@ -233,6 +233,7 @@ import {
     publicMemberCard,
     type ContactViewer,
     rowToMember,
+    setMemberPhoto,
     rowToProfile,
     type Member,
     type DirectoryRow,
@@ -308,6 +309,7 @@ import {
     approveGroupMember as approveGroupMemberEngine,
     inviteGroupMember as inviteGroupMemberEngine,
     deleteGroupPost as deleteGroupPostEngine,
+    groupAsListed,
     type Group,
     type GroupMember,
     type GroupRole,
@@ -337,7 +339,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
-import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
+import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -815,7 +817,8 @@ export function initStateEngine(): void {
         try { runLedgerAudit(); } catch (e) { console.warn('[LedgerAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
-    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily)
+    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
+    // at each run (engine/audit.ts): its numbers are about Beans, and its member walk freezes a large node.
     setTimeout(() => {
         try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
     }, 2.5 * 60 * 1000);
@@ -1612,10 +1615,10 @@ export function assertMemberActive(publicKey: string): void {
 }
 
 export function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT avatar_ref, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return; // Let assertMemberActive handle missing members
-    // See the identical gate in engine/posts.ts: a stored /api/avatar/ URL is not a photo.
-    if (!isServableAvatarValue(member.avatar_url)) {
+    // See the identical gate in engine/posts.ts: an avatar the node serves, by the row's reference.
+    if (!member.avatar_ref) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -2013,7 +2016,7 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: avatarUrlFor(inviter.publicKey, inviter.avatarUrl),
+        avatarUrl: avatarUrlOf(inviter.publicKey, inviter.avatarRef),
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
@@ -2043,7 +2046,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // surfaces people the viewer already knows — never the target's wider graph.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
-            SELECT m.public_key as publicKey, m.callsign, m.avatar_url as avatarUrl
+            SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
             FROM friends fv
             JOIN friends ft ON fv.friend_pubkey = ft.friend_pubkey
             JOIN members m ON m.public_key = fv.friend_pubkey
@@ -2054,7 +2057,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
         `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
-            avatarUrl: avatarUrlFor(r.publicKey, r.avatarUrl)
+            avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)
         }))
         : [];
     const mutualCount = mutualConnections.length;
@@ -2104,7 +2107,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: avatarUrlFor(voucher.publicKey, voucher.avatarUrl),
+                avatarUrl: avatarUrlOf(voucher.publicKey, voucher.avatarRef),
             };
         }
     }
@@ -3111,7 +3114,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     suspended: boolean;
 }> {
     return (db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+        SELECT m.public_key, m.callsign, m.avatar_ref, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
                m.can_operate, m.status, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
@@ -3120,7 +3123,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
@@ -3362,7 +3365,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
         WHERE p.enterprise = ? AND p.released_at IS NULL
@@ -3371,7 +3374,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
         id: r.id,
         keeper: r.keeper,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.keeper, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.keeper, r.avatar_ref),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -3389,7 +3392,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.enterprise
         WHERE p.keeper = ? AND p.released_at IS NULL
@@ -3398,7 +3401,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
         id: r.id,
         enterprise: r.enterprise,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.enterprise, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.enterprise, r.avatar_ref),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -3672,7 +3675,7 @@ export function requestToJoinEnterprise(
 export function getKeeperRequests(enterprisePubkey: string, filterStatus?: string): KeeperJoinRequest[] {
     let sql = `
         SELECT r.id, r.enterprise_pubkey, r.member_pubkey, r.pledged_backing, r.status,
-               r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_url
+               r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_ref
         FROM enterprise_keeper_requests r
         JOIN members m ON m.public_key = r.member_pubkey
         WHERE r.enterprise_pubkey = ?
@@ -3697,7 +3700,7 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
-            avatarUrl: avatarUrlFor(r.member_pubkey, r.avatar_url),
+            avatarUrl: avatarUrlOf(r.member_pubkey, r.avatar_ref),
             pledgedBacking: Number(r.pledged_backing),
             status: r.status,
             createdAt: r.created_at,
@@ -4756,9 +4759,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
-    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
-    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
-    assertPostFields(updates as PostFieldsIn, 'edit');
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
+    // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
+    // sent back unchanged, is not held to a length limit it was stored before (#1493).
+    const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -5745,12 +5750,13 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
             buyer: {
                 pubkey: r.buyer_pubkey,
                 callsign: r.buyer_callsign || 'Anonymous',
-                avatarUrl: r.buyer_avatar_url || null
+                // Each party's photo as its URL, never the photo (#1478): a page of disputes reads none.
+                avatarUrl: avatarUrlOf(r.buyer_pubkey, r.buyer_avatar_ref)
             },
             seller: {
                 pubkey: r.seller_pubkey,
                 callsign: r.seller_callsign || 'Anonymous',
-                avatarUrl: r.seller_avatar_url || null
+                avatarUrl: avatarUrlOf(r.seller_pubkey, r.seller_avatar_ref)
             }
         },
         chat,
@@ -5770,9 +5776,9 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               buyer.avatar_url AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               seller.avatar_url AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
@@ -5817,9 +5823,9 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               buyer.avatar_url AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               seller.avatar_url AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
@@ -7226,9 +7232,10 @@ export function createTreasury(
         // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
         const signerVal = opts.locationAuthSigner || opts.leadKeeperPubkey || null;
         const now = new Date().toISOString();
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(pubKeyHex, trimmed, now, avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
+                    VALUES (?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, now, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        setMemberPhoto(db, pubKeyHex, avatar);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.leadKeeperPubkey) {
             const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
@@ -7565,11 +7572,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         const now = new Date().toISOString();
 
         // 4. Anonymize member record and reset privileges
+        // The photo first: its writer stamps the row, and the UPDATE below sets the stamp this deletion is.
+        setMemberPhoto(db, publicKey, null);
         db.prepare(`
             UPDATE members 
             SET status = 'pruned',
                 callsign = 'Deleted Member',
-                avatar_url = NULL,
                 bio = NULL,
                 contact_value = NULL,
                 contact_visibility = NULL,
@@ -8176,10 +8184,12 @@ export function getAllProjects(): CommunityProject[] {
             WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
               AND m.public_key NOT IN (SELECT id FROM projects)
         `).all() as any[];
+        // The proposer's name only: getMember read their photo too, once a project (#1478).
+        const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
 
         for (const e of enterprises) {
             const lead = e.lead_keeper || e.any_keeper || e.public_key;
-            const leadMember = getMember(lead);
+            const leadMember = callsignOfKey.get(lead) as { callsign: string } | undefined;
             const existing = blobProjects.find(p => p.id === e.public_key);
             if (existing) {
                 // Keep live values from members table so blob doesn't shadow SQL
@@ -8263,7 +8273,8 @@ export function runLedgerAudit(): { sumBalances: number; baseline: number; drift
     return runLedgerAuditEngine();
 }
 
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+/** Null where Beans are off: the audit does not run there (engine/audit.ts). */
+export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
     return runWashSybilMetricsEngine();
 }
 
@@ -9118,11 +9129,12 @@ export function createGroup(params: CreateGroupParams): Group {
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
+    // As a list sends it (#1493): a description stored before its limit goes to every socket as its preview, never whole.
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_created', group: res });
+        broadcast({ type: 'group_created', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
-        broadcast({ type: 'group_created', group: res }, recipients);
+        broadcast({ type: 'group_created', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9192,7 +9204,7 @@ export function handOverGroupLead(groupId: string, leadPubkey: string, targetPub
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     const group = getGroupEngine(db, groupId);
-    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
     return res;
 }
 
@@ -9279,10 +9291,10 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9295,10 +9307,10 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }

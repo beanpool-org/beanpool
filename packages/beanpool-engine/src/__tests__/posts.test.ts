@@ -46,7 +46,7 @@ const POSTS_FIXTURE_DDL = `
     CREATE TABLE members (
         public_key TEXT PRIMARY KEY,
         callsign TEXT NOT NULL,
-        avatar_url TEXT,
+        avatar_ref TEXT,
         status TEXT DEFAULT 'active',
         earned_credit REAL DEFAULT 0,
         paused INTEGER DEFAULT 0,
@@ -58,7 +58,8 @@ const POSTS_FIXTURE_DDL = `
         name TEXT NOT NULL,
         slug TEXT UNIQUE,
         description TEXT,
-        avatar_url TEXT,
+        avatar_ref TEXT,
+        avatar_bytes INTEGER,
         category TEXT DEFAULT 'general',
         created_by TEXT,
         join_policy TEXT DEFAULT 'open',

@@ -58,6 +58,7 @@ import net from 'node:net';
 import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
 import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -169,8 +170,9 @@ async function main() {
 
     const member = (callsign: string): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', '/uploads/avatar.jpg')`).run(id.pubKeyHex, callsign);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(id.pubKeyHex, callsign);
+        setMemberPhoto(db, id.pubKeyHex, '/uploads/avatar.jpg');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
@@ -506,15 +508,23 @@ async function main() {
             delete (db as any).prepare;
         }
 
-        // And the time it saves, against the count itself: 3,000 members with a 25 KB photo each, inline as the app
-        // sends them. Every one of these reads paid at least one count on origin/main; now a read costs a small part of one.
+        // And the time it saves, against the count itself. Every one of these reads paid at least one count on origin/main;
+        // now a read costs a small part of one. The count was dear here because each of 3,000 members' 25 KB photos sat in
+        // their row, and a count read past every one; photos have their own table now (member_photos), so a count over
+        // 3,000 members costs ~0.1 ms, less than any read's own work. So the members a count must walk are as many as make it
+        // cost what it did (150,000 more, without photos): what a read saves is still a count, whatever made one dear.
         {
             const photo = `data:image/jpeg;base64,${crypto.randomBytes(18_750).toString('base64')}`;
             const keys: string[] = [];
-            const ins = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', ?)`);
+            const ins = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`);
             db.transaction(() => {
-                for (let i = 0; i < 3_000; i++) { const k = crypto.randomBytes(32).toString('hex'); keys.push(k); ins.run(k, `DosPhoto${i}`, photo); }
+                for (let i = 0; i < 3_000; i++) {
+                    const k = crypto.randomBytes(32).toString('hex'); keys.push(k); ins.run(k, `DosPhoto${i}`); setMemberPhoto(db, k, photo);
+                }
+                db.prepare(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 150000)
+                            INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                            SELECT lower(hex(randomblob(32))), 'DosBulk' || i, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed' FROM n`).run();
             })();
             se.bumpMembersVersion();
             // CPU time, not wall-clock (the server is in this process): a busy neighbour in the pool slows both alike.
@@ -531,9 +541,13 @@ async function main() {
             for (let i = 0; i < 120; i++) await call('GET', paths[i % 3], `198.51.108.${i}`);
             const perRead = cpuMs(t) / 120;
             assert(perRead < perCount / 2,
-                `with 3,000 members' photos inline, a read of the health, node info or directory info costs ${perRead.toFixed(2)} ms of CPU, under half of one member count (${perCount.toFixed(2)} ms)`);
+                `with 153,000 members, 3,000 with photos, a read of the health, node info or directory info costs ${perRead.toFixed(2)} ms of CPU, under half of one member count (${perCount.toFixed(2)} ms)`);
             const del = db.prepare('DELETE FROM members WHERE public_key = ?');
-            db.transaction(() => { for (const k of keys) del.run(k); })();
+            const delPhoto = db.prepare('DELETE FROM member_photos WHERE public_key = ?');
+            db.transaction(() => {
+                for (const k of keys) { del.run(k); delPhoto.run(k); }
+                db.prepare(`DELETE FROM members WHERE callsign LIKE 'DosBulk%'`).run();
+            })();
             se.bumpMembersVersion();
             se.resetCommunityReadCaches?.();
         }

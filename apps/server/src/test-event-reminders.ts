@@ -33,6 +33,7 @@ import { putPushTokenRow } from './services/push-token-seal.js';
 import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import { initStateEngine } from './state-engine.js';
 import { setNodeRole } from './engine/sync.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     createPost as createPostEngine, updatePost, removePost, rsvpEvent,
 } from './engine/posts.js';
@@ -61,9 +62,10 @@ const at = (ms: number) => new Date(T0 + ms).toISOString();
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-        .run(pub, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(pub, callsign);
+    setMemberPhoto(db, pub, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }

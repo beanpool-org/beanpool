@@ -3,13 +3,16 @@
  * no key looks at the Market and the Map before joining. App shows it in place of the welcome page when the node says
  * visitors see its listings (`features.guestListingsOnly`) and nothing is part way through a join in this browser.
  *
- * - The same header as a member's, with **Join** where Settings sits, and two tabs, Market and Map.
+ * - The same header as a member's, with **Join** where Settings sits, and three tabs: Home, Market and Map. Home is the
+ *   visitor's Home (DESIGN-home-dashboard-fable.md §5.3, slice H3): the Join card, then what's near from the public
+ *   cards of GET /api/home (communities near, a few listings and events without people, the community's counts).
  * - The Market and the Map with no identity: the node's guest view of each listing (no name, face, tier or exact
  *   place), and nothing to write with. The Market's list starts with a Join card, with "Already have BeanPool?".
  * - Join opens screen 1 of the browser join over the lobby ("Have you used BeanPool before?"), "Already have
  *   BeanPool?" its ways back; ← Back returns to the listings. Once joined, App draws the member's app.
- * - It asks for nothing new: the guest list read, the socket's doorbells (unsigned, so nothing else), and
- *   `/api/community/info`, which App read once to decide on the lobby and hands down.
+ * - It asks for nothing a visitor couldn't already read: the visitors' Home (GET /api/home, unsigned), the guest list
+ *   read, the socket's doorbells (unsigned, so nothing else), and `/api/community/info`, which App read once to decide
+ *   on the lobby and hands down.
  */
 
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -19,15 +22,17 @@ import { connectToAnchor, reconnectToAnchor } from '../lib/sync';
 import { browserKeyProblem } from '../lib/web-join';
 import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
+import { HomePage } from './HomePage';
 import { WelcomePage } from './WelcomePage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-type LobbyTab = 'marketplace' | 'map';
+type LobbyTab = 'home' | 'marketplace' | 'map';
 
 const TABS: { id: LobbyTab; label: string; emoji: string }[] = [
+    { id: 'home', label: 'Home', emoji: '🏠' },
     { id: 'marketplace', label: 'Market', emoji: '🤝' },
     { id: 'map', label: 'Map', emoji: '🗺️' },
 ];
@@ -43,7 +48,7 @@ interface Props {
 }
 
 export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
-    const [tab, setTab] = useState<LobbyTab>('marketplace');
+    const [tab, setTab] = useState<LobbyTab>('home');
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
@@ -136,7 +141,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     );
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
-    const title = tab === 'marketplace' ? 'Market' : 'Map';
+    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : 'Map';
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
@@ -200,6 +205,9 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     paddingBottom: tab === 'map' ? '0' : 'var(--bottom-nav-offset)',
                     position: 'relative',
                 }} className="md:pb-0">
+                    {tab === 'home' && (
+                        <HomePage identity={null} visitor={{ joinCard, beans }} onNavigate={navigate} />
+                    )}
                     {tab === 'marketplace' && (
                         <MarketplacePage
                             identity={null}

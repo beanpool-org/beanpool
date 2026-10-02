@@ -21,6 +21,7 @@
  *      on (and so their cards) where the ledger has moved, whatever an override says
  *   8. the other runs, each in a child process with its own node: the global profile (below), a local node with
  *      ENFORCE_READ_AUTH=false, and a fresh local node whose ledger never moved
+ *      (`me.interestsUpdatedAt`, the node's stamp for the member's interests, is in `me` too: PR #1479 round 2)
  *   9. the deciding review's five findings (#1472, 950e1a15): a 300,000-character category sent through the signed
  *      listing route and a Pulse link of 300,000 characters as the harvester stores it leave the answer a few KB (A); a
  *      suspended member's `me` says `standing: 'suspended'` (C); "Coming up" is the soonest events by start, an event
@@ -147,6 +148,7 @@ async function main(): Promise<void> {
     const se = await import('./state-engine.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
+    const { setMemberPhoto } = await import('@beanpool/engine');
     const { keepNotice, markKeptNoticesSeen } = await import('./engine/kept-notices.js');
     // A tree without the route (origin/main) runs every step anyway, so each fails as an assertion rather than an abort.
     const homeCardBuilds: Record<string, number> = await import('./routes/home-answer.js' as string)
@@ -169,10 +171,11 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() - 90 * DAY).toISOString(), owner.pk);
     const member = (name: string, opts: { status?: string; balance?: number; earned?: number; joinedAt?: string; area?: { lat: number; lng: number } } = {}): Id => {
         const id = newId(name);
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, area_lat, area_lng, earned_credit)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng, earned_credit)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(id.pk, name, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(), owner.pk,
-                `INV-${name.toUpperCase()}`, TINY_PNG, opts.area?.lat ?? null, opts.area?.lng ?? null, opts.earned ?? 0);
+                `INV-${name.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null, opts.earned ?? 0);
+        setMemberPhoto(db, id.pk, TINY_PNG); // the photo goes where every writer puts it (member_photos, the row's avatar_ref)
         db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, MONEY ? opts.balance ?? 0 : 0);
         return id;
     };
@@ -238,16 +241,21 @@ async function main(): Promise<void> {
     const ALL = 'cards=needs,safety,find,steps,interests,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,invite,community';
     const cardsOf = (r: Res) => Object.keys(r.body?.cards ?? {});
 
-    /** Review A: what one member can type into a listing's category, and a feed into a Pulse link. */
+    /**
+     * Review A: what one member could type into a listing's category before #1493 held it to 50 characters, and a feed into
+     * a Pulse link. The listing is made through the route; its category is then stored as such a listing still holds it.
+     */
     const HUGE = 300_000;
     const hugeCategory = `cat${'c'.repeat(HUGE)}`;
     const hugeListing = async (who: Id) => {
         const r = await postJson('/api/marketplace/posts', who, {
-            type: 'offer', category: hugeCategory, title: 'HomeSentinel huge category', description: 'An ordinary offer', credits: 0,
+            type: 'offer', category: 'garden', title: 'HomeSentinel huge category', description: 'An ordinary offer', credits: 0,
             authorPublicKey: who.pk, lat: BYRON.lat + 0.01, lng: BYRON.lng + 0.01, photos: [TINY_PNG],
         });
-        assert(r.status === 200 || r.status === 201, `setup: ${who.name}'s signed listing with a ${HUGE}-character category is accepted, as the route does (${r.status} ${r.text.slice(0, 120)})`);
-        return r.body?.id ?? r.body?.post?.id;
+        const id = r.body?.id ?? r.body?.post?.id;
+        if (id) db.prepare('UPDATE posts SET category = ? WHERE id = ?').run(hugeCategory, id);
+        assert((r.status === 200 || r.status === 201) && !!id, `setup: ${who.name}'s signed listing, stored with a ${HUGE}-character category (${r.status} ${r.text.slice(0, 120)})`);
+        return id;
     };
     /**
      * Review D: 101 upcoming events. "the repair cafe" starts in 12 hours and was posted (and last updated) 20 days before
@@ -325,6 +333,10 @@ async function main(): Promise<void> {
         assert(c.events?.items?.[0]?.id === event.id && c.events.items[0].place === 'HomeSentinel Town Hall', `events: the seed swap, with its place for a member (${JSON.stringify(c.events?.items?.[0])})`);
         assert(c.decide?.open === 1 && c.decide?.polls === 1, `decide: one Decision and one poll open (${JSON.stringify(c.decide)})`);
         assert(c.joined?.count7d === 1 && c.joined?.names?.[0]?.callsign === 'HomeCarol', `joined: Carol this week, by name (${JSON.stringify(c.joined)})`);
+        // Her face: the URL the members list gives her, made from her row's avatar_ref, never from the photo itself.
+        const carolRef = (db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(carol.pk) as { avatar_ref: string | null }).avatar_ref;
+        assert(!!carolRef && c.joined?.names?.[0]?.avatarUrl === `/api/avatar/${carol.pk}?size=thumb&v=${carolRef}`,
+            `joined: with her photo's URL, made from avatar_ref (${c.joined?.names?.[0]?.avatarUrl}, ref ${carolRef})`);
         assert(c.groups?.items?.some((g: any) => g.name === 'HomeSentinel garden group'), `groups: hers (${JSON.stringify(c.groups)})`);
         const pulse = c.pulse?.items ?? [];
         assert(pulse.length === 2 && pulse[0].category === 'garden' && /^\/api\/pulse\/items\/item-home-2\/thumbnail$/.test(pulse[0].thumbnailUrl),
@@ -338,6 +350,12 @@ async function main(): Promise<void> {
             'no find on a local node, no safety for a member who came in by invite, and nothing for the two cards with no data of their own');
         assert(JSON.stringify(r.body?.me?.interests) === '["garden"]' && JSON.stringify(r.body?.layout?.order) === '["needs","market"]',
             `me.interests and the layout, unknown ids dropped (${JSON.stringify(r.body?.me?.interests)} ${JSON.stringify(r.body?.layout)})`);
+        // The node's stamp beside them (PR #1479 round 2): interests kept before it read as stamped at 1970; none kept, null.
+        assert(r.body?.me?.interestsUpdatedAt === new Date(0).toISOString(),
+            `me.interestsUpdatedAt: interests kept before the node stamped them read as stamped at 1970 (${r.body?.me?.interestsUpdatedAt})`);
+        const bobsOwn = await get('/api/home', bob);
+        assert(bobsOwn.status === 200 && bobsOwn.body?.me?.interestsUpdatedAt === null && JSON.stringify(bobsOwn.body?.me?.interests) === '[]',
+            `and null for a member who keeps none (${bobsOwn.status} ${bobsOwn.body?.me?.interestsUpdatedAt})`);
         const order = cardsOf(r);
         assert(order.indexOf('needs') < order.indexOf('deals') && order.indexOf('market') < order.indexOf('pulse') && order[order.length - 1] === 'community',
             `cards in the default order, community last (${order.join(',')})`);
@@ -426,12 +444,14 @@ async function main(): Promise<void> {
     // ── 6. the size ─────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 6. the size, and what a landing costs ──');
     {
-        // Titles of thousands of characters, everywhere a card shows one: each is cut.
+        // Titles of thousands of characters, everywhere a card shows one: each is cut. A member's new title is held to 200
+        // characters since #1493, so each listing is stored with its long title as one from before then still holds it.
         const long = (s: string) => `${s} ${'x'.repeat(5000)}`;
-        for (let i = 0; i < 6; i++) post(bob, 'offer', 'garden', long(`HomeSentinel long ${i}`));
-        post(carol, 'event', 'general', long('HomeSentinel long event'), {
+        const storedLong = (made: { id: string }, title: string) => db.prepare('UPDATE posts SET title = ? WHERE id = ?').run(long(title), made.id);
+        for (let i = 0; i < 6; i++) storedLong(post(bob, 'offer', 'garden', `HomeSentinel long ${i}`), `HomeSentinel long ${i}`);
+        storedLong(post(carol, 'event', 'general', 'HomeSentinel long event', {
             eventStartAt: new Date(Date.now() + DAY).toISOString(), eventEndAt: new Date(Date.now() + DAY + 3600_000).toISOString(), eventPlaceName: 'H'.repeat(80),
-        });
+        }), 'HomeSentinel long event');
         db.prepare("UPDATE groups SET name = ? WHERE id = ?").run(long('HomeSentinel group'), group.id);
         keepNotice(alice.pk, long('HomeSentinel long notice'), long('line'), { kind: 'moderation' });
         db.prepare('UPDATE pulse_items SET title = ?').run(long('HomeSentinel long pulse'));

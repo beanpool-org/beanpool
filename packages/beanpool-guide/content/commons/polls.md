@@ -9,7 +9,7 @@ related: decisions, proposing-a-decision, events, rules
 
 A **Poll** asks what people think: "Market on Sunday or Saturday?". It changes nothing by itself. For something binding, propose a Decision.
 
-On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it with a sign-in, so one person with several accounts could tip the count, and there are no Decisions there.
+On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could tip the count, and there are no Decisions there.
 
 When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from each kind, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
 

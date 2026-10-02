@@ -44,6 +44,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
 import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -221,8 +222,9 @@ async function main(): Promise<void> {
     // ── 2. a photo in, and out ─────────────────────────────────────────────────────────────────
     console.log('\n--- 2. A photo goes to the bucket and is served from it ---');
     const author = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
-        .run(author, dataUrl(makePhoto('avatar')));
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(author);
+    setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const photoA = makePhoto('a');
     const photoB = makePhoto('b');

@@ -48,7 +48,7 @@
  * Every text a member, a feed or a peer sets is cut or left out (`clip`, `bounded`), the category and the Pulse link
  * included, so the answer stays a few kilobytes whatever anyone typed (§5.2 "under 6 KB gzipped").
  */
-import { PRICING_CATEGORIES, avatarUrlFor, normalizeCategory } from '@beanpool/core';
+import { PRICING_CATEGORIES, avatarUrlOf, normalizeCategory } from '@beanpool/core';
 import { ONE_PASS_MAX_MEASURED, guestPost, haversineKm, type MarketplacePost } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import {
@@ -63,6 +63,7 @@ import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '.
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
+import { getInterestsUpdatedAt } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
@@ -148,6 +149,11 @@ export interface HomeMe {
     /** Their own new-account limits while they last (engine/probation.ts), else null. */
     probation: ProbationSummary | null;
     interests: string[];
+    /**
+     * When `interests` last changed on this node (engine/home-preferences.ts), null when none are kept: an app sends its
+     * own unsaved change only while this is still the stamp that change was made on.
+     */
+    interestsUpdatedAt: string | null;
     area: { lat: number; lng: number } | null;
     /**
      * Whether they have posted an Offer here, which decides the `invite` card (§3.1 "after the first Offer"), whatever
@@ -597,11 +603,11 @@ function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
     const since = iso(c.now - JOINED_DAYS * DAY_MS);
     // People who joined this week and are here now: no enterprise, no visitor's row, nobody pruned or suspended, no system
     // row (SYSTEM, which posts the node's own lines), and not the reader. The members list shows each of them to members already (joinedAt, a keyed face).
-    const rows = db.prepare(`SELECT public_key, callsign, avatar_url, area_lat, area_lng FROM members
+    const rows = db.prepare(`SELECT public_key, callsign, avatar_ref, area_lat, area_lng FROM members
                               WHERE joined_at >= ? AND status = 'active' AND COALESCE(is_treasury, 0) = 0 AND COALESCE(is_visitor, 0) = 0
                                 AND length(public_key) = 64 AND public_key NOT GLOB '*[^0-9a-f]*' AND public_key != ?
                               ORDER BY joined_at DESC`).all(since, c.me!) as
-        { public_key: string; callsign: string; avatar_url: string | null; area_lat: number | null; area_lng: number | null }[];
+        { public_key: string; callsign: string; avatar_ref: string | null; area_lat: number | null; area_lng: number | null }[];
     if (c.switches.guestListingsOnly) {
         // The global node (§3.1, §13 Q4): a count by area, never a name. Within 50 km of the reader's point, from each
         // person's own coarse area (G4), or everyone this week where the reader gave none and has set none.
@@ -610,7 +616,7 @@ function joinedCard(c: Ctx): HomeCards['joined'] | undefined {
         return count ? { count7d: count, radiusKm: p ? JOINED_RADIUS_KM : null } : undefined;
     }
     if (!rows.length) return undefined;
-    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clip(r.callsign, NAME_CHARS), avatarUrl: bounded(avatarUrlFor(r.public_key, r.avatar_url), URL_CHARS) })) };
+    return { count7d: rows.length, radiusKm: null, names: rows.slice(0, JOINED_NAMES).map(r => ({ callsign: clip(r.callsign, NAME_CHARS), avatarUrl: bounded(avatarUrlOf(r.public_key, r.avatar_ref), URL_CHARS) })) };
 }
 
 function pulseCard(c: Ctx): HomeCards['pulse'] | undefined {
@@ -736,6 +742,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             isKeeper: keeperOf(me!).length > 0,
             probation: probation?.onProbation ? probation : null,
             interests,
+            interestsUpdatedAt: getInterestsUpdatedAt(me!),
             area: area ? { lat: area.lat, lng: area.lng } : null,
             firstOffer: firstOfferOf(c),
             standing: member ? 'member' : 'suspended',

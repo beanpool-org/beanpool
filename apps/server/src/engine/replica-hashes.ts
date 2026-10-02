@@ -28,7 +28,17 @@ export interface TableHashes {
     tables: Record<string, TableHash>;
 }
 
-export const TABLE_HASHES_VERSION = 1;
+/**
+ * 2: members' photos out of their rows (schema.sql member_photos): `members` is hashed with avatar_ref and avatar_bytes
+ * where it had avatar_url, and member_photos is hashed too. A server on either side of that hashes `members` with other
+ * columns, so their hashes would differ on every copy and a standby would force-resync over and over; with the version
+ * raised, a standby and a main server on either side of it compare row counts only until both are updated.
+ */
+/**
+ * 3: groups' own pictures out of their rows (schema.sql group_pictures, #1486): `groups` is hashed with avatar_ref and
+ * avatar_bytes where it had avatar_url, and group_pictures is hashed too. Raised for the same reason as 2.
+ */
+export const TABLE_HASHES_VERSION = 3;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

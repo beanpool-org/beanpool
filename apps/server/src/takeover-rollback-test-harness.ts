@@ -1,8 +1,11 @@
 /**
- * Shared by test-takeover-failure-rolls-back.ts and test-takeover-crash-then-fails.ts (not a suite itself): a take-over
- * that stops part way (F2 of the 2026-10-01 standby review, scratch/reviews/FABLE-standby-e2e.md "Area 2").
+ * Shared by test-takeover-failure-rolls-back.ts and the three suites of a take-over killed and then failing at the next
+ * start, test-takeover-crash-next-start-fails.ts, test-takeover-crash-boot-role.ts and test-takeover-crash-promoted-in-place.ts
+ * (not a suite itself): a take-over that stops part way (F2 of the 2026-10-01 standby review,
+ * scratch/reviews/FABLE-standby-e2e.md "Area 2"). The three were one suite until it took 3m52s-4m17s on CI against the
+ * runner's 300 s per suite (killed at 300 s on a slow runner, Test-All run 36986738475).
  *
- * Every node is its own process (takeover-test-harness.ts). The world both suites start from, built once:
+ * Every node is its own process (takeover-test-harness.ts). The world every suite starts from, built once per suite:
  *   - a main server with an owner (Anna), an admin (Ben), a link with another community, a tunnel address and a recovery
  *     code. It stays up for the whole suite, so a standby can copy it after a take-over that stopped;
  *   - a standby that copied it and holds its locked keys, with things of its own a take-over writes over: Ben as the
@@ -19,6 +22,8 @@ export const PW_MAIN = 'Main-Server-Pw-512!';
 export const PW_STANDBY = 'Standby-Own-Pw-618!';
 export const TUNNEL_TOKEN = 'tunnel-' + crypto.randomBytes(12).toString('hex');
 export const STANDBY_OWN_ADDRESS = { name: 'standby-own', mode: 'direct', hostname: 'standby-own.example' };
+/** A start of the standby: its own admin password, as a standby. */
+export const STANDBY_ENV = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' };
 
 /**
  * node_config rows a main server's boot writes and a standby's does not (the 2026-10-02 review of #1433): the listing-photo
@@ -191,6 +196,8 @@ export function differences(before: Record<string, any>, after: Record<string, a
 }
 
 export interface World {
+    /** The suite's own file, which every node process runs with `--child`. */
+    script: string;
     main: NodeProc;
     mainPeerId: string;
     standbyPeerId: string;
@@ -226,7 +233,7 @@ export async function buildWorld(script: string, root: string): Promise<World> {
             await standby.kill('SIGTERM');
         }
         const standbyPeerId = standby.ready.peerId;
-        return { main, mainPeerId: main.ready.peerId, standbyPeerId, baseDir, code: setup.code, anna: setup.anna, ben: setup.ben, ownerSeedHex, before };
+        return { script, main, mainPeerId: main.ready.peerId, standbyPeerId, baseDir, code: setup.code, anna: setup.anna, ben: setup.ben, ownerSeedHex, before };
     } catch (e) {
         await main.kill();
         throw e;
@@ -238,6 +245,15 @@ export async function openAndConfirm(node: NodeProc, code: string): Promise<{ st
     const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': PW_STANDBY });
     if (opened.status !== 200) return opened;
     return post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+}
+
+/** Confirm with the process killed the moment `step` is recorded (BEANPOOL_TEST_TAKEOVER_CRASH_AFTER, as a power cut). */
+export async function killedAfter(world: World, dir: string, step: string): Promise<void> {
+    const node = await spawnNode(world.script, dir, { ...STANDBY_ENV, BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: step });
+    await openAndConfirm(node, world.code);
+    await node.exited;
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, 'takeover-journal.json'), 'utf-8'));
+    assert(!!journal.steps[step] && journal.state === 'running', `[killed after ${step}] the journal stops at "${step}"`);
 }
 
 /** A fresh copy of the standby the cases start from. */
@@ -261,4 +277,36 @@ export function assert(cond: unknown, msg: string): void {
 }
 export function tally(): { run: number; passed: number } {
     return { run: testsRun, passed: testsPassed };
+}
+
+/**
+ * A suite's entry: run as `--child`, a node process; otherwise build the world under BEANPOOL_DATA_DIR, run `cases` on it,
+ * stop the main server, and print the count and `passedLine`. Exits 0 when every check passed, 1 otherwise.
+ */
+export function runRollbackSuite(script: string, passedLine: string, cases: (world: World, root: string) => Promise<void>): void {
+    if (process.argv.includes('--child')) {
+        rollbackChild().catch((e) => {
+            console.error('child failed:', e);
+            process.exit(1);
+        });
+        return;
+    }
+    const main = async (): Promise<void> => {
+        const root = process.env.BEANPOOL_DATA_DIR;
+        if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
+        console.log('\n— setup: a main server (it stays up), and a standby that copies it and has an owner and an address of its own —');
+        const world = await buildWorld(script, root);
+        try {
+            await cases(world, root);
+        } finally {
+            await world.main.kill();
+        }
+        const { run, passed } = tally();
+        console.log(`\n${passed}/${run} checks passed.`);
+        console.log(passedLine);
+    };
+    main().then(() => process.exit(0)).catch((e) => {
+        console.error(e?.output ? `${e.message}\n--- node output ---\n${e.output}` : e);
+        process.exit(1);
+    });
 }

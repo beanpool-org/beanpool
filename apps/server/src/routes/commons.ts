@@ -27,7 +27,8 @@ import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
@@ -335,7 +336,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
@@ -360,6 +361,12 @@ router.post('/api/crowdfund/projects', async (ctx) => {
     if (!isAcceptableGoal(Number(goalAmount))) {
         ctx.status = 400;
         ctx.body = { error: GOAL_AMOUNT_ERROR };
+        return;
+    }
+    // Its title is the enterprise's name and its description its purpose, each held to its limit (#1493).
+    try { assertEnterpriseText(title, description || ''); } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message };
         return;
     }
     createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
@@ -404,7 +411,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
@@ -482,6 +489,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         return;
     }
     // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.
+    if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
     try {

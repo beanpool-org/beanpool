@@ -62,6 +62,7 @@ import { createPulseSubmitRoutes, type PulseSubmitRouteDeps } from './routes/pul
 import { PulseThumbnailService } from './engine/pulse-thumbnail.js';
 import { lockedDm } from './dm-test-payload.js';
 import { resolveChannel, prunePulseItems, type SsrfSafeResponse } from './engine/pulse-resolver.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -84,8 +85,9 @@ let owner: Id;
 /** A member who joined a week ago, with a profile photo (posting needs one). */
 function member(name: string): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(7 * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
@@ -379,7 +381,7 @@ async function main(): Promise<void> {
         const ent = (await enterprise(max, 'Max Market')).body?.publicKey as string;
         assert(!!ent, 'setup: Max keeps an enterprise');
         // The marketplace asks every author for a profile photo first, an enterprise too.
-        db.prepare("UPDATE members SET avatar_url = 'https://example.com/e.jpg' WHERE public_key = ?").run(ent);
+        setMemberPhoto(db, ent, 'https://example.com/e.jpg');
         // Changed by W-money (Marty, 2026-09-29: "maybe needs to be higher for enterprise/project"): what a keeper puts up
         // for an enterprise used to count with their own 100, so a keeper stocking a shop had nothing left for themselves.
         // It now counts against the enterprise's own WRITER_LIMITS.enterprisePostsPerDay.

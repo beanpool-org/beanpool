@@ -45,6 +45,10 @@ No. Only you can see your balance and your trades. A trade shows only its two pe
 
 No, if you kept your 12-word recovery phrase. Install the app and restore your account with those 12 words. If you linked a sign-in account in Account Protection, you can also use that. Keep your 12 words somewhere safe and private. Anyone who has them can use your account.
 
+## Do I need a Google, Apple or Facebook account?
+
+No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from any phone or browser where you are in your account, and not while your account is suspended. See "Joining BeanPool" and "Your 12 words".
+
 ## Can I belong to more than one community?
 
 Yes. You can save several communities in the app and switch between them. You use the same identity in each. Each community has its own beans, rules and members.

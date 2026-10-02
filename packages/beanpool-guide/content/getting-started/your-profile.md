@@ -23,7 +23,7 @@ You need a name and a photo before you can post or accept a trade. If one is mis
 
 ## Contact details
 
-Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to.
+Under **Contact details** you can add a phone number, an email or a WhatsApp number, up to 200 characters. You do not have to.
 
 Once you add one, choose **Who can see this?**:
 

@@ -18,7 +18,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../db/db.js';
-import { isSelfAvatarUrl } from '@beanpool/core';
+import { MAX_PICTURE_BYTES, isSelfAvatarUrl, isSelfGroupPictureUrl } from '@beanpool/core';
 import { isStorableImageValue } from '../storage/image-metadata.js';
 
 
@@ -67,14 +67,14 @@ export function isAcceptableAvatarValue(value: unknown): boolean {
  * serves nothing it cannot sniff as a raster image; those do not look. So a value written in base64 without a
  * `data:` prefix (the legacy bare form) is judged as well: its bytes must be a JPEG, PNG, WebP or GIF, the
  * formats the metadata strip handles (G9a-3). A bare HEIC, GPS inside, would otherwise be stored and served as
- * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…` or post-photo address sent
- * back by an editor) is not image bytes and passes as before.
+ * sent. Any other string (a URL, a `bundled://` name, this node's own `/api/avatar/…`, group picture or post-photo
+ * address sent back by an editor) is not image bytes and passes as before.
  */
 export function isAcceptablePhotoValue(value: unknown): boolean {
     if (!isAcceptableAvatarValue(value)) return false;
     if (typeof value !== 'string') return true;
     const trimmed = value.trim();
-    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
+    if (/^data:/i.test(trimmed) || isSelfAvatarUrl(trimmed) || isSelfGroupPictureUrl(trimmed) || isSelfPostPhotoUrl(trimmed) || !BASE64_TEXT.test(trimmed)) return true;
     return sniffRasterImageType(Buffer.from(trimmed, 'base64')) !== null;
 }
 
@@ -92,7 +92,7 @@ export function isSelfPostPhotoUrl(value: string): boolean {
     return /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/posts\/[^/?#\s]+\/photos\/\d+(?:\?\S*)?$/i.test(value.trim());
 }
 
-export const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+export const MAX_AVATAR_BYTES = MAX_PICTURE_BYTES; // 2 MB (@beanpool/core: a group's picture is held to it too)
 export const DEFAULT_MAX_AVATAR_CACHE_TOTAL_BYTES = 10 * 1024 * 1024; // 10 MB RAM
 
 export interface AvatarCacheEntry {
@@ -194,7 +194,7 @@ export class AvatarCache {
 }
 
 function findBundledAvatarFile(name: string): string | null {
-    // `name` comes from member-supplied `avatar_url` ("bundled://<name>"), so it must not be
+    // `name` comes from a member-supplied avatar ("bundled://<name>", member_photos), so it must not be
     // allowed to walk out of the avatars directory via path separators or "..".
     if (!/^[a-z0-9_-]{1,64}$/i.test(name)) return null;
     const filename = `avatar_${name.replace(/-/g, '_')}.jpg`;
@@ -208,6 +208,11 @@ function findBundledAvatarFile(name: string): string | null {
         if (fs.existsSync(c)) return c;
     }
     return null;
+}
+
+/** Where a group's picture is cached: a name no member key can have. */
+function groupPictureCacheKey(groupId: string): string {
+    return `group-picture|${groupId}`;
 }
 
 export interface AvatarServiceOptions {
@@ -233,19 +238,38 @@ export class AvatarService {
             return { status: 400, error: 'Invalid public key' };
         }
 
-        // Check if member exists and has an avatar_url
+        // The member's avatar as they set it (member_photos: written with the row's avatar_ref, @beanpool/engine
+        // members.ts setMemberPhoto, so a member with none has no row here).
         const row = db.prepare(
-            `SELECT public_key, avatar_url FROM members WHERE public_key = ?`
-        ).get(pubkey) as { public_key: string; avatar_url: string | null } | undefined;
+            `SELECT photo FROM member_photos WHERE public_key = ?`
+        ).get(pubkey) as { photo: string } | undefined;
 
-        if (!row || !row.avatar_url || !row.avatar_url.trim()) {
+        if (!row || !row.photo.trim()) {
             return { status: 404, error: 'Avatar not found' };
         }
+        return this.serveStored(pubkey, row.photo.trim(), options);
+    }
 
-        const rawUrl = row.avatar_url.trim();
+    /**
+     * A group's own picture (group_pictures, #1486), by the member photo's rules to the letter: raster bytes only, under
+     * the type the bytes say, never past MAX_AVATAR_BYTES, with the same ETag and cache. Cached under its own name, so a
+     * group id never answers for a member key.
+     */
+    async getGroupPicture(groupId: string, options: { ifNoneMatch?: string } = {}): Promise<AvatarResult> {
+        if (!groupId || typeof groupId !== 'string') {
+            return { status: 400, error: 'Invalid group' };
+        }
+        const row = db.prepare('SELECT picture FROM group_pictures WHERE group_id = ?').get(groupId) as { picture: string } | undefined;
+        if (!row || !row.picture.trim()) {
+            return { status: 404, error: 'Picture not found' };
+        }
+        return this.serveStored(groupPictureCacheKey(groupId), row.picture.trim(), options);
+    }
 
+    /** A stored picture value (a data URL, legacy bare base64 or a `bundled://` name) as bytes to serve. */
+    private async serveStored(cacheKey: string, rawUrl: string, options: { ifNoneMatch?: string }): Promise<AvatarResult> {
         // Check in-memory L1 cache; if rawUrl matches, use cached decoded buffer and etag
-        const cached = this.cache.get(pubkey);
+        const cached = this.cache.get(cacheKey);
         if (cached && cached.rawUrl === rawUrl) {
             const ifNoneMatch = options.ifNoneMatch?.replace(/^W\//, '');
             const cleanEtag = cached.etag.replace(/^W\//, '');
@@ -281,7 +305,7 @@ export class AvatarService {
             // `[\s\S]` rather than `.` so a base64 body wrapped across lines still matches.
             const dataMatch = rawUrl.match(/^data:([^;,]+);base64,([\s\S]*)$/i);
             if (dataMatch) {
-                // Allowlist on the way OUT, not only on the way in. `members.avatar_url` is
+                // Allowlist on the way OUT, not only on the way in. A member's photo (member_photos) is
                 // member-supplied and `POST /api/profile/update` does not validate its format
                 // the way post photos do, so the stored MIME type is attacker-controlled. This
                 // route is public and unauthenticated, so echoing a stored `text/html` or
@@ -320,7 +344,7 @@ export class AvatarService {
         const etag = `"${contentHash}"`;
 
         // Cache decoded buffer and content type
-        this.cache.set(pubkey, {
+        this.cache.set(cacheKey, {
             rawUrl,
             buffer: fullBuffer,
             contentType: mimeType,
@@ -344,6 +368,11 @@ export class AvatarService {
 
     delete(pubkey: string): void {
         this.cache.delete(pubkey);
+    }
+
+    /** Forgets a group's picture's decoded bytes (a removed or replaced picture is never served again either way). */
+    deleteGroupPicture(groupId: string): void {
+        this.cache.delete(groupPictureCacheKey(groupId));
     }
 
     clear(): void {

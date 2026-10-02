@@ -56,7 +56,7 @@ import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth
 import { clientLimiterKey } from '../client-ip.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
 import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
@@ -737,11 +737,14 @@ router.post('/api/local/admin/data', async (ctx) => {
             // only you can see it", and the manager never shows them. `profiles` below goes through the same rule as
             // the profile page (contactVisibleTo) with no viewer, and a password proves no member, so it carries no
             // contact details at all. The rest of the row stays: the manager draws the invite tree, pruning and roles
-            // from it.
-            const { contactValue, contactVisibility, ...row } = m;
+            // from it. Each photo as its URL (avatarUrlOf, from the row's avatar_ref), which the manager, served by this node,
+            // shows as it shows a photo: a list of every member never reads every photo (it sent each one twice, here and in
+            // `profiles`, which at 30,000 members with photos would be 1.6 GB).
+            const { contactValue, contactVisibility, avatarRef, ...row } = m;
             void contactValue; void contactVisibility;
             return {
                 ...row,
+                avatarUrl: avatarUrlOf(m.publicKey, avatarRef),
                 // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
                 lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                 tier,
@@ -1708,9 +1711,11 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/decisions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
+    // The subject's name only: getMember read their photo too, once a Decision (#1478).
+    const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
     ctx.body = {
         decisions: actionable.map(d => {
-            const subject = d.subject ? getMember(d.subject) : null;
+            const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
             return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
         }),
     };

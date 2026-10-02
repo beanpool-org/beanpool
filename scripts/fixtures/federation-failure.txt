@@ -1,4 +1,4 @@
-━━━ test-schema-upgrade ━━━
+━━━ test-schema-upgrade-fresh-shape ━━━
 ✓ schema upgrades from v1
 ✓ schema upgrades from v2
 

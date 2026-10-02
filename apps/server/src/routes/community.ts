@@ -61,11 +61,11 @@ import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE,
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
-import { respondIfMuted, respondProfileRefusal, isNote } from './profile-feature-gate.js';
+import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
@@ -80,7 +80,7 @@ import { doorRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
@@ -996,7 +996,7 @@ router.get('/api/community/members', async (ctx) => {
                 publicKey: m.publicKey,
                 callsign: m.callsign,
                 joinedAt: m.joinedAt,
-                avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
+                avatarUrl: avatarUrlOf(m.publicKey, m.avatarRef),
                 profileUpdatedAt: m.profileUpdatedAt,
                 bio: m.bio,
                 contactValue: showContact ? m.contactValue : null,
@@ -1272,6 +1272,11 @@ router.post('/api/profile/update', async (ctx) => {
         if (e?.message === 'CALLSIGN_TOO_SHORT') {
             ctx.status = 400;
             ctx.body = { error: 'callsign_too_short', message: 'Your name needs at least 2 characters.' };
+            return;
+        }
+        if (e?.message === 'CONTACT_TOO_LONG') {
+            ctx.status = 400;
+            ctx.body = { error: 'contact_too_long', message: textTooLongMessage('How to reach you', CONTACT_VALUE_LIMIT) };
             return;
         }
         throw e;
@@ -1591,6 +1596,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
     }
     // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A
     // muted member still pays what they owe, without one.
+    if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, from)) return;
 
     // A visitor's beans live on their home node's ledger, so this node cannot settle
@@ -2151,7 +2157,9 @@ router.get('/api/members', async (ctx) => {
     //
     // Only the columns below are read, and a delta reads only the rows changed since its cursor (engine members.ts
     // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
-    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal).
+    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
+    // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
+    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
     const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
         .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
@@ -2162,7 +2170,7 @@ router.get('/api/members', async (ctx) => {
         callsign: r.callsign,
         joinedAt: r.joined_at,
         nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url || null),
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         profileUpdatedAt: r.profile_updated_at || null,
         earnedCredit: r.earned_credit ?? 0,
         elderVouchedBy: r.elder_vouched_by || null,

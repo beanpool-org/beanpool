@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 98,
-  "hash": "91850e3e270820f7ad1cfe0e7bc8f04bfdd6379b292d830f75b6cf973eed7319",
+  "version": 100,
+  "hash": "2e1cf6e72e7b30b747836947adc706514516e623cf6777ca6060d8cc06d2ba3c",
   "sections": [
     {
       "id": "about",
@@ -329,7 +329,7 @@
         },
         {
           "type": "p",
-          "text": "The global community has Polls but no Decisions: anyone can join it with one sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities."
+          "text": "The global community has Polls but no Decisions: anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities."
         },
         {
           "type": "h2",
@@ -676,6 +676,14 @@
         },
         {
           "type": "h2",
+          "text": "Do I need a Google, Apple or Facebook account?"
+        },
+        {
+          "type": "p",
+          "text": "No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from any phone or browser where you are in your account, and not while your account is suspended. See \"Joining BeanPool\" and \"Your 12 words\"."
+        },
+        {
+          "type": "h2",
           "text": "Can I belong to more than one community?"
         },
         {
@@ -850,7 +858,7 @@
     {
       "slug": "joining",
       "title": "Joining BeanPool",
-      "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with one sign-in. Asking a community to let you in, and how to invite someone else.",
+      "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.",
       "section": "getting-started",
       "related": [
         "finding-a-community",
@@ -921,17 +929,34 @@
           "type": "ul",
           "items": [
             "On the first screen, tap **Explore BeanPool worldwide**. It is at the bottom of the screen: on a small phone, scroll down. The app shows it only when the global community is open.",
-            "Sign in once with Google, Apple (on an iPhone) or Facebook. This keeps out fake accounts: one sign-in account makes one BeanPool account. BeanPool never sees your password and never posts anything for you.",
+            "Choose one of the two ways in, side by side. **Create an account with 12 secret words** needs no Google, Apple or Facebook account: your 12 words are the only way back in.",
+            "**Or sign in** once with Google, Apple (on an iPhone) or Facebook. That sign-in is also a way back if you lose your phone. BeanPool never sees your password and never posts anything for you.",
             "Choose the name people will see, up to 20 characters, and tap **Join**. If someone already has that name, the app suggests others."
           ]
         },
         {
           "type": "p",
-          "text": "The community keeps only a scrambled reference to your sign-in account, never your email. The sign-in you used also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see \"Getting your account back\". After joining you don't sign in to open the app: your account is the key on your phone, like any other."
+          "text": "With 12 words, your phone also does a moment of work to set up the account. It starts as soon as the two ways show, while you read and type your name, so most people never wait for it. If you tap **Join** before it is done, the app says **Setting up your account…** with a bar, and **← Back** still works. When a lot of people are joining from your network, the app says so, with how long it will take on your phone, and you can sign in instead to join at once. A sign-in join is asked for this work only on a very busy network, and the app does it by itself. **Choose another way** stops the waiting and takes you back to the two ways. If you sign in instead, the 12-words setting up stops to save your battery, and **Choose another way** starts it again."
         },
         {
           "type": "p",
-          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
+          "text": "If the community says to wait (too many people joining from your network), the app says how long. Tapping **Join** before then only says it again, with the time left; after the wait, or after a minute if the wait is longer, **Join** asks again. If your phone's date and time are wrong, the app says **Check them in your phone's settings (set them to automatic)**, then try again. If the community closed your account (you deleted it, or you were removed), the app says **This account's place in the global community was closed, so it can't join again.** and doesn't offer the door to it again."
+        },
+        {
+          "type": "p",
+          "text": "If a 12-words join, in the phone app or in a web browser, says the community couldn't accept it because **your date and time look wrong**, the clock on that phone or computer is more than a few minutes off. Set its date and time to automatic in its settings, then try again. Nothing was saved, and signing in again won't help. The same words appear if adding a sign-in or getting your account back in a browser is refused for the same reason."
+        },
+        {
+          "type": "p",
+          "text": "If you sign in, the community keeps only a scrambled reference to your sign-in account, never your email. That sign-in also becomes a way back into your account if you lose your phone, so you are not asked to sign in again at **Safety Backup**. For that, the community keeps a locked copy of your account. The people who run its server can open that copy: see \"Getting your account back\". After joining you don't sign in to open the app: your account is the key on your phone, like any other."
+        },
+        {
+          "type": "p",
+          "text": "If you join with 12 words, nothing about you reaches the community but your key and your name, and your 12 words are your only way back: nobody can reset them, not BeanPool and not the community. **Safety Backup** says so, and offers **Add a sign-in as a second way back**. After joining, a card at the top of the Market says **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** Tap **✕** to put it away: it comes back once after your first post and once after a week, then stays in **Settings**, under **Account Protection**, until you add a sign-in or tap **I still have my 12 words**. An account made with 12 words also has smaller limits for its first 7 days, and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message a day, and one report hides its post while it is new. Adding a sign-in, any time, lifts it to the usual new-account limits. You can add one from any phone where you are in your account, not only the one you joined on. If BeanPool's key vault already keeps a copy of your account, the card is not shown, and **Settings** offers **Add a sign-in** quietly."
+        },
+        {
+          "type": "p",
+          "text": "**Already have an account?** Join the global community with it, not with a second one. Tap the bean at the top left and, under **Your communities**, tap **Join the global community**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**. You join with your 12 words or sign in once, check your name and tap **Join**. Your key and your 12 words stay the same, and nothing changes in your other communities. See \"More than one community\"."
         },
         {
           "type": "h2",
@@ -946,7 +971,7 @@
           "items": [
             "**Your Photo:** choose a photo or one of the ready-made pictures. You must pick one before **Next** works. People trade more easily with a face or a picture they recognise.",
             "**← Back** on **Your Photo** takes you back to your name, to change it. It is still the same account: tap **Next** and you carry on to **Your Photo** and **Safety Backup** with the new name. If someone already has it, the app suggests others.",
-            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community, this step also shows your sign-in protecting your account.",
+            "**Safety Backup:** the app shows your 12 words. Write them down on paper and keep them safe. The tickbox **I've saved these words** is there to remind you. Nothing stops you if you skip it, but read \"Your 12 words\" soon. If you joined the global community with a sign-in, this step also shows your sign-in protecting your account. If you joined it with 12 words, it says first that these 12 words are your account, and offers **Add a sign-in as a second way back**: you can skip that too.",
             "**How it Works:** a short tour. Tap **Let's Begin!** to start."
           ]
         },
@@ -1168,7 +1193,7 @@
     {
       "slug": "your-12-words",
       "title": "Your 12 words",
-      "summary": "The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.",
+      "summary": "The 12 words are the key to your account. Why they matter, where to find them, how to keep them safe, and adding a sign-in as a second way back.",
       "section": "getting-started",
       "related": [
         "recovery",
@@ -1255,6 +1280,58 @@
         },
         {
           "type": "h2",
+          "text": "If you joined the global community with 12 words"
+        },
+        {
+          "type": "p",
+          "text": "You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see \"Joining BeanPool\"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)"
+        },
+        {
+          "type": "p",
+          "text": "The app says so at **Safety Backup**. After you join, a card at the top of the Market says it again: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**✕** puts the card away. It comes back once after your first post and once after a week, then stays only in **Settings**, under **Account Protection**.",
+            "**Show my 12 words** opens **Account Protection**, where you can see them again.",
+            "In **Account Protection**, **I still have my 12 words** puts the card away for good. **Add a sign-in** stays there."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "An account made with 12 words also starts slower than one made with a sign-in, for its first week. See \"Reporting a problem\" for its limits, and why."
+        },
+        {
+          "type": "h3",
+          "text": "Adding a sign-in later"
+        },
+        {
+          "type": "p",
+          "text": "You can add a sign-in later, from any phone or browser where you are in your account, not only the one you joined on. On a phone you restored your account onto with your 12 words, open the global community in the app: the community says your account has only its 12 words, and the card and **Add a sign-in** appear (it can take a moment). You can't add one while your account is suspended, or if the community has closed your account (the app says so, and nothing changes). It becomes a second way back, and it lifts the 12-words limits at once."
+        },
+        {
+          "type": "p",
+          "text": "If BeanPool's key vault already keeps a copy of your account, that copy is a way back too. The app then doesn't show the one-way-back card. **Add a sign-in** is still offered, quietly, in **Account Protection** in **Settings**, because it lifts the 12-words limits."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. At **Safety Backup** the button says **Add a sign-in as a second way back**.",
+            "Tap **Continue with Google**, **Continue with Facebook** or, on an iPhone, **Continue with Apple**, and sign in once. The app may ask for your phone's lock first.",
+            "**Sign-in added** says it worked. Your account now has the usual new-account limits, and that sign-in brings it back if you lose your phone, as for someone who joined with it. See \"Getting your account back\" for who can open the copy kept for it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If the copy of your account can't be kept right then, the sign-in is still added and your limits still lift, but your 12 words stay your way back. The app says so. A sign-in account that already has another BeanPool account in the global community, or that belonged to an account the community removed, can't be added, and nothing changes."
+        },
+        {
+          "type": "p",
+          "text": "**Protect with**, lower down in **Account Protection** under **Sign-In Recovery Providers**, also links a sign-in as a way back, but it leaves the 12-words limits and the card as they are. Use **Add a sign-in** for both."
+        },
+        {
+          "type": "h2",
           "text": "A second way back: a sign-in account"
         },
         {
@@ -1271,7 +1348,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see \"Using BeanPool in a web browser\"). On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
+          "text": "On the global community, a sign-in you join with in a browser is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see \"Using BeanPool in a web browser\"). If you join there with 12 words instead, they are your only way back until you add a sign-in: a card called **One way back** says so, with **See my 12 words** and **Add a sign-in**, after you join and in Settings. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app."
         }
       ]
     },
@@ -1321,7 +1398,7 @@
         },
         {
           "type": "p",
-          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to."
+          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number, up to 200 characters. You do not have to."
         },
         {
           "type": "p",
@@ -1735,14 +1812,14 @@
           "type": "ul",
           "items": [
             "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.",
-            "Sign in once with Google, Apple (on an iPhone) or Facebook. The app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
+            "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
             "Then choose your photo for the global community, as for any new community."
           ]
         },
         {
           "type": "p",
-          "text": "Nothing changes in your other communities, and your 12 words stay the same. The sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See \"Getting your account back\". A sign-in you linked to your account before keeps working."
+          "text": "Nothing changes in your other communities, and your 12 words stay the same. A sign-in also becomes a way back into the same account: a locked copy of it is kept for that sign-in, so if you lose your phone, it brings back this account, not a new one. See \"Getting your account back\". A sign-in you linked to your account before keeps working. If you join with 12 words and no sign-in keeps a copy of your account, the app shows the **Your account has one way back** card, as for anyone who joins with 12 words (see \"Joining a community\")."
         },
         {
           "type": "p",
@@ -2816,10 +2893,21 @@
           "type": "ul",
           "items": [
             "A chat between two people is **end-to-end encrypted**: it is locked on your phone and unlocked on theirs, so your community's server cannot read it. The chat shows **End-to-end encrypted** at the top. Photos in it are encrypted too, and so are your edits.",
+            "Each message is also locked to who sent it, to that one message, to its chat and, if it is a reply, to the message it answers. So the server cannot show your message as the other person's, send it again as a new message, or point your answer at a different message. Where it tries, the app shows **This message couldn't be verified, so it isn't shown.** in the middle of the chat, as nobody's, instead of the words. A photo the server swaps for another reads **Image unavailable**.",
+            "If the server puts a message into another chat, the app refuses it there. When two of your chats with the same person are joined into one, each message carries the chat it came from. One sent since this update then shows with **Moved here from another conversation.** underneath. One sent before it shows the older-version line instead (see below).",
+            "Each message also remembers the newest message its writer had when they wrote it. If the server shows it before that one, it reads **Shown out of the order it was written in.** underneath. Two messages written at the same moment, neither after the other, can come in either order without it.",
+            "Anything in a chat between two people that is not locked is never shown as either person's words: it reads **This message wasn't encrypted, so BeanPool can't confirm who wrote it.** in the middle of the chat, and its words are not shown. Your list of chats shows the same line.",
+            "A message your community's admins send you from the server's admin page is not locked, and is not a private message. It shows in the middle of the chat, never as someone's own message, with **From your community's admins. Not a private message: the community's server can read it.** underneath.",
+            "Messages sent before this update, by any app, were locked without these checks: the server could have changed who they seem to be from, or sent one again. They still open, and every one reads **Sent from an older version of the app: BeanPool can't confirm who wrote it.** underneath, wherever it is in the chat. Someone still on an older app cannot read messages from an updated one until they update.",
+            "A reply shows the message it answers the way that message itself is shown. It names the writer only when their message opened, and carries that message's line underneath, such as the older-version one. It names **Notice** for one of the server's notices and **Your community's admins** for the admins' message. Anything that didn't open or wasn't locked is quoted as **Not confirmed**, with the line that stands in for its words.",
+            "So the server alone cannot make either of you seem to write words you did not write. It can still hold a message back, deliver it late, or make it read **This message was deleted**. It can show an edited message's earlier words instead of the new ones: both are really the sender's. It sees which message each message answers, but cannot change that unseen. It can add or take away an emoji reaction in either person's name: reactions aren't locked. And it can add its own notices to a chat. A notice shows as a notice, is quoted as **Notice**, and reads **Notice:** in your list of chats, never as either of you.",
+            "Locking proves a message came from one of the two of you, not which one: the other person, with the help of the people who run your server, could put words in your name.",
+            "All of this rests on your app having the other person's real key, which it gets from your community's server, as the encryption itself does. In the web app it also rests on the app itself, which your community's server sends to your browser. The phone app comes from the app store.",
             "A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.",
             "The notices BeanPool adds to a chat about a deal are not encrypted: beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.",
-            "The server also knows who messaged whom, and when, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
-            "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.",
+            "The server also knows who messaged whom, and when, which message each one answers, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.",
+            "Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them, and the server could write in them in anyone's name.",
+            "A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked. A phone or browser that has never seen the chat, and is given none of its encrypted messages, can't tell: to it, such a chat looks like any other group's chat, readable by the server. In the web app that also goes for a browser that has been signed out since, a private window, or one whose site data was cleared: the web app forgets which chats were between two people. The phone app keeps that list.",
             "Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.",
             "Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See \"Leaving or deleting your account\".",
             "A group's chat can also be read by the group's members.",
@@ -2887,7 +2975,7 @@
           "type": "ul",
           "items": [
             "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.",
-            "Give it a **Group Name** and, if you like, a **Purpose / Description**.",
+            "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
             "Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat."
@@ -2978,7 +3066,7 @@
         },
         {
           "type": "p",
-          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Open a group, then:"
+          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:"
         },
         {
           "type": "ul",
@@ -3567,7 +3655,7 @@
         },
         {
           "type": "p",
-          "text": "The global community has no Decisions. Anyone can join it with one sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see \"Reporting a problem\". Decisions belong to local communities. Polls still work everywhere."
+          "text": "The global community has no Decisions. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see \"Reporting a problem\". Decisions belong to local communities. Polls still work everywhere."
         },
         {
           "type": "h2",
@@ -3741,7 +3829,15 @@
         },
         {
           "type": "p",
-          "text": "On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it with a sign-in, so one person with several accounts could tip the count, and there are no Decisions there."
+          "text": "On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could tip the count, and there are no Decisions there."
+        },
+        {
+          "type": "p",
+          "text": "When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example \"5 of 12 votes came from new or 12-word accounts\". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from each kind, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted."
+        },
+        {
+          "type": "p",
+          "text": "While a poll is open it says nothing about this. If it did, someone checking the poll after each vote could tell what kind of account each vote came from, and how it chose. An open vote never says it, open or closed: it shows who voted, so the count would say which kind of account each voter has. A group's poll doesn't say it either, and nor does a poll on a local community."
         },
         {
           "type": "h2",
@@ -4701,8 +4797,10 @@
             "Playing a YouTube video in the Pulse tells YouTube you watched it, the same as opening it in the YouTube app would. Nothing is sent to YouTube until you tap ▶, and scrolling past a video sends nothing at all. See \"The Pulse\".",
             "Your community's server keeps your trades, posts and votes, and whom you blocked in the web app. The owners and admins who run it can see what is stored there, including event chats and group chats. Choose a community whose people you trust.",
             "If you delete your account, every message you wrote reads **This message was deleted** and the photos you sent are deleted. The server's own daily copies made before then keep them for up to 14 days. A backup an owner downloaded keeps them until the owner deletes it. See \"Leaving or deleting your account\".",
-            "If you linked a sign-in account, or joined with one, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\".",
-            "On the global community, its moderators can see which accounts joined from the same internet connection within a day of each other, but never the connection itself, so they can deal with a burst of fake accounts in one go. See \"Reporting a problem\"."
+            "If you linked a sign-in account, joined with one, or added one later, your community's server keeps a locked copy of your account for it. The people who run that server can open it. Only your 12 words need nobody. See \"Getting your account back\".",
+            "On the global community, its moderators can see which accounts joined from the same internet connection within a day of each other, but never the connection itself, so they can deal with a burst of fake accounts in one go. See \"Reporting a problem\".",
+            "When you join the global community, it keeps a scrambled reference to the internet connection you joined from for a day, never the address itself. With it, when many accounts are being made from one connection, each new one there takes a little more setting up, and only so many can come from it. If the community removes an account within a day of its joining, that reference is kept for 7 days from the join instead, so new 12-words accounts from the same connection take longer to set up that week. It is never kept longer for someone who deleted their own account.",
+            "If you join the global community with 12 words, all it learns at the door, besides that reference, is the name you chose and your account's key: no email, no phone number, no other account."
           ]
         },
         {
@@ -4901,18 +4999,20 @@
         },
         {
           "type": "p",
-          "text": "The global community at global.beanpool.org is open to anyone who signs in, so it looks after itself a little more:"
+          "text": "The global community at global.beanpool.org is open to anyone, with 12 secret words or a sign-in, so it looks after itself a little more:"
         },
         {
           "type": "ul",
           "items": [
-            "**A post reported by three members who don't know each other** is hidden at once, until a moderator looks at it. Each of them must have been a member for at least a week, and be at least half as established there as the person who posted it. Time as a member counts most, then posts that stayed up and people they have finished a deal with. Trust badges don't count. People who joined from the same internet connection within a day of each other count as one, and so do people who came in on invites from the same person. Someone who reported three posts in a month that the moderators then kept doesn't count for a while. Otherwise the reports wait for the moderators, as they do everywhere. So a few new accounts can't hide the posts of someone who has been there for months.",
+            "**A post reported by three members who don't know each other** is hidden at once, until a moderator looks at it. Each of them must have been a member for at least a week, be past the new-account limits below themselves, and be at least half as established there as the person who posted it. Time as a member counts most, then posts that stayed up and people they have finished a deal with. Trust badges don't count. People who joined from the same internet connection within a day of each other count as one, and so do people who came in on invites from the same person. Someone who reported three posts in a month that the moderators then kept doesn't count for a while. Otherwise the reports wait for the moderators, as they do everywhere. So a few new accounts can't hide the posts of someone who has been there for months.",
+            "**A post by a new account made with 12 words** is hidden by one such report, while the account is on its new-account limits. Once it is past them, or has added a sign-in, its posts need three like anyone's.",
             "**A hidden post** can still be seen by its author, who gets an alert that it is hidden, not removed. If the moderators keep it, everyone can see it again.",
             "**Accounts that joined together.** The moderators can see which accounts joined from the same internet connection within a day of a reported one, never the connection itself, so they can deal with a burst of fake accounts in one go: hide all their posts while they look, or remove the accounts. If yours are hidden that way, you get one alert, \"Your posts are hidden for review\", and they come back if the moderators keep them. People in one household or at one meetup often join together, so the moderators check each account before they act.",
-            "**New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.",
+            "**New accounts have daily limits** for their first 3 days, and until 3 of their posts have stayed up: 3 posts, 5 photos, and 10 new people to message in any 24 hours. An account made with 12 words has smaller ones, for its first 7 days and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people. Adding a sign-in moves it to the usual ones at once, counted from when it joined. Replying to someone who wrote to you first is never limited. If you reach a limit, the app says which one and when it lets up.",
+            "**Why new accounts start slowly.** Anyone can make an account there, and nothing stops one person making many. Behind a sign-in there is a Google, Apple or Facebook account, which takes some effort to make; 12 words take none. So what keeps the global community usable is how little a brand-new account can do, and how quickly its spam can be hidden. Nothing is locked: a new account can do everything an older one can, a little at a time at first, and the limits end once it has been there a while and 3 of its posts have stayed up.",
             "**If the moderators remove three of your posts within 30 days,** you can't post or send messages there until a moderator lifts it. You can still read, edit your profile and leave.",
             "**There are no community votes there.** When an admin suspends someone, the suspension lasts 7 days and then lifts by itself, unless an admin lifts it sooner.",
-            "**Polls there are informal.** Each one says \"An informal poll; it decides nothing\". Anyone can join with a sign-in, so one person with several accounts could tip the count."
+            "**Polls there are informal.** Each one says \"An informal poll; it decides nothing\". Anyone can join, with 12 words or a sign-in, so one person with several accounts could tip the count."
           ]
         },
         {
@@ -5232,7 +5332,7 @@
             "The block list your community kept for you goes too.",
             "If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.",
             "It deletes your account only in the community you are using. Your accounts in other communities stay.",
-            "Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in."
+            "Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again as a new account, with new 12 words or a sign-in, from a phone or browser that does not hold this account. The global community refuses the deleted account for good, and a phone that is still in another community keeps it. On such a phone the app says **This account's place in the global community was closed, so it can't join again.** and stops offering the door to that account. The same sentence comes for a member the community removed."
           ]
         },
         {
@@ -5385,6 +5485,10 @@
         },
         {
           "type": "p",
+          "text": "If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See \"Your 12 words\"."
+        },
+        {
+          "type": "p",
           "text": "If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown."
         },
         {
@@ -5429,7 +5533,7 @@
         },
         {
           "type": "p",
-          "text": "If someone starts recovering your account, you get an alert, and Settings shows **Someone is recovering your account**. If it is not you, tap **Stop It Now**. If they used your linked sign-in account, they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password."
+          "text": "If someone starts recovering your account, Settings shows **Someone is recovering your account** while it is under way. If it is not you, tap **Stop It Now**: your community's server then hands nothing more to that restore. If they get in with your linked sign-in account, you get an alert that your account was just restored on another device, and they may already be in by the time you see it. Keep that sign-in account safe, with its own strong password."
         },
         {
           "type": "h2",

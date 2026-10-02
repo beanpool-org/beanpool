@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { db, initSchema } from './db/db.js';
 import { createPost } from './state-engine.js';
 import { createGroupRoutes } from './routes/groups.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let passed = 0;
 let run = 0;
@@ -28,9 +29,10 @@ function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(32).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, earned_credit)
-        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'bundled://sprout', 'active', 50)
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 50)
     `).run(pubkey, uniqueCallsign);
+    setMemberPhoto(db, pubkey, 'bundled://sprout');
     // Give member initial offer to satisfy covenant
     createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 10, 'fixed', pubkey, undefined, undefined, [], false);
     return pubkey;

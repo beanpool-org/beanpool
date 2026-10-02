@@ -86,6 +86,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Photo-Keys-Resync-Pw-6613!';
@@ -125,7 +126,7 @@ async function child(): Promise<void> {
     se.initStateEngine();
     if (process.env.PKR_PROMOTE_IN_PROCESS === '1') {
         // A take-over's "role" step finished at this boot, after the state engine read the role as a standby's
-        // (index.ts: initStateEngine, then resumeTakeoverAtBoot), as test-schema-upgrade plays it.
+        // (index.ts: initStateEngine, then resumeTakeoverAtBoot), as test-schema-upgrade-triggers-visitors plays it.
         const { updateLocalConfig } = await import('./config/local-config.js');
         const { resumeTakeoverAtBoot } = await import('./services/takeover.js');
         updateLocalConfig({ nodeRole: 'primary' });
@@ -139,9 +140,10 @@ async function child(): Promise<void> {
             se.seedGenesisMember(a.owner.pk, a.owner.callsign);
             db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(a.owner.pk);
             for (const m of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at, invited_by, invite_code, avatar_url)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', '-30 days'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
-                    .run(m.pk, m.callsign, `INV-${m.callsign.toUpperCase()}`, TINY_PNG);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at, invited_by, invite_code)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now', '-30 days'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
+                    .run(m.pk, m.callsign, `INV-${m.callsign.toUpperCase()}`);
+                setMemberPhoto(db, m.pk, TINY_PNG);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
             }
             return true;

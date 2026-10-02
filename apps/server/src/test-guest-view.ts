@@ -50,7 +50,9 @@
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
  *      since changed is 404, as is a conditional request without one; a member's listings carry keyed URLs, a guest's
- *      none. The recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
+ *      none. A group's own picture (#1486) is keyed on every node: a member's read of the group carries its keyed URL,
+ *      which opens it unsigned; without that key, with a face's, or at another group's address it is 404 to anyone. The
+ *      recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
  *  10. the Beans constructs (an enterprise Alice leads and Bob keeps and backs, a crowdfund Bob runs, a Commons project
  *      Alice proposed): where they are switched on and so is the visitors' view, every read of them is for members
  *      only, trailing slash or not, and a member reads them naming their people; where they are off, 404 to everyone
@@ -287,6 +289,7 @@ async function main(): Promise<void> {
     const { initStateEngine, createPost, createGroup, getPosts } = se;
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
+    const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
     const { getProfileSwitches } = await import('./config/node-profile.js');
     const { writeDirectoryRows } = await import('./engine/directory-cache.js');
     // Before boot, where the faces' keys are decided (engine/avatar-keys.ts); the schema first, as boot would lay it.
@@ -304,9 +307,10 @@ async function main(): Promise<void> {
     // ── the community ──────────────────────────────────────────────────────────────────────────
     const member = (callsign: string, status = 'active'): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, ?, ?, 'seed', ?, ?)`)
-            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`, TINY_PNG);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, ?, ?, 'seed', ?)`)
+            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pk, TINY_PNG);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
@@ -334,7 +338,8 @@ async function main(): Promise<void> {
     const keeperPost = post(grid, 'Sentinel keeper post', KEEPER_AT);
     const bobOffer = post(bob, 'Sentinel sourdough starter', BOB_AT);
     const direct = post(alice, 'Sentinel direct offer for Bob', OFFER_AT, { audienceScope: 'direct', targetPubkey: bob.pk });
-    const club = createGroup({ name: 'Sentinel club', createdBy: alice.pk });
+    // With a picture of its own, which goes out as a keyed URL to its members only (#1486; section 9).
+    const club = createGroup({ name: 'Sentinel club', createdBy: alice.pk, avatarUrl: TINY_PNG });
     const groupPost = post(alice, 'Sentinel club offer', OFFER_AT, { audienceScope: 'group', targetGroupId: club.id });
     const hiddenPost = post(bob, 'Sentinel reported offer', BOB_AT);
     const now = new Date().toISOString();
@@ -463,6 +468,8 @@ async function main(): Promise<void> {
         { path: '/api/messages/msg-sentinel/attachment' },
         { path: '/api/pulse/items/item_sentinel/thumbnail' },
         { path: `/api/avatar/${alice.pk}`, echoes: [alice.pk] },
+        // A group's own picture, without the key only a group read hands out (#1486): 404 to anyone (section 9).
+        { path: `/api/groups/${club.id}/picture` },
     ];
     for (const re of PATTERNS ?? []) {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
@@ -919,9 +926,31 @@ async function main(): Promise<void> {
         const bobKey = new URL(`https://x${bobUrl}`).searchParams.get('k') ?? '';
         assert((await call('GET', null, direct.url!.replace(`k=${k}`, `k=${bobKey}`))).status === 404, "another member's key is 404 for Alice's face");
         assert((await call('GET', null, `/api/avatar/${outsider.pk}?k=${k}`)).status === 404, 'a key for a key with no member is 404');
+        // A group's own picture (#1486): keyed on every node, since a group is its members' read everywhere. The URL a group
+        // read hands its member opens it unsigned, as an <img> asks; without that key, or with a face's, it is 404 to anyone.
+        {
+            const card = await call('GET', alice, `/api/groups/${club.id}`);
+            const pictureUrl = card.body?.avatarUrl as string | undefined;
+            assert(!!pictureUrl && new RegExp(`^/api/groups/${club.id}/picture\\?v=[0-9a-f]+&k=[A-Za-z0-9_-]{22}$`).test(pictureUrl) && !card.text.includes('base64'),
+                `a member's read of the club carries its picture as a keyed URL, never the picture (${pictureUrl})`);
+            const pic = await fetch(`${BASE}${pictureUrl}`);
+            assert(pic.status === 200 && pic.headers.get('content-type') === 'image/png' && Buffer.from(await pic.arrayBuffer()).equals(PNG_BYTES),
+                `that URL opens the picture unsigned, as an <img> asks (got ${pic.status} ${pic.headers.get('content-type')})`);
+            const unkeyed = pictureUrl!.replace(/&k=.*$/, '');
+            const pk = new URL(`https://x${pictureUrl}`).searchParams.get('k') ?? '';
+            for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider], ['a member', alice]] as const) {
+                const r = await call('GET', id, unkeyed);
+                assert(r.status === 404 && r.body?.error === 'Picture not found' && !r.text.includes('base64'),
+                    `${who}: the club's picture without its key is 404 Picture not found (got ${r.status})`);
+            }
+            assert((await call('GET', null, pictureUrl!.replace(`k=${pk}`, `k=${k}`))).status === 404, "a face's key is 404 for the club's picture");
+            assert((await call('GET', null, `/api/groups/${club.id}/picture?k=${pk}`)).status === 200, 'its key alone opens it (the version is for caches)');
+            assert((await call('GET', null, `/api/groups/no-such-group/picture?k=${pk}`)).status === 404, "the club's key is 404 for another group's address");
+        }
         // Alice changes her photo: the old URL and its key open nothing; the new ones do.
         const NEW_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-        db.prepare('UPDATE members SET avatar_url = ?, profile_updated_at = ? WHERE public_key = ?').run(NEW_PNG, new Date().toISOString(), alice.pk);
+        db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), alice.pk);
+        setMemberPhoto(db, alice.pk, NEW_PNG);
         assert((await call('GET', null, direct.url!)).status === 404, 'after a photo change, the old URL and its key are 404');
         const changed = await avatarOf(bob, '/api/community/members', alice);
         assert(!!changed.url && changed.url !== direct.url && (await call('GET', null, changed.url)).status === 200,
@@ -1102,7 +1131,7 @@ async function main(): Promise<void> {
                     `${who}: redeeming a code and a ticket for Alice's key is refused, not signed by her key, and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
             }
             // The card holds the photo itself, as stored: the phone keeps it only if the node can serve it.
-            const photo = (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(alice.pk) as { avatar_url: string }).avatar_url;
+            const photo = getMemberPhoto(db, alice.pk);
             const own = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             const ownTicket = await call('POST', alice, '/api/invite/redeem-offline', { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             assert([own, ownTicket].every(r => r.status === 200 && r.body?.member?.callsign === 'SentinelAlice' && r.body?.member?.avatarUrl === photo),
@@ -1113,7 +1142,9 @@ async function main(): Promise<void> {
         // A face goes out as a keyed link or as the photo itself (the redeem card held the photo). So every member but the
         // pruned account gets a photo no listing, enterprise or crowdfund holds, and the sweep looks for it too.
         const FACE = 'data:image/png;base64,U2VudGluZWwgZmFjZSwgYSBtZW1iZXIncyBvd24=';
-        db.prepare("UPDATE members SET avatar_url = ? WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").run(FACE, pruned.pk);
+        for (const { public_key } of db.prepare("SELECT public_key FROM members WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").all(pruned.pk) as { public_key: string }[]) {
+            setMemberPhoto(db, public_key, FACE);
+        }
 
         // 11d. The sweep.
         /** A write's body, unless the route has its own below: every field a route names someone by, each naming Alice. */
@@ -1208,7 +1239,7 @@ async function main(): Promise<void> {
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
-            'PATCH /api/groups/:id/members/:pubkey', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
+            'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
             'GET /api/home',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',

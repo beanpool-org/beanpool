@@ -20,7 +20,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { getMember, getConversation, isVisitorKey, assertConvenorPowersActive, type Conversation, type Message } from '@beanpool/engine';
-import type { GroupRole, GroupMemberStatus } from '@beanpool/core';
+import { groupPictureUrlOf, type GroupRole, type GroupMemberStatus } from '@beanpool/core';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { participantWriteAt, toThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { getChatMute, unmutedRecipients, type ChatMute } from './chat-mutes.js';
@@ -80,12 +80,13 @@ interface GroupRow {
     slug: string;
     category: string;
     join_policy: string;
-    avatar_url: string | null;
+    /** The group's picture's reference (@beanpool/engine groups.ts setGroupPicture): its URL is made from it. */
+    avatar_ref: string | null;
     created_by: string;
 }
 
 export function loadGroupForThread(groupId: string): GroupRow {
-    const row = db.prepare('SELECT id, name, slug, category, join_policy, avatar_url, created_by FROM groups WHERE id = ?')
+    const row = db.prepare('SELECT id, name, slug, category, join_policy, avatar_ref, created_by FROM groups WHERE id = ?')
         .get(groupId) as GroupRow | undefined;
     if (!row) throw new Error(GROUP_NOT_FOUND);
     return row;
@@ -317,7 +318,7 @@ function memberCandidates(groupId: string, exclude: string): { pubkey: string; c
 
 export function getGroupThreadMessages(groupId: string, limit = 50, offset = 0): EventThreadMessage[] {
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
@@ -338,7 +339,7 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
         messages: getGroupThreadMessages(groupId, limit, offset),
         group: {
             id: group.id, name: group.name, slug: group.slug, category: group.category,
-            joinPolicy: group.join_policy, avatarUrl: group.avatar_url || null,
+            joinPolicy: group.join_policy, avatarUrl: groupPictureUrlOf(group.id, group.avatar_ref),
         },
         role,
         canPost: role !== 'observer',

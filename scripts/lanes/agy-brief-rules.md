@@ -9,6 +9,10 @@
 - If node_modules is missing, run `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
   @beanpool/engine — their dist is shared and goes stale across branches. `pnpm exec tsc --noEmit` in apps/server
   catches type errors; tsx strips types and will NOT.
+- LONG COMMANDS (measured 2026-09-21): any command over ~10 s becomes a background task by itself; that is fine. Poll it
+  with `manage_task` (Action: status) until Status: DONE, then read its output. NEVER end your turn while a task is
+  RUNNING, and never say you are "waiting for" something: poll instead. The CLI kills every background task ~5 s after
+  you stop replying, and four runs in a row ended with nothing because of it.
 - Order: read → edit → commit → push → run the 2-3 suites you touched → push → scripts/test-all.sh LAST. Never run
   the full suite as a "baseline" before editing: one stage did, the baseline consumed its whole budget, and it
   committed nothing.

@@ -6,8 +6,16 @@ CREATE TABLE IF NOT EXISTS members (
     invited_by TEXT REFERENCES members(public_key),
     invite_code TEXT,
     home_node_url TEXT,
-    
-    avatar_url TEXT,
+
+    -- The member's avatar without the photo (member_photos below holds it): what its URL is made from, written with the
+    -- photo by its one writer (@beanpool/engine members.ts setMemberPhoto). NULL: no avatar. A shipped picture's
+    -- `bundled://<name>`, as it is emitted. Otherwise the photo's content version (@beanpool/core avatarRefOf), the URL's
+    -- `v`. So a list, a count or a URL reads no photo: while photos sat in this row, every scan of members read them (at
+    -- ~6,400 photos one full member list ran a 256 MB heap out of memory: the global node's load rehearsal, 2026-10-02).
+    avatar_ref TEXT,
+    -- What member_photos holds for this member, in bytes; NULL: nothing. A copy in pages counts it towards a page
+    -- without reading the photo (engine/copy-pages.ts).
+    avatar_bytes INTEGER,
     bio TEXT,
     contact_value TEXT,
     contact_visibility TEXT,
@@ -38,7 +46,7 @@ CREATE TABLE IF NOT EXISTS members (
     -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
     -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
     -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
-    -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
+    -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)
@@ -128,6 +136,17 @@ CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLA
 -- page and hash slice of a copy, and without it walks every member's row, inline photo and all (at 6,000 members with
 -- 60 KB photos: 7.8 ms a count, 1.2 ms with it).
 CREATE INDEX IF NOT EXISTS idx_members_member_keys ON members(is_visitor, public_key);
+
+-- A member's avatar as they set it: a photo as a data URL (≤ 800 px, as the apps send it), or a shipped picture's
+-- `bundled://<name>`. Out of the members row (members.avatar_ref above), so a scan of members never reads a photo.
+-- Written only with that row's avatar_ref and avatar_bytes (@beanpool/engine members.ts setMemberPhoto), so a write here
+-- stamps the member's row: a standby's copy carries it inside each member's row, as `avatar_url`, where a standby of any
+-- version reads it (engine/replication-manifest.ts). Read by the avatar route (engine/avatar.ts) and by the reads of one
+-- member that hand it out as it is (@beanpool/engine members.ts MEMBER_WITH_PHOTO_SQL).
+CREATE TABLE IF NOT EXISTS member_photos (
+    public_key TEXT PRIMARY KEY,
+    photo TEXT NOT NULL
+);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (
@@ -1199,7 +1218,7 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
-    callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
+    callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
     legacy_credit_floor, earned_surplus, working_capital_ceiling,
@@ -1933,7 +1952,12 @@ CREATE TABLE IF NOT EXISTS groups (
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
-    avatar_url TEXT,
+    -- The group's own picture is in group_pictures (#1486), as a member's photo is in member_photos: this row keeps only
+    -- its reference (@beanpool/core avatarRefOf: its version, or a shipped picture's name), which its URL is made from,
+    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture). db.ts
+    -- moveGroupPicturesOutOfRows moved the pictures out of the old `avatar_url` column.
+    avatar_ref TEXT,
+    avatar_bytes INTEGER,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
     created_by TEXT NOT NULL REFERENCES members(public_key),
     -- The LEAD convenor (2026-09-23). One per group: the creator to begin with, and it moves only by hand-over,
@@ -1950,6 +1974,15 @@ CREATE TABLE IF NOT EXISTS groups (
 CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
 CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
 CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
+
+-- A group's own picture, exactly as it was set (a data URL, bare base64 or a shipped `bundled://` name), out of its row
+-- so no read of groups reads it (#1486; a list of 100 groups with a 1.84 MB picture each ran a 256 MB heap out of
+-- memory). Served by GET /api/groups/:id/picture to a URL carrying its key; travels to a standby in its group's row
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_pictures (
+    group_id TEXT PRIMARY KEY,
+    picture TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS group_members (
     group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,

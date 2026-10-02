@@ -53,6 +53,7 @@ import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
@@ -79,9 +80,10 @@ function keypair(name: string): Id {
 function makeMember(name: string, beans = 40): Id {
     const id = keypair(name);
     db.prepare(
-        `INSERT INTO members (public_key, callsign, joined_at, avatar_url, bio, contact_value, contact_visibility, archetype, status, updated_at)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
-    ).run(id.pk, name, AVATAR, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
+        `INSERT INTO members (public_key, callsign, joined_at, bio, contact_value, contact_visibility, archetype, status, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id.pk, name, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
@@ -135,7 +137,8 @@ const isClosed = (r: Res) => r.status === 403 && r.body?.code === 'account_close
 
 /** What Delete account erases, as the row holds it. */
 const profileOf = (pk: string) => db.prepare(
-    'SELECT callsign, avatar_url, bio, contact_value, contact_visibility, archetype, status FROM members WHERE public_key = ?').get(pk) as Record<string, unknown> | undefined;
+    `SELECT m.callsign, mp.photo AS avatar_url, m.bio, m.contact_value, m.contact_visibility, m.archetype, m.status FROM members m
+     LEFT JOIN member_photos mp ON mp.public_key = m.public_key WHERE m.public_key = ?`).get(pk) as Record<string, unknown> | undefined;
 const erased = (pk: string): boolean => {
     const p = profileOf(pk);
     return !!p && p.status === 'pruned' && p.callsign === 'Deleted Member' && p.avatar_url === null && p.bio === null

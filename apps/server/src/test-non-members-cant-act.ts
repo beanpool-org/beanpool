@@ -78,6 +78,7 @@ import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import { putPushTokenRow } from './services/push-token-seal.js';
 import { lockedDm } from './dm-test-payload.js';
 
@@ -101,9 +102,10 @@ function keypair(callsign: string): Id {
 function makeMember(callsign: string, beans = 100): Id {
     const id = keypair(callsign);
     db.prepare(
-        `INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
-    ).run(id.pubKeyHex, callsign, AVATAR);
+        `INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id.pubKeyHex, callsign);
+    setMemberPhoto(db, id.pubKeyHex, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
     transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
     return id;
@@ -185,7 +187,8 @@ const settle = () => new Promise(r => setTimeout(r, 50));
 const eventRow = (id: string) => db.prepare('SELECT title, event_place_name, event_start_at, event_state, status FROM posts WHERE id = ?').get(id);
 /** A member's account and profile, as the re-key hands it on. */
 const accountOf = (pk: string) => db.prepare(
-    'SELECT callsign, avatar_url, bio, contact_value, status FROM members WHERE public_key = ?').get(pk) as Record<string, unknown> | undefined;
+    `SELECT m.callsign, mp.photo AS avatar_url, m.bio, m.contact_value, m.status FROM members m
+     LEFT JOIN member_photos mp ON mp.public_key = m.public_key WHERE m.public_key = ?`).get(pk) as Record<string, unknown> | undefined;
 
 /** The whole database, table by table, so a sweep can say which table changed, if any did. */
 function snapshot(): Map<string, string> {

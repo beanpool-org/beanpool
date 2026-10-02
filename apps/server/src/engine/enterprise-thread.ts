@@ -10,7 +10,7 @@ import { getMember, getConversation, type Conversation } from '@beanpool/engine'
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 
 export interface EnterpriseThreadMessage {
     id: string;
@@ -121,7 +121,7 @@ export function getEnterpriseThreadMessages(
 ): EnterpriseThreadMessage[] {
     ensureEnterpriseThread(enterprisePubkey);
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
@@ -140,7 +140,7 @@ export function getEnterpriseThreadMessages(
             conversationId: r.conversation_id,
             authorPubkey: r.author_pubkey,
             authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-            authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
+            authorAvatar: avatarUrlOf(r.author_pubkey, r.author_avatar),
             ciphertext: displayCiphertext,
             nonce: r.nonce,
             type: r.type,
@@ -219,7 +219,7 @@ export function postEnterpriseThreadMessage(
                     conversationId: existing.conversation_id,
                     authorPubkey: existing.author_pubkey,
                     authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-                    authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
+                    authorAvatar: avatarUrlOf(authorPubkey, senderMember?.avatar_url),
                     ciphertext: existing.ciphertext,
                     nonce: existing.nonce,
                     type: existing.type,
@@ -248,7 +248,7 @@ export function postEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey,
         authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-        authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
+        authorAvatar: avatarUrlOf(authorPubkey, senderMember?.avatar_url),
         ciphertext,
         nonce,
         type,
@@ -314,7 +314,7 @@ export function removeEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey: msgRow.author_pubkey,
         authorCallsign: authorMember?.callsign || msgRow.author_pubkey?.slice(0, 8),
-        authorAvatar: avatarUrlFor(msgRow.author_pubkey, authorMember?.avatar_url),
+        authorAvatar: avatarUrlOf(msgRow.author_pubkey, authorMember?.avatar_url),
         ciphertext,
         nonce,
         type: 'removed',

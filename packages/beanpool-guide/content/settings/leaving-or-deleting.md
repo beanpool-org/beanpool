@@ -44,7 +44,7 @@ This cannot be undone, even with your 12 words.
 - The block list your community kept for you goes too.
 - If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
-- Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in.
+- Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again as a new account, with new 12 words or a sign-in, from a phone or browser that does not hold this account. The global community refuses the deleted account for good, and a phone that is still in another community keeps it. On such a phone the app says **This account's place in the global community was closed, so it can't join again.** and stops offering the door to that account. The same sentence comes for a member the community removed.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
 

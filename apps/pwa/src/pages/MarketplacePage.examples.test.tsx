@@ -270,7 +270,14 @@ describe('the examples stay on the Market', () => {
             .filter(f => /example-listings'|ExampleListings'/.test(fs.readFileSync(f, 'utf8')))
             .map(f => path.relative(src, f).split(path.sep).join('/'))
             .sort();
-        expect(users).toEqual(['components/ExampleListings.tsx', 'pages/MarketplacePage.tsx']);
+        // Home's Market card shows two of them too, on the same rule (DESIGN-home-dashboard-fable.md §6.1): beside the
+        // answer's listings, never one of them, with no tap, and only while the node says `examples` (checked below).
+        expect(users).toEqual(['components/ExampleListings.tsx', 'pages/HomePage.tsx', 'pages/MarketplacePage.tsx']);
+        const home = fs.readFileSync(path.join(src, 'pages/HomePage.tsx'), 'utf8');
+        const drawn = home.slice(home.indexOf('data-testid="home-examples"'), home.indexOf('EXAMPLES_NOTE}'));
+        expect(drawn).toMatch(/EXAMPLE_LISTINGS\.slice\(0, 2\)\.map/);
+        expect(drawn).not.toMatch(/onClick|href=|onKeyDown|tabIndex|onNavigate|HomeLine/);
+        expect(home).toMatch(/const examples = m\.examples && /);
         // And the Market draws them outside its posts: the component takes no post and hands nothing back.
         const component = fs.readFileSync(path.join(src, 'components/ExampleListings.tsx'), 'utf8');
         expect(component).toMatch(/export function ExampleListings\(\)/);

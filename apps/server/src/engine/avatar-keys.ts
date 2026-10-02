@@ -10,16 +10,22 @@
  * visitor's listings carry no face (the engine's guestPost). No app changes: every app renders the URL it is given.
  *
  * - The key is `base64url(HMAC-SHA256(secret, id + '|' + version)).slice(0, 22)` (132 bits). `version` is the photo's
- *   content version (@beanpool/core avatarVersionOf), so a new photo has a new key, and the old key opens nothing; it
- *   changes exactly when the URL's `v` does, which already brings members the new URL.
+ *   content version (@beanpool/core avatarVersionOf, kept in the members row's avatar_ref), so a new photo has a new
+ *   key, and the old key opens nothing; it changes exactly when the URL's `v` does, which already brings members the
+ *   new URL.
  * - The secret is 32 random bytes in `node_config.avatarKeySecret`, written once: it travels with the database (file
  *   and sealed backups, a restore). A server that has no copy of it (a standby, a take-over) mints its own, and members'
  *   saved URLs show initials until their next members sync brings the new ones: a nuisance, never a leak.
  * - Decided at boot, like the rest of what a node runs as: an operator who switches `guestListingsOnly` restarts the
  *   node, so the URLs it emits and the URLs it serves always agree.
+ *
+ * A GROUP's own picture (#1486) is served the same way, at `/api/groups/:id/picture`, and keyed on EVERY node: a group is
+ * a members' read everywhere (https-server.ts gates every /api/groups read), so its picture goes only to a URL a group read
+ * handed out. Its key is the same HMAC with the same secret over `'group-picture|' + id + '|' + version`, so it can never
+ * be a member's key, and a new picture has a new key.
  */
 import crypto from 'node:crypto';
-import { avatarVersionOf, configureAvatarKeys, isServableAvatarValue } from '@beanpool/core';
+import { avatarVersionOfRef, configureAvatarKeys, configureGroupPictureKeys } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 
@@ -56,15 +62,34 @@ function keyFor(s: crypto.KeyObject, id: string, version: string): string {
  * asks for it; elsewhere neither. Returns whether faces are keyed.
  */
 export function installAvatarKeysAtBoot(): boolean {
+    // Groups' pictures are keyed on every node (above).
+    const s = crypto.createSecretKey(avatarKeySecret());
+    groupSecret = s;
+    configureGroupPictureKeys((id, version) => keyFor(s, `group-picture|${id}`, version));
     if (!getProfileSwitches().guestListingsOnly) {
         secret = null;
         configureAvatarKeys(null);
         return false;
     }
-    const s = crypto.createSecretKey(avatarKeySecret());
     secret = s;
     configureAvatarKeys((id, version) => keyFor(s, id, version));
     return true;
+}
+
+// The secret groups' pictures are keyed with: installed at every boot (installAvatarKeysAtBoot).
+let groupSecret: crypto.KeyObject | null = null;
+
+/**
+ * Whether `k` is the key for group `groupId`'s picture as it is now (the row's avatar_ref). False for anything else, a
+ * picture that isn't there and a server that installed no keys included: the route answers each as no picture.
+ */
+export function groupPictureKeyMatches(groupId: string, k: unknown): boolean {
+    if (!groupSecret || typeof k !== 'string' || k.length !== KEY_CHARS) return false;
+    const row = db.prepare('SELECT avatar_ref FROM groups WHERE id = ?').get(groupId) as { avatar_ref: string | null } | undefined;
+    if (!row || !row.avatar_ref) return false;
+    const want = Buffer.from(keyFor(groupSecret, `group-picture|${groupId}`, avatarVersionOfRef(row.avatar_ref)));
+    const got = Buffer.from(k);
+    return got.length === want.length && crypto.timingSafeEqual(got, want);
 }
 
 /** Whether this node serves a face only to a URL with its key (installAvatarKeysAtBoot). */
@@ -78,10 +103,10 @@ export function avatarKeysRequired(): boolean {
  */
 export function avatarKeyMatches(pubkey: string, k: unknown): boolean {
     if (!secret || typeof k !== 'string' || k.length !== KEY_CHARS) return false;
-    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(pubkey) as { avatar_url: string | null } | undefined;
-    if (!row || !isServableAvatarValue(row.avatar_url)) return false;
-    // The version avatarUrlFor put in the URL, from the same trimmed value.
-    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOf(pubkey, row.avatar_url.trim())));
+    const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pubkey) as { avatar_ref: string | null } | undefined;
+    if (!row || !row.avatar_ref) return false;
+    // The version avatarUrlOf put in the URL, from the row's reference: the photo is never read.
+    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOfRef(row.avatar_ref)));
     const got = Buffer.from(k);
     return got.length === want.length && crypto.timingSafeEqual(got, want);
 }

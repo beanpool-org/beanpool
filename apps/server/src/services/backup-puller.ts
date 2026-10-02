@@ -2046,7 +2046,7 @@ function copyWaitNow(now: number): CopyWait | null {
     }
     if (w.kind !== 'first') words.push(deltaTooBig ? 'No delta either: the changes since the last copy are more than a delta takes.' : 'Deltas carry on meanwhile.');
     if (kept) words.push(`The ${kept} photo${kept === 1 ? '' : 's'} fetched so far ${kept === 1 ? 'is' : 'are'} kept, so the next asks only for the rest.`);
-    words.push('Resync now asks for a force-resync at once.');
+    words.push('Force Full Resync, in Settings, asks for one at once.');
     return { until, kind: w.kind, cause: w.cause, tries: w.tries, keptObjects: kept, reason: w.reason, waitingOn: words.join(' ') };
 }
 

@@ -113,7 +113,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-const asked = cardsToAsk(null, 'local');
+const asked = cardsToAsk(null);
 const homeReads = () => node.requests.filter(r => new URL(r.url).pathname === '/api/home');
 
 describe('one signed read for the whole screen, and the 304', () => {

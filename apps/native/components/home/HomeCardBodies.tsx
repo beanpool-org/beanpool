@@ -11,7 +11,7 @@ import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
     RSVP_WORDS, beansLines, communityLines, dealsLine, decideLine, enterpriseLine, eventDay, eventLine, formatBeans,
-    groupLine, joinedLine, needsLineA11y, pulseTitle,
+    groupLine, joinedLine, needsLineA11y, pulseTitle, sentence,
     type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
 import { FabAware, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
@@ -109,7 +109,7 @@ export function DealsBody({ card, colors }: { card: NonNullable<HomeCards['deals
         <HomeRow
             colors={colors}
             text={line}
-            a11y={`${line}. Opens ${w ? 'the deal' : 'your deals'}.`}
+            a11y={`${sentence(line)} Opens ${w ? 'the deal' : 'your deals'}.`}
             strong={!!w}
             onPress={() => (w
                 ? router.push({ pathname: '/post/[id]', params: { id: w.postId, txId: w.txId } })
@@ -127,7 +127,7 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
             text={card.name}
             sub={line}
             strong
-            a11y={`${card.name}: ${line}. Opens the enterprise.`}
+            a11y={`${card.name}: ${sentence(line)} Opens the enterprise.`}
             onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } })}
             testID="home-enterprise-line"
         />
@@ -147,7 +147,7 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                         key={e.id}
                         colors={colors}
                         text={eventLine(e)}
-                        a11y={`${eventDay(e.startsAt)}: ${e.title}${e.place ? `, at ${e.place}` : ''}${rsvp ? `. You're marked ${rsvp.toLowerCase()}` : ''}${far ? `. ${far} away` : ''}. Opens the event.`}
+                        a11y={`${eventDay(e.startsAt)}: ${sentence(`${e.title}${e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: e.id } })}
                         right={trailing ? <Text style={s.trailing}>{trailing}</Text> : undefined}
                         testID={`home-event-${e.id}`}
@@ -189,7 +189,7 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
                         colors={colors}
                         text={p.title}
                         sub={facts || categoryLabel(p.category)}
-                        a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${p.title}. ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
+                        a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${sentence(p.title)} ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
                         left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
                         subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
@@ -207,7 +207,7 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
 export function DecideBody({ card, colors, now }: { card: NonNullable<HomeCards['decide']>; colors: AppColors; now: number }) {
     const line = decideLine(card, now);
     return (
-        <HomeRow colors={colors} text={line} a11y={`${line}. Opens Decide.`}
+        <HomeRow colors={colors} text={line} a11y={`${sentence(line)} Opens Decide.`}
             onPress={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } })} testID="home-decide-line" />
     );
 }
@@ -223,7 +223,7 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
                         colors={colors}
                         text={line}
                         strong={g.unread > 0 && !g.muted}
-                        a11y={`${line}. Opens the chat.`}
+                        a11y={`${sentence(line)} Opens the chat.`}
                         onPress={() => router.push(g.kind === 'event'
                             ? { pathname: '/chat/[id]', params: { id: g.id, event: '1' } }
                             : { pathname: '/chat/[id]', params: { id: g.id, [g.kind]: '1' } })}
@@ -276,7 +276,7 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
                         colors={colors}
                         text={title}
                         sub={`by ${p.callsign}`}
-                        a11y={`${title}, by ${p.callsign}. Opens the Pulse.`}
+                        a11y={`${title}, by ${sentence(p.callsign)} Opens the Pulse.`}
                         onPress={() => router.push('/(tabs)/pulse')}
                         left={<Thumb uri={resolvePulseThumbnailUrl(nodeUrl, p)} emoji="📡" colors={colors} />}
                         testID={`home-pulse-${p.id}`}
@@ -291,7 +291,7 @@ export function PulseBody({ card, nodeUrl, colors }: { card: NonNullable<HomeCar
 export function BeansBody({ card, colors }: { card: NonNullable<HomeCards['beans']>; colors: AppColors }) {
     const { main, sub } = beansLines(card);
     return (
-        <HomeRow colors={colors} text={main} sub={sub} strong a11y={`${main}.${sub ? ` ${sub}` : ''} Opens your Ledger.`}
+        <HomeRow colors={colors} text={main} sub={sub} strong a11y={`${sentence(main)}${sub ? ` ${sentence(sub)}` : ''} Opens your Ledger.`}
             onPress={() => router.push('/(tabs)/ledger')} testID="home-beans-line" />
     );
 }
@@ -300,7 +300,7 @@ export function NoticesBody({ card, colors, onOpen }: { card: NonNullable<HomeCa
     const more = card.unseen > 1 ? ` · ${card.unseen - 1} more` : '';
     return (
         <HomeRow colors={colors} text={card.first.title} sub={`${card.first.line}${more}`} strong
-            a11y={`${card.first.title}. ${card.first.line}${card.unseen > 1 ? `. ${card.unseen - 1} more unread` : ''}. Opens it.`}
+            a11y={`${sentence(card.first.title)} ${sentence(card.first.line)}${card.unseen > 1 ? ` ${card.unseen - 1} more unread.` : ''} Opens it.`}
             onPress={() => onOpen(card.first.id)} testID="home-notice-line" />
     );
 }

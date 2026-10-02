@@ -56,7 +56,9 @@ export function FabAware({ id, children, style }: { id: string; children: React.
 
 // ── The card ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export function HomeCard({ caption, colors, onMenu, menuRef, right, children, testID, accent }: {
+export function HomeCard({ id, caption, colors, onMenu, menuRef, right, children, testID, accent }: {
+    /** For the floating button's band: the caption's own targets (the "…", "Tune") report where they rest. */
+    id: string;
     caption: string;
     colors: AppColors;
     /** The card's "…" (Hide, Move up, Move down); absent on the cards that can't be hidden or moved. */
@@ -74,21 +76,27 @@ export function HomeCard({ caption, colors, onMenu, menuRef, right, children, te
     return (
         <View style={[s.card, accent && s.cardAccent]} testID={testID}>
             <View style={s.captionRow}>
-                <Text style={s.caption} accessibilityRole="header" maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
+                {/* Drawn in capitals; read in its own words (a screen reader can spell an all-caps word out). */}
+                <Text style={s.caption} accessibilityRole="header" accessibilityLabel={caption} maxFontSizeMultiplier={CAPTION_MAX_SCALE} numberOfLines={2}>
                     {caption}
                 </Text>
-                {right}
-                {onMenu && (
-                    <Pressable
-                        ref={menuRef}
-                        onPress={onMenu}
-                        style={({ pressed }) => [s.menuButton, pressed && s.pressed]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Card options for ${caption}`}
-                        testID={testID ? `${testID}-menu` : undefined}
-                    >
-                        <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
-                    </Pressable>
+                {(right || onMenu) && (
+                    // The "…" sits at the card's right edge, where "+ ADD POST" floats: it steps aside for it too.
+                    <FabAware id={`${id}:caption`} style={s.captionTargets}>
+                        {right}
+                        {onMenu && (
+                            <Pressable
+                                ref={menuRef}
+                                onPress={onMenu}
+                                style={({ pressed }) => [s.menuButton, pressed && s.pressed]}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Card options for ${caption}`}
+                                testID={testID ? `${testID}-menu` : undefined}
+                            >
+                                <MaterialCommunityIcons name="dots-horizontal" size={22} color={colors.text.secondary} />
+                            </Pressable>
+                        )}
+                    </FabAware>
                 )}
             </View>
             {children}
@@ -206,6 +214,7 @@ function make(colors: AppColors) {
         caption: {
             flex: 1, fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', color: colors.text.secondary,
         },
+        captionTargets: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
         menuButton: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, marginRight: -12, alignItems: 'center', justifyContent: 'center', borderRadius: HOME_TARGET_DP / 2, flexShrink: 0 },
         pressed: { backgroundColor: colors.surface.subtle },
         row: { flexDirection: 'row', alignItems: 'center', minHeight: HOME_TARGET_DP, paddingVertical: 6, gap: 10 },

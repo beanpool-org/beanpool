@@ -95,7 +95,7 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
                         </Text>
                         {shown.map(id => row(id, true))}
                         {hidden.length > 0 && (
-                            <Text style={[editHomeStyles.section, { color: colors.text.secondary }]} accessibilityRole="header">Hidden</Text>
+                            <Text style={[editHomeStyles.section, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel="Hidden">Hidden</Text>
                         )}
                         {hidden.map(id => row(id, false))}
                         <Pressable

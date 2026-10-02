@@ -248,10 +248,11 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 /**
  * The cards to ask the node for (`cards=`), in the catalogue's order so the address is the same each time and a repeat
  * read can be a 304: what this build draws and the answer carries, minus the member's hidden cards (never `needs` or
- * `community`). On the global node no `steps` in H2: its global lines are H4's.
+ * `community`). Never decided by what the last answer said of the node (its profile): a list built on a stale answer
+ * would leave out a card the node now has (measured on the emulator: First steps went missing after a switch).
  */
-export function cardsToAsk(layout: HomeLayout | null, profile: string | null | undefined): HomeCardId[] {
-    return HOME_DRAWN.filter(id => !NO_DATA.has(id) && !isHidden(layout, id) && !(id === 'steps' && profile === 'global'));
+export function cardsToAsk(layout: HomeLayout | null): HomeCardId[] {
+    return HOME_DRAWN.filter(id => !NO_DATA.has(id) && !isHidden(layout, id));
 }
 
 /** The member's starred categories: the account's, else the phone's own (the Market's For You stars, `bp_fav_categories`). */
@@ -365,11 +366,19 @@ export function voteLabelHere(item: HomeNeedsItem, now: number): string {
 const sameDeal = (a: NeedsYouTarget, b: NeedsYouTarget) => a.to === 'deal' && b.to === 'deal' && a.txId === b.txId;
 
 /**
- * One list, as the header shows it: the phone's own deals and unread messages (fresher, no request), the node's admin
- * work, votes and group lines; the node's deal or message line only when the phone's couldn't be read. Highest first.
+ * One list, as the header shows it, highest first:
+ * - the node's admin work, votes and group lines;
+ * - unread messages from the phone's own database when it could be read (it knows at once what was read here), else
+ *   the node's line;
+ * - a deal waiting from the phone's database when it has one, else the node's: the phone's copy of the trades can lag
+ *   the node's until the next sync (measured on the emulator: a request made to the member showed in the answer, not yet
+ *   on the phone), and a deal is the line that costs a member something if missed.
  */
 export function mergeNeeds(node: readonly HomeNeedsItem[] | null | undefined, local: LocalNeeds | null, now: number): NeedsYouEntry[] {
-    const fromNode = (node ?? []).filter(i => !local?.kinds.has(i.kind))
+    const phoneHas = (kind: NeedsYouKind) => kind === 'message'
+        ? !!local?.kinds.has('message')
+        : kind === 'deal' && !!local?.entries.some(e => e.kind === 'deal');
+    const fromNode = (node ?? []).filter(i => !phoneHas(i.kind))
         .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
@@ -380,9 +389,18 @@ export function mergeNeeds(node: readonly HomeNeedsItem[] | null | undefined, lo
     return [...fromPhone, ...fromNode].sort((a, b) => rank(a.kind) - rank(b.kind));
 }
 
+/**
+ * Text a member or the node wrote, ended with one stop, so a screen reader's "… Opens the listing." never reads a
+ * doubled one ("kept it up.. Opens it.", measured on the emulator).
+ */
+export function sentence(text: string): string {
+    const t = text.trim();
+    return /[.!?…]$/.test(t) ? t : `${t}.`;
+}
+
 /** A line of Needs you in words that say what waits, never by colour alone (§10): the accent has a ▲ too. */
 export function needsLineA11y(e: NeedsYouEntry): string {
-    return e.accent ? `${e.label}. Waiting on you.` : e.label;
+    return e.accent ? `${sentence(e.label)} Waiting on you.` : e.label;
 }
 
 // ── Each card's words ─────────────────────────────────────────────────────────────────────────────────────────────

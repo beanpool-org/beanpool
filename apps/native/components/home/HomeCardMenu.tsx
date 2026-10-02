@@ -53,7 +53,7 @@ export function HomeCardMenu({ visible, name, colors, canHide, canUp, canDown, o
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
             <Pressable style={s.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close card options">
                 <Pressable style={[s.sheet, { backgroundColor: colors.surface.card, paddingBottom: 16 + insets.bottom }]} onPress={() => {}} accessible={false}>
-                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" numberOfLines={2}>{name}</Text>
+                    <Text style={[s.title, { color: colors.text.secondary }]} accessibilityRole="header" accessibilityLabel={`Card options for ${name}`} numberOfLines={2}>{name}</Text>
                     {item('Hide', `Hide ${name}`, canHide, onHide, 'home-menu-hide')}
                     {item('Move up', `Move ${name} up`, canUp, onUp, 'home-menu-up')}
                     {item('Move down', `Move ${name} down`, canDown, onDown, 'home-menu-down')}

@@ -198,7 +198,7 @@ export default function HomeScreen() {
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout, cached?.answer.profile);
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout);
         const read = await loadHome(u, id, asked, cached);
         if (identityRef.current?.publicKey !== id.publicKey) return;
         if (read.kind === 'answer') {
@@ -270,7 +270,7 @@ export default function HomeScreen() {
         void writePhoneLayout(id.publicKey, url, next);
         void pushLayout(next);
         // A card that comes back was never asked for: read Home again for it.
-        const shownAgain = cardsToAsk(next, storedRef.current?.answer.profile).some(c => !cardsToAsk(before, storedRef.current?.answer.profile).includes(c));
+        const shownAgain = cardsToAsk(next).some(c => !cardsToAsk(before).includes(c));
         if (shownAgain) void refreshRef.current('layout');
     }, [url, pushLayout]);
 
@@ -344,7 +344,7 @@ export default function HomeScreen() {
         const caption = cardCaption(id, answer);
         const menu = canHideCard(id) ? () => setMenuFor(id) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
-            <HomeCard caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
+            <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
             </HomeCard>
         );

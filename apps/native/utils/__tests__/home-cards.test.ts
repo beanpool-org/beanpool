@@ -16,7 +16,7 @@ import {
     HOME_CARD_IDS, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     createDoorbellDebounce, decideLine, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     hideCard, isHidden, joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
-    resetLayout, safetyWord, showCard, starredFirst, stepLines, voteLabelHere,
+    needsLineA11y, resetLayout, safetyWord, sentence, showCard, starredFirst, stepLines, voteLabelHere,
     type HomeAnswer, type HomeCards, type HomeLayout,
 } from '../home-cards';
 import { dismissedOneWayBack, oneWayBackPlace, withAccountDismissal, ONE_WAY_BACK_WEEK_MS, type OneWayBack } from '../one-way-back';
@@ -206,17 +206,25 @@ describe('the layout (§4)', () => {
     it('a hidden card is never drawn, nor asked for; `needs` and `community` can\'t be hidden', () => {
         const l = layout({ hidden: ['market', 'beans'] });
         expect(cardsToDraw(full, l, ctx({ interests: ['food'] }))).toEqual(['events', 'community']);
-        expect(cardsToAsk(l, 'local')).not.toContain('market');
-        expect(cardsToAsk(l, 'local')).not.toContain('beans');
+        expect(cardsToAsk(l)).not.toContain('market');
+        expect(cardsToAsk(l)).not.toContain('beans');
         expect(hideCard(null, 'needs', NOW)).toBeNull();
         expect(hideCard(null, 'community', NOW)).toBeNull();
         expect(readHomeLayout({ v: 1, hidden: ['needs', 'community', 'pulse'] })!.hidden).toEqual(['pulse']);
     });
 
-    it('cards= is the catalogue\'s order, the same each time: no `find`, no data-less cards, no global First steps in H2', () => {
-        expect(cardsToAsk(null, 'local')).toEqual(['needs', 'safety', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
-        expect(cardsToAsk(null, 'global')).not.toContain('steps');
-        expect(cardsToAsk(layout({ order: ['beans', 'market'] }), 'local')).toEqual(cardsToAsk(null, 'local'));
+    it('cards= is the catalogue\'s order, the same each time: no `find`, no data-less cards; a move doesn\'t change it', () => {
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+        expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(null));
+    });
+
+    it('cards= never depends on what the last answer said of the node: a community that changed still gets First steps', () => {
+        // Measured on the emulator: built from a cached global answer, the list left out `steps`, and the community's
+        // First steps never came. The list is the layout's alone now; whether a card is drawn is cardsToDraw's.
+        expect(cardsToAsk.length).toBe(1);
+        expect(cardsToAsk(null)).toContain('steps');
+        const global = answer({ profile: 'global', cards: { steps: steps(), community: { name: 'G', members: 9 } } });
+        expect(cardsToDraw(global, null, ctx({ interests: ['food'] }))).not.toContain('steps');
     });
 
     it('hide, show again, and the date moves on each edit', () => {
@@ -342,9 +350,12 @@ describe('Needs you: the phone\'s own lines and the node\'s, as the header shows
         expect(merged.find(e => e.kind === 'deal')!.label).toBe('A deal is waiting for you: Sourdough');
     });
 
-    it('nothing waiting on the phone: no deal or message line, even if the node\'s answer is older', () => {
+    it('the phone\'s trades not synced yet: the node\'s deal line still shows (measured on the emulator); unread is the phone\'s', () => {
         const merged = mergeNeeds(node, localNeeds(ME, NOW, [], []), NOW);
-        expect(merged.map(e => e.kind)).toEqual(['admin', 'vote', 'group']);
+        expect(merged.map(e => e.kind)).toEqual(['admin', 'deal', 'vote', 'group']);
+        expect(merged.find(e => e.kind === 'deal')!.label).toBe('A deal is waiting for you: Sourdough');
+        // Read on this phone a moment ago: the node's older unread line is not shown.
+        expect(merged.some(e => e.kind === 'message')).toBe(false);
     });
 
     it('a vote\'s closing in the member\'s own time ("tonight"), from the node\'s hours', () => {
@@ -383,6 +394,14 @@ describe('each card\'s words', () => {
         expect(joinedLine({ count7d: 2, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }, { callsign: 'Kofi', avatarUrl: null }] })).toBe('Ana and Kofi joined this week.');
         expect(joinedLine({ count7d: 1, radiusKm: null, names: [{ callsign: 'Ana', avatarUrl: null }] })).toBe('Ana joined this week.');
         expect(joinedLine({ count7d: 1, radiusKm: 50 })).toBe('1 person within 50 km joined this week.');
+    });
+
+    it('a screen reader\'s label ends member text with one stop (measured on the emulator: "kept it up.. Opens it.")', () => {
+        expect(sentence('A moderator kept it up.')).toBe('A moderator kept it up.');
+        expect(sentence('Mend clothes')).toBe('Mend clothes.');
+        expect(sentence('Who has a drill?  ')).toBe('Who has a drill?');
+        expect(needsLineA11y({ kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you: Bread.', target: { to: 'my-deals' } }))
+            .toBe('A deal is waiting for you: Bread. Waiting on you.');
     });
 
     it('deals, enterprise, decide, groups, an event\'s day', () => {

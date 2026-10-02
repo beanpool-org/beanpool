@@ -37,7 +37,8 @@ import {
     isJoinPolicy,
     isGroupCategory,
     isGroupMemberStatus,
-    DEFAULT_GROUP_CATEGORY
+    DEFAULT_GROUP_CATEGORY,
+    avatarUrlOf
 } from '@beanpool/core';
 import { isSuspendedAccount } from './members.js';
 import { likeContains } from './like.js';
@@ -171,6 +172,16 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
     return created;
 }
 
+/**
+ * A member's photo as a group read hands it out: its URL (avatarUrlOf, from the row's avatar_ref), never the photo, or
+ * undefined for none. A roster, a list of groups and every group a broadcast carries name people by the row; reading
+ * each one's photo (~27 KB) ran a 256 MB heap out of memory at one open group of ~6,400 members with photos (#1478),
+ * as the member list did before #1475. Both apps render the URL as they render the member list's.
+ */
+function memberAvatarUrl(publicKey: string | null | undefined, avatarRef: string | null | undefined): string | undefined {
+    return publicKey ? avatarUrlOf(publicKey, avatarRef) ?? undefined : undefined;
+}
+
 export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group | null {
     // convenor_pubkey is the LEAD convenor: "the group's convenor", wherever one name is shown, is the person who
     // leads it. Group info in both apps reads these fields, so naming the lead there needs no second query.
@@ -179,10 +190,9 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
-               mp.photo as convenor_avatar_url
+               m.avatar_ref as convenor_avatar_ref
         FROM groups g
         LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
-        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE g.id = ? OR g.slug = ?
     `).get(idOrSlug, idOrSlug) as any;
 
@@ -193,9 +203,8 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
     let viewerInvitedBy: { pubkey: string; callsign?: string; avatarUrl?: string } | undefined;
     if (viewerPubkey) {
         const membership = db.prepare(`
-            SELECT gm.role, gm.status, gm.invited_by, inv.callsign AS inviter_callsign, invp.photo AS inviter_avatar
+            SELECT gm.role, gm.status, gm.invited_by, inv.callsign AS inviter_callsign, inv.avatar_ref AS inviter_avatar_ref
             FROM group_members gm LEFT JOIN members inv ON inv.public_key = gm.invited_by
-            LEFT JOIN member_photos invp ON invp.public_key = inv.public_key
             WHERE gm.group_id = ? AND gm.member_pubkey = ?
         `).get(row.id, viewerPubkey) as any;
         if (membership) {
@@ -207,7 +216,7 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
                 viewerInvitedBy = {
                     pubkey: membership.invited_by,
                     callsign: membership.inviter_callsign || undefined,
-                    avatarUrl: membership.inviter_avatar || undefined,
+                    avatarUrl: memberAvatarUrl(membership.invited_by, membership.inviter_avatar_ref),
                 };
             }
         }
@@ -227,7 +236,7 @@ export function getGroup(db: Db, idOrSlug: string, viewerPubkey?: string): Group
         memberCount: row.member_count ?? 0,
         convenorPubkey: row.convenor_pubkey || undefined,
         convenorCallsign: row.convenor_callsign || undefined,
-        convenorAvatarUrl: row.convenor_avatar_url || undefined,
+        convenorAvatarUrl: memberAvatarUrl(row.convenor_pubkey, row.convenor_avatar_ref),
         leadPubkey: row.convenor_pubkey || null,
         leadCallsign: row.convenor_callsign || undefined,
         viewerRole,
@@ -242,10 +251,9 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
                (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'active') as member_count,
                ${leadPubkeySql('g')} as convenor_pubkey,
                m.callsign as convenor_callsign,
-               mp.photo as convenor_avatar_url
+               m.avatar_ref as convenor_avatar_ref
         FROM groups g
         LEFT JOIN members m ON m.public_key = ${leadPubkeySql('g')}
-        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE 1=1
     `;
     const params: any[] = [];
@@ -318,7 +326,7 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
         memberCount: row.member_count ?? 0,
         convenorPubkey: row.convenor_pubkey || undefined,
         convenorCallsign: row.convenor_callsign || undefined,
-        convenorAvatarUrl: row.convenor_avatar_url || undefined,
+        convenorAvatarUrl: memberAvatarUrl(row.convenor_pubkey, row.convenor_avatar_ref),
         leadPubkey: row.convenor_pubkey || null,
         leadCallsign: row.convenor_callsign || undefined,
         viewerRole: viewerMap.get(row.id)?.role,
@@ -328,10 +336,9 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
 
 export function getGroupMembers(db: Db, groupId: string, filter?: { status?: GroupMemberStatus; role?: GroupRole }): GroupMember[] {
     let query = `
-        SELECT gm.*, m.callsign, mp.photo AS avatar_url
+        SELECT gm.*, m.callsign, m.avatar_ref
         FROM group_members gm
         LEFT JOIN members m ON m.public_key = gm.member_pubkey
-        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE gm.group_id = ?
     `;
     const params: any[] = [groupId];
@@ -371,16 +378,17 @@ export function getGroupMembers(db: Db, groupId: string, filter?: { status?: Gro
         invitedBy: r.invited_by || undefined,
         updatedAt: r.updated_at,
         callsign: r.callsign || undefined,
-        avatarUrl: r.avatar_url || undefined
+        avatarUrl: memberAvatarUrl(r.member_pubkey, r.avatar_ref)
     }));
 }
 
+/** One roster row, its photo as the roster gives it (memberAvatarUrl): what a join, an approval or a role change answers
+ *  with, and what the group's members are sent when it happens. */
 export function getGroupMember(db: Db, groupId: string, memberPubkey: string): GroupMember | null {
     const row = db.prepare(`
-        SELECT gm.*, m.callsign, mp.photo AS avatar_url
+        SELECT gm.*, m.callsign, m.avatar_ref
         FROM group_members gm
         LEFT JOIN members m ON m.public_key = gm.member_pubkey
-        LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE gm.group_id = ? AND gm.member_pubkey = ?
     `).get(groupId, memberPubkey) as any;
 
@@ -394,7 +402,7 @@ export function getGroupMember(db: Db, groupId: string, memberPubkey: string): G
         invitedBy: row.invited_by || undefined,
         updatedAt: row.updated_at,
         callsign: row.callsign || undefined,
-        avatarUrl: row.avatar_url || undefined
+        avatarUrl: memberAvatarUrl(row.member_pubkey, row.avatar_ref)
     };
 }
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
-import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -2120,17 +2120,22 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     };
 }
 
+/**
+ * Every project, newest first. An enterprise's photo, where it stands as the project's (no photos of its own), is its URL
+ * (avatarUrlOf, from the row's avatar_ref), never the photo: a list reads no member's photo (#1478, as the member list
+ * since #1475). The one project's read (getCrowdfundProject) still hands it out as it is stored.
+ */
 export function getCrowdfundProjects(): ProjectRow[] {
-    const enterprises = db.prepare(`
-        SELECT m.public_key, m.callsign, mp.photo AS avatar_url, m.bio, m.purpose,
+    const enterprises = (db.prepare(`
+        SELECT m.public_key, m.callsign, m.avatar_ref, m.bio, m.purpose,
                m.goal_amount, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
-        FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
+        FROM members m
         WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
-    `).all() as any[];
+    `).all() as any[]).map(e => ({ ...e, avatar_url: avatarUrlOf(e.public_key, e.avatar_ref) }));
 
     const projectMap = new Map<string, any>();
     try {

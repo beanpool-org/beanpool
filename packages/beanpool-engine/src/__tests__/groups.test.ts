@@ -9,6 +9,7 @@ import {
     handOverGroupLead,
     listGroups,
     getGroupMembers,
+    getGroupMember,
     joinGroup,
     isGroupConvenor,
     isGroupMember,
@@ -184,6 +185,29 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.strictEqual(members.length, 1);
         assert.strictEqual(members[0].role, 'convenor');
         assert.strictEqual(members[0].status, 'active');
+    });
+
+    it('a group read gives each photo as its URL (avatar_ref), never the photo (#1478)', () => {
+        // A photo in member_photos that no read may hand out, and each member's reference, as setMemberPhoto writes them.
+        db.prepare("UPDATE members SET avatar_ref = 'a1b2c3d4' WHERE public_key = 'alice_pub'").run();
+        db.prepare("UPDATE members SET avatar_ref = 'bundled://leaf' WHERE public_key = 'bob_pub'").run();
+        db.prepare("INSERT INTO member_photos (public_key, photo) VALUES ('alice_pub', 'data:image/jpeg;base64,PHOTO'), ('bob_pub', 'bundled://leaf')").run();
+        const group = createGroup(db, { name: 'Faces', joinPolicy: 'invite_only', createdBy: 'alice_pub' });
+        inviteGroupMember(db, group.id, 'alice_pub', 'bob_pub');
+        joinGroup(db, group.id, 'bob_pub');
+        inviteGroupMember(db, group.id, 'alice_pub', 'carol_pub');
+
+        const alice = '/api/avatar/alice_pub?size=thumb&v=a1b2c3d4';
+        const rows = getGroupMembers(db, group.id).sort((a, b) => a.memberPubkey.localeCompare(b.memberPubkey));
+        assert.deepStrictEqual(rows.map(r => [r.memberPubkey, r.status, r.avatarUrl]),
+            [['alice_pub', 'active', alice], ['bob_pub', 'active', 'bundled://leaf'], ['carol_pub', 'invited', undefined]]);
+        assert.ok(!('avatarUrl' in JSON.parse(JSON.stringify(rows[2]))), 'no photo: no avatarUrl in the answer, as before');
+        assert.strictEqual(getGroupMember(db, group.id, 'alice_pub')?.avatarUrl, alice);
+        assert.strictEqual(getGroup(db, group.id)?.convenorAvatarUrl, alice);
+        assert.strictEqual(listGroups(db, {}, 'alice_pub')[0]?.convenorAvatarUrl, alice);
+        assert.deepStrictEqual(getGroup(db, group.id, 'carol_pub')?.viewerInvitedBy, { pubkey: 'alice_pub', callsign: 'Alice', avatarUrl: alice });
+        const everything = JSON.stringify([rows, getGroup(db, group.id, 'carol_pub'), listGroups(db, {}, 'alice_pub')]);
+        assert.ok(!everything.includes('PHOTO'), 'no group read carries the photo');
     });
 
     it('handles open join policy', () => {

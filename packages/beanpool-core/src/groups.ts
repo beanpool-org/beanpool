@@ -78,11 +78,12 @@ export interface Group {
     currentUserRole?: GroupRole | null;
     currentUserStatus?: GroupMemberStatus | null;
     viewerRole?: GroupRole | null;
-    /** The viewer's own open invitation: who sent it (invite landing, groups slice 2). */
+    /** The viewer's own open invitation: who sent it (invite landing, groups slice 2). `avatarUrl` as GroupMember's. */
     viewerInvitedBy?: { pubkey: string; callsign?: string; avatarUrl?: string };
     viewerStatus?: GroupMemberStatus | null;
     convenorPubkey?: string;
     convenorCallsign?: string;
+    /** The lead convenor's photo as GroupMember.avatarUrl gives it. */
     convenorAvatarUrl?: string | null;
     /**
      * The group's LEAD convenor (2026-09-23). One per group, stored as `groups.lead_pubkey`. The creator to
@@ -98,6 +99,10 @@ export interface GroupMember {
     groupId: string;
     memberPubkey: string;
     callsign?: string;
+    /**
+     * The member's photo as the member list gives it: its URL (avatarUrlOf), a shipped picture's `bundled://` name, or
+     * absent for none. Never the photo (#1478): a roster of thousands of photos ran the node out of memory.
+     */
     avatarUrl?: string | null;
     role: GroupRole;
     status: GroupMemberStatus;

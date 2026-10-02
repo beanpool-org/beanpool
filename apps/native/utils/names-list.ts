@@ -846,6 +846,14 @@ export const NAMES_COPY = {
     waitNewKey: (holders: string[]) => (holders.length
         ? `The list needs a new key before anything more is written. ${either(holders)} will make it the next time they open the names list.`
         : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
+    /**
+     * The wait when the new key is this phone's own drop (a removal by hand, or one the history it took hadn't made): the
+     * holder only sends the current key; this phone then makes the new one (round 7).
+     */
+    waitOwnKey: (holders: string[], own: string[]) => (holders.length
+        ? `The list needs a new key without ${both(own)} before anything more is written. This phone makes it once it holds the list’s `
+            + `current key: ${either(holders)} will send that the next time they open the names list.`
+        : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
     nobodyHoldsKey: (n: number, count: number, maker: string) => `Nobody who is an admin now holds key ${n}. You can make a new key; the `
         + `${count} ${count === 1 ? 'name' : 'names'} sealed under it stay locked unless ${at(maker)}’s phone is found.`,
     droppedMe: (who: string) => `${at(who)} made a key without this phone. This phone still trusts them; ask them why, and tell your other admins if you didn’t expect it.`,
@@ -873,7 +881,8 @@ export const NAMES_COPY = {
     takeHistoryButton: (who: string) => `Take ${at(who)}’s history`,
     takeHistoryTitle: (who: string) => `Take ${at(who)}’s history?`,
     takeHistory: (who: string) => `This phone follows the key history ${at(who)}’s phone has, from the last key both share. It keeps the `
-        + 'other history’s keys for reading and passes them on with the rest, but never writes under them again. An admin this phone had '
+        + 'other history’s keys for reading and passes them on with the rest, but never writes under them again unless the server’s history '
+        + 'comes back to them. An admin this phone had '
         + 'removed stays removed: before it writes, it makes a key without them.',
     sendAgainButton: (who: string) => `Send the keys to ${at(who)} again`,
     myKeyTitle: 'Your phone’s key',
@@ -912,7 +921,11 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): strin
             const maker = o.pin.chain.length ? readNamesGeneration(o.pin.chain[o.pin.chain.length - 1], undefined, new Set([plan.keyId]))?.maker ?? '' : '';
             return NAMES_COPY.nobodyHoldsKey(plan.n, state.counts?.byKey?.[plan.keyId] ?? 0, name(maker));
         }
-        return plan.newKeyNeeded ? NAMES_COPY.waitNewKey(holders) : NAMES_COPY.wait(holders);
+        if (!plan.newKeyNeeded) return NAMES_COPY.wait(holders);
+        // This phone's own drops (by hand, or standing from a history it left): the holder only sends the key.
+        const chainIds = new Set(o.pin.chain.map((l) => l.id));
+        const own = plan.drops.filter((k) => o.pin.manualDrops.includes(k) || (k in o.pin.dropped && !chainIds.has(o.pin.dropped[k])));
+        return own.length ? NAMES_COPY.waitOwnKey(holders, own.map(name)) : NAMES_COPY.waitNewKey(holders);
     }
     switch (plan.reason) {
         case 'other_community': return NAMES_COPY.otherCommunity;

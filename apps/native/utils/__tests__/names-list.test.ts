@@ -698,7 +698,8 @@ describe('C. Drops and removal', () => {
         const c = await open(cy);
         expect(c.plan).toMatchObject({ kind: 'wait', newKeyNeeded: true, holders: [ada.publicKey] });
         expect(sentAs('POST', '/api/names/generations')).toEqual([]);
-        expect(planWords(c)).toBe(NAMES_COPY.waitNewKey(['Ada']));
+        // Cy's own removal of Owen is due: Ada sends the key, and Cy's phone makes the new key without Owen (round 7).
+        expect(planWords(c)).toBe(NAMES_COPY.waitOwnKey(['Ada'], ['Owen']));
         await open(ada);
         const c2 = await open(cy);
         expect(node.current()!.maker).toBe(cy.publicKey);
@@ -974,10 +975,19 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         const b = await open(bea);
         expect(b.plan).toEqual({ kind: 'refused', reason: 'different_history' });
         await meet(node, bea, cy);
+        // W1 (round 7): Cy's box to Bea hasn't come yet when she takes his history. Cy's phone only sends the key; Bea's
+        // phone makes the key without Abe, and the words say so.
+        node.shares.delete(`${cy.publicKey}|${bea.publicKey}`);
         sent = [];
         const t = await takeHistoryOf(COMMUNITY, bea, STORE, cy.publicKey);
-        expect(t.ok).toBe(true);
-        const after = t.ok ? t.value : null!;
+        expect(t.ok && t.value.plan).toMatchObject({ kind: 'wait', newKeyNeeded: true, holders: [cy.publicKey], drops: [abe.publicKey] });
+        expect(t.ok && planWords(t.value)).toBe(NAMES_COPY.waitOwnKey(['Cy'], ['Abe']));
+        expect(sentAs('POST', '/api/names/generations')).toEqual([]);
+        expect(sentAs('POST', '/api/names/entries')).toEqual([]);
+        await open(cy);
+        expect(node.current()!.id).toBe(twoPP); // Cy's phone made nothing
+        sent = [];
+        const after = await open(bea);
         expect(after.plan.kind).toBe('ready');
         const threePP = node.current()!;
         expect(threePP).toMatchObject({ maker: bea.publicKey, parentId: twoPP, drops: [abe.publicKey] });
@@ -1048,6 +1058,44 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         // The screen offers Remove on an admin this phone hasn't checked, too.
         const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
         expect(screen).toMatch(/checkButton\(a\.callsign\)[\s\S]{0,200}removeKeyButton\(a\.callsign\), \(\) => removeKey\(a\)/);
+    });
+
+    it("I1 (the re-review's :639, end to end) a standby takes over from an older copy, Cy's phone makes 2″ by itself, Bea takes Cy's history; the main copy comes back: Cy and then Bea take Owen's history, and Bea's phone re-takes the 2 it left and is ready on it; nothing goes to Abe", async () => {
+        const { node, phones: [owen, bea, cy, abe] } = await community(['Owen', 'Bea', 'Cy', 'Abe']);
+        const copy = () => ({ gens: new Map(node.gens), shares: new Map(node.shares) });
+        const put = (c: ReturnType<typeof copy>) => { node.gens = new Map(c.gens); node.shares = new Map(c.shares); };
+        const standby = copy();
+        node.admins = [role(owen, 'owner'), role(bea), role(cy)];
+        await open(owen); // 2 drops Abe
+        const two = node.current()!.id;
+        await open(bea);
+        const main = copy();
+        put(standby); // the take-over from the older copy
+        expect((await open(cy)).plan.kind).toBe('ready');
+        const twoPP = node.current()!.id;
+        expect(node.current()!).toMatchObject({ maker: cy.publicKey, drops: [abe.publicKey] });
+        expect((await open(bea)).plan).toEqual({ kind: 'refused', reason: 'different_history' });
+        await meet(node, bea, cy);
+        const t1 = await takeHistoryOf(COMMUNITY, bea, STORE, cy.publicKey);
+        expect(t1.ok && t1.value.plan.kind).toBe('ready');
+        put(main); // whoever runs the server puts the main copy back
+        expect((await open(owen)).plan.kind).toBe('ready');
+        expect((await open(cy)).plan).toEqual({ kind: 'refused', reason: 'different_history' });
+        await meet(node, cy, owen);
+        const tc = await takeHistoryOf(COMMUNITY, cy, STORE, owen.publicKey);
+        expect(tc.ok && tc.value.plan.kind).toBe('ready');
+        sent = [];
+        expect((await open(bea)).plan).toEqual({ kind: 'refused', reason: 'different_history' });
+        await meet(node, bea, owen);
+        const t2 = await takeHistoryOf(COMMUNITY, bea, STORE, owen.publicKey);
+        expect(t2.ok).toBe(true);
+        const b = t2.ok ? t2.value : null!;
+        expect(b.plan.kind).toBe('ready');
+        expect(b.pin.chain.map((l) => l.id).slice(1)).toEqual([two]);
+        expect(b.pin.abandoned).toEqual([twoPP]);
+        expect(b.pin.trusted).not.toContain(abe.publicKey);
+        expect(openEntries(b.list!, b).every((e) => e.text)).toBe(true);
+        expect(sentAs('POST', '/api/names/shares').filter((x) => readNamesShare(JSON.parse(x.body), CID)?.to === abe.publicKey)).toEqual([]);
     });
 
     it('H6 a fresh walk that drops an admin this phone checked says so: check each other again', async () => {
@@ -1248,7 +1296,9 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         // The design addendum's (e), exact, then what an admin can do about it (the fifth deciding review's BLOCKING finding, 52e1a759).
         // Addendum 2 (§3): the removal check is Remove by hand; the comparison only says two phones are shown different things.
         expect(plain(NAMES_COPY.who)).toBe("Only this community's owners and admins can read these names, on their own phones. The server keeps them scrambled: a backup, a copy or a stolen database holds nothing readable. This phone gives the list's keys only to admins whose phones were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can't protect: a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an admin's phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin's keys can read. Each admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, look at this phone's admins: if it still shows them, tap Remove @X's old key. Whatever the server says, this phone then makes a key without them or writes nothing.");
-        expect(plain(NAMES_COPY.takeHistory('X'))).toBe("This phone follows the key history @X's phone has, from the last key both share. It keeps the other history's keys for reading and passes them on with the rest, but never writes under them again. An admin this phone had removed stays removed: before it writes, it makes a key without them.");
+        expect(plain(NAMES_COPY.takeHistory('X'))).toBe("This phone follows the key history @X's phone has, from the last key both share. It keeps the other history's keys for reading and passes them on with the rest, but never writes under them again unless the server's history comes back to them. An admin this phone had removed stays removed: before it writes, it makes a key without them.");
+        // Round 7: when the new key is this phone's own drop, the holder only sends the key; this phone makes the new one.
+        expect(plain(NAMES_COPY.waitOwnKey(['A'], ['X']))).toBe("The list needs a new key without @X before anything more is written. This phone makes it once it holds the list's current key: @A will send that the next time they open the names list.");
         expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: this phone had removed their key, and the history it took hadn't.");
         expect(plain(NAMES_COPY.checkAgain('X', 4))).toBe("Key 4 removed @X's key. If @X is an admin again, check each other's phones again: a check made before this phone took key 4 doesn't count past it.");
         expect(plain(`${NAMES_COPY.newKeyMade(['X'])} ${NAMES_COPY.newKeySent(['A'], [])}`)).toBe('The list has a new key because @X is no longer an admin. Nothing this phone writes from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');

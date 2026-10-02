@@ -262,6 +262,23 @@ describe.each(CASES)('$label id_token', ({ provider, label, iss, aud }) => {
         expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
     });
 
+    it('within the minute after a refetch that failed, an unknown kid is still "try again", and asks nobody', async () => {
+        const nonce = issueNonce(SUBJECT);
+        await verify(mint(claims(nonce)), nonce);
+        fetchCalls = [];
+        providerAnswer = () => { throw new Error('ECONNREFUSED'); };
+        for (let i = 0; i < 3; i++) {
+            const next = issueNonce(SUBJECT);
+            const e = await refusal(verify(mint(claims(next), { header: { kid: `new-${i}` } }), next));
+            expect(e).toBeInstanceOf(SsoProviderUnavailableError);
+            expect(e.message).toBe(`${label} could not be reached to check the sign-in. Please try again in a minute.`);
+        }
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+        // A token with the key the node holds still goes through meanwhile.
+        const real = issueNonce(SUBJECT);
+        await verify(mint(claims(real)), real);
+    });
+
     it('still picks up a key the provider rotated in, on the first token that names it', async () => {
         const nonce = issueNonce(SUBJECT);
         await verify(mint(claims(nonce)), nonce);

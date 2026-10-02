@@ -22,8 +22,8 @@
  *
  * ## When the owner is told
  *
- * When a sign-in releases their copy (notifySeedReleased): the owner learns it worked, which is the moment that
- * matters, since a sign-in releases it seconds after the session opens and nothing left to stop it.
+ * When a sign-in releases their copy (notifySeedReleased): the owner learns it worked. That is the moment that
+ * matters, since a sign-in releases the copy seconds after the session opens.
  *
  * Not when a session opens, any more (defence review FABLE-sec-sso finding 5, 2026-10-01). Opening one is
  * unauthenticated by necessity, so that alert was a push anybody with a callsign could send a member, as often as the

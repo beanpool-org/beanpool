@@ -133,3 +133,17 @@ export function vaultCopyKnownStoreKey(publicKey: string): string {
 export function vaultApprovedHoldsStoreKey(publicKey: string): string {
     return `beanpool_vault_approved_holds:${publicKey.toLowerCase()}`;
 }
+
+/**
+ * The "one way back" card of an account that joined the global community with 12 words (utils/one-way-back.ts): when it
+ * joined, and whether the card was put away or done. Times and flags only. Kept when the account leaves the phone, as
+ * its block list is: the same account restored here carries on where it was.
+ */
+export function oneWayBackStoreKey(publicKey: string): string {
+    return `beanpool_one_way_back:${publicKey.toLowerCase()}`;
+}
+
+/** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */
+export function oneWayBackAskedStoreKey(publicKey: string): string {
+    return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;
+}

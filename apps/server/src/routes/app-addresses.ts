@@ -113,60 +113,75 @@ export function createAppAddressesRoutes(deps: RouteDeps): Router {
 
     router.get('/api/local/admin/app-addresses', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport(ctx.query.host);
+        try {
+            ctx.set('Cache-Control', 'no-store');
+            ctx.body = appAddressesReport(ctx.query.host);
+        } catch (e: any) {
+            ctx.status = 500;
+            ctx.body = { error: e?.message || 'Could not fetch app addresses.' };
+        }
     });
 
     router.post('/api/local/admin/app-addresses/confirm', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const address = normalizeAddress(bodyOf(ctx).address);
-        if (!address) {
-            ctx.status = 400;
-            ctx.body = { error: 'Send { "address": "community.example.org" }: a web address, with no path.' };
-            return;
-        }
-        if (isLostAddress(address)) {
-            const why = registrarNames().find((e) => e.address === address)?.lost?.why;
-            ctx.status = 409;
-            ctx.body = {
-                code: 'lost_address',
-                error: why === 'released'
-                    ? `${address} was this community's name until it released it, and the hold is over. It can't be confirmed; claim it again, or choose another address.`
-                    : `Another community holds ${address} and answers there, so this community refuses what apps sign for it. It can't be confirmed; choose another address.`,
-            };
-            return;
-        }
-        const current = ownerConfirmedAddresses();
-        if (!current.includes(address)) {
-            if (current.length >= MAX_OWNER_ADDRESSES) {
-                ctx.status = 409;
-                ctx.body = { error: `This community already has ${MAX_OWNER_ADDRESSES} confirmed addresses. Remove one you no longer use first.` };
+        try {
+            const address = normalizeAddress(bodyOf(ctx).address);
+            if (!address) {
+                ctx.status = 400;
+                ctx.body = { error: 'Send { "address": "community.example.org" }: a web address, with no path.' };
                 return;
             }
-            updateNodeConfig({ ownerAddresses: [...current, address] });
-            forgetOwnAddresses();
-            logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+            if (isLostAddress(address)) {
+                const why = registrarNames().find((e) => e.address === address)?.lost?.why;
+                ctx.status = 409;
+                ctx.body = {
+                    code: 'lost_address',
+                    error: why === 'released'
+                        ? `${address} was this community's name until it released it, and the hold is over. It can't be confirmed; claim it again, or choose another address.`
+                        : `Another community holds ${address} and answers there, so this community refuses what apps sign for it. It can't be confirmed; choose another address.`,
+                };
+                return;
+            }
+            const current = ownerConfirmedAddresses();
+            if (!current.includes(address)) {
+                if (current.length >= MAX_OWNER_ADDRESSES) {
+                    ctx.status = 409;
+                    ctx.body = { error: `This community already has ${MAX_OWNER_ADDRESSES} confirmed addresses. Remove one you no longer use first.` };
+                    return;
+                }
+                updateNodeConfig({ ownerAddresses: [...current, address] });
+                forgetOwnAddresses();
+                logger.security('AUTH', `App address confirmed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+            }
+            ctx.set('Cache-Control', 'no-store');
+            ctx.body = appAddressesReport(ctx.query.host);
+        } catch (e: any) {
+            ctx.status = 500;
+            ctx.body = { error: e?.message || 'Could not confirm app address.' };
         }
-        ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport(ctx.query.host);
     });
 
     router.post('/api/local/admin/app-addresses/remove', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
-        const address = normalizeAddress(bodyOf(ctx).address);
-        // The list as this node reads it (and Settings shows it), not as stored: a take-over envelope stores the
-        // primary's list as it came, and an address accepted as this community's must be one Settings can remove.
-        const current = ownerConfirmedAddresses();
-        if (!address || !current.includes(address)) {
-            ctx.status = 404;
-            ctx.body = { error: 'That address is not one confirmed in Settings. Addresses from the registrar or the server’s own settings are changed there.' };
-            return;
+        try {
+            const address = normalizeAddress(bodyOf(ctx).address);
+            // The list as this node reads it (and Settings shows it), not as stored: a take-over envelope stores the
+            // primary's list as it came, and an address accepted as this community's must be one Settings can remove.
+            const current = ownerConfirmedAddresses();
+            if (!address || !current.includes(address)) {
+                ctx.status = 404;
+                ctx.body = { error: 'That address is not one confirmed in Settings. Addresses from the registrar or the server’s own settings are changed there.' };
+                return;
+            }
+            updateNodeConfig({ ownerAddresses: current.filter((a) => a !== address) });
+            forgetOwnAddresses();
+            logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
+            ctx.set('Cache-Control', 'no-store');
+            ctx.body = appAddressesReport(ctx.query.host);
+        } catch (e: any) {
+            ctx.status = 500;
+            ctx.body = { error: e?.message || 'Could not remove app address.' };
         }
-        updateNodeConfig({ ownerAddresses: current.filter((a) => a !== address) });
-        forgetOwnAddresses();
-        logger.security('AUTH', `App address removed in Settings by ${(ctx.state as any)?.actor || 'the admin password'}: ${address}`);
-        ctx.set('Cache-Control', 'no-store');
-        ctx.body = appAddressesReport(ctx.query.host);
     });
 
     return router;

@@ -144,3 +144,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
 **Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
 **Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.
+
+## 2026-10-02 - [Missing try/catch in app-addresses route handlers]
+**Issue:** `GET /api/local/admin/app-addresses`, `POST /api/local/admin/app-addresses/confirm`, and `POST /api/local/admin/app-addresses/remove` in `apps/server/src/routes/app-addresses.ts` executed state reads and config mutations (`updateNodeConfig`, `appAddressesReport`) without try/catch blocks.
+**Learning:** Unhandled exceptions during admin node configuration updates or app address lookups resulted in uncaught 500 rejections without structured JSON error bodies (`{ error: ... }`).
+**Pattern:** Ensure all administrative config mutation and report routes enclose state engine calls in try/catch blocks that explicitly set `ctx.status = 500` and return structured JSON error messages.

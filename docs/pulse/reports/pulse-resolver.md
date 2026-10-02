@@ -199,7 +199,7 @@ Results: 103/103 tests passed.
 - `bash scripts/check-suite-registration.sh`:
   `✓ all 80 server suites in apps/server/src are registered in scripts/test-all.sh`
 - `test-creator-channels.ts`: 127/127 passed.
-- `test-schema-upgrade.ts`: 32/32 passed.
+- `test-schema-upgrade-fresh-shape.ts`: 32/32 passed.
 - `test-backup-topology.ts`: 10/10 passed.
 - `test-sync-signature.ts`: 10/10 passed.
 - `pnpm --filter @beanpool/server exec tsc --noEmit && pnpm --filter beanpool-pillar exec tsc --noEmit`: 0 errors.

@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS members (
     -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
     -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
     -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
-    -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
+    -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)

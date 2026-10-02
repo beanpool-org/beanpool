@@ -853,7 +853,7 @@ export function initSchema() {
     // build we ship rather than a documented guarantee, and "if schema.sql names it, add it before the exec"
     // is a cheaper rule to keep than an exception list.
     //
-    // test-schema-upgrade.ts enforces this statically for EVERY late-added column — separating the fatal
+    // test-schema-upgrade-fresh-shape.ts enforces this statically for EVERY late-added column — separating the fatal
     // index case from the defensive trigger one — so a column added below the exec fails in CI rather than on
     // somebody's node.
     try {
@@ -891,7 +891,7 @@ export function initSchema() {
     // before federation existed agreed to their listing travelling.
     //
     // MUST BE HERE, BEFORE the schema.sql exec below, because schema.sql defines idx_posts_reach over these
-    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade caught
+    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade-fresh-shape caught
     // exactly that when these two lines sat with the other posts migrations further down — the suite exists
     // for this failure and earned its keep.
     //

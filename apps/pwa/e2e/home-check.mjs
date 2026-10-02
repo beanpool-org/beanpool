@@ -208,7 +208,9 @@ async function openTab(context, origin, { deaf = false } = {}) {
 
 /**
  * The page's next GET /api/home is answered by the node at once (signed, as the page sent it) but handed to the page only
- * on `release()`: a read still out, as on a 2G phone. `fetched` resolves with the answer's tag once the node answered.
+ * on `release()`: a read still out, as on a 2G phone. `fetched` resolves with the node's status once it answered.
+ * It is asked without the page's tag, so the node sends her whole answer (a 200, as when something changed), never a
+ * 304 that would leave the page nothing to keep.
  */
 async function holdNextHomeRead(page) {
     let release;
@@ -219,10 +221,12 @@ async function holdNextHomeRead(page) {
     await page.route('**/api/home*', async (route) => {
         if (held || route.request().method() !== 'GET') return route.continue();
         held = true;
-        const response = await route.fetch();
+        const headers = { ...route.request().headers() };
+        delete headers['if-none-match'];
+        const response = await route.fetch({ headers });
         // Marked, so a copy of it kept anywhere can be told from a fresh one with the same contents.
         const body = response.status() === 200 ? JSON.stringify({ ...(await response.json()), heldFromBefore: true }) : await response.text();
-        fetched(response.headers().etag ?? null);
+        fetched(response.status());
         await released;
         await route.fulfill({ response, body }).catch(() => { /* the page went meanwhile */ });
     });
@@ -632,7 +636,8 @@ async function twoTabs(browser, root) {
         const heldDeaf = await holdNextHomeRead(deafRead.page);
         await ringHome(hears.page);
         await ringHome(deafRead.page);
-        await Promise.all([heldHears.fetched, heldDeaf.fetched]);
+        const heldStatus = await Promise.all([heldHears.fetched, heldDeaf.fetched]);
+        check(heldStatus.every((s) => s === 200), `two reads held across the sign-out, each her whole answer (${heldStatus.join(', ')})`);
         const out = await signOutIn(a.page);
 
         const gone = await hears.page.getByTestId('home-signed-out').waitFor({ timeout: 5_000 }).then(() => Date.now() - out.at, () => null);
@@ -651,6 +656,10 @@ async function twoTabs(browser, root) {
         await deafChip.page.getByTestId('home-interest-food').click();
         const found = await Promise.all([deafHide, deafChip].map((t) => t.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false)));
         check(stillDrawn && found.every(Boolean), `a tab that heard nothing finds out at its first write, a Hide or a chip tap, and drops her Home there too (${stillDrawn ? 'drawn until then' : 'not drawn'}; ${found.map((f) => (f ? 'dropped' : 'still drawn')).join(', ')})`);
+        // Read from a tab that stays (the one she signed out in reloads), once anything the taps wrote has landed.
+        await wait(1_500);
+        const afterTaps = await leftOf(hears.page, ana.publicKey);
+        check(afterTaps.length === 0, `(1) that Hide and that chip tap put nothing of hers back (${afterTaps.join(', ') || 'nothing kept'})`);
 
         // (2) The two reads held across the sign-out land now.
         const released = Date.now();
@@ -659,6 +668,9 @@ async function twoTabs(browser, root) {
         const deafReadFound = await deafRead.page.getByTestId('home-signed-out').waitFor({ timeout: 3_000 }).then(() => true, () => false);
         check(deafReadFound && !(await hears.page.getByText('Unread message from Kofi').count()),
             `a read in flight across the sign-out lands, and nothing of it is drawn (${deafReadFound ? 'the deaf tab drops her Home' : 'the deaf tab still draws it'})`);
+        await wait(1_500);
+        const heldKept = (await homeEntries(hears.page)).filter((e) => e.text.includes('heldFromBefore')).map((e) => e.key);
+        check(heldKept.length === 0, `(2) and nothing of those reads is kept (${heldKept.join(', ') || 'nothing kept'})`);
 
         // Nothing more is read as her, however Home is asked.
         for (const t of [hears, deafHide, deafRead, deafChip]) {
@@ -686,7 +698,8 @@ async function twoTabs(browser, root) {
         await wait(1_500);
         const fHeld = await holdNextHomeRead(fDeaf.page);
         await ringHome(fDeaf.page);
-        await fHeld.fetched;
+        const fHeldStatus = await fHeld.fetched;
+        check(fHeldStatus === 200, `a read held across the clear, her whole answer (${fHeldStatus})`);
         f.page.on('dialog', (dlg) => { void dlg.accept(); });
         await f.page.getByRole('button', { name: 'Settings' }).first().click();
         await f.page.getByText('Database Health & Stats').click();
@@ -721,7 +734,8 @@ async function twoTabs(browser, root) {
         check((await leftOf(d.page, bea.publicKey)).some((k) => k.endsWith(`|${bea.publicKey}`)), 'before: this browser keeps her Home');
         const dHeld = await holdNextHomeRead(dDeaf.page);
         await ringHome(dDeaf.page);
-        await dHeld.fetched;
+        const dHeldStatus = await dHeld.fetched;
+        check(dHeldStatus === 200, `a read held across the delete, her whole answer (${dHeldStatus})`);
         await d.page.getByRole('button', { name: 'Settings' }).first().click();
         await d.page.getByText('⚠️ Account Deletion & Sign Out').click();
         await d.page.getByRole('button', { name: 'Permanently Delete Account' }).click();
@@ -839,7 +853,7 @@ async function globalNode(browser, root) {
             const readsAfter = [gHears, gDeaf].flatMap((t) => t.net.since(out.at).filter((r) => r.path === '/api/home'));
             check(readsAfter.length === 0, `neither tab reads Home again, so no visitors' answer is read in her place (${readsAfter.length} × GET /api/home${readsAfter.length ? `, ${readsAfter.map((r) => `${r.signed ? 'signed' : 'unsigned'} ${r.status}`).join(',')}` : ''})`);
             const kept = (await homeEntries(g.page)).map((e) => e.key);
-            check(!kept.some((k) => k.includes(rua.publicKey)), `nothing is kept under her key (kept: ${kept.map((k) => k.replace(/^.*\|/, '…|').slice(0, 14)).join(', ') || 'nothing'})`);
+            check(!kept.some((k) => k.includes(rua.publicKey)), `(3) nothing is kept under her key (kept: ${kept.map((k) => k.replace(/^.*\|/, '…|').slice(0, 14)).join(', ') || 'nothing'})`);
             check(g.seen.violations.length === 0, `no document-policy violations${g.seen.violations.length ? `: ${JSON.stringify(g.seen.violations)}` : ''}`);
         } finally {
             await g.context.close();

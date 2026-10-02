@@ -67,7 +67,13 @@ export interface Group {
     id: string;
     name: string;
     slug: string;
+    /**
+     * What the group is for. A list of groups and a group_created / group_updated broadcast send at most its preview
+     * (LIST_PREVIEW_CHARS, text-limits.ts), marked by `descriptionTruncated`; the group's own card sends it whole (#1493).
+     */
     description?: string;
+    /** True when `description` is a list's preview of a longer one: the group's card (GET /api/groups/:id) has all of it. */
+    descriptionTruncated?: boolean;
     avatarUrl?: string | null;
     category: GroupCategory;
     createdBy: string;

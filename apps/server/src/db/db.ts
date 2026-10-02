@@ -12,6 +12,7 @@ import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -2429,6 +2430,8 @@ export function createCrowdfundProject(
 ) {
     if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
+    // The title is the enterprise's name and the description its purpose: each held to its limit (#1493).
+    assertEnterpriseText(title, description);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
@@ -2507,6 +2510,8 @@ export function updateCrowdfundProject(
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
+    // As on a create (#1493); the title and description it already holds, sent back unchanged, are kept.
+    assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
         throw new Error("Cannot change funding goal after receiving pledges");

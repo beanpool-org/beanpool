@@ -10,7 +10,7 @@ import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../li
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -239,6 +239,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     type="text"
                     value={contactValue}
                     onChange={(e) => setContactValue(e.target.value)}
+                    maxLength={CONTACT_VALUE_LIMIT.chars}
                     placeholder="Phone, email, or WhatsApp"
                     className="w-full py-3 px-4 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all placeholder:text-nature-400"
                 />

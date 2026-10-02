@@ -41,11 +41,11 @@ import { fileURLToPath } from 'node:url';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import {
-    initStateEngine, createPost, getPosts, updatePost, transfer,
+    initStateEngine, createPost, getPosts, transfer,
     acceptPost, completePostTransaction, cancelPostTransaction, adminDeletePost,
     exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
-import { rsvpEvent } from './engine/posts.js';
+import { rsvpEvent, updatePost as updatePostWriter } from './engine/posts.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -70,6 +70,15 @@ function makeMember(callsign: string, beans = 0): string {
     ledger.initializeGenesisAccount(pk);
     if (beans > 0) transfer('genesis', pk, beans, `seed ${callsign}`, 'direct', true);
     return pk;
+}
+
+/**
+ * An author's edit, through the posts writer itself (engine/posts.ts), where the triggers fire. The state engine's
+ * updatePost holds a member's title to LISTING_TITLE_LIMIT first (#1493), and every title edit here carries FILLER, longer
+ * than any member may write, on purpose (see top): the writer's statement and its triggers are the same either way.
+ */
+function updatePost(id: string, author: string, updates: { title?: string; description?: string }) {
+    return updatePostWriter(noop, id, author, updates);
 }
 
 const updatedAt = (id: string): string =>

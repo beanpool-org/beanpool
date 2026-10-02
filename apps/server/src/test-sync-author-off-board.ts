@@ -56,6 +56,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -84,7 +85,7 @@ function signedHeaders(method: string, path: string, body: string, id: Id): Reco
 }
 
 async function getText(path: string, id: Id): Promise<string> {
-    const res = await fetch(`${BASE}${path}`, { headers: signedHeaders('GET', path, '', id) });
+    const res = await localFetch(`${BASE}${path}`, { headers: signedHeaders('GET', path, '', id) });
     if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
     return res.text();
 }
@@ -106,7 +107,7 @@ async function getUnsigned(path: string): Promise<any[]> {
 
 async function postJson(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
     const body = JSON.stringify(payload);
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await localFetch(`${BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) },
         body,
@@ -215,7 +216,7 @@ class Phone {
     async openEventDetail(postId: string): Promise<any> {
         const path = `/api/marketplace/posts?id=${encodeURIComponent(postId)}`;
         const stored = this.httpCache.get(path);
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             headers: { ...signedHeaders('GET', path, '', this.id), ...(stored ? { 'If-None-Match': stored.etag } : {}) },
         });
         let raw: string;
@@ -477,9 +478,9 @@ async function main() {
     assert(!reopened.has(seedSwap), 'Hana\'s event is off her phone\'s Market again');
     // Only that read skips the 304: asked twice with nothing written in between, every other read is confirmed.
     const revalidated = async (path: string, id: Id | null): Promise<number> => {
-        const first = await fetch(`${BASE}${path}`, { headers: id ? signedHeaders('GET', path, '', id) : {} });
+        const first = await localFetch(`${BASE}${path}`, { headers: id ? signedHeaders('GET', path, '', id) : {} });
         await first.text();
-        const again = await fetch(`${BASE}${path}`, {
+        const again = await localFetch(`${BASE}${path}`, {
             headers: { ...(id ? signedHeaders('GET', path, '', id) : {}), 'If-None-Match': first.headers.get('etag') ?? '' },
         });
         return again.status;
@@ -495,14 +496,14 @@ async function main() {
     }
     // An unsigned read of the event by id was confirmed with a 304 here too. A local community's listings are its
     // members' since 2026-09-28: it is refused, and nothing is confirmed to it.
-    const unsignedById = await fetch(`${BASE}/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`);
+    const unsignedById = await localFetch(`${BASE}/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`);
     assert(unsignedById.status === 401, `an unsigned read of the event by id is refused (got ${unsignedById.status})`);
     // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps. Such a
     // key read the event page and was noted nothing; now the signature gate refuses it the page before any handler runs,
     // so nothing can be noted for it.
     const stranger = keypair();
     const strangerPath = `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`;
-    const strangerRead = await fetch(`${BASE}${strangerPath}`, { headers: signedHeaders('GET', strangerPath, '', stranger) });
+    const strangerRead = await localFetch(`${BASE}${strangerPath}`, { headers: signedHeaders('GET', strangerPath, '', stranger) });
     assert(strangerRead.status === 403, `a key with no member row is refused the event page (got ${strangerRead.status})`);
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
@@ -653,7 +654,7 @@ async function main() {
     const adaSession = adaSolved.ok ? consumeHandshakeToken(adaSolved.handshakeToken!).sessionId : undefined;
     assert(!!adaSession, 'Ada signs in as an admin with her key');
     const asAdmin = async (method: 'POST' | 'DELETE', path: string, payload?: unknown): Promise<number> => {
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             method, headers: { 'Content-Type': 'application/json', 'x-admin-session': adaSession ?? '' },
             ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         });
@@ -831,7 +832,7 @@ async function main() {
     const modSession = solved.ok ? consumeHandshakeToken(solved.handshakeToken!).sessionId : undefined;
     assert(!!modSession, 'Mo signs in as a moderator with his key');
     const moderator = async (path: string): Promise<number> => {
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-session': modSession ?? '' }, body: JSON.stringify({ reasonCategory: 'spam' }),
         });
         await res.text();

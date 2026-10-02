@@ -43,6 +43,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
+import { localFetch } from './keepalive-test-fetch.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -161,13 +162,13 @@ async function child(): Promise<void> {
     if (mode === 'sealed') {
         const backupLocked = async () => {
             resetAdminAuthTarpit();
-            const r = await fetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: { 'X-Admin-Password': pw } });
+            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: { 'X-Admin-Password': pw } });
             const b = Buffer.from(await r.arrayBuffer());
             return { status: r.status, locked: r.headers.get('x-backup-locked'), why: r.headers.get('x-backup-not-locked'), gzip: b[0] === 0x1f && b[1] === 0x8b };
         };
         const beforeCode = await backupLocked();
         resetAdminAuthTarpit();
-        const made = await fetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
+        const made = await localFetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
             method: 'POST', headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/json' }, body: '{}',
         });
         const madeBody: any = await made.json();
@@ -177,7 +178,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
-    const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
+    const res = await localFetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
     const body = await res.json();
 
     const read = (f: string) => { try { return fs.readFileSync(path.join(dataDir, f)); } catch { return null; } };
@@ -525,7 +526,7 @@ async function main(): Promise<void> {
     const { server, base } = await serveBackupRoutes();
     const restore = async (bytes: Buffer, headers: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
-        const res = await fetch(base + '/api/local/admin/restore', {
+        const res = await localFetch(base + '/api/local/admin/restore', {
             method: 'POST', headers: { 'X-Admin-Password': PW, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
         });
         return { status: res.status, body: await res.json() as any };

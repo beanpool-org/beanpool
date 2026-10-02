@@ -968,11 +968,13 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
     pollOpenVote?: boolean;
     totalVotes?: number;
+    /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)

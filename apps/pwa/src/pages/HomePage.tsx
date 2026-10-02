@@ -27,6 +27,7 @@ import {
     type HomeAnswer, type HomeCardId, type HomeLayout, type NeedsItem,
 } from '../lib/home-cards';
 import { homeCacheKey, readCachedHome, writeCachedHome } from '../lib/home-cache';
+import { settleInterests, shareInterests } from '../lib/home-interests';
 import { onSocketOpen, onSyncActivity } from '../lib/sync';
 import { onLivePostChange } from '../lib/live-posts';
 import { withJitter } from '../lib/jitter';
@@ -57,7 +58,6 @@ export const HOME_NOT_ON_NODE = "This community's server doesn't have Home yet. 
 
 const revealKey = (pk: string) => `beanpool_home_revealed_${pk}`;
 const hintKey = (pk: string) => `beanpool_home_hint_closed_${pk}`;
-const FAV_KEY = 'bp_fav_categories';
 
 function readFlag(key: string): boolean {
     try { return localStorage.getItem(key) === '1'; } catch { return true; }
@@ -160,12 +160,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             .catch(() => { /* kept in this browser, sent again after the next read */ });
     }, [publicKey, keep]);
 
+    // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is sent again after the next read.
     const saveInterests = useCallback((next: string[]) => {
         if (!publicKey) return;
         pendingInterests.current = next;
-        saveHomePreferences(publicKey, { interests: next })
-            .then(() => { if (pendingInterests.current === next) pendingInterests.current = null; })
-            .catch(() => { /* sent again after the next read */ });
+        void shareInterests(publicKey, next).then((ok) => { if (ok && pendingInterests.current === next) pendingInterests.current = null; });
     }, [publicKey]);
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point') => {
@@ -196,6 +195,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             if (merged && merged === local && unsavedRef.current) saveLayout(merged);
             else if (merged === fromNode) unsavedRef.current = false;
             if (pendingInterests.current) saveInterests(pendingInterests.current);
+            else if (publicKey && a.me) {
+                // The account's interests are this browser's Market favourites too; ones only kept here move up, once.
+                const settled = settleInterests(publicKey, a.me.interests);
+                if (settled.movedUp) setInterests(settled.interests);
+            }
             answerRef.current = a;
             layoutRef.current = merged;
             setAnswer(a);
@@ -226,7 +230,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 void fetchHomeRef.current?.('doorbell');
             }
         }
-    }, [keep, saveLayout, saveInterests]);
+    }, [keep, saveLayout, saveInterests, publicKey]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
 
@@ -321,7 +325,6 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         const next = toggleInterest(myInterests, id);
         setInterests(next);
         setInterestsOpen(true);
-        try { localStorage.setItem(FAV_KEY, JSON.stringify(next)); } catch { /* the Market keeps its own */ }
         saveInterests(next);
     }
 

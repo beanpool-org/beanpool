@@ -57,6 +57,7 @@ import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+import { shareInterests } from '../lib/home-interests';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -191,6 +192,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         } catch (e) {
             console.error(e);
         }
+        // One truth with Home's interests (DESIGN-home-dashboard-fable.md §4.3): kept on the member's account too.
+        if (identity?.publicKey && !visitor) void shareInterests(identity.publicKey, updated);
     };
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);

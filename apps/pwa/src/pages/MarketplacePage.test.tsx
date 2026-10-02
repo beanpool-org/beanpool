@@ -228,6 +228,16 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         expect(screen.getByText('No items found')).toBeInTheDocument();
     });
 
+    it("a category starred here is kept on the member's account too, one truth with Home's interests (Home design §4.3)", async () => {
+        localStorage.removeItem('bp_fav_categories');
+        const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
+        await openForYou();
+        await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories')!)).toEqual(['food']);
+        await waitFor(() => expect(save).toHaveBeenCalledWith(identity.publicKey, { interests: ['food'] }));
+        localStorage.removeItem('bp_fav_categories');
+    });
+
     it('is not there at all on a node without the route (decision 7)', async () => {
         const missing = Object.assign(new Error('Not Found'), { status: 404 });
         vi.mocked(api.getMyEvents).mockRejectedValue(missing);

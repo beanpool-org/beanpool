@@ -315,6 +315,25 @@ describe('interests (§4.3, §6.2)', () => {
         expect(screen.queryByTestId('home-card-interests')).toBeNull();
     });
 
+    it("the account's interests become this browser's Market favourites; favourites kept only here move up, and order the card", async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: ['tools'] } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories')!)).toEqual(['tools']);
+        cleanup();
+        localStorage.clear();
+        resetHomeCacheForTest();
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        localStorage.setItem('bp_fav_categories', JSON.stringify(['food']));
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({ me: { ...answer().me!, interests: [] } })));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        await waitFor(() => expect(api.saveHomePreferences).toHaveBeenCalledWith(ME.publicKey, { interests: ['food'] }));
+        expect(marketTitles()[0]).toBe('Offer, Sourdough, 12 Beans');
+        // Their own choice, made before: not asked again.
+        expect(screen.queryByTestId('home-card-interests')).toBeNull();
+    });
+
     it('Tune on the Market card opens the chips for a member who has some', async () => {
         vi.mocked(api.getHome).mockResolvedValue(fresh(answer()));
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);

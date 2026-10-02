@@ -417,6 +417,11 @@ export {
     dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
     type MyEvent,
 } from './engine/event-reminders.js';
+import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
+export {
+    HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
+    type HomeLayout, type HomeCardId,
+} from './engine/home-preferences.js';
 
 /** "Your events" and the per-event reminder write, wired to this node's db. */
 export const listMyEvents = (memberPubkey: string, nowMs?: number) => listMyEventsEngine(memberPubkey, nowMs);
@@ -8541,10 +8546,10 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
 }
 
 /**
- * The preferences a member sets (setMemberPreferences), and the only ones they set: which pushes reach their phone, one per
- * dispatchPushNotification category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is
- * not one of them; setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too
- * (visitor-allowlist.ts).
+ * The push settings a member sets (setMemberPreferences): which pushes reach their phone, one per dispatchPushNotification
+ * category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is not one of them;
+ * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
+ * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
@@ -8556,8 +8561,9 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+/** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
-    `Only your notification settings are saved here: ${PUSH_PREFERENCE_KEYS.join(', ')}, each sent by name.`;
+    `Only your notification settings and your Home are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS].join(', ')}, each sent by name.`;
 export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
 
 /**
@@ -8569,10 +8575,13 @@ export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send tr
  * toggles are booleans-as-strings because that is all they have ever needed, while a reminder choice is a
  * list of minutes (docs/events-on-the-map.md §2.2). Serving it here rather than as a raw `pref_value` means
  * the client never has to know it is stored as JSON, and never has to guess the `[1440]` default.
+ *
+ * `reader`, the verified signer: when it is the member, their Home's keys too (engine/home-preferences.ts), each one they
+ * have saved. Nobody else is ever served them, whatever ENFORCE_READ_AUTH says: a layout says what someone cares about.
  */
-export function getMemberPreferences(publicKey: string): Record<string, string | number[]> {
+export function getMemberPreferences(publicKey: string, reader?: string): Record<string, string | number[] | string[] | HomeLayout> {
     const rows = db.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?`).all(publicKey) as any[];
-    const prefs: Record<string, string | number[]> = {
+    const prefs: Record<string, string | number[] | string[] | HomeLayout> = {
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
@@ -8583,45 +8592,59 @@ export function getMemberPreferences(publicKey: string): Record<string, string |
         if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
+    if (reader === publicKey) Object.assign(prefs, ownHomePreferences(publicKey));
     return prefs;
 }
 
 /**
- * THROWS on a body it refuses: a key that isn't one of PUSH_PREFERENCE_KEYS (holiday mode among them, which only
- * setHolidayMode switches, after its open-trades check), a notification toggle that isn't true or false, or a rejected
- * `eventReminderOffsets`. Still returns false for a storage failure — the route turns the throw into a 400 and the false
- * into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid toggles and dropping
- * a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * THROWS on a body it refuses: a key that is neither one of PUSH_PREFERENCE_KEYS nor one of HOME_PREFERENCE_KEYS
+ * (holiday mode among them, which only setHolidayMode switches, after its open-trades check), a notification toggle that
+ * isn't true or false, a rejected `eventReminderOffsets`, a Home key engine/home-preferences.ts refuses, or a Home key
+ * from a key that isn't a member here. Still returns false for a storage failure — the route turns the throw into a 400
+ * and the false into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid
+ * toggles and dropping a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * A Home layout older than the one kept is not a refusal: the rest of the body is written and the newer layout stays.
  */
 export function setMemberPreferences(publicKey: string, preferences: unknown): boolean {
     // Validated BEFORE the transaction opens: anything refused here refuses the whole write.
     if (!!preferences && typeof preferences === 'object' && Object.prototype.hasOwnProperty.call(preferences, 'holiday_mode')) {
         throw new Error(HOLIDAY_NOT_A_PREFERENCE_MESSAGE);
     }
-    if (!namesOnlyPushSettings(preferences)) throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
-    for (const [key, value] of Object.entries(preferences)) {
-        if (key !== 'eventReminderOffsets' && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    const isHomeKey = (key: string) => HOME_PREFERENCE_KEYS.includes(key);
+    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
+        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key))) {
+        throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
     }
-    const hasOffsets = Object.prototype.hasOwnProperty.call(preferences, 'eventReminderOffsets');
-    const offsets = hasOffsets ? parseReminderOffsets(preferences.eventReminderOffsets) : undefined;
+    const body = preferences as Record<string, unknown>;
+    for (const [key, value] of Object.entries(body)) {
+        if (key !== 'eventReminderOffsets' && !isHomeKey(key) && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    }
+    const hasOffsets = Object.prototype.hasOwnProperty.call(body, 'eventReminderOffsets');
+    const offsets = hasOffsets ? parseReminderOffsets(body.eventReminderOffsets) : undefined;
     if (hasOffsets && offsets === null) {
         // There is no "my default" above a default. `[]` is how a member turns reminders off.
         throw new Error(BAD_OFFSETS_MESSAGE);
     }
+    // A Home is a member's: a key with no row here, or a visitor's row, keeps none (the visitor gate refuses it first).
+    const namesHome = Object.keys(body).some(isHomeKey);
+    if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
+    const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
         const tx = db.transaction(() => {
-            for (const [key, value] of Object.entries(preferences)) {
-                if (key === 'eventReminderOffsets') continue;
+            for (const [key, value] of Object.entries(body)) {
+                if (key === 'eventReminderOffsets' || isHomeKey(key)) continue;
                 stmt.run(publicKey, key, String(value));
             }
+            for (const [key, value] of homeWrites) stmt.run(publicKey, key, value);
             // A preference is on no column of the member's row, so the row is stamped here, as setHolidayMode does: delta
             // sync carries a member's preferences with their row, to a standby (engine sync.ts exportSyncState).
             db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
             if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();
-        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}:`, preferences);
+        // Keys only: a Home layout and interests say what someone cares about, and stay out of the log.
+        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}: ${Object.keys(body).join(', ')}`);
         return true;
     } catch (e) {
         console.error('[Prefs] Failed to set preferences:', e);

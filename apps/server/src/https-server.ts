@@ -141,6 +141,7 @@ import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
+import { createHomeRoutes } from './routes/home.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
@@ -316,6 +317,7 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
+    '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
 ]);
 /**
  * The peer protocol's own paths, which the gateway's usual buckets leave alone: the public reads another community's
@@ -407,6 +409,15 @@ export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<
     '/api/marketplace/posts',
 ]);
 
+// Home in one read (routes/home.ts, DESIGN-home-dashboard §5.3): public, like the listings, only on a node that shows
+// visitors the listings and not the people (`guestListingsOnly`, the global node), where an unsigned reader or a key that
+// is no member here gets the visitors' subset (the landing card, the listings and events in their rough areas, the
+// community's counts). Everywhere else it is a member's own read, which the ordinary gate answers for a member of this
+// node (passesReadGate) and refuses anyone else with the community's members-only words (COMMUNITY_MEMBERS_ONLY).
+export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/home',
+]);
+
 /** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
 export const LISTINGS_MEMBERS_ONLY = {
     error: "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
@@ -448,6 +459,8 @@ function isPublicRead(path: string): boolean {
     // The switches are read only for these few paths, so no other request pays for them.
     // The listings: public only where visitors get the listings' view.
     if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
+    // Home: the visitors' subset is public only there too.
+    if (HOME_READ_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
     // The Commons pot: public everywhere but there.
     if (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return !getProfileSwitches().guestListingsOnly;
     if (!namesMembers(path)) return true;
@@ -463,6 +476,8 @@ function isPublicRead(path: string): boolean {
  */
 function membersOnlyRefusal(path: string): typeof LISTINGS_MEMBERS_ONLY | typeof COMMUNITY_MEMBERS_ONLY | null {
     if (isListingsRead(path)) return LISTINGS_MEMBERS_ONLY;
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    if (HOME_READ_EXACT.has(routed) && !getProfileSwitches().guestListingsOnly) return COMMUNITY_MEMBERS_ONLY;
     if (namesMembers(path) && !getProfileSwitches().guestListingsOnly) return COMMUNITY_MEMBERS_ONLY;
     return null;
 }
@@ -1712,6 +1727,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
+        createHomeRoutes(deps),
         createPulseRoutes(deps),
         createPulseSubmitRoutes(deps),
         createAvatarRoutes(deps),

@@ -81,6 +81,7 @@ export const SUITES = [
     'test-guest-view',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-home',
     'test-knock',
     'test-commons-conservation',
     'test-ledger-rollback',

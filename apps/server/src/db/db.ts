@@ -6,7 +6,7 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL } from '@beanpool/engine';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -245,7 +245,7 @@ const NO_RECORD_OF_JOINING = `
  * up its profile in the join wizard; these keep that person a member.
  */
 const USED_AS_A_MEMBER = `
-    COALESCE(m.avatar_url, '') != '' OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
+    m.avatar_ref IS NOT NULL OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
     OR m.profile_updated_at IS NOT NULL
     OR EXISTS (SELECT 1 FROM invite_codes c WHERE c.created_by = m.public_key)`;
 
@@ -548,6 +548,61 @@ function movePlainPushTablesAside(): void {
         }
     })();
     console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
+}
+
+/** Members whose photos move out of their rows in one transaction (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
+export const MEMBER_PHOTO_MOVE_BATCH = 500;
+
+/**
+ * Before schema.sql runs, on a database from before member_photos: each member's avatar (`members.avatar_url`, a photo
+ * inline as a data URL, ~27 KB) moved into member_photos, with its reference and size in the row (avatar_ref,
+ * avatar_bytes: @beanpool/engine members.ts memberPhotoColumnsOf, the one rule its writer uses), then the column dropped.
+ * A value the node does not serve (empty, or its own avatar URL sent back) is not moved: that member has no avatar, as
+ * every app already showed them. No row is stamped (members_touch_updated_at is dropped until schema.sql makes it again):
+ * a photo moved is not a change, and a standby moves its own the same way at its own boot.
+ *
+ * In batches by rowid, each its own transaction, so neither the WAL nor a transaction grows with the community (a 50,000-
+ * member database is 1.3 GB of photos); killed part way, the batches done stay done, the next boot carries on from the
+ * first row still holding its photo, and nothing reads half of one. Before the server listens, so no reader ever sees a
+ * member half moved. A batch that throws stops the move, loudly: the members not reached show no photo until a later
+ * boot finishes it (a standby's copy still carries theirs: @beanpool/engine sync.ts withPhoto). Returns how many moved.
+ */
+export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH): number {
+    const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[]).map((c) => c.name));
+    if (!columns.has('avatar_url')) return 0;
+    const started = Date.now();
+    let moved = 0, dropped = 0, after = 0;
+    try {
+        db.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)`);
+        const next = db.prepare(`SELECT rowid AS rid, public_key, avatar_url FROM members WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        const putPhoto = db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?) ON CONFLICT(public_key) DO UPDATE SET photo = excluded.photo`);
+        const setRow = db.prepare('UPDATE members SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
+        const clearRow = db.prepare('UPDATE members SET avatar_url = NULL WHERE rowid = ?');
+        for (;;) {
+            const rows = next.all(after, batch) as { rid: number; public_key: string; avatar_url: string }[];
+            if (rows.length === 0) break;
+            db.transaction(() => {
+                for (const r of rows) {
+                    const photo = memberPhotoColumnsOf(r.avatar_url);
+                    if (photo) {
+                        putPhoto.run(r.public_key, photo.photo);
+                        setRow.run(photo.ref, photo.bytes, r.rid);
+                        moved++;
+                    } else {
+                        clearRow.run(r.rid);
+                        dropped++;
+                    }
+                }
+            })();
+            after = rows[rows.length - 1].rid;
+            if (moved > 0 && moved % (batch * 20) < rows.length) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
+        }
+        db.exec('ALTER TABLE members DROP COLUMN avatar_url');
+        console.log(`[DB] Members' photos are in member_photos now: ${moved} moved, ${dropped} that were no photo left out, in ${Date.now() - started} ms.`);
+    } catch (e) {
+        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
+    }
+    return moved;
 }
 
 // Function to initialize schema
@@ -1110,6 +1165,12 @@ export function initSchema() {
     } catch (e) {
         console.error('[DB] ❌ Could not replace posts_au:', e);
     }
+
+    // Members' photos out of their rows (schema.sql member_photos): the reference first, before the exec, whose members
+    // trigger names it; then each photo moved, with members_touch_updated_at still dropped above, so no row is stamped.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_ref TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
+    moveMemberPhotosOutOfRows();
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
@@ -1732,8 +1793,8 @@ export function migrateLegacyState() {
     const insertMember = db.prepare(`
         INSERT OR IGNORE INTO members (
             public_key, callsign, joined_at, invited_by, invite_code, home_node_url,
-            avatar_url, bio, contact_value, contact_visibility, status, last_active_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bio, contact_value, contact_visibility, status, last_active_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertInviteCode = db.prepare(`
@@ -1814,12 +1875,13 @@ export function migrateLegacyState() {
                 const contactValue = profile.contact?.value || null;
                 const contactVis = profile.contact?.visibility || null;
 
-                insertMember.run(
+                const inserted = insertMember.run(
                     m.publicKey, m.callsign, m.joinedAt,
                     m.invitedBy || 'genesis', m.inviteCode || 'legacy', m.homeNodeUrl || null,
-                    profile.avatar || null, profile.bio || null, contactValue, contactVis,
+                    profile.bio || null, contactValue, contactVis,
                     profile.status || 'active', profile.lastActiveAt || null
-                );
+                ).changes > 0;
+                if (inserted) setMemberPhoto(db, m.publicKey, profile.avatar || null);
             }
         }
 
@@ -2012,11 +2074,11 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
 
 export function getCrowdfundProjects(): ProjectRow[] {
     const enterprises = db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+        SELECT m.public_key, m.callsign, mp.photo AS avatar_url, m.bio, m.purpose,
                m.goal_amount, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
-        FROM members m
+        FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
@@ -2033,11 +2095,11 @@ export function getCrowdfundProjects(): ProjectRow[] {
 
 export function getCrowdfundProject(id: string): ProjectRow | undefined {
     const e = db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+        SELECT m.public_key, m.callsign, mp.photo AS avatar_url, m.bio, m.purpose,
                m.goal_amount, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
-        FROM members m
+        FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE m.public_key = ? AND m.is_treasury = 1 AND m.status NOT IN ('pruned', 'deleted')
     `).get(id) as any;
 
@@ -2176,7 +2238,7 @@ export function createCrowdfundProject(
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
     // without its metadata (G9a-3). Anything that is not an image comes back exactly as given.
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos;
-    // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. An
+    // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. An
     // editor that read the enterprise back from the node holds THIS node's own avatar URL
     // there, not the photo; storing it would point the avatar at itself. Same rule as
     // updateProfile: read it as "no photo" rather than rejecting the whole save.
@@ -2193,11 +2255,12 @@ export function createCrowdfundProject(
     db.transaction(() => {
         db.prepare(`
             INSERT INTO members (
-                public_key, callsign, joined_at, avatar_url, bio, status,
+                public_key, callsign, joined_at, bio, status,
                 is_treasury, earned_credit, earned_surplus,
                 purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-            ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
-        `).run(id, callsign, now, photoUrl, description || '', description || title.trim(), goal_amount, deadline_at, now);
+            ) VALUES (?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+        `).run(id, callsign, now, description || '', description || title.trim(), goal_amount, deadline_at, now);
+        setMemberPhoto(db, id, photoUrl || null);
         db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
         if (creator_pubkey) {
             db.prepare(`
@@ -2238,8 +2301,8 @@ export function updateCrowdfundProject(
     const now = new Date().toISOString();
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos; // as in createCrowdfundProject (G9a-3)
     // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
-    // loaded the enterprise from the node, means "unchanged" — the UPDATEs below COALESCE a
-    // null onto the existing avatar_url, so the stored photo survives the edit.
+    // loaded the enterprise from the node, means "unchanged": read as no photo, which leaves the
+    // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
 
@@ -2253,9 +2316,9 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, photoUrl || null, goal_amount, deadline_at, now, id);
+            `).run(title.trim(), description, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -2265,10 +2328,11 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, photoUrl || null, goal_amount, now, id);
+            `).run(title.trim(), description, description, goal_amount, now, id);
         }
+        if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
 }
 

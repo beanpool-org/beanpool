@@ -6,7 +6,7 @@
 // Pure reads (parameterized on better-sqlite3 Database handle).
 
 import type Database from 'better-sqlite3';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -42,7 +42,7 @@ export interface AverageRatingResult {
 
 export function getRatings(db: Db, targetPubkey: string): any[] {
     const rows = db.prepare(`
-        SELECT r.*, m.callsign as rater_callsign, m.avatar_url as rater_avatar
+        SELECT r.*, m.callsign as rater_callsign, m.avatar_ref as rater_avatar
         FROM ratings r
         LEFT JOIN members m ON r.rater_pubkey = m.public_key
         WHERE r.target_pubkey=?
@@ -59,14 +59,14 @@ export function getRatings(db: Db, targetPubkey: string): any[] {
         transactionId: r.transaction_id,
         createdAt: r.created_at,
         rater_callsign: r.rater_callsign,
-        rater_avatar: avatarUrlFor(r.rater_pubkey, r.rater_avatar)
+        rater_avatar: avatarUrlOf(r.rater_pubkey, r.rater_avatar)
     }));
 }
 
 export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
     const rows = db.prepare(`
         SELECT r.id, r.target_pubkey, r.rater_pubkey, r.stars, r.comment, r.role, r.transaction_id, r.created_at,
-               m.callsign as target_callsign, m.avatar_url as target_avatar
+               m.callsign as target_callsign, m.avatar_ref as target_avatar
         FROM ratings r
         LEFT JOIN members m ON r.target_pubkey = m.public_key
         WHERE r.rater_pubkey=?
@@ -83,7 +83,7 @@ export function getRatingsGiven(db: Db, raterPubkey: string): Rating[] {
         transactionId: r.transaction_id,
         createdAt: r.created_at,
         target_callsign: r.target_callsign,
-        target_avatar: avatarUrlFor(r.target_pubkey, r.target_avatar)
+        target_avatar: avatarUrlOf(r.target_pubkey, r.target_avatar)
     }));
 }
 
@@ -102,7 +102,7 @@ export function getAverageRating(db: Db, targetPubkey: string): AverageRatingRes
 
 export function getFriends(db: Db, pubkey: string): FriendEntry[] {
     const rows = db.prepare(`
-        SELECT f.friend_pubkey, m.callsign, f.added_at, m.avatar_url
+        SELECT f.friend_pubkey, m.callsign, f.added_at, m.avatar_ref
         FROM friends f 
         JOIN members m ON f.friend_pubkey = m.public_key 
         WHERE f.owner_pubkey=?
@@ -113,6 +113,6 @@ export function getFriends(db: Db, pubkey: string): FriendEntry[] {
         callsign: r.callsign,
         addedAt: r.added_at,
         isGuardian: false,
-        avatarUrl: avatarUrlFor(r.friend_pubkey, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.friend_pubkey, r.avatar_ref),
     }));
 }

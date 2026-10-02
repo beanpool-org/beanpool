@@ -12,7 +12,7 @@ import {
 import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 
@@ -447,7 +447,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: avatarUrlFor(row.author_pubkey, row.author_avatar),
+        authorAvatarUrl: avatarUrlOf(row.author_pubkey, row.author_avatar),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
@@ -675,7 +675,7 @@ export function liveOfferCount(db: Db, publicKey: string): number {
 
 /** A listed post's row: the post, its author, who took it, its group, and the author's trade count. */
 const POST_ROW_SELECT = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_callsign,
+        SELECT p.*, m.callsign as author_callsign, m.avatar_ref as author_avatar, a.callsign as accepted_callsign,
                g.name as target_group_name,
                COALESCE(m.earned_credit, 0) as author_earned_credit,
                (

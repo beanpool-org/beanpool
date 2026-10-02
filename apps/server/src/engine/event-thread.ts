@@ -29,7 +29,7 @@ import { assertNodeMember } from './members.js';
 import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
@@ -288,7 +288,7 @@ export function toThreadMessage(r: any, conversationId: string, removedText = EV
         conversationId,
         authorPubkey: r.author_pubkey,
         authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-        authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
+        authorAvatar: avatarUrlOf(r.author_pubkey, r.author_avatar),
         ciphertext: displayCiphertext,
         nonce: r.nonce,
         type: r.type,
@@ -300,7 +300,7 @@ export function toThreadMessage(r: any, conversationId: string, removedText = EV
 
 export function getEventThreadMessages(postId: string, limit = 50, offset = 0): EventThreadMessage[] {
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
@@ -380,7 +380,7 @@ export function postEventThreadMessage(
                 return toThreadMessage({
                     ...existing,
                     author_callsign: senderMember?.callsign,
-                    author_avatar: senderMember?.avatarUrl,
+                    author_avatar: senderMember?.avatarRef,
                 }, postId);
             }
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
@@ -402,7 +402,7 @@ export function postEventThreadMessage(
         id: msgId,
         author_pubkey: authorPubkey,
         author_callsign: senderMember?.callsign,
-        author_avatar: senderMember?.avatarUrl,
+        author_avatar: senderMember?.avatarRef,
         ciphertext,
         nonce,
         type: 'text',
@@ -459,7 +459,7 @@ export function removeEventThreadMessage(
         type: 'removed',
         metadata: metadataStr,
         author_callsign: authorMember?.callsign,
-        author_avatar: authorMember?.avatarUrl,
+        author_avatar: authorMember?.avatarRef,
     }, postId);
 
     broadcastEventThreadMessage(cb, postId, updated, 'removed');

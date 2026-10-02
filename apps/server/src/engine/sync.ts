@@ -35,6 +35,7 @@ import {
 import {
     exportSyncState as exportSyncStateEngine,
     clearEnterpriseFloorCache,
+    setMemberPhoto,
     isWellFormedKey,
     summariseLedger,
     type LedgerSummary,
@@ -1320,6 +1321,26 @@ function writeMemberStanding(
     return 'updated';
 }
 
+/** The members columns a copy never writes as they come: the avatar's reference and size, made here from its photo. */
+const MEMBER_PHOTO_COLUMNS: ReadonlySet<string> = new Set(['avatar_ref', 'avatar_bytes']);
+
+/**
+ * A member's avatar as the main server holds it: `avatar_url` in its row (`standing`, or the named `avatarUrl` from a main
+ * server older than that), where a main server of any version puts it (@beanpool/engine sync.ts withPhoto). Written by its
+ * one writer (@beanpool/engine members.ts setMemberPhoto), so member_photos and the row's avatar_ref and avatar_bytes say
+ * the same as the main server's, worked out here by the same rule; and the row keeps the main server's stamp, which the
+ * touch trigger would otherwise move (it is set aside for a copy of whole rows, not for an older main server's). A value
+ * that is not text or null is left out, and the member keeps what they have here. Returns whether the avatar changed.
+ */
+function importMemberPhoto(publicKey: string, stored: unknown): boolean {
+    if (stored !== null && typeof stored !== 'string') return false;
+    const row = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(publicKey) as { updated_at: string | null } | undefined;
+    if (!row) return false;
+    if (!setMemberPhoto(db, publicKey, stored)) return false;
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(row.updated_at, publicKey);
+    return true;
+}
+
 /**
  * A member's preferences as the main server holds them (design G2b): the copy names every one the member has, so this
  * member's rows here are replaced by them when they differ. A malformed entry is left out. Only for a member this database
@@ -1632,9 +1653,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 noteReplacedKeysFromMainServer();
             }
 
-            // This table's own columns, which alone a member's `standing` may name; never the key or the stamp, written apart.
+            // This table's own columns, which alone a member's `standing` may name; never the key or the stamp, written apart,
+            // nor the avatar's reference and size, which go with the photo (importMemberPhoto).
             const memberColumns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[])
-                .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at'));
+                .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at' && !MEMBER_PHOTO_COLUMNS.has(c)));
             const standingStatements = new Map<string, Database.Statement>();
             // This table's own rules, which a whole row is checked against before it is written (writeMemberStanding); only
             // for a copy that carries whole rows.
@@ -1646,8 +1668,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 if (memberRules && isPlainObject(rm.standing)) {
                     if (typeof rm.publicKey !== 'string' || !rm.publicKey) { conflictsSkipped++; continue; }
                     const wrote = writeMemberStanding(memberColumns, memberRules, standingStatements, rm.publicKey, rm.standing, rm.updatedAt, valuesLeftOut);
+                    // The avatar, as the row carries it (@beanpool/engine sync.ts withPhoto); a row that names none keeps its own.
+                    const photoChanged = wrote !== 'refused' && Object.hasOwn(rm.standing, 'avatar_url')
+                        && importMemberPhoto(rm.publicKey, rm.standing.avatar_url);
                     if (wrote === 'new') newMembers++;
-                    else if (wrote === 'updated') updatedMembers++;
+                    else if (wrote === 'updated' || photoChanged) updatedMembers++;
                     else if (wrote === 'refused') {
                         conflictsSkipped++;
                         console.warn(`[Sync] A member's row this table's rules refuse whatever is left out, not written: ${rm.publicKey.slice(0, 16)}`);
@@ -1656,16 +1681,15 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 }
                 const existing = db.prepare("SELECT updated_at, is_visitor, board_standing_changed_at FROM members WHERE public_key=?").get(rm.publicKey) as { updated_at: string | null; is_visitor: number | null; board_standing_changed_at: string | null } | undefined;
                 if (!existing) {
-                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, avatar_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
+                    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, home_node_url, bio, contact_value, contact_visibility, status, last_active_at, elder_vouched_by, archetype, updated_at, moderation_muted_until,
                                 area_lat, area_lng, area_updated_at, is_visitor, deleted_by_owner_at, board_standing_changed_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
                         rm.publicKey,
                         rm.callsign,
                         rm.joinedAt,
                         rm.invitedBy,
                         rm.inviteCode,
                         rm.homeNodeUrl || null,
-                        rm.avatarUrl || null,
                         rm.bio || null,
                         rm.contactValue || null,
                         rm.contactVisibility || null,
@@ -1680,6 +1704,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         deletedByOwnerAt(rm),
                         boardStandingChangedAt(rm)
                     );
+                    importMemberPhoto(rm.publicKey, rm.avatarUrl || null);
                     // No account row here: the copy's own account set brings the member's (below). One made here was
                     // stamped with this standby's clock and then kept over the main server's older row (G0).
                     newMembers++;
@@ -1716,7 +1741,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     }
                     const res = db.prepare(`UPDATE members SET
                         callsign = ?,
-                        avatar_url = ?,
                         bio = ?,
                         contact_value = ?,
                         contact_visibility = ?,
@@ -1734,7 +1758,6 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         updated_at = ?
                         WHERE public_key = ?`).run(
                         rm.callsign,
-                        rm.avatarUrl || null,
                         rm.bio || null,
                         rm.contactValue || null,
                         rm.contactVisibility || null,
@@ -1750,7 +1773,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rm.updatedAt || existing.updated_at || new Date().toISOString(),
                         rm.publicKey
                     );
-                    if (res.changes > 0) updatedMembers++;
+                    const photoChanged = importMemberPhoto(rm.publicKey, rm.avatarUrl || null);
+                    if (res.changes > 0 || photoChanged) updatedMembers++;
                 }
             }
 

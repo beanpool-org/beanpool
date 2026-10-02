@@ -10,8 +10,9 @@
  * visitor's listings carry no face (the engine's guestPost). No app changes: every app renders the URL it is given.
  *
  * - The key is `base64url(HMAC-SHA256(secret, id + '|' + version)).slice(0, 22)` (132 bits). `version` is the photo's
- *   content version (@beanpool/core avatarVersionOf), so a new photo has a new key, and the old key opens nothing; it
- *   changes exactly when the URL's `v` does, which already brings members the new URL.
+ *   content version (@beanpool/core avatarVersionOf, kept in the members row's avatar_ref), so a new photo has a new
+ *   key, and the old key opens nothing; it changes exactly when the URL's `v` does, which already brings members the
+ *   new URL.
  * - The secret is 32 random bytes in `node_config.avatarKeySecret`, written once: it travels with the database (file
  *   and sealed backups, a restore). A server that has no copy of it (a standby, a take-over) mints its own, and members'
  *   saved URLs show initials until their next members sync brings the new ones: a nuisance, never a leak.
@@ -19,7 +20,7 @@
  *   node, so the URLs it emits and the URLs it serves always agree.
  */
 import crypto from 'node:crypto';
-import { avatarVersionOf, configureAvatarKeys, isServableAvatarValue } from '@beanpool/core';
+import { avatarVersionOfRef, configureAvatarKeys } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 
@@ -75,10 +76,10 @@ export function avatarKeysRequired(): boolean {
  */
 export function avatarKeyMatches(pubkey: string, k: unknown): boolean {
     if (!secret || typeof k !== 'string' || k.length !== KEY_CHARS) return false;
-    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(pubkey) as { avatar_url: string | null } | undefined;
-    if (!row || !isServableAvatarValue(row.avatar_url)) return false;
-    // The version avatarUrlFor put in the URL, from the same trimmed value.
-    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOf(pubkey, row.avatar_url.trim())));
+    const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(pubkey) as { avatar_ref: string | null } | undefined;
+    if (!row || !row.avatar_ref) return false;
+    // The version avatarUrlOf put in the URL, from the row's reference: the photo is never read.
+    const want = Buffer.from(keyFor(secret, pubkey, avatarVersionOfRef(row.avatar_ref)));
     const got = Buffer.from(k);
     return got.length === want.length && crypto.timingSafeEqual(got, want);
 }

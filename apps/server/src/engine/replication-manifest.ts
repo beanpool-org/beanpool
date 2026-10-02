@@ -158,7 +158,7 @@ export const TABLES: Record<string, TableEntry> = {
     // members' touch triggers aside while it writes them).
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_url bio contact_value contact_visibility status
+        columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_ref avatar_bytes bio contact_value contact_visibility status
             elder_vouched_by can_vouch vouch_credit credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
             legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
@@ -174,6 +174,15 @@ export const TABLES: Record<string, TableEntry> = {
     member_preferences: {
         kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'preferences' },
         columns: cols('public_key pref_key pref_value'),
+    },
+    // A member's avatar, out of their row so no scan of members reads it (schema.sql member_photos), in each member's row
+    // as `avatar_url`, where a standby of any version reads it (@beanpool/engine sync.ts withPhoto, engine/sync.ts
+    // importMemberPhoto). Its one writer (@beanpool/engine members.ts setMemberPhoto) writes the row's avatar_ref and
+    // avatar_bytes with it, which the touch trigger names, so a change moves the member's updated_at; the standby makes
+    // those two from the photo by the same rule.
+    member_photos: {
+        kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'standing.avatar_url' },
+        columns: cols('public_key photo'),
     },
     // Who keeps each enterprise (G2c): the whole set in every payload, applied as a diff, so an unbound keeper needs no
     // tombstone.

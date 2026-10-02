@@ -29,7 +29,7 @@
  * either; replication-manifest message_attachments), and its object goes with the line.
  * Gone with their sender on a prune or a self-deletion (dropWithheldOf); a re-key moves them (engine/key-move.ts).
  */
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import type { Message } from '@beanpool/engine';
 import { db, afterTransactionCommit } from '../db/db.js';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
@@ -343,14 +343,14 @@ export function listWithOwnWithheld<T extends ListedConversation>(viewer: string
         .map(r => [r.conversation_id, r]));
     if (convs.length === 0 && lastOwn.size === 0) return listed;
 
-    const peer = db.prepare('SELECT public_key, callsign, avatar_url FROM members WHERE public_key = ?');
+    const peer = db.prepare('SELECT public_key, callsign, avatar_ref FROM members WHERE public_key = ?');
     const added = convs.map(c => {
-        const p = peer.get(c.other_pubkey) as { public_key: string; callsign: string | null; avatar_url: string | null } | undefined;
+        const p = peer.get(c.other_pubkey) as { public_key: string; callsign: string | null; avatar_ref: string | null } | undefined;
         return {
             id: c.id, type: 'dm', postId: null, postTitle: null, postStatus: 'active', postPhoto: null,
             lastMsgType: null, lastSysType: null, name: null, createdBy: c.owner_pubkey, createdAt: c.created_at,
             participants: [c.owner_pubkey, c.other_pubkey].sort(),
-            peerCallsign: p?.callsign ?? undefined, peerAvatar: p ? avatarUrlFor(p.public_key, p.avatar_url) : null,
+            peerCallsign: p?.callsign ?? undefined, peerAvatar: p ? avatarUrlOf(p.public_key, p.avatar_ref) : null,
             peerLastReadAt: null, myLastReadAt: c.owner_last_read_at ?? null,
         } as unknown as T;
     });

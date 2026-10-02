@@ -317,7 +317,7 @@ function memberCandidates(groupId: string, exclude: string): { pubkey: string; c
 
 export function getGroupThreadMessages(groupId: string, limit = 50, offset = 0): EventThreadMessage[] {
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?

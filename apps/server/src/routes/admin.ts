@@ -33,7 +33,7 @@ import {
     hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
-import { listBrokenBalances, BROKEN_BALANCE_REPAIR } from '../engine/audit.js';
+import { listBrokenBalances, BROKEN_BALANCE_REPAIR, CommonsPotUnknownError } from '../engine/audit.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -1098,7 +1098,8 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
             : { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
-        ctx.status = 500;
+        // A Commons pot that isn't a number pauses every Bean move (engine/audit.ts COMMONS_POT_PAUSED): plain words, 503.
+        ctx.status = e instanceof CommonsPotUnknownError ? 503 : 500;
         ctx.body = { error: e.message };
     }
 });

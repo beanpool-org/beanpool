@@ -59,9 +59,34 @@ export function persistCommonsBalance(): void {
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
 }
 
+/**
+ * What a member, a moderator or an admin reads when a step that would move Beans meets a Commons pot that is not a finite
+ * number (#1465 review, NB-2). While the pot is unknown NO Beans move at all, because every move's conservingTransaction
+ * flushes the pot first and that flush refuses it: deals, refunds, removals, account deletions, sends, grants. The
+ * internal words ("The Commons pot in memory is not a finite number (NaN)…") reached members as the route's error; they
+ * go to the log instead, at most once a minute, for the operator.
+ */
+export const COMMONS_POT_PAUSED = 'Payments are paused on this community while its admins fix a problem with its accounts. Nothing has moved.';
+
+/** Thrown with COMMONS_POT_PAUSED as its message; `code` lets a route answer 503 rather than 500. */
+export class CommonsPotUnknownError extends Error {
+    readonly code = 'COMMONS_POT_UNKNOWN';
+    constructor() {
+        super(COMMONS_POT_PAUSED);
+        this.name = 'CommonsPotUnknownError';
+    }
+}
+
+let potRefusalLoggedAt = 0;
+
 function assertCommonsPotFinite(): void {
     if (!Number.isFinite(COMMONS_BALANCE)) {
-        throw new Error(`The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written`);
+        if (Date.now() - potRefusalLoggedAt >= 60_000) {
+            potRefusalLoggedAt = Date.now();
+            console.error(`🛑 [Ledger] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written, `
+                + 'and no Beans move until its COMMONS_POOL row is mended (operator manual, "A balance that isn\'t a number").');
+        }
+        throw new CommonsPotUnknownError();
     }
 }
 

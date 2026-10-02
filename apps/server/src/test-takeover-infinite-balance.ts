@@ -265,8 +265,13 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
                 `the pot's row still holds ${stored.holds} after the boot, the audits and the flush (${JSON.stringify(pot.afterBoot)} → ${JSON.stringify(pot.afterFlush)})`);
             assert(pot.memory === (stored.t === 'real' ? String(row.balance) : 'NaN'),
                 `the pot in memory is ${stored.t === 'real' ? 'what the row holds' : 'unknown (NaN), never 0'} (${pot.memory})`);
-            assert(/^refused: The Commons pot in memory is not a finite number/.test(pot.flush), `the timer's flush refuses it and writes nothing (${pot.flush})`);
+            assert(/^refused: Payments are paused on this community/.test(pot.flush), `the timer's flush refuses it and writes nothing (${pot.flush})`);
             assert(pot.dust === 0.0000005, `the settled deal's dust was not moved into a pot that isn't a number (${pot.dust})`);
+            // The boot says so, for ±Infinity as for text or NULL, and never "Restored" or "IN DEFICIT" (#1465 review, NB-2).
+            const stop = (firstStart.match(/🛑 The Commons pot's row.*/) ?? [''])[0];
+            assert(stop.includes(`holds ${stored.holds}, not a number of Beans`) && /no Beans move at all until it is mended/.test(stop)
+                && !/Restored Commons Pool balance/.test(firstStart),
+                `the boot's 🛑 line names the row and says no Beans move until it is mended (${stop.slice(0, 200) || 'none'})`);
         }
 
         console.log('\n— 5. a second start is quiet, and the take-over stays complete —');

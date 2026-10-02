@@ -55,6 +55,7 @@ import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import { payFromCommons, getCommonsBalanceExact } from './state-engine.js';
 import { crossNodeFee } from './federation-settlement-exchange.js';
 import { logger } from './logger.js';
+import { COMMONS_POT_PAUSED } from './engine/audit.js';
 
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -222,7 +223,8 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
             ok: false,
             reason: 'commons_not_a_number',
             shortfall: round2(shortfall),
-            message: `${link.name} needs ${round2(shortfall)} from the Commons pot, and the pot's balance is not a number just now, so nothing can be drawn from it. Nothing has been moved. The operator mends it (operator manual, "A balance that isn't a number").`,
+            // The words every Bean move gives while the pot is unknown (engine/audit.ts COMMONS_POT_PAUSED).
+            message: COMMONS_POT_PAUSED,
         };
     }
     if (shortfall > 0 && shortfall > round4(getCommonsBalanceExact())) {

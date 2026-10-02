@@ -42,6 +42,7 @@ import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { COMMONS_POT_PAUSED } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -103,6 +104,45 @@ export type DecisionEffect =
     | 'grant_enterprise'
     | 'grant_hardship'
     | 'write_off_deficit';
+
+/**
+ * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
+ * it isn't (its COMMONS_POOL row holds text, NULL, a BLOB or ±Infinity), every conservingTransaction refuses at its
+ * pre-flush, and no Beans move anywhere (#1465 review, NB-1). A removal moves Beans too, but at the end of its grace
+ * window (adminPruneUser), so its start is not here: the suspension is a plain row change.
+ */
+const POT_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['grant_enterprise', 'grant_hardship', 'write_off_deficit']);
+
+/** What a Decision waiting on an unknown pot says, to members and in the log. */
+export const WAITING_FOR_POT = 'Waiting: payments are paused on this community while its admins fix a problem with its accounts. '
+    + 'This is carried out once they are working again.';
+
+function potIsUnknown(): boolean {
+    return !Number.isFinite(getCommonsBalanceExact());
+}
+
+/**
+ * A due Decision that needs the pot, while the pot is unknown: left in its status (passed, queued for funds, or a
+ * removal's grace window), so the tick carries it out on its first run after the row is mended. It used to go to
+ * execution_blocked, which the tick never retries: a vote the community passed was lost to a broken row, and a removal
+ * left its member suspended for good (#1465 review, NB-1, measured on a real main server). Says so once, on the Decision
+ * and in the log.
+ */
+function waitForPot(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }, now: string): void {
+    const reason = decision.executionReason ?? decision.execution_reason ?? null;
+    if (reason === WAITING_FOR_POT) return;
+    db.prepare('UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?').run(WAITING_FOR_POT, now, decision.id);
+    console.warn(`[Decisions] ${decision.id} (${decision.effect}) waits: the Commons pot is not a number. It is carried out on the first `
+        + 'tick after the COMMONS_POOL row is mended.');
+    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
+}
+
+/** The log line when a Decision that waited on the pot is carried out after all. */
+function noteCarriedOutAfterWait(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }): void {
+    if ((decision.executionReason ?? decision.execution_reason ?? null) === WAITING_FOR_POT) {
+        console.log(`[Decisions] ${decision.id} (${decision.effect}) carried out now that the Commons pot is a number again.`);
+    }
+}
 
 export interface Decision {
     id: string;
@@ -1072,6 +1112,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: false, status: 'unresolved', error: why };
     }
 
+    // Needs the pot, and the pot is unknown: waits in its status, before the preflight (which reads the pot) and before
+    // anything is written. Retried by the tick. A Decision that moves no Beans goes on below whatever the pot is.
+    if (POT_EFFECTS.has(decision.effect) && potIsUnknown()) {
+        waitForPot(decision, now);
+        return { success: false, status: decision.status, error: WAITING_FOR_POT };
+    }
+
     const preflight = preflightAssert(decision);
 
     if (preflight.status === 'void') {
@@ -1114,7 +1161,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         try {
-            conservingTransaction(() => {
+            // A plain transaction, not a conservingTransaction: the suspension moves no Beans, so it must not wait on the
+            // pot's pre-flush (#1465 review, NB-1). The Beans move at the end of the grace window (adminPruneUser).
+            db.transaction(() => {
                 // Hold the member's node role aside before the suspension deletes it, so halting the removal
                 // in its grace window gives it back exactly (as an emergency suspension does).
                 db.prepare(`
@@ -1133,7 +1182,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         updated_at = ?
                     WHERE id = ?
                 `).run(graceEndsAt, now, decisionId);
-            });
+            })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
             broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
             return { success: true, status: 'execution_pending_grace' };
@@ -1152,7 +1201,12 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         const touchedEnterprises: string[] = [];
         const touchedProfiles: string[] = [];
 
-        conservingTransaction(() => {
+        // Beans move only for POT_EFFECTS, which need the pot's pre-flush and the in-memory unwind. Every other effect is
+        // row changes alone, so it runs in a plain transaction and is carried out whatever the pot is (#1465 review, NB-1).
+        const inTransaction = POT_EFFECTS.has(decision.effect)
+            ? (fn: () => void) => conservingTransaction(fn)
+            : (fn: () => void) => db.transaction(fn)();
+        inTransaction(() => {
             // Re-verify status under write lock to guard against concurrent execution
             const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
             if (!current || current.status === 'executed' || current.status === 'execution_void') {
@@ -1331,6 +1385,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             const current = getDecision(decisionId);
             return { success: true, status: current?.status || 'executed' };
         }
+        noteCarriedOutAfterWait(decision);
 
         for (const ent of touchedEnterprises) {
             clearEnterpriseFloorCache(ent);
@@ -1447,6 +1502,9 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
             error: `This member held the ${held} role, and only an owner can cut short the grace window on removing an owner or admin. Ask an owner to do this`,
         };
     }
+
+    // The prune moves Beans: refused in plain words while the pot is unknown, and the removal stays in its grace window.
+    if (potIsUnknown()) return { success: false, status: 503, error: COMMONS_POT_PAUSED };
 
     const now = new Date().toISOString();
     try {
@@ -1842,8 +1900,16 @@ export function tickDecisions(asOfTime?: number): {
                 continue;
             }
 
+            // The prune settles the member's balance with the Commons, so it waits for an unknown pot, still in its grace
+            // window with the member suspended, and completes on the first tick after the row is mended. It went to
+            // execution_blocked, which nothing retries or halts: the member stayed suspended for good (#1465 review, NB-1).
+            if (potIsUnknown()) {
+                waitForPot(r, now);
+                continue;
+            }
             try {
                 adminPruneUser(r.subject, COMMUNITY_DECISION_ACTOR);
+                noteCarriedOutAfterWait(r);
                 db.prepare(`
                     UPDATE decisions SET
                         status = 'executed',
@@ -1878,7 +1944,8 @@ export function tickDecisions(asOfTime?: number): {
         const closesAtDate = new Date(top.closes_at);
         const ageDays = (now.getTime() - closesAtDate.getTime()) / (1000 * 60 * 60 * 24);
 
-        if (ageDays > 90) {
+        // Not while the pot is unknown: the grant didn't wait those days for funds but for a broken row (#1465 review).
+        if (ageDays > 90 && !potIsUnknown()) {
             // Expired after 90 days
             db.prepare(`
                 UPDATE decisions SET

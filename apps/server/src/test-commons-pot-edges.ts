@@ -12,9 +12,9 @@
  *   1. a healthy pot still pays, inside the deficit and into it, and the conservation audit stays ok (no change);
  *   2. payFromCommons, with and without allowDeficit, called outside any transaction: refused (null, no throw), and the
  *      recipient's balance in memory and in its row, the history and the pot's row are all as they were;
- *   3. fundCommission (the one caller outside a conservingTransaction) refuses in words, with no "NaN" in them, and
- *      nothing moves;
- *   4. once the pot is set back to what its row holds, the conservation audit is ok: nothing was minted or lost.
+ *   3. fundCommission (the one caller outside a conservingTransaction) refuses in the plain words every Bean move gives
+ *      while the pot is unknown (COMMONS_POT_PAUSED), and nothing moves; so does a send, as a CommonsPotUnknownError;
+ *   4. once the row and the pot are set back to what they held, the conservation audit is ok: nothing was minted or lost.
  *
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx apps/server/src/test-commons-pot-edges.ts
  */
@@ -27,8 +27,13 @@ import { generateKeyPair } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { setCommonsBalance, COMMONS_BALANCE } from '@beanpool/core';
 import {
-    initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact, payFromCommons, runLedgerAudit, createTreasury,
+    initStateEngine, reconcileLedgerFromDb, getCommonsBalanceExact, payFromCommons, runLedgerAudit, createTreasury, transfer,
 } from './state-engine.js';
+import * as auditModule from './engine/audit.js';
+
+// The words every Bean move gives while the pot is unknown (engine/audit.ts), written out so this suite still runs, and
+// fails by count, on a tree without them.
+const COMMONS_POT_PAUSED = 'Payments are paused on this community while its admins fix a problem with its accounts. Nothing has moved.';
 import { ledger } from './engine/ledger.js';
 import { db } from './db/db.js';
 import { addConnector, setConnectorCreditCap } from './connector-manager.js';
@@ -124,6 +129,11 @@ async function main(): Promise<void> {
     for (const pot of [NaN, Infinity, -Infinity]) {
         console.log(`\n── a pot of ${pot} in memory ──`);
         const rowBefore = potRow();
+        // As a boot leaves it: the row holds what makes the pot so (text for the unknown pot, ±9e999 for ±Infinity), and
+        // the pot in memory is what the row gives. A failed move's resync reads the row back, so the two must agree.
+        const broken = Number.isNaN(pot) ? "'abc'" : pot > 0 ? '9e999' : '-9e999';
+        db.prepare(`UPDATE accounts SET balance = ${broken} WHERE public_key = 'COMMONS_POOL'`).run();
+        const brokenRow = potRow();
         setCommonsBalance(pot);
         const keys = [ben, cara, link.treasuryPubkey];
         const before = snapshot(keys);
@@ -140,12 +150,22 @@ async function main(): Promise<void> {
         const c = commission.value as any;
         assert(commission.threw === undefined && c?.ok === false && c?.reason === 'commons_not_a_number',
             `fundCommission refuses: the pot isn't a number (${commission.threw ?? JSON.stringify(c).slice(0, 200)})`);
-        assert(/the pot's balance is not a number just now, so nothing can be drawn from it\. Nothing has been moved\./.test(String(c?.message))
-            && !/NaN|Infinity|null/.test(String(c?.message)), `in plain words, with no NaN or Infinity in them (${c?.message})`);
+        assert(c?.message === COMMONS_POT_PAUSED, `in the plain words every Bean move gives (${c?.message})`);
         assert(snapshot(keys) === before, 'and nothing moved');
 
+        // Any other move (here a send from genesis, past every gate): refused with the plain words, as a
+        // CommonsPotUnknownError a route answers 503, and nothing moves (#1465 review, NB-2).
+        const sent = attempt(() => transfer('genesis', ben, 1, 'a send', 'direct', true));
+        assert(sent.threw === COMMONS_POT_PAUSED && snapshot(keys) === before, `a send is refused in plain words, nothing moved (${sent.threw ?? 'no throw'})`);
+        let caught: unknown = null;
+        try { transfer('genesis', ben, 1, 'a send', 'direct', true); } catch (e) { caught = e; }
+        const PotError = (auditModule as Record<string, unknown>).CommonsPotUnknownError as (new () => Error) | undefined;
+        assert(!!PotError && caught instanceof PotError && (caught as { code?: string }).code === 'COMMONS_POT_UNKNOWN', 'thrown as a CommonsPotUnknownError');
+
         // The pot set back to what its row holds, as the operator's repair does: the books add up, nothing minted or lost.
-        assert(JSON.stringify(potRow()) === JSON.stringify(rowBefore), `the pot's row was never written (${JSON.stringify(potRow())})`);
+        assert(JSON.stringify(potRow()) === JSON.stringify(brokenRow) && String(COMMONS_BALANCE) === String(pot),
+            `the pot's row was never written, and the pot is still ${pot} (${JSON.stringify(potRow())}, ${String(COMMONS_BALANCE)})`);
+        db.prepare("UPDATE accounts SET balance = ? WHERE public_key = 'COMMONS_POOL'").run(rowBefore.balance);
         setCommonsBalance(rowBefore.balance as number);
         const audit = runLedgerAudit();
         assert(audit.ok && audit.badBalances === 0 && Math.abs(audit.drift) < 1e-9, `with the pot mended, the ledger adds up (${JSON.stringify(audit)})`);

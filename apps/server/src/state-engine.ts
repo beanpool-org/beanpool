@@ -713,11 +713,16 @@ export function initStateEngine(): void {
     // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
     const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
     const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
-    if (restoredPot !== null && Number.isNaN(restoredPot)) {
+    //
+    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
+    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
+    if (restoredPot !== null && !Number.isFinite(restoredPot)) {
         setCommonsBalance(restoredPot);
-        console.error(`🛑 The Commons pot's row holds ${describeRowBalance(commonsRow!.balance)}, not a number: the pot is unknown. `
-            + 'Nothing will be written over it and nothing will be paid from it until an operator sets it (operator manual, '
-            + '"A balance that isn\'t a number").');
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+            + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
+            + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
+            + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
     } else if (restoredPot !== null) {
         setCommonsBalance(restoredPot);
         const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
@@ -2515,6 +2520,7 @@ function commonsPotFromRow(balance: unknown): number {
 /** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
 function describeRowBalance(balance: unknown): string {
     if (balance === null || balance === undefined) return 'NULL';
+    if (Buffer.isBuffer(balance)) return 'a BLOB';
     return typeof balance === 'string' ? `text '${balance}'` : String(balance);
 }
 

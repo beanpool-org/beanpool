@@ -89,7 +89,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
 import {
-    isNamesKeyId, isNamesRingBox, namesBoxDigest, newNamesListKey, openNamesRing, sealNamesRing, NAMES_LIMITS,
+    isNamesKeyId, isNamesEntryId, isNamesRingBox, namesBoxDigest, newNamesListKey, openNamesRing, sealNamesRing, NAMES_LIMITS,
     type NamesRingBox,
 } from './names-list-crypto.js';
 
@@ -351,13 +351,16 @@ export interface NamesPin {
     pending: NamesPending | null;
     /** Keys this phone's admin chose to remove, until the generation that drops them lands. */
     manualDrops: string[];
-    /** Entries last seen, for the rollback message. */
-    lastCount: number;
+    /**
+     * The ids of the entries this phone last read (design Addendum 4; replaces `lastCount`): ids only, never text, at most
+     * `NAMES_LIMITS.entries`. On the next ready read, an id here that is neither on the server nor deleted is a loss.
+     */
+    seen: string[];
 }
 
 /** A pin that trusts no one yet but this phone. */
 export function emptyNamesPin(communityId: string, me: string): NamesPin {
-    return { v: 3, communityId, me: lower(me), trusted: [lower(me)], dropped: {}, chain: [], abandoned: [], ring: {}, pending: null, manualDrops: [], lastCount: 0 };
+    return { v: 3, communityId, me: lower(me), trusted: [lower(me)], dropped: {}, chain: [], abandoned: [], ring: {}, pending: null, manualDrops: [], seen: [] };
 }
 
 function readLink(raw: unknown): NamesChainLink | null {
@@ -406,10 +409,10 @@ export function readNamesPin(raw: unknown, me: string): NamesPin | null {
             const key = (p.pending as { key?: unknown }).key;
             if (link && typeof key === 'string' && HEX_KEY.test(key)) pending = { ...link, key };
         }
-        const lastCount = Number.isSafeInteger(p.lastCount) && (p.lastCount as number) >= 0 ? (p.lastCount as number) : 0;
+        const seen = Array.isArray(p.seen) ? [...new Set(p.seen.filter((id): id is string => isNamesEntryId(id)))].slice(0, NAMES_LIMITS.entries) : [];
         return {
             v: 3, communityId: p.communityId as string, me: lower(me), trusted: [...new Set([...trusted, lower(me)])].sort(), dropped, chain, abandoned, ring, pending,
-            manualDrops: normaliseNamesKeys(p.manualDrops, 10_000), lastCount,
+            manualDrops: normaliseNamesKeys(p.manualDrops, 10_000), seen,
         };
     } catch {
         return null;
@@ -483,8 +486,10 @@ export type NamesPlan =
         canCheck?: boolean;
         /** untrusted_maker on an empty chain: nobody holds the current key, so this phone may start again (asked first). */
         canStartAgain?: boolean;
-        /** different_history: the server's path is whole, so this phone may follow it (asked first; Addendum 3). */
+        /** different_history or untrusted_maker: the server's path is whole, so this phone may follow it (asked first; Addenda 3, 4). */
         canFollow?: boolean;
+        /** untrusted_maker: this phone had removed the maker on a history it left (Addendum 4). */
+        standing?: boolean;
         /** rolled_back: what the server offers, and this phone's head. */
         offered?: { id: string; n: number } | null;
         newest?: { id: string; n: number };
@@ -624,12 +629,11 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
         return histories.get(id)!;
     };
     /**
-     * Whether a trusted admin's header names a head whose history includes `g` (rule 1b), for a maker never dropped here
-     * or dropped by a statement on this chain (an ancestor of `g`: Addendum 2, ruling 5). A maker whose drop is abandoned
-     * stays refused.
+     * Whether a trusted admin's header names a head whose history includes `g` (rule 1b). No clause on `dropped` (Addendum
+     * 4, ruling 1): a maker this phone removed on a history it left is taken for place and drops only; rule (a) keeps the
+     * drop standing, so this phone makes its own key without them before it writes.
      */
     const vouchedHistory = (g: NamesGeneration): boolean => {
-        if (g.maker in D && !droppedOnChain(g.maker)) return false;
         return shares.some((w) => w.from !== me && T.has(w.from) && historyOf(w.headId).has(g.id));
     };
 
@@ -721,7 +725,7 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     const standing = Object.keys(D).filter((k) => k !== me && !droppedOnChain(k));
     const toDrop = [...new Set([...[...T].filter((k) => k !== me && !listed.has(k)), ...manualDrops, ...standing])].sort().slice(0, NAMES_TRUST_BOUNDS.keys);
     const pin: NamesPin = {
-        v: 3, communityId, me, trusted: [...T].sort(), dropped: D, chain, abandoned, ring, pending, manualDrops, lastCount: pin0.lastCount,
+        v: 3, communityId, me, trusted: [...T].sort(), dropped: D, chain, abandoned, ring, pending, manualDrops, seen: [...(pin0.seen ?? [])],
     };
     return { pin, plan: planNames(pin, state, toDrop, gens), toDrop, notices, generations: gens };
 }
@@ -771,7 +775,23 @@ export function planNames(pin: NamesPin, state: NamesServerState, toDrop: string
     const next = gens.get(back.ids[meet - 1]);
     if (!next) return { kind: 'refused', reason: 'missing_record' };
     if (pin.trusted.includes(next.maker)) return different;
-    return { kind: 'refused', reason: 'untrusted_maker', maker: next.maker, n: next.n, canCheck: isAdmin(next.maker) };
+    // Addendum 4: whether this phone had removed the maker on a history it left (`standing`: rule 1b would carry the drop),
+    // and whether it may follow the server's path from here (asked: for place and drops only).
+    const standing = next.maker in pin.dropped && !position.has(pin.dropped[next.maker]);
+    return { kind: 'refused', reason: 'untrusted_maker', maker: next.maker, n: next.n, canCheck: isAdmin(next.maker), standing, canFollow: back.complete };
+}
+
+/**
+ * After a ready read (design Addendum 4): the entries this phone saw last time that are neither on the server now nor
+ * deleted by an admin (the server's `deleted` ids) are `gone`, a loss to say with its count; the pin then remembers the
+ * ids it read now. Nothing else in the pin moves: no trust, no drop, no key (K13).
+ */
+export function namesSeenAfterRead(pin: NamesPin, entryIds: string[], deletedIds: string[] = []): { pin: NamesPin; gone: string[] } {
+    const now = new Set(entryIds);
+    const deleted = new Set(deletedIds);
+    const gone = (pin.seen ?? []).filter((id) => !now.has(id) && !deleted.has(id));
+    const seen = [...now].filter((id) => isNamesEntryId(id)).slice(0, NAMES_LIMITS.entries);
+    return { pin: { ...pin, seen }, gone };
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────────────────────
@@ -802,7 +822,7 @@ export interface NamesFollowed {
  * to the last statement it shares with the server's path; the rest of that path is adopted for its drops and its place
  * only. Every adopted signature is checked; no trust is taken, no key, and no scan is needed. A drop this phone stands by
  * is kept unless the adopted path drops the key on this chain ((a)), so the next sync makes this phone's own key without
- * it before anything is written. The ring, `pending`, `manualDrops` and `lastCount` are unchanged. The pin as it was when
+ * it before anything is written. The ring, `pending`, `manualDrops` and `seen` are unchanged. The pin as it was when
  * the server's path isn't whole.
  */
 export function followNamesServer(pin: NamesPin, state: Pick<NamesServerState, 'current' | 'generations'>): NamesFollowed {

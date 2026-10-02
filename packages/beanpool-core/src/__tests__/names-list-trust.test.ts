@@ -16,7 +16,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     NAMES_REFUSAL_REASONS, checkNamesKeyInPerson, emptyNamesPin, makeNamesGeneration, makeNamesGenerationFor, makeNamesShare,
     namesKeyCheckMatches, namesKeyCode, namesKeyQr, namesReplay, namesSharesToSend, readNamesGeneration, readNamesPin, readNamesShare,
-    removeNamesKey, followNamesServer, syncNames, namesRingKeys, namesShareHeader, namesStatementId, readNamesKeyCheck,
+    removeNamesKey, followNamesServer, namesSeenAfterRead, syncNames, namesRingKeys, namesShareHeader, namesStatementId, readNamesKeyCheck,
     type NamesGeneration, type NamesPin, type NamesServerState, type NamesShare, type NamesSyncResult, type NamesSigner,
 } from '../names-list-trust.js';
 import { namesBoxDigest, newNamesListKey, sealNamesRing, openNamesEntry, sealNamesEntry, newNamesEntryId } from '../names-list-crypto.js';
@@ -43,6 +43,8 @@ class World {
     shares = new Map<string, NamesShare>();
     admins: Admin[] = [];
     entries: { id: string; keyId: string; ciphertext: string }[] = [];
+    /** Entry ids an admin deleted (the log's `delete` lines). */
+    deleted: string[] = [];
     /** What the route does: the parent is the current one, the number the next. */
     post(g: NamesGeneration): 201 | 200 | 409 {
         if (this.gens.has(g.id)) return 200;
@@ -63,7 +65,8 @@ class World {
     keyIdsOf(pubkey: string): string[] {
         const ids = new Set<string>();
         for (const g of this.gens.values()) if (g.maker === pubkey) ids.add(g.id);
-        for (const s of this.shares.values()) if (s.to === pubkey || s.from === pubkey) for (const id of s.keyIds) ids.add(id);
+        // On their own word (design Addendum 4): made, or listed in their own share header; a box addressed to them isn't.
+        for (const s of this.shares.values()) if (s.from === pubkey) for (const id of s.keyIds) ids.add(id);
         return [...ids];
     }
     holdersOf(id: string): string[] {
@@ -985,7 +988,8 @@ function forkWorld() {
     expect(world.gens.get(two)!.drops).toEqual([abe.pk]);
     bea.open(world);
     expect(bea.ringIds()).toContain(two);
-    world.shares.delete(`${owen.pk}|${zed.pk}`);
+    // Zed never gets key 2: no box to it carries 2 (a box addressed isn't a key held, so Bea's phone sends one too).
+    for (const k of [...world.shares.keys()]) if (k.endsWith(`|${zed.pk}`) && world.shares.get(k)!.keyIds.includes(two)) world.shares.delete(k);
     expect(zed.open(world).plan.kind).toBe('wait'); // took 2, never its key
     const entryId = newNamesEntryId();
     const sealed = sealNamesEntry(namesRingKeys(owen.pin!)[two], entryId, two, { name: 'Written after Abe was removed', note: '' });
@@ -1160,7 +1164,7 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         expect(sharesTo(world, owen.pk, pat.pk)).toEqual([]);
     });
 
-    it('H8 / J12 C1, C2 and an abandoned drop stand under the relaxed rule 1b, and under Follow', () => {
+    it('H8 C1 and C2 stand under rule 1b: a statement off another parent, and one no trusted header vouches (Addendum 4: (c) reads as K5)', () => {
         // (a) Abe's 2′ off 1 while this phone's head is 2: refused (its parent isn't the head).
         const { world, phones: [owen, bea, abe] } = community(['Owen', 'Bea', 'Abe']);
         const one = world.current!;
@@ -1177,25 +1181,15 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         const threeA = makeNamesGeneration({ communityId: CID, n: 3, parentId: two, drops: [] }, abe.who);
         world.plant(threeA, true);
         expect(bea.sync(world.stateFor(bea.pk)).plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', maker: abe.pk });
-        // (c) as H1 before Bea's 3″ lands: Abe signs a 3″ off 2″, and Cy's header names it: refused on Bea.
-        const f = forkWorld();
-        f.bea.pin = followNamesServer(f.bea.pin!, f.world.stateFor(f.bea.pk, f.view)).pin;
-        const threeAbe = makeNamesGeneration({ communityId: CID, n: 3, parentId: f.twoPP, drops: [] }, f.abe.who);
-        f.world.plant(threeAbe);
-        const cyShown = new World();
-        cyShown.gens = new Map(f.world.gens);
-        f.world.putShare(makeNamesShare({ communityId: CID, from: f.cy.who, to: f.bea.pk, headId: threeAbe.id, ring: namesRingKeys(f.cy.pin!), trusts: f.cy.pin!.trusted }));
-        f.bea.sync(f.world.stateFor(f.bea.pk, f.view));
-        expect(f.bea.pin!.chain.map((l) => l.id)).toEqual([f.one, f.twoPP]);
-        f.bea.open(f.world, f.view);
-        expect(f.world.gens.get(f.world.current!)).toMatchObject({ maker: f.bea.pk, parentId: f.twoPP, drops: [f.abe.pk] });
     });
 });
 
 /** A copy of the server's rows, as a standby holds them (statements, current, shares). */
-type Copy = { gens: Map<string, NamesGeneration>; current: string | null; shares: Map<string, NamesShare> };
-const copyOf = (w: World): Copy => ({ gens: new Map(w.gens), current: w.current, shares: new Map(w.shares) });
-const restore = (w: World, c: Copy) => { w.gens = new Map(c.gens); w.current = c.current; w.shares = new Map(c.shares); };
+type Copy = { gens: Map<string, NamesGeneration>; current: string | null; shares: Map<string, NamesShare>; entries: World['entries']; deleted: string[] };
+const copyOf = (w: World): Copy => ({ gens: new Map(w.gens), current: w.current, shares: new Map(w.shares), entries: [...w.entries], deleted: [...w.deleted] });
+const restore = (w: World, c: Copy) => {
+    w.gens = new Map(c.gens); w.current = c.current; w.shares = new Map(c.shares); w.entries = [...c.entries]; w.deleted = [...c.deleted];
+};
 
 /**
  * The re-review's :639 sequence (round 7), all honest: a standby copies key 1; Abe is removed and Owen's phone makes 2;
@@ -1277,27 +1271,40 @@ describe('I. Following the server back to a history this phone left (round 7, un
  * After a phone's tap: it never sends Abe anything, and when ready it neither trusts Abe nor writes under any key Abe
  * holds or was sent. Always: every ring id is on the chain or abandoned, and a ready phone has no standing drop.
  */
-function propertyRun(seed: number): { readies: number; follows: number; taps: number } {
+function propertyRun(seed: number): { readies: number; follows: number; taps: number; made: number; losses: number } {
     let x = seed * 2654435761 >>> 0;
     const rnd = () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
-    const { world, phones: [owen, bea, cy, abe] } = community(['Owen', 'Bea', 'Cy', 'Abe']);
+    const { world, phones: [owen, bea, cy, abe, mia] } = community(['Owen', 'Bea', 'Cy', 'Abe', 'Mia']);
     const honest = [owen, bea, cy];
-    world.admins = [owen.who, bea.who, cy.who];
+    world.admins = [owen.who, bea.who, cy.who, mia.who];
     owen.open(world); // Abe removed
     bea.open(world);
-    world.admins = [owen.who, bea.who, cy.who, abe.who]; // made an admin again; Owen checks him in person
+    world.admins = [owen.who, bea.who, cy.who, mia.who, abe.who]; // made an admin again; Owen checks him in person
     owen.meet(abe);
     settle(world, honest);
     const toAbe: NamesShare[] = [];
     const put = world.putShare.bind(world);
     world.putShare = (sh: NamesShare) => { if (sh.to === abe.pk) toAbe.push(sh); put(sh); };
     const lossAt = 3 + Math.floor(rnd() * 10);
+    // Addendum 4's K1 shape: Mia makes a key whose boxes never land, then her phone is lost and her role removed. Nobody
+    // trusted ever vouches her statement: the phones follow, or make a new key when nobody holds hers.
+    const miaLostAt = 2 + Math.floor(rnd() * 12);
+    let made = 0; let losses = 0;
     let abeKeys = new Set<string>();
     const tappedAt = new Map<string, number>(); // phone → index into toAbe when it tapped
     const copies: Copy[] = [copyOf(world)];
     let readies = 0; let follows = 0;
     for (let step = 0; step < 32; step++) {
+        if (step === miaLostAt) {
+            const st = mia.sync(world.stateFor(mia.pk));
+            if (st.plan.kind === 'ready' || st.plan.kind === 'make_new') {
+                const m = makeNamesGenerationFor(mia.pin!, mia.who, st.plan.kind === 'make_new' ? st.plan.drops : []);
+                if (world.post(m.generation) === 201) made++;
+            }
+            world.admins = world.admins.filter((a) => a.publicKey !== mia.pk);
+            continue;
+        }
         if (step === lossAt) {
             // Abe's phone is lost: everything it holds, and every box sent to it from now on, is the operator's.
             abeKeys = new Set([...abe.ringIds(), ...toAbe.flatMap((sh) => sh.keyIds)]);
@@ -1314,12 +1321,27 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
         const r = rnd();
         if (r < 0.1) { copies.push(copyOf(world)); continue; }
         if (r < 0.2) { const c = pick(copies); copies.push(copyOf(world)); restore(world, c); continue; }
+        if (r < 0.26 && world.entries.length) { // an honest delete
+            const e = pick(world.entries);
+            world.entries = world.entries.filter((x) => x !== e);
+            world.deleted.push(e.id);
+            continue;
+        }
         const p = pick(honest);
         const view = rnd() < 0.25 ? { admins: [bea.who, cy.who, abe.who] } : {};
         let res = p.open(world, view);
-        if (res.plan.kind === 'refused' && res.plan.reason === 'different_history' && res.plan.canFollow && rnd() < 0.8) {
+        // The asked ways forward, as the screen offers them: Follow (on a different history, or a stop at a maker nobody
+        // trusted vouches for) and Make a new key (nobody who is an admin holds the current one).
+        if (res.plan.kind === 'refused' && (res.plan.reason === 'different_history' || res.plan.reason === 'untrusted_maker')
+            && res.plan.canFollow && p.pin!.chain.length > 0 && rnd() < 0.8) {
             p.pin = followNamesServer(p.pin!, world.stateFor(p.pk, view)).pin;
             follows++;
+            res = p.open(world, view);
+        }
+        if (res.plan.kind === 'wait' && res.plan.canMakeNew && rnd() < 0.8) {
+            const m = makeNamesGenerationFor(p.pin!, p.who, res.plan.drops);
+            p.pin = m.pin;
+            if (world.post(m.generation) === 201) made++;
             res = p.open(world, view);
         }
         if (step > lossAt) for (const sh of toAbe) for (const id of sh.keyIds) abeKeys.add(id);
@@ -1335,22 +1357,35 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
                 expect(pin.trusted).not.toContain(abe.pk);
                 expect(abeKeys.has(p.head()!)).toBe(false);
             }
+            // The read (Addendum 4): what was seen and is neither here nor deleted is a loss; K13: the count moves no
+            // trust, drop, key, pending statement or removal by hand.
+            const read = namesSeenAfterRead(pin, world.entries.map((e) => e.id), world.deleted);
+            const keyParts = (q: NamesPin) => JSON.stringify([q.trusted, q.dropped, q.ring, q.pending, q.manualDrops, q.chain, q.abandoned]);
+            expect(keyParts(read.pin)).toBe(keyParts(pin));
+            for (const id of read.gone) {
+                expect(pin.seen).toContain(id);
+                expect(world.deleted).not.toContain(id);
+            }
+            expect(read.pin.seen.length).toBeLessThanOrEqual(2000);
+            losses += read.gone.length;
+            p.pin = read.pin;
+            if (rnd() < 0.3) world.entries.push({ id: newNamesEntryId(), keyId: p.head()!, ciphertext: 'sealed' }); // a name added
         }
     }
-    return { readies, follows, taps: tappedAt.size };
+    return { readies, follows, taps: tappedAt.size, made, losses };
 }
 
 describe('the property check, in parts (each well under a minute on CI)', () => {
-    const totals = { readies: 0, follows: 0, taps: 0 };
-    for (let part = 0; part < 8; part++) {
-        it(`seeds ${part * 3 + 1}–${part * 3 + 3}: no phone that tapped Remove @Abe sends him anything, trusts him or writes under a key he holds; rings stay on the chain or abandoned; no standing drop when ready`, () => {
-            for (let seed = part * 3 + 1; seed <= part * 3 + 3; seed++) {
+    const totals = { readies: 0, follows: 0, taps: 0, made: 0, losses: 0 };
+    for (let part = 0; part < 12; part++) {
+        it(`seeds ${part * 2 + 1}–${part * 2 + 2}: no phone that tapped Remove @Abe sends him anything, trusts him or writes under a key he holds; rings stay on the chain or abandoned; no standing drop when ready`, () => {
+            for (let seed = part * 2 + 1; seed <= part * 2 + 2; seed++) {
                 const r = propertyRun(seed);
-                totals.readies += r.readies; totals.follows += r.follows; totals.taps += r.taps;
+                totals.readies += r.readies; totals.follows += r.follows; totals.taps += r.taps; totals.made += r.made; totals.losses += r.losses;
             }
         }, 60_000);
     }
-    it('the parts exercised what they check: ready opens, follows and taps', () => {
+    it('the parts exercised what they check: ready opens, follows, taps, new keys and losses counted', () => {
         expect(totals.readies).toBeGreaterThan(100);
         expect(totals.follows).toBeGreaterThan(0);
         expect(totals.taps).toBeGreaterThanOrEqual(24);
@@ -1419,7 +1454,9 @@ describe('J. Addendum 3: drops this phone stands by, removal by hand, and Follow
         expect(bea.trusts(abe)).toBe(false);
         expect(bea.pin!.dropped[abe.pk]).toBe(three);
         // Nothing to Abe after the tap; no box to him carries 3″ or 3.
-        expect(sharesTo(world, abe.pk, bea.pk)).toEqual(tapped);
+        // Bea's box to Abe is the one the restored main copy holds (from before the loss); none made after the tap.
+        void tapped;
+        expect(sharesTo(world, abe.pk, bea.pk)).toEqual([...main.shares.values()].filter((x) => x.from === bea.pk && x.to === abe.pk));
         for (const sh of sharesTo(world, abe.pk)) expect(sh.keyIds.filter((id) => id === threePP || id === three)).toEqual([]);
         // Owen takes Bea's 3 and drops Abe and Zed.
         owen.open(world);
@@ -1695,6 +1732,181 @@ describe('J. Addendum 3: drops this phone stands by, removal by hand, and Follow
         bea.meet(owen);
         expect(bea.trusts(owen)).toBe(true);
         expect(bea.sync(world.stateFor(bea.pk)).plan.kind).toBe('wait');
+    });
+});
+
+/**
+ * K1's world (the re-review's :774 dead end): Owen, Bea, Dan, Mia, Zed on 1; a standby copies with Mia listed. Main:
+ * Mia removed, Owen's 2 drops her, Bea and Dan take it. The standby takes over; Owen's phone lost, his role removed;
+ * Mia's 2″ off 1 drops Owen and its boxes never land; Bea and Dan follow; Zed removed; Mia's 3″ drops Zed and its boxes
+ * land; then (unless `miaListed`) Mia's phone is lost and her role removed.
+ */
+function lostMakerWorld(miaListed = false) {
+    const { world, phones: [owen, bea, dan, mia, zed] } = community(['Owen', 'Bea', 'Dan', 'Mia', 'Zed']);
+    const one = world.current!;
+    const standby = copyOf(world);
+    world.admins = [owen.who, bea.who, dan.who, zed.who];
+    owen.open(world); // 2 drops Mia
+    const two = world.current!;
+    bea.open(world);
+    dan.open(world);
+    restore(world, standby);
+    world.admins = [bea.who, dan.who, mia.who, zed.who];
+    const r = mia.sync(world.stateFor(mia.pk));
+    expect(r.plan).toEqual({ kind: 'make_new', drops: [owen.pk] });
+    const m2 = makeNamesGenerationFor(mia.pin!, mia.who, [owen.pk]);
+    mia.pin = m2.pin;
+    expect(world.post(m2.generation)).toBe(201);
+    mia.sync(world.stateFor(mia.pk)); // its boxes never land
+    const twoPP = m2.generation.id;
+    for (const p of [bea, dan]) {
+        expect(p.sync(world.stateFor(p.pk)).plan).toMatchObject({ kind: 'refused', reason: 'different_history', canFollow: true });
+        p.pin = followNamesServer(p.pin!, world.stateFor(p.pk)).pin;
+        expect(p.pin.dropped[mia.pk]).toBe(two); // standing
+    }
+    world.admins = [bea.who, dan.who, mia.who];
+    mia.open(world); // 3″ drops Zed; its boxes land
+    const threePP = world.current!;
+    expect(world.gens.get(threePP)).toMatchObject({ maker: mia.pk, parentId: twoPP, drops: [zed.pk] });
+    if (!miaListed) world.admins = [bea.who, dan.who];
+    return { world, owen, bea, dan, mia, zed, one, two, twoPP, threePP };
+}
+
+describe('K. Addendum 4: rule 1b carries a standing drop, Follow from a stop, holders on their own word (round 10)', () => {
+    it("K1 (the re-review's :774) the maker's phone is lost and nobody trusted vouches her key: Bea follows from the stop and makes a key without Mia; Dan takes it (rule 1b carries his standing drop) and makes his own; nothing to Mia", () => {
+        const { world, bea, dan, mia, one, two, twoPP, threePP } = lostMakerWorld();
+        const r = bea.sync(world.stateFor(bea.pk));
+        expect(r.plan).toEqual({ kind: 'refused', reason: 'untrusted_maker', maker: mia.pk, n: 3, canCheck: false, standing: true, canFollow: true });
+        const before = JSON.stringify(bea.pin!.chain);
+        expect(bea.sync(world.stateFor(bea.pk)).plan.kind).toBe('refused');
+        expect(JSON.stringify(bea.pin!.chain)).toBe(before); // nothing moves without a tap
+        bea.pin = followNamesServer(bea.pin!, world.stateFor(bea.pk)).pin;
+        expect(bea.pin.chain.map((l) => l.id)).toEqual([one, twoPP, threePP]);
+        expect(bea.pin.abandoned).toEqual([two]);
+        expect(bea.pin.dropped[mia.pk]).toBe(two);
+        const st = world.stateFor(bea.pk);
+        // K3: a box addressed isn't a key held: nobody holds 3″ on their own word.
+        expect(st.admins.find((a) => a.pubkey === bea.pk)!.keyIds).not.toContain(threePP);
+        expect(st.admins.find((a) => a.pubkey === dan.pk)!.keyIds).not.toContain(threePP);
+        expect(st.nobodyHoldsKey).toBe(true);
+        const w = bea.sync(st);
+        expect(w.plan).toMatchObject({ kind: 'wait', keyId: threePP, holders: [], canMakeNew: true, drops: [mia.pk] });
+        const made = makeNamesGenerationFor(bea.pin!, bea.who, (w.plan as { drops: string[] }).drops);
+        bea.pin = made.pin;
+        expect(world.post(made.generation)).toBe(201);
+        expect(bea.open(world).plan.kind).toBe('ready');
+        const fourPP = world.current!;
+        expect(world.gens.get(fourPP)).toMatchObject({ maker: bea.pk, parentId: threePP, drops: [mia.pk] });
+        // Dan: follows the stop too (or a header vouches it), then takes Bea's key and makes his own without Mia.
+        const rd = dan.sync(world.stateFor(dan.pk));
+        expect(dan.pin!.chain.map((l) => l.id)).toEqual([one, twoPP, threePP, fourPP]); // 3″ by rule 1b, 4″ by rule 1
+        expect(rd.toDrop).toEqual([mia.pk]);
+        settle(world, [dan, bea]);
+        expect(dan.open(world).plan.kind).toBe('ready');
+        expect(world.gens.get(dan.head()!)).toMatchObject({ maker: dan.pk, drops: [mia.pk] });
+        expect(bea.open(world).plan.kind).toBe('ready');
+        for (const p of [bea, dan]) {
+            expect(p.ringIds()).toEqual(expect.arrayContaining([one, two]));
+            expect(p.ringIds()).not.toContain(twoPP);
+            expect(p.ringIds()).not.toContain(threePP);
+        }
+        expect(sharesTo(world, mia.pk).filter((x) => x.from === bea.pk || x.from === dan.pk).filter((x) => x.keyIds.includes(fourPP))).toEqual([]);
+    });
+
+    it("K2 the words with Cy: Cy's phone (on the standby, trusting Mia) made 2″ and took Mia's 3″; Bea, on 2″ with Mia standing, checks Cy: 3″ is taken by rule 1b, and Bea's own 4″ drops Mia", () => {
+        const { world, phones: [owen, bea, cy, mia, zed] } = community(['Owen', 'Bea', 'Cy', 'Mia', 'Zed']);
+        const standby = copyOf(world);
+        world.admins = [owen.who, bea.who, cy.who, zed.who];
+        owen.open(world);
+        bea.open(world);
+        restore(world, standby);
+        world.admins = [bea.who, cy.who, mia.who, zed.who]; // Owen's phone lost
+        cy.open(world); // 2″ drops Owen
+        settle(world, [cy, mia]);
+        bea.pin = followNamesServer(bea.pin!, world.stateFor(bea.pk)).pin;
+        world.admins = [bea.who, cy.who, mia.who];
+        mia.open(world); // 3″ drops Zed
+        const threePP = world.current!;
+        expect(world.gens.get(threePP)!.maker).toBe(mia.pk);
+        cy.open(world);
+        expect(cy.head()).toBe(threePP);
+        bea.meet(cy);
+        cy.open(world);
+        const r = bea.sync(world.stateFor(bea.pk));
+        expect(bea.head()).toBe(threePP); // taken by rule 1b, Mia standing
+        expect(r.toDrop).toContain(mia.pk);
+        settle(world, [cy, bea]);
+        expect(bea.open(world).plan.kind).toBe('ready');
+        expect(world.gens.get(bea.head()!)).toMatchObject({ maker: bea.pk, parentId: threePP });
+        expect(world.gens.get(bea.head()!)!.drops).toContain(mia.pk);
+    });
+
+    it("K5 rule 1b with a standing drop: Abe's 3″ off 2″ lands first and Cy (in the dark, trusting Abe, holding its key) vouches it; Bea takes it, keeps Abe standing, makes 4″ without him, and only then writes", () => {
+        const { world, bea, cy, abe, twoPP, view } = forkWorld();
+        bea.pin = followNamesServer(bea.pin!, world.stateFor(bea.pk, view)).pin;
+        const threeAbe = makeNamesGeneration({ communityId: CID, n: 3, parentId: twoPP, drops: [] }, abe.who);
+        world.plant(threeAbe, true);
+        const k3 = newNamesListKey();
+        world.putShare(makeNamesShare({ communityId: CID, from: cy.who, to: bea.pk, headId: threeAbe.id, ring: { ...namesRingKeys(cy.pin!), [threeAbe.id]: k3 }, trusts: cy.pin!.trusted }));
+        const r = bea.sync(world.stateFor(bea.pk, view));
+        expect(bea.head()).toBe(threeAbe.id);
+        expect(bea.pin!.dropped[abe.pk]).not.toBe(threeAbe.id);
+        expect(bea.pin!.ring[threeAbe.id]).toBe(bytesToHex(k3));
+        expect(r.plan).toEqual({ kind: 'make_new', drops: [abe.pk] });
+        bea.open(world, view);
+        const four = world.gens.get(world.current!)!;
+        expect(four).toMatchObject({ maker: bea.pk, parentId: threeAbe.id, drops: [abe.pk] });
+        expect(bea.open(world, view).plan.kind).toBe('ready');
+        expect(bea.head()).toBe(four.id);
+        expect(sharesTo(world, abe.pk, bea.pk).filter((x) => x.keyIds.includes(four.id))).toEqual([]);
+        cy.open(world, view);
+        expect(cy.trusts(abe)).toBe(false);
+    });
+
+    it('K6 a planted statement on the head: every phone stops at O with Follow offered; (a) O unlisted: after Follow, a new key off it, nothing under 3ᵒ; (b) O listed and holding it: the phone waits, and an owner must remove O', () => {
+        for (const variant of ['a', 'b'] as const) {
+            const { world, phones: [owen, bea] } = community(['Owen', 'Bea']);
+            const m = makeNamesGenerationFor(owen.pin!, owen.who, []);
+            owen.pin = m.pin;
+            world.post(m.generation);
+            settle(world, [owen, bea]);
+            const o = admin('Op');
+            const planted = makeNamesGeneration({ communityId: CID, n: 3, parentId: world.current, drops: [owen.pk] }, o);
+            world.plant(planted, true);
+            if (variant === 'b') {
+                world.admins.push(o);
+                world.putShare(makeNamesShare({ communityId: CID, from: o, to: bea.pk, headId: planted.id, ring: { [planted.id]: newNamesListKey() }, trusts: [o.publicKey] }));
+            }
+            for (const p of [owen, bea]) {
+                expect(p.sync(world.stateFor(p.pk)).plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', maker: o.publicKey, standing: false, canFollow: true });
+            }
+            const f = followNamesServer(bea.pin!, world.stateFor(bea.pk));
+            expect(f.dropped.map((d) => d.key)).toEqual([owen.pk]);
+            bea.pin = f.pin;
+            const r = bea.sync(world.stateFor(bea.pk));
+            expect(bea.ringIds()).not.toContain(planted.id);
+            if (variant === 'a') {
+                expect(r.plan).toMatchObject({ kind: 'wait', canMakeNew: true });
+                const n = makeNamesGenerationFor(bea.pin!, bea.who, (r.plan as { drops: string[] }).drops);
+                bea.pin = n.pin;
+                expect(world.post(n.generation)).toBe(201);
+                expect(bea.open(world).plan.kind).toBe('ready');
+                expect(bea.head()).toBe(n.generation.id);
+            } else {
+                expect(r.plan).toMatchObject({ kind: 'wait', holders: [], canMakeNew: false });
+                bea.pin = removeNamesKey(bea.pin!, o.publicKey);
+                expect(bea.sync(world.stateFor(bea.pk)).plan).toMatchObject({ kind: 'wait', canMakeNew: false });
+            }
+            expect(bea.ringIds()).not.toContain(planted.id);
+        }
+    });
+
+    it('K7 the lost maker still listed (a quiet owner): Bea waits with nobody to make a new key; once an owner removes Mia, K1', () => {
+        const { world, bea, mia } = lostMakerWorld(true);
+        bea.pin = followNamesServer(bea.pin!, world.stateFor(bea.pk)).pin;
+        expect(bea.sync(world.stateFor(bea.pk)).plan).toMatchObject({ kind: 'wait', holders: [], canMakeNew: false });
+        world.admins = world.admins.filter((a) => a.publicKey !== mia.pk);
+        expect(bea.sync(world.stateFor(bea.pk)).plan).toMatchObject({ kind: 'wait', canMakeNew: true });
     });
 });
 

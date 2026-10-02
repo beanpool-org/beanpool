@@ -122,7 +122,9 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { keepNotice, markKeptNoticesSeen } = await import('./engine/kept-notices.js');
-    const { homeCardBuilds } = await import('./routes/home-answer.js');
+    // A tree without the route (origin/main) runs every step anyway, so each fails as an assertion rather than an abort.
+    const homeCardBuilds: Record<string, number> = await import('./routes/home-answer.js' as string)
+        .then(m => m.homeCardBuilds as Record<string, number>).catch(() => ({}));
     const { getProfileSwitches } = await import('./config/node-profile.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');

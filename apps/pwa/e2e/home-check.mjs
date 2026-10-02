@@ -20,6 +20,10 @@
  *      drops her Home at once (axe clean); one that hears nothing finds out at its first write. Nothing of hers is put
  *      back on disk by a Hide (1), a read in flight (2), or, on global, the next read, which would have gone out
  *      unsigned (3); after Force Clear a read from before it is never kept, and the other tab reads afresh with no tag.
+ *      The third review: after Force Clear a Hide in a deaf tab puts back nothing it read before; and a restore with 12
+ *      words in a welcome page that heard another tab's sign-out lands on that account's Home, its Market star saved;
+ *   6. the delete at a community the web app was pointed at (two nodes, P and X): a Hide and a doorbell in tabs that
+ *      heard nothing put nothing of her Home at X back under X, and file nothing of P's under X; both read P afresh.
  *
  * Fails on any sideways scroll, a control under 44 px, an axe violation, a document-policy violation, or a request to
  * any host but this machine.
@@ -65,6 +69,18 @@ function memberIdentity(callsign) {
         callsign,
         createdAt: new Date().toISOString(),
     };
+}
+
+/**
+ * An account made from 12 words, as the web app derives it (lib/mnemonic.ts, through tsx): the words, to restore it
+ * through the welcome page, and its public key, to make it a member of the node first.
+ */
+async function wordsIdentity(callsign) {
+    const { tsImport } = await import('tsx/esm/api');
+    const m = await tsImport(path.join(PWA_DIR, 'src/lib/mnemonic.ts'), import.meta.url);
+    const words = m.generateMnemonic();
+    const { publicKeyHex } = await m.mnemonicToKeypair(words);
+    return { publicKey: publicKeyHex, words, callsign };
 }
 
 // ---------- the node ----------
@@ -120,6 +136,7 @@ function recorder(cdp, origin) {
         const u = new URL(e.request.url);
         const r = { id: e.requestId, at: Date.now(), method: e.request.method, url: e.request.url, origin: u.origin, path: u.pathname, search: u.search,
             signed: !!(e.request.headers['X-Public-Key'] || e.request.headers['x-public-key']),
+            signer: e.request.headers['X-Public-Key'] || e.request.headers['x-public-key'] || null,
             tag: e.request.headers['If-None-Match'] ?? e.request.headers['if-none-match'] ?? null, up:e.request.method.length + e.request.url.length + 12 + headerBytes(e.request.headers) + (e.request.postData?.length ?? 0), status: null, down: 0, done: false };
         byId.set(e.requestId, r);
         all.push(r);
@@ -137,7 +154,7 @@ function recorder(cdp, origin) {
     cdp.on('Network.webSocketFrameReceived', (e) => frames.push({ at: Date.now(), dir: 'down', bytes: (e.response?.payloadData ?? '').length, data: (e.response?.payloadData ?? '').slice(0, 60) }));
     return {
         mark: () => Date.now(),
-        since: (t) => all.filter((r) => r.at >= t && r.origin === origin),
+        since: (t, from = origin) => all.filter((r) => r.at >= t && r.origin === from),
         framesSince: (t) => frames.filter((f) => f.at >= t),
         others: () => all.filter((r) => r.origin !== origin && !r.url.startsWith('data:')),
     };
@@ -169,22 +186,24 @@ async function openContext(browser, origin, { identity = null, dark = false, geo
     const cdp = await context.newCDPSession(page);
     await cdp.send('Network.enable');
     const net = recorder(cdp, origin);
-    if (identity) {
-        // The key goes where the web app keeps it (identity.ts), from a page of this origin; then the app opens.
-        await page.goto(`${origin}/app`, { waitUntil: 'load' });
-        await page.evaluate((id) => new Promise((resolve, reject) => {
-            const open = indexedDB.open('beanpool-identity', 1);
-            open.onupgradeneeded = () => open.result.createObjectStore('keys');
-            open.onerror = () => reject(open.error);
-            open.onsuccess = () => {
-                const tx = open.result.transaction('keys', 'readwrite');
-                tx.objectStore('keys').put(id, 'sovereign-identity');
-                tx.oncomplete = () => { open.result.close(); resolve(); };
-                tx.onerror = () => reject(tx.error);
-            };
-        }), identity);
-    }
+    if (identity) await putIdentity(page, origin, identity);
     return { context, page, net, seen };
+}
+
+/** The key goes where the web app keeps it (identity.ts), from a page of this origin; then the app opens. */
+async function putIdentity(page, origin, identity) {
+    await page.goto(`${origin}/app`, { waitUntil: 'load' });
+    await page.evaluate((id) => new Promise((resolve, reject) => {
+        const open = indexedDB.open('beanpool-identity', 1);
+        open.onupgradeneeded = () => open.result.createObjectStore('keys');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+            const tx = open.result.transaction('keys', 'readwrite');
+            tx.objectStore('keys').put(id, 'sovereign-identity');
+            tx.oncomplete = () => { open.result.close(); resolve(); };
+            tx.onerror = () => reject(tx.error);
+        };
+    }), identity);
 }
 
 /**
@@ -561,7 +580,9 @@ async function localMember(browser, root) {
 async function twoTabs(browser, root) {
     const ana = memberIdentity('Ana');
     const bea = memberIdentity('Bea');
-    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }, { publicKey: bea.publicKey, callsign: 'Bea', joinedDaysAgo: 1 }]);
+    const cal = await wordsIdentity('Cal');
+    const node = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }, { publicKey: bea.publicKey, callsign: 'Bea', joinedDaysAgo: 1 },
+        { publicKey: cal.publicKey, callsign: 'Cal', joinedDaysAgo: 1 }]);
     console.log(`\nTwo tabs of one browser, on a local node on ${node.origin}:`);
     const contexts = [];
     /** What this browser keeps of `pk`: Home's entries under its key, and localStorage keys naming it or the favourites. */
@@ -693,8 +714,22 @@ async function twoTabs(browser, root) {
         contexts.push(f);
         const fHears = await openTab(f.context, node.origin);
         const fDeaf = await openTab(f.context, node.origin, { deaf: true });
-        for (const t of [f, fHears, fDeaf]) await land(t.page, node.origin);
-        for (const t of [f, fHears, fDeaf]) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
+        // (PR #1479's third review) A deaf tab whose answers before the clear are marked, and always whole (asked without
+        // the tag), so a copy of one kept after the clear can be told from a fresh read.
+        const fDeafHide = await openTab(f.context, node.origin, { deaf: true });
+        const markBefore = async (route) => {
+            if (route.request().method() !== 'GET') return route.continue();
+            const headers = { ...route.request().headers() };
+            delete headers['if-none-match'];
+            const response = await route.fetch({ headers });
+            if (response.status() !== 200) return route.fulfill({ response });
+            return route.fulfill({ response, body: JSON.stringify({ ...(await response.json()), readBeforeTheClear: true }) });
+        };
+        await fDeafHide.page.route('**/api/home*', markBefore);
+        // Its socket quiet too, so no doorbell finds the clear for it before its Hide does.
+        await fDeafHide.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
+        for (const t of [f, fHears, fDeaf, fDeafHide]) await land(t.page, node.origin);
+        for (const t of [f, fHears, fDeaf, fDeafHide]) await t.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
         await wait(1_500);
         const fHeld = await holdNextHomeRead(fDeaf.page);
         await ringHome(fDeaf.page);
@@ -718,6 +753,28 @@ async function twoTabs(browser, root) {
         const fKept = (await homeEntries(f.page)).filter((e) => e.key.endsWith(`|${ana.publicKey}`));
         check(fKept.length <= 1 && fKept.every((e) => !e.text.includes('heldFromBefore')),
             `a read from before the clear, landing after it, is never kept (${fKept.length} kept${fKept.some((e) => e.text.includes('heldFromBefore')) ? ', the held one among them' : ', each read afresh'})`);
+        // (1 of the third review) A deaf tab, still drawing the answer it read before the clear, is tapped: "…" → Hide. It
+        // learns of the clear inside that call, and nothing of what it held is kept or sent. Its read afresh is held, so
+        // a copy kept by the Hide can't be overwritten before it is looked for.
+        await fDeafHide.page.unroute('**/api/home*', markBefore);
+        const stillBefore = !!(await fDeafHide.page.getByText('Unread message from Kofi').count());
+        const fAfresh = await holdNextHomeRead(fDeafHide.page);
+        const tapped = Date.now();
+        await fDeafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
+        await fDeafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        const fAfreshStatus = await Promise.race([fAfresh.fetched, wait(5_000).then(() => null)]);
+        await wait(1_500);
+        const putBack = (await homeEntries(f.page)).filter((e) => e.text.includes('readBeforeTheClear')).map((e) => e.key.replace(/^.*\|/, '…|').slice(0, 14));
+        const fSaves = fDeafHide.net.since(tapped).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST');
+        check(stillBefore && putBack.length === 0 && fSaves.length === 0,
+            `Force Clear, then a Hide in a tab that heard nothing: the answer it read before the clear is not put back, and its layout is not sent (${stillBefore ? 'drawn until the tap' : 'not drawn'}; ${putBack.length ? `put back under ${putBack.join(', ')}` : 'nothing put back'}; ${fSaves.length} layout save(s))`);
+        fAfresh.release();
+        await fDeafHide.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).catch(() => {});
+        await wait(1_500);
+        const fAfreshRead = fDeafHide.net.since(tapped).filter((r) => r.path === '/api/home');
+        const fNow = (await homeEntries(f.page)).filter((e) => e.key.endsWith(`|${ana.publicKey}`));
+        check(fAfreshStatus === 200 && fAfreshRead.length === 1 && fAfreshRead[0].signed && fNow.every((e) => !e.text.includes('readBeforeTheClear')),
+            `and that tab reads her Home afresh, once, signed, and keeps only that (${fAfreshRead.map((r) => `${r.status} ${r.signed ? 'signed' : 'unsigned'}`).join('; ') || 'no read'})`);
         check(f.seen.violations.length === 0, `no document-policy violations${f.seen.violations.length ? `: ${JSON.stringify(f.seen.violations)}` : ''}`);
         await f.context.close();
 
@@ -755,11 +812,161 @@ async function twoTabs(browser, root) {
         check(dLeft.length === 0, `the delete at the last community with her Home open in other tabs: nothing of hers is put back (${dLeft.join(', ') || 'nothing kept'})`);
         check(d.seen.violations.length === 0, `no document-policy violations${d.seen.violations.length ? `: ${JSON.stringify(d.seen.violations)}` : ''}`);
         await d.context.close();
+
+        // ── A fresh sign-in in a page that heard another tab's sign-out (PR #1479's third review) ──
+        console.log('  The welcome page open in one tab; Ana signs in and out in another; then Cal restores with his 12 words in the first:');
+        await node.ask({ op: 'resetLimits' });
+        const w = await openContext(browser, node.origin, { installDismissed: true });
+        contexts.push(w);
+        await land(w.page, node.origin);
+        await w.page.getByRole('button', { name: 'Restore existing identity' }).waitFor({ timeout: 30_000 });
+        const wAna = await openTab(w.context, node.origin);
+        await putIdentity(wAna.page, node.origin, ana);
+        await land(wAna.page, node.origin);
+        await wAna.page.getByText('Unread message from Kofi').waitFor({ timeout: 30_000 });
+        const wOut = await signOutIn(wAna.page);
+        await wOut.reloaded;
+        await wait(1_000);
+        await node.ask({ op: 'resetLimits' });
+        const restored = Date.now();
+        await w.page.getByRole('button', { name: 'Restore existing identity' }).click();
+        await w.page.getByRole('button', { name: /Recover with 12 Words/ }).click();
+        for (let i = 0; i < 12; i++) await w.page.getByLabel(`Recovery word ${i + 1}`, { exact: true }).fill(cal.words[i]);
+        await w.page.getByRole('button', { name: 'Recover Identity' }).click();
+        const calHome = await Promise.race([
+            w.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 }).then(() => 'his Home'),
+            w.page.getByTestId('home-signed-out').waitFor({ timeout: 30_000 }).then(() => '"You signed out of this browser in another tab"'),
+        ]).catch(() => 'nothing');
+        await wait(1_500);
+        const calReads = w.net.since(restored).filter((r) => r.path === '/api/home');
+        check(calHome === 'his Home' && calReads.length >= 1 && calReads.every((r) => r.signer === cal.publicKey),
+            `a restore in a page that heard Ana's sign-out lands on his Home, read as him (${calHome}; ${calReads.length} × GET /api/home${calReads.length ? `, ${calReads.map((r) => (r.signer === cal.publicKey ? 'his' : r.signer ? 'another key' : 'unsigned')).join(',')}` : ''})`);
+        await w.page.locator('[data-testid="mobile-bottom-nav"] button').filter({ hasText: /Market$/ }).click();
+        await w.page.getByRole('button', { name: '★ For You' }).click();
+        const customizer = w.page.locator('div', { has: w.page.locator('h4', { hasText: 'Customize Interests' }) }).last();
+        const starred = Date.now();
+        await customizer.getByRole('button', { name: /Tools/ }).click();
+        await wait(2_500);
+        const starSaves = w.net.since(starred).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST');
+        const favs = await w.page.evaluate(() => localStorage.getItem('bp_fav_categories'));
+        const onAccount = await node.ask({ op: 'sql', sql: "SELECT pref_value AS v FROM member_preferences WHERE public_key = ? AND pref_key = 'interests'", params: [cal.publicKey], all: true });
+        check(starSaves.length === 1 && starSaves[0].signer === cal.publicKey && favs === '["tools"]' && /"tools"/.test(onAccount[0]?.v ?? ''),
+            `and his star in the Market is saved on his account and kept as this browser's (${starSaves.length} save(s); favourites ${favs ?? 'none'}; his account: ${onAccount[0]?.v ?? 'no interests'})`);
+        check(w.seen.violations.length === 0, `no document-policy violations${w.seen.violations.length ? `: ${JSON.stringify(w.seen.violations)}` : ''}`);
+        await w.context.close();
     } finally {
         for (const c of contexts) await c.context.close().catch(() => {});
         const blocked = node.log.filter((l) => l.startsWith('BLOCKED-'));
         check(blocked.length === 0, `the local node reached nothing outside this machine${blocked.length ? `: ${blocked.join('; ')}` : ''}`);
         await node.stop();
+    }
+}
+
+// ---------- 6: the delete at a community the web app was pointed at ----------
+
+/**
+ * PR #1479's third review: the web app on community P's address, pointed at community X (Settings → Sovereign Node
+ * Connection), her Home from X open in two tabs that hear nothing. She deletes her account at X in a third: the web app
+ * goes back to P, and Home's kept answers go (lib/delete-here.ts leaveThisCommunity). Then a Hide in one deaf tab (2) and
+ * a doorbell in the other (3). Neither may put her Home at X back on disk under X, nor file P's answer under X's key;
+ * both read her Home at P afresh. Two real nodes on this machine; X lets P's address call it (CORS), as an operator sets.
+ */
+async function pointedAtAnother(browser, root) {
+    const ana = memberIdentity('Ana');
+    const p = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
+    const x = await startNode(root, 'local', [{ publicKey: ana.publicKey, callsign: 'Ana', joinedDaysAgo: 1 }]);
+    console.log(`\nThe web app on ${p.origin} (P), pointed at ${x.origin} (X); Ana is a member of both:`);
+    let ctx = null;
+    try {
+        await x.ask({ op: 'cors', origins: [p.origin] });
+        // Her Home at X can be told from P's by this listing, only there.
+        await x.ask({ op: 'post', title: 'Kept only at X', category: 'food' });
+        const keyAt = (node) => `${node.origin}|${ana.publicKey}`;
+        ctx = await openContext(browser, p.origin, { identity: ana, installDismissed: true });
+        await ctx.page.evaluate((url) => localStorage.setItem('bp_node_url', url), x.origin);
+        const deafHide = await openTab(ctx.context, p.origin, { deaf: true });
+        const deafBell = await openTab(ctx.context, p.origin, { deaf: true });
+        // Their sockets are quiet too (a phone's asleep, a 2G line): no doorbell finds the delete for them first, so the
+        // Hide (2) and the read asked here (3) are each the first call to hear of it.
+        for (const t of [deafHide, deafBell]) await t.page.routeWebSocket(/\/ws/, () => { /* open, and silent */ });
+        const tabs = [ctx, deafHide, deafBell];
+        for (const t of tabs) await land(t.page, p.origin);
+        for (const t of tabs) await t.page.getByText('Kept only at X').first().waitFor({ timeout: 30_000 });
+        await wait(1_500);
+        const xReads = tabs.flatMap((t) => t.net.since(0, x.origin).filter((r) => r.path === '/api/home' && r.method === 'GET'));
+        check(xReads.length >= 3 && xReads.every((r) => r.signed), `her Home is read from X, signed, in each tab (${xReads.length} × GET /api/home at X)`);
+        check((await homeEntries(ctx.page)).some((e) => e.key === keyAt(x)), 'before: this browser keeps her Home from X, under X');
+
+        // Settings → Permanently Delete Account, at X: the panel says the key stays, for P.
+        await ctx.page.getByRole('button', { name: 'Settings' }).first().click();
+        await ctx.page.getByText('⚠️ Account Deletion & Sign Out').click();
+        await ctx.page.getByRole('button', { name: 'Permanently Delete Account' }).click();
+        await ctx.page.getByLabel(/Type callsign Ana or DELETE/).fill('DELETE');
+        await ctx.page.getByTestId('delete-key-plan').getByText(/stays? in this browser/).waitFor({ timeout: 15_000 });
+        const reloaded = ctx.page.waitForEvent('load', { timeout: 30_000 });
+        await x.ask({ op: 'resetLimits' });
+        const purged = Date.now();
+        await ctx.page.getByRole('button', { name: /Purge Account/ }).click();
+        await reloaded;
+        await scaleText(ctx.page);
+        await ctx.page.getByTestId('home-card-community').waitFor({ timeout: 30_000 });
+        const gone = await x.ask({ op: 'sql', sql: 'SELECT status FROM members WHERE public_key = ?', params: [ana.publicKey], all: true });
+        check(gone[0]?.status === 'pruned' && !(await ctx.page.getByText('Kept only at X').count()), `deleted at X (her row there: ${gone[0]?.status ?? 'none'}); the web app is back at P, her Home read there`);
+        await wait(1_500);
+        const leftAtX = async () => (await homeEntries(ctx.page)).filter((e) => e.key === keyAt(x));
+        const describe = (entries) => entries.map((e) => (e.text.includes('Kept only at X') ? 'her Home at X' : "P's answer")).join(', ') || 'nothing';
+        check((await leftAtX()).length === 0, `the delete takes her Home at X out of this browser (under X: ${describe(await leftAtX())})`);
+
+        // (2) A deaf tab, still drawing her Home at X: "…" → Hide.
+        const stillX = !!(await deafHide.page.getByText('Kept only at X').count());
+        const tapped = Date.now();
+        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Card options for The Pulse' }).click();
+        await deafHide.page.getByTestId('home-card-pulse').getByRole('button', { name: 'Hide' }).click();
+        await wait(3_000);
+        const afterHide = await leftAtX();
+        const hideSaves = [p, x].flatMap((n) => deafHide.net.since(tapped, n.origin).filter((r) => r.path === '/api/members/preferences' && r.method === 'POST'));
+        check(stillX && afterHide.length === 0 && hideSaves.length === 0,
+            `(2) a Hide in a tab that heard nothing puts nothing back under X, and sends X's layout nowhere (${stillX ? 'her Home at X drawn until the tap' : 'not drawn'}; under X: ${describe(afterHide)}; ${hideSaves.length} layout save(s))`);
+        const hideReads = deafHide.net.since(tapped, p.origin).filter((r) => r.path === '/api/home' && r.method === 'GET');
+        const hideDrawsP = await deafHide.page.getByTestId('home-card-community').waitFor({ timeout: 8_000 }).then(() => true, () => false);
+        check(hideDrawsP && !(await deafHide.page.getByText('Kept only at X').count()) && hideReads.length === 1 && hideReads[0].signed && hideReads[0].tag === null
+            && deafHide.net.since(tapped, x.origin).length === 0,
+            `and that tab reads her Home at P afresh, once, signed, and asks X nothing (${hideReads.map((r) => `${r.status} ${r.signed ? 'signed' : 'unsigned'} ${r.tag ? 'tagged' : 'no tag'}`).join('; ') || 'no read at P'}; ${deafHide.net.since(tapped, x.origin).length} request(s) to X)`);
+        // Whatever (2) left, (3) starts from nothing under X.
+        await ctx.page.evaluate((k) => new Promise((resolve) => {
+            const open = indexedDB.open('beanpool-home');
+            open.onsuccess = () => {
+                const db = open.result;
+                if (!db.objectStoreNames.contains('answers')) { db.close(); resolve(); return; }
+                const tx = db.transaction('answers', 'readwrite');
+                tx.objectStore('answers').delete(k);
+                tx.oncomplete = () => { db.close(); resolve(); };
+                tx.onerror = () => { db.close(); resolve(); };
+            };
+            open.onerror = () => resolve();
+        }), keyAt(x));
+
+        // (3) The other deaf tab's next read: Home asked again, as a doorbell does.
+        const rung = Date.now();
+        await ringHome(deafBell.page);
+        const bellDrawsP = await deafBell.page.getByTestId('home-card-community').filter({ hasNotText: 'Kept only at X' }).waitFor({ timeout: 8_000 }).then(() => true, () => false);
+        await wait(3_000);
+        const afterBell = await leftAtX();
+        const atP = (await homeEntries(ctx.page)).filter((e) => e.key === keyAt(p));
+        check(afterBell.length === 0 && atP.length === 1 && !atP[0].text.includes('Kept only at X'),
+            `(3) a doorbell read in a tab that heard nothing keeps P's answer under P, never under X's key (under X: ${describe(afterBell)}; under P: ${atP.length ? describe(atP) : 'nothing'})`);
+        const bellReads = deafBell.net.since(rung, p.origin).filter((r) => r.path === '/api/home' && r.method === 'GET');
+        check(bellDrawsP && !(await deafBell.page.getByText('Kept only at X').count()) && bellReads.length === 1 && bellReads[0].tag === null && deafBell.net.since(rung, x.origin).length === 0,
+            `and that tab draws her Home at P from one read afresh (${bellReads.map((r) => `${r.status} ${r.tag ? 'tagged' : 'no tag'}`).join('; ') || 'no read at P'}; ${deafBell.net.since(rung, x.origin).length} request(s) to X)`);
+        await shot(deafBell.page, '10-after-delete-at-pointed-at-community');
+        console.log(`    (${((Date.now() - purged) / 1000).toFixed(0)} s from Purge to the last check)`);
+    } finally {
+        await ctx?.context.close().catch(() => {});
+        for (const n of [p, x]) {
+            const blocked = n.log.filter((l) => l.startsWith('BLOCKED-'));
+            check(blocked.length === 0, `node ${n === p ? 'P' : 'X'} reached nothing outside this machine${blocked.length ? `: ${blocked.join('; ')}` : ''}`);
+            await n.stop();
+        }
     }
 }
 
@@ -872,7 +1079,7 @@ async function main() {
         await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
         browser = await chromium.launch();
         console.log('The web app as built; Chromium at 320 px, 1.3x text, reduced motion.');
-        for (const run of [localMember, twoTabs, globalNode]) {
+        for (const run of [localMember, twoTabs, pointedAtAnother, globalNode]) {
             try {
                 await run(browser, root);
             } catch (e) {

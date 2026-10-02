@@ -16,6 +16,8 @@
  *   { op: 'sql', sql, params?, all? }   a statement on the node's database
  *   { op: 'post', title, category? }    a new offer by another member, as the node stores and rings it
  *   { op: 'resetLimits' }               the gateway and auth limiters start again
+ *   { op: 'cors', origins }             the web addresses this node lets call it (Settings' CORS allowed origins), as for
+ *                                       a web app on another community's address pointed here (Sovereign Node Connection)
  *
  * Run by the check as: node --import tsx ../pwa/e2e/home-node-harness.ts (cwd apps/server).
  */
@@ -65,6 +67,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('../../server/src/auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('../../server/src/gateway-rate-limit.js');
     const { lockedDm } = await import('../../server/src/dm-test-payload.js');
+    const { updateGatewayConfig } = await import('../../server/src/config/local-config.js');
     // The engine the server runs (the same file through the workspace link): faces live in member_photos since #1475.
     const { setMemberPhoto } = await import('../../../packages/beanpool-engine/dist/index.js');
 
@@ -153,6 +156,9 @@ async function main(): Promise<void> {
                 case 'resetLimits':
                     resetGatewayRateLimit();
                     pruneAuthAttempts(Date.now() + 3600_000);
+                    break;
+                case 'cors':
+                    updateGatewayConfig({ corsAllowedOrigins: (req.origins as unknown[]).map(String) });
                     break;
                 default:
                     throw new Error(`no op ${String(req.op)}`);

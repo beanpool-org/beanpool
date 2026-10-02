@@ -52,7 +52,7 @@ interface ApplianceSectionProps {
     onRefreshLogs: () => void;
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
-    auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
+    auditState: { running: boolean; result: { ok: boolean; drift: number | null; sumBalances?: number | null; baseline?: number; strandedEscrows?: number } | null };
     initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
@@ -937,11 +937,11 @@ export function ApplianceSection({
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Drift</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.drift} beans</div>
+                                    <div className="font-mono text-white mt-0.5 font-bold">{Number.isFinite(auditState.result.drift) ? `${auditState.result.drift} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Total Balances</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances ?? 0} beans</div>
+                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances === undefined ? '0 beans' : Number.isFinite(auditState.result.sumBalances) ? `${auditState.result.sumBalances} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Stranded Escrows</span>

@@ -30,6 +30,7 @@ import {
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
 function decodeThreadMessage(ciphertext: string, type: string): string {
@@ -136,6 +137,7 @@ export default function TreasuryDetailScreen() {
         progressBarFill: { height: '100%', borderRadius: 4 },
         escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
         pledgeBox: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default },
+        pledgeClosedText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20 },
         pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
         pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
@@ -908,6 +910,8 @@ export default function TreasuryDetailScreen() {
                             const progress = Math.min(100, (current / goal) * 100);
                             const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
+                            const pledgesClosed = pledgeClosedLine(detail?.status);
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>
@@ -933,6 +937,11 @@ export default function TreasuryDetailScreen() {
                                     </Text>
 
                                     {/* Inline Pledge Beans Input */}
+                                    {pledgesClosed ? (
+                                    <View style={styles.pledgeBox} testID="pledges-closed">
+                                        <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
+                                    </View>
+                                    ) : (
                                     <View style={styles.pledgeBox}>
                                         <View style={styles.pledgeInputRow}>
                                             <TextInput
@@ -968,6 +977,7 @@ export default function TreasuryDetailScreen() {
                                             )}
                                         </Pressable>
                                     </View>
+                                    )}
                                 </View>
                             );
                         })()}

@@ -63,6 +63,7 @@ import {
     PulseThumbnailService,
     extractInstagramEmbedUrl,
     extractThumbnailFromEmbedHtml,
+    SSRF_REFUSED_TEXT,
 } from '../engine/pulse-thumbnail.js';
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
@@ -538,7 +539,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
  * which private address the node's resolver gave the member's name, and why it was refused, which is the internal
  * network the guard is there to keep out of reach. The detail stays in the server's log.
  */
-export const SSRF_REFUSED_TEXT = "That address can't be fetched from here. Use a public web address.";
+export { SSRF_REFUSED_TEXT };
 
 function ssrfRefusal(err: SsrfSecurityError): string {
     logger.warn('SYS', `[PulseSubmit] Address refused: ${err.message}`);

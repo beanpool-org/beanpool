@@ -4,6 +4,7 @@
  * it, so no test ever starts a real cloudflared, whatever this machine has installed.
  */
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -34,12 +35,26 @@ const lines = (file: string): any[] => {
     try { return fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; }
 };
 
+/**
+ * A free port for the fake's metrics, from 20000-32767: below the ports any OS hands out on its own (Linux 32768-60999,
+ * macOS 49152-65535), so between this check and the fake's own listen no other process is given it by a listen(0) or an
+ * outgoing connection. One from listen(0) was, once: CI run 36816140050, the fake's start failed with EADDRINUSE and
+ * test-public-address read the connector's pid while it waited a second to start the fake again (pid null).
+ */
 async function freePort(): Promise<number> {
-    const s = net.createServer();
-    await new Promise<void>((r) => s.listen(0, '127.0.0.1', () => r()));
-    const port = (s.address() as net.AddressInfo).port;
-    await new Promise<void>((r) => s.close(() => r()));
-    return port;
+    for (;;) {
+        const port = 20_000 + crypto.randomInt(12_768);
+        if (port === 20241) continue; // cloudflared's own default, the connector's outside the suites
+        const s = net.createServer();
+        const free = await new Promise<boolean>((r) => {
+            s.once('error', () => r(false));
+            s.listen(port, '127.0.0.1', () => r(true));
+        });
+        if (free) {
+            await new Promise<void>((r) => s.close(() => r()));
+            return port;
+        }
+    }
 }
 
 /** A fresh control folder at `dir`, a free metrics port, and the connector pointed at the fake. `timings`: the connector's. */

@@ -22,14 +22,14 @@ import {
     MarketBody, NeedsBody, NoticesBody, PulseBody, StepsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, canHideCard, canMoveCard, cardCaption, cardOrder, cardsToAsk, cardsToDraw,
+    HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk, cardsToDraw,
     createDoorbellDebounce, dismissSafety, effectiveInterests, hideCard, isHidden, localNeeds, marketForward, mergeNeeds,
     moveCard, pickLayout, safetyWord, starredFirst, stepLines,
     type HomeCardId, type HomeLayout, type LocalNeeds, type StepLine,
 } from '../../utils/home-cards';
 import {
-    loadHome, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests, saveHomePreferences, saveInterests,
-    writePhoneLayout, type StoredHome,
+    SAVE_REFUSED, interestsTurnNow, loadHome, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
+    saveHomePreferences, saveInterests, writePhoneLayout, yieldPhoneLayout, type StoredHome,
 } from '../../utils/home-store';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
@@ -49,7 +49,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *   every two minutes while it is in front: never a timer per card.
  * - **Nothing here waits on the network or blocks anything** (memory onboarding-no-hard-gates): with no answer yet and
  *   none kept, it says so plainly and the tabs work as ever.
- * - **Tailoring**: each card's "…" (Hide, Move up, Move down) and Edit home at the bottom; kept on the account.
+ * - **Tailoring**: each card's "…" (Hide, Move up, Move down) and Edit home at the bottom; kept on the account. A member's
+ *   only: a visitor (a key with no account on the global node, which answers with its public cards) gets none of it, no
+ *   hint, and no layout is ever sent for one.
  * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
  * - **"+ ADD POST"** floats as on the Market, and steps aside while a card's buttons, chips or links rest under it.
  */
@@ -169,6 +171,14 @@ export default function HomeScreen() {
         const u = storedRef.current?.url ?? url;
         if (!id || !u) return;
         const saved = await saveHomePreferences(u, id, { layout: next });
+        if (saved === SAVE_REFUSED) {
+            // The node won't keep it: the account's copy stands, and the phone's is never sent again by itself.
+            const account = storedRef.current?.answer.layout ?? null;
+            phoneLayout.current = account;
+            setLayout(account);
+            await yieldPhoneLayout(id.publicKey, u, account);
+            return;
+        }
         // The node keeps the newer layout (another phone's, the web app's): that one, then.
         if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
             phoneLayout.current = saved.layout;
@@ -194,11 +204,13 @@ export default function HomeScreen() {
             phoneLayout.current = mine;
             setUrl(u);
             setStored(copy);
-            setLayout(pickLayout(copy?.answer.layout ?? null, mine).layout);
+            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine).layout : null);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
         const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout);
+        // A star tapped while the node answers is newer than the answer's interests (home-store.ts reconcileInterests).
+        const since = interestsTurnNow();
         const read = await loadHome(u, id, asked, cached);
         if (identityRef.current?.publicKey !== id.publicKey) return;
         if (read.kind === 'answer') {
@@ -206,15 +218,17 @@ export default function HomeScreen() {
             setStored(read.stored);
             setStatus('ok');
             setOfflineNote(false);
-            const pick = pickLayout(read.stored.answer.layout, phoneLayout.current);
+            // A visitor keeps no Home here: drawn in the default order, and nothing is sent.
+            const member = canTailor(read.stored.answer);
+            const pick = member ? pickLayout(read.stored.answer.layout, phoneLayout.current) : { layout: null, push: false };
             setLayout(pick.layout);
             if (pick.push && pick.layout) void pushLayout(pick.layout);
             else if (pick.layout) {
                 phoneLayout.current = pick.layout;
                 void writePhoneLayout(id.publicKey, u, pick.layout);
             }
-            if (read.stored.answer.me) setInterests(await reconcileInterests(u, id, read.stored.answer.me.interests));
-            void maybeReveal(id.publicKey);
+            if (read.stored.answer.me) setInterests(await reconcileInterests(u, id, read.stored.answer.me.interests, since));
+            if (member) void maybeReveal(id.publicKey);
             if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
         } else if (read.kind === 'members_only') {
             setStatus('members_only');
@@ -268,7 +282,7 @@ export default function HomeScreen() {
     // ── The member's edits ──
     const changeLayout = useCallback((next: HomeLayout | null) => {
         const id = identityRef.current;
-        if (!next || !id || !url) return;
+        if (!next || !id || !url || !canTailor(storedRef.current?.answer)) return;
         const before = layoutRef.current;
         phoneLayout.current = next;
         setLayout(next);
@@ -342,14 +356,15 @@ export default function HomeScreen() {
     const showsBeans = answer?.features.beans !== false;
     const invitesOn = answer?.features.invites === true;
     const ordered = cardOrder(layout);
-    const menuCard = menuFor;
+    const tailor = canTailor(answer);
+    const menuCard = tailor ? menuFor : null;
     const menuAt = menuCard ? drawn.indexOf(menuCard) : -1;
 
     const card = (id: HomeCardId): React.ReactNode => {
         if (!answer) return null;
         const c = answer.cards;
         const caption = cardCaption(id, answer);
-        const menu = canHideCard(id) ? () => setMenuFor(id) : undefined;
+        const menu = tailor && canHideCard(id) ? () => setMenuFor(id) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
             <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
@@ -385,22 +400,23 @@ export default function HomeScreen() {
                     onSeeAll={() => router.navigate('/(tabs)/market')}
                 />,
                 {
-                    right: (
+                    // The interests are a member's (a visitor's answer has no `me`, so no interests card to open).
+                    right: tailor ? (
                         <Pressable onPress={openTune} style={{ minHeight: 48, minWidth: 48, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}
                             accessibilityRole="button" accessibilityLabel="Tune: pick what you're into" testID="home-market-tune">
                             <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.link }}>Tune</Text>
                         </Pressable>
-                    ),
+                    ) : undefined,
                 },
             ) : null;
-            case 'decide': return c.decide ? frame(<DecideBody card={c.decide} colors={colors} now={now} />) : null;
+            case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
             case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} colors={colors} />) : null;
             case 'pulse': return c.pulse ? frame(<PulseBody card={{ items: starredFirst(c.pulse.items, i => i.category, interests, normalizeCategory) }} nodeUrl={url} colors={colors} />) : null;
             case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
             case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
             case 'invite': return frame(<InviteBody colors={colors} />);
-            case 'community': return frame(<CommunityBody card={c.community} profile={profile} invitesOn={invitesOn} colors={colors} onEdit={() => setEditOpen(true)} />);
+            case 'community': return frame(<CommunityBody card={c.community} profile={profile} invitesOn={invitesOn} colors={colors} onEdit={tailor ? () => setEditOpen(true) : undefined} />);
             default: return null;
         }
     };
@@ -477,7 +493,7 @@ export default function HomeScreen() {
                         {list.map(id => (
                             <View key={id} onLayout={e => cardY.current.set(id, e.nativeEvent.layout.y)}>
                                 {card(id)}
-                                {hint && id === firstDrawn && (
+                                {hint && tailor && id === firstDrawn && (
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
                                         <Text style={[st.hintText, { color: colors.text.body }]}>This is your Home. Tap … on any card to move or hide it.</Text>
                                         <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this tip">
@@ -513,9 +529,9 @@ export default function HomeScreen() {
                     returnTo={menuCard ? menuRef(menuCard) : undefined}
                 />
                 <EditHomeSheet
-                    visible={editOpen}
+                    visible={editOpen && tailor && !!answer}
                     layout={layout}
-                    profile={profile}
+                    node={answer ?? { profile, features: {} }}
                     drawnNow={drawn}
                     colors={colors}
                     onChange={changeLayout}

@@ -132,6 +132,12 @@ describe('Edit home at 320dp × 1.3', () => {
         expect(num(e.reset.minHeight)).toBeGreaterThanOrEqual(48);
         expect(num(e.done.minHeight)).toBeGreaterThanOrEqual(48);
     });
+
+    it('each up and down arrow is a 48dp target both ways, not only in height (PR #1483 review 4165384018)', () => {
+        expect(num(e.arrow.width)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(num(e.arrow.height)).toBeGreaterThanOrEqual(HOME_TARGET_DP);
+        expect(HOME_TARGET_DP).toBeGreaterThanOrEqual(48);
+    });
 });
 
 describe('the tab strip: Home · Market · Map · Talk · Commons · Ledger', () => {

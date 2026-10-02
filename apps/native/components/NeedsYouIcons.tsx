@@ -12,7 +12,7 @@ import { cachedNodeRole, canManageNode, fetchAdminQueue, forgetNodeRole } from '
 import { getCachedNodeProfile, decisionsOn } from '../utils/node-profile';
 import type { BeanPoolIdentity } from '../utils/identity';
 import {
-    buildNeedsYou, fitNeedsYou, moreLabel, needsYouRowOrder, NEEDS_YOU_SLOT,
+    buildNeedsYou, fitNeedsYou, moreLabel, needsTargetHref, needsYouRowOrder, NEEDS_YOU_SLOT,
     type NeedsYouEntry, type NeedsYouInputs, type NeedsYouKind, type NeedsYouTarget,
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
@@ -50,22 +50,7 @@ const WS_SETTLE_MS = 3_000;
 
 /** Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode). Home's Needs you card too. */
 export function goToNeedsTarget(target: Exclude<NeedsYouTarget, { to: 'admin' }>) {
-    switch (target.to) {
-        case 'deal': return router.push({ pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } });
-        case 'my-deals': return router.push({ pathname: '/(tabs)/market', params: { tab: 'deals' } });
-        // Commons has no route or param for one Decision, so every vote lands on its Decide section.
-        case 'decide': return router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
-        // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
-        case 'chat': return router.push(target.event
-            ? { pathname: '/chat/[id]', params: { id: target.conversationId, event: '1' } }
-            : target.thread
-                ? { pathname: '/chat/[id]', params: { id: target.conversationId, [target.thread]: '1' } }
-                : { pathname: '/chat/[id]', params: { id: target.conversationId } });
-        // Talk → Messages lists chats with people; the Unread filter narrows it to these.
-        case 'unread-messages': return router.push({ pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } });
-        // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
-        case 'your-groups': return router.push({ pathname: '/(tabs)/chats', params: { view: 'groups' } });
-    }
+    return router.push(needsTargetHref(target));
 }
 
 type LocalParts = Pick<NeedsYouInputs, 'transactions' | 'conversations'>;

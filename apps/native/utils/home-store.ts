@@ -12,13 +12,17 @@
  * - **The header reads Home's answer** (§5.2): while one is fresher than two minutes, components/NeedsYouIcons.tsx draws
  *   the node's lines from it instead of asking the node itself, and on Home it waits a moment for the read under way.
  * - **The layout and the interests are the account's** (H1, `POST /api/members/preferences`), with a copy on the phone;
- *   the newer layout wins by `updatedAt`, and a save that couldn't land is sent again at the next landing.
+ *   the newer layout wins by `updatedAt`, and a save that couldn't land is sent again at the next landing. A save the
+ *   node refuses (it keeps a Home only for its members) is never sent again by itself: the account's copy stands.
+ * - **Interests saves go one at a time, and only the latest counts** (PR #1483 review 4165383880): a star tapped while an
+ *   earlier save is out waits for it, a save overtaken by a newer star is never sent, and a save that lands after a
+ *   newer star was tapped leaves the newer one owed.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { signedGet, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
-import { homeAnswerStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey } from './storage-keys';
+import { FAV_CATEGORIES_STORE_KEY, homeAnswerStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey } from './storage-keys';
 import {
     HOME_FRESH_FOR_HEADER_MS, readHomeAnswer, readHomeLayout,
     type HomeAnswer, type HomeCardId, type HomeLayout,
@@ -28,8 +32,10 @@ import {
 export const HOME_READ_TIMEOUT_MS = 15_000;
 /** How long the header waits for a read under way on Home before it asks the node itself. */
 export const HOME_HEADER_WAIT_MS = 3_000;
+/** How long a save of the layout or the interests has before it counts as not landed (owed, sent again later). */
+export const HOME_SAVE_TIMEOUT_MS = 15_000;
 /** The Market's For You stars (app/(tabs)/market.tsx), the phone's copy of the account's interests (§4.3). */
-export const FAV_CATEGORIES_STORE_KEY = 'bp_fav_categories';
+export { FAV_CATEGORIES_STORE_KEY };
 
 const norm = (url: string) => url.trim().replace(/\/+$/, '').toLowerCase();
 
@@ -176,11 +182,13 @@ export function onHomeRead(listener: (read: HomeRead, url: string, publicKey: st
     return () => { settledListeners.delete(listener); };
 }
 
-/** For the tests: forget the shared read and the latest answer. */
+/** For the tests: forget the shared read, the latest answer and any interests save under way. */
 export function resetHomeStoreForTests(): void {
     latest = null;
     inflight = null;
     settledListeners.clear();
+    interestsTurn = 0;
+    interestsQueue = Promise.resolve();
 }
 
 // ── The layout ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -202,16 +210,40 @@ export async function writePhoneLayout(publicKey: string, url: string, layout: H
     }
 }
 
-/** What the node kept of a save (its answer names each Home key the body named), or null when it didn't take it. */
+/**
+ * The phone's copy of the layout made the account's again (null: none): after the node refused the phone's, so the
+ * phone's is no longer newer and is never sent again by itself.
+ */
+export async function yieldPhoneLayout(publicKey: string, url: string, account: HomeLayout | null): Promise<void> {
+    try {
+        if (account) await AsyncStorage.setItem(homeLayoutStoreKey(publicKey, url), JSON.stringify(account));
+        else await AsyncStorage.removeItem(homeLayoutStoreKey(publicKey, url));
+    } catch {
+        // Asked again at the next landing.
+    }
+}
+
+/** What the node kept of a save (its answer names each Home key the body named). */
 export interface SavedPreferences { layout?: HomeLayout | null; interests?: string[] }
 
 /**
+ * The node answered and won't take the save: a refusal (400, 401, 403, …; the node keeps a Home only for its members,
+ * home-preferences.ts). Sending it again changes nothing, so it isn't. A save that didn't land (no answer, 408, 429, a
+ * server error) is null instead, and is sent again later.
+ */
+export const SAVE_REFUSED = 'refused' as const;
+
+const refusal = (status: number) => status >= 400 && status < 500 && status !== 408 && status !== 429;
+
+/**
  * Save the layout and/or the interests to the account (`POST /api/members/preferences`, signed, own write only). The
- * node drops unknown ids and keeps the newer layout; its answer says what it kept. Null when the save didn't land.
+ * node drops unknown ids and keeps the newer layout; its answer says what it kept. {@link SAVE_REFUSED} when it won't
+ * take it, null when the save didn't land.
  */
 export async function saveHomePreferences(
     url: string, identity: BeanPoolIdentity, prefs: { layout?: HomeLayout; interests?: readonly string[] },
-): Promise<SavedPreferences | null> {
+    options: { timeoutMs?: number } = {},
+): Promise<SavedPreferences | typeof SAVE_REFUSED | null> {
     const preferences: Record<string, unknown> = {};
     if (prefs.layout) {
         const { updatedAt, ...rest } = prefs.layout;
@@ -219,8 +251,11 @@ export async function saveHomePreferences(
     }
     if (prefs.interests) preferences.interests = [...prefs.interests];
     if (!Object.keys(preferences).length) return {};
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? HOME_SAVE_TIMEOUT_MS);
     try {
-        const res = await signedPost(url, '/api/members/preferences', { publicKey: identity.publicKey, preferences }, identity);
+        const res = await signedPost(url, '/api/members/preferences', { publicKey: identity.publicKey, preferences }, identity, stop.signal);
+        if (refusal(res.status)) return SAVE_REFUSED;
         if (!res.ok) return null;
         const body = await res.json().catch(() => null) as Record<string, unknown> | null;
         const out: SavedPreferences = {};
@@ -229,6 +264,8 @@ export async function saveHomePreferences(
         return out;
     } catch {
         return null;
+    } finally {
+        clearTimeout(timer);
     }
 }
 
@@ -252,7 +289,10 @@ export async function writePhoneInterests(list: readonly string[]): Promise<void
     }
 }
 
-/** 'owed': the phone changed them and the save hasn't landed. 'synced': the two agreed once. Absent: never compared. */
+/**
+ * 'owed': the phone changed them and the save hasn't landed. 'synced': the two agreed once, or the node refused the
+ * phone's list (then the account's stands). Absent: never compared.
+ */
 type InterestsState = 'owed' | 'synced';
 
 async function interestsState(publicKey: string, url: string): Promise<InterestsState | null> {
@@ -264,9 +304,10 @@ async function interestsState(publicKey: string, url: string): Promise<Interests
     }
 }
 
-async function setInterestsState(publicKey: string, url: string, state: InterestsState): Promise<void> {
+async function setInterestsState(publicKey: string, url: string, state: InterestsState | null): Promise<void> {
     try {
-        await AsyncStorage.setItem(homeInterestsOwedStoreKey(publicKey, url), state);
+        if (state) await AsyncStorage.setItem(homeInterestsOwedStoreKey(publicKey, url), state);
+        else await AsyncStorage.removeItem(homeInterestsOwedStoreKey(publicKey, url));
     } catch {
         // Asked again at the next landing.
     }
@@ -275,35 +316,67 @@ async function setInterestsState(publicKey: string, url: string, state: Interest
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((c, i) => c === b[i]);
 
 /**
+ * The member's latest change of interests on this phone, counted up at each change. A save carries the count it was
+ * made at: one overtaken by a newer change is never sent, and one that lands after a newer change marks nothing synced
+ * (the newer list is still owed). A landing that read the phone before a change leaves that change alone.
+ */
+let interestsTurn = 0;
+/** The interests saves, one at a time in the order made, so the node takes the latest list last. */
+let interestsQueue: Promise<unknown> = Promise.resolve();
+
+function inTurn<T>(job: () => Promise<T>): Promise<T> {
+    const run = interestsQueue.then(job, job);
+    interestsQueue = run.catch(() => undefined);
+    return run;
+}
+
+/** The count of changes now: Home takes it as it asks the node, and gives it to {@link reconcileInterests}. */
+export const interestsTurnNow = (): number => interestsTurn;
+
+/**
  * The member starred or unstarred a category (the interests card, the Market's "Tune" or its For You panel): the
  * phone's copy at once, then the account's (§4.3: one truth, and For You keeps working offline). A save that doesn't
- * land is owed, and sent at the next landing.
+ * land is owed, and sent at the next landing; one the node refuses is not (a visitor's star stays on the phone only).
+ * True once this list is the account's.
  */
 export async function saveInterests(url: string | null, identity: BeanPoolIdentity | null | undefined, list: readonly string[]): Promise<boolean> {
-    await writePhoneInterests(list);
+    const turn = ++interestsTurn;
+    const mine = [...list];
+    await writePhoneInterests(mine);
     if (!url || !identity) return false;
     await setInterestsState(identity.publicKey, url, 'owed');
-    const saved = await saveHomePreferences(url, identity, { interests: list });
-    if (!saved) return false;
-    await setInterestsState(identity.publicKey, url, 'synced');
-    return true;
+    return inTurn(async () => {
+        if (turn !== interestsTurn) return false;
+        const saved = await saveHomePreferences(url, identity, { interests: mine });
+        if (!saved || turn !== interestsTurn) return false;
+        await setInterestsState(identity.publicKey, url, saved === SAVE_REFUSED ? null : 'synced');
+        return saved !== SAVE_REFUSED;
+    });
 }
 
 /**
  * At a landing, the account's interests (from the answer's `me`) and the phone's made one: an owed save is sent; the
  * stars a member made in the Market before Home existed are sent once to an account that has none; otherwise the
- * account's win and the phone's copy follows. Returns the list Home draws with.
+ * account's win and the phone's copy follows. A star tapped since `since` (the count when the answer was asked, so an
+ * answer made before the star can't undo it) is left as it is: its own save carries it. Returns the list Home draws with.
  */
-export async function reconcileInterests(url: string, identity: BeanPoolIdentity, account: readonly string[]): Promise<string[]> {
+export async function reconcileInterests(url: string, identity: BeanPoolIdentity, account: readonly string[], since: number = interestsTurn): Promise<string[]> {
+    const turn = since;
     const phone = await readPhoneInterests();
     const state = await interestsState(identity.publicKey, url);
+    if (turn !== interestsTurn) return readPhoneInterests();
     const push = state === 'owed' || (state === null && account.length === 0 && phone.length > 0);
     if (push) {
-        const saved = await saveHomePreferences(url, identity, { interests: phone });
-        if (saved) await setInterestsState(identity.publicKey, url, 'synced');
-        return phone;
+        await inTurn(async () => {
+            if (turn !== interestsTurn) return;
+            const saved = await saveHomePreferences(url, identity, { interests: phone });
+            // Refused: the account's list stands, and the phone's is never sent again by itself.
+            if (saved && turn === interestsTurn) await setInterestsState(identity.publicKey, url, 'synced');
+        });
+        return turn === interestsTurn ? phone : readPhoneInterests();
     }
     if (!sameList(account, phone)) await writePhoneInterests(account);
+    if (turn !== interestsTurn) return readPhoneInterests();
     if (state !== 'synced') await setInterestsState(identity.publicKey, url, 'synced');
     return [...account];
 }

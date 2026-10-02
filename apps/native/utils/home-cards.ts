@@ -116,7 +116,7 @@ export interface HomeLayout {
 export interface HomeAnswer {
     generatedAt: string;
     profile: string;
-    features: { beans?: boolean; escrow?: boolean; invites?: boolean; exampleListings?: boolean; decisions?: boolean; [k: string]: unknown };
+    features: { beans?: boolean; escrow?: boolean; enterprises?: boolean; invites?: boolean; exampleListings?: boolean; decisions?: boolean; [k: string]: unknown };
     welcome?: true;
     me: HomeMe | null;
     layout: HomeLayout | null;
@@ -246,6 +246,33 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 // ── What is asked, and what is drawn ───────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Whether a node of this profile can ever show the card in this build: the money cards only where Beans, escrow and
+ * enterprises are on (the node builds them only then, routes/home-answer.ts), the invite card only where invites are,
+ * and First steps not on the global node, whose words come in H4. Unknown counts as on, as utils/node-profile.ts reads a
+ * node's features (kept here so this file stays pure). Home draws only these whatever an answer holds, and Edit home
+ * offers only these: "Nothing to show now" is said of a card that could show, never of one that can't.
+ */
+export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'>): boolean {
+    if (!HOME_DRAWN.includes(id)) return false;
+    const f = answer.features;
+    switch (id) {
+        case 'steps': return answer.profile !== 'global';
+        case 'beans': return f.beans !== false;
+        case 'deals': return f.escrow !== false;
+        case 'enterprise': return f.enterprises !== false;
+        case 'invite': return answer.profile !== 'global' && f.invites === true;
+        default: return true;
+    }
+}
+
+/**
+ * Whether the reader tailors this Home: a member (the answer has a `me`). A visitor's answer (a key with no account on
+ * the global node gets the public cards, routes/home.ts) has no "…", no Edit home and no hint, and the phone never
+ * sends a layout for it: the node keeps a Home only for its members (design §2 (c): nothing a visitor could write with).
+ */
+export const canTailor = (answer: Pick<HomeAnswer, 'me'> | null | undefined): boolean => !!answer?.me;
+
+/**
  * The cards to ask the node for (`cards=`), in the catalogue's order so the address is the same each time and a repeat
  * read can be a 304: what this build draws and the answer carries, minus the member's hidden cards (never `needs` or
  * `community`). Never decided by what the last answer said of the node (its profile): a list built on a stale answer
@@ -315,7 +342,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
     const c = answer.cards;
     const global = answer.profile === 'global';
     const shows = (id: HomeCardId): boolean => {
-        if (!HOME_DRAWN.includes(id)) return false;
+        if (!cardOnNode(id, answer)) return false;
         if (isHidden(layout, id)) return false;
         switch (id) {
             case 'needs': return ctx.needs !== undefined ? ctx.needs > 0 : !!c.needs?.items?.length;
@@ -324,6 +351,7 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
             case 'invite': return !global && answer.features.invites === true && !!answer.me?.firstOffer;
             case 'market': return !!c.market && (c.market.items.length > 0 || !!c.market.examples);
+            case 'decide': return !!c.decide && decideLines(c.decide, answer.features, 0).length > 0;
             case 'community': return true;
             default: return c[id as keyof HomeCards] !== undefined;
         }
@@ -467,15 +495,35 @@ export function enterpriseLine(card: NonNullable<HomeCards['enterprise']>): stri
     return card.others > 0 ? `${requests} · and ${card.others} more you keep` : requests;
 }
 
-export function decideLine(card: NonNullable<HomeCards['decide']>, now: number): string {
-    const parts: string[] = [];
-    if (card.open > 0) {
+/** A screen a Home line opens, as `router.push` takes it. */
+export interface HomeHref { pathname: string; params?: Record<string, string> }
+
+/** Formal Decisions: Commons → Decide (app/(tabs)/projects.tsx). */
+export const DECIDE_HREF: HomeHref = { pathname: '/(tabs)/projects', params: { section: 'decide' } };
+/** Polls are posts, on every node: the Market's Polls pill (app/(tabs)/market.tsx takes `filter=polls`). Decide never lists them. */
+export const POLLS_HREF: HomeHref = { pathname: '/(tabs)/market', params: { filter: 'polls' } };
+
+export interface DecideLine { id: 'decisions' | 'polls'; text: string; a11y: string; href: HomeHref }
+
+/**
+ * The Decide card (§3.1), one line per place, each one tap into where its things are listed:
+ * - open Decisions → Commons → Decide, only where the node has Decisions and shows Commons (utils/node-profile.ts
+ *   `decisionsOn`, `hiddenTabsFor`: the global node has neither);
+ * - open polls → the Market's Polls, on every node.
+ */
+export function decideLines(card: NonNullable<HomeCards['decide']>, features: HomeAnswer['features'], now: number): DecideLine[] {
+    const lines: DecideLine[] = [];
+    if (card.open > 0 && features.decisions !== false && features.beans !== false) {
         const closes = card.soonestClosesAt ? closesInWords(card.soonestClosesAt, now) : null;
         const when = !closes ? '' : card.open === 1 ? `, ${closes}` : `, the first ${closes}`;
-        parts.push(`${plural(card.open, 'Decision', 'Decisions')} open${when}`);
+        const text = `${plural(card.open, 'Decision', 'Decisions')} open${when}`;
+        lines.push({ id: 'decisions', text, a11y: `${sentence(text)} Opens Decide, in Commons.`, href: DECIDE_HREF });
     }
-    if (card.polls > 0) parts.push(`${card.polls}${card.pollsMore ? '+' : ''} ${card.polls === 1 && !card.pollsMore ? 'poll' : 'polls'} open`);
-    return parts.join(' · ');
+    if (card.polls > 0) {
+        const text = `${card.polls}${card.pollsMore ? '+' : ''} ${card.polls === 1 && !card.pollsMore ? 'poll' : 'polls'} open`;
+        lines.push({ id: 'polls', text, a11y: `${sentence(text)} Opens the polls, in the Market.`, href: POLLS_HREF });
+    }
+    return lines;
 }
 
 export function groupLine(g: NonNullable<HomeCards['groups']>['items'][number]): string {

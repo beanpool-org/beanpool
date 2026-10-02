@@ -33,7 +33,7 @@ vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () =>
 
 import {
     FAV_CATEGORIES_STORE_KEY, HOME_HEADER_WAIT_MS, freshHomeForHeader, homeForHeader, loadHome, readHomeFromNode, readStoredHome,
-    reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests,
+    interestsTurnNow, reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests,
 } from '../home-store';
 import { HOME_FRESH_FOR_HEADER_MS, cardsToAsk, type HomeAnswer, type HomeLayout } from '../home-cards';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeRevealStoreKey } from '../storage-keys';
@@ -50,6 +50,11 @@ const node = {
     body: null as string | null,
     kept: { layout: null as unknown, interests: null as unknown },
     requests: [] as (SentRequest & { status: number })[],
+    /** How each preferences save is answered, in turn: kept at once, no answer, or held until released. */
+    saves: [] as ('ok' | 'fail' | 'hold')[],
+    held: [] as (() => void)[],
+    /** A preferences save refused with this status (the node keeps a Home only for its members). */
+    refuse: 0,
 };
 
 function answer(over: Partial<HomeAnswer> = {}): HomeAnswer {
@@ -79,6 +84,9 @@ beforeEach(async () => {
     node.body = null;
     node.kept = { layout: null, interests: null };
     node.requests = [];
+    node.saves = [];
+    node.held = [];
+    node.refuse = 0;
     me = await draftIdentity();
     globalThis.fetch = vi.fn(async (input: any, init: any = {}) => {
         const url = String(input);
@@ -97,12 +105,19 @@ beforeEach(async () => {
             return new Response(JSON.stringify(node.answer), { status: 200, headers: { ETag: tag, 'Cache-Control': 'private, max-age=0, must-revalidate' } });
         }
         if (u.pathname === '/api/members/preferences' && req.method === 'POST') {
+            if (node.refuse) { record(node.refuse); return new Response('{"error":"Only a member of this community keeps a Home here."}', { status: node.refuse }); }
+            const plan = node.saves.shift() ?? 'ok';
+            if (plan === 'fail') { record(0); throw new TypeError('Network request failed'); }
             const body = JSON.parse(req.body);
-            const out: Record<string, unknown> = { success: true };
-            if ('home.layout' in body.preferences) { node.kept.layout = body.preferences['home.layout']; out['home.layout'] = node.kept.layout; }
-            if ('interests' in body.preferences) { node.kept.interests = body.preferences.interests; out.interests = node.kept.interests; }
-            record(200);
-            return new Response(JSON.stringify(out), { status: 200 });
+            const land = () => {
+                const out: Record<string, unknown> = { success: true };
+                if ('home.layout' in body.preferences) { node.kept.layout = body.preferences['home.layout']; out['home.layout'] = node.kept.layout; }
+                if ('interests' in body.preferences) { node.kept.interests = body.preferences.interests; out.interests = node.kept.interests; }
+                record(200);
+                return new Response(JSON.stringify(out), { status: 200 });
+            };
+            if (plan === 'hold') return new Promise<Response>(resolve => { node.held.push(() => resolve(land())); });
+            return land();
         }
         record(404);
         return new Response('{}', { status: 404 });
@@ -251,7 +266,7 @@ describe('the layout and the interests are the account\'s, with a copy on the ph
         expect(new URL(post.url).pathname).toBe('/api/members/preferences');
         expect(boundSignatureValid(post, me.publicKey)).toBe(true);
         expect(JSON.parse(post.body)).toEqual({ publicKey: me.publicKey, preferences: { 'home.layout': layout } });
-        expect(saved?.layout).toEqual(layout);
+        expect(saved !== 'refused' && saved?.layout).toEqual(layout);
         // No date: the node stamps it.
         await saveHomePreferences(NODE, me, { layout: { ...layout, updatedAt: null } });
         expect(JSON.parse(node.requests.at(-1)!.body).preferences['home.layout']).not.toHaveProperty('updatedAt');
@@ -287,6 +302,80 @@ describe('the layout and the interests are the account\'s, with a copy on the ph
         // Never compared before and the account has some: the account's.
         expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food']);
         expect(node.requests.filter(r => r.method === 'POST')).toHaveLength(0);
+    });
+});
+
+describe('interests saves: one at a time, only the latest counts (PR #1483 review 4165383880)', () => {
+    const until = async (done: () => boolean) => { for (let i = 0; i < 200 && !done(); i++) await new Promise(r => setTimeout(r, 0)); expect(done()).toBe(true); };
+    const owed = () => mem.store.get(`beanpool_home:interests-owed:${me.publicKey.toLowerCase()}:${NODE}`) ?? null;
+    const interestPosts = () => node.requests.filter(r => r.method === 'POST' && 'interests' in JSON.parse(r.body).preferences)
+        .map(r => JSON.parse(r.body).preferences.interests);
+
+    it('a first save landing late, after a second failed, leaves the second owed; the next landing sends it and keeps both stars', async () => {
+        node.saves = ['hold', 'fail'];
+        const first = saveInterests(NODE, me, ['food']);
+        await until(() => node.held.length === 1);
+        const second = saveInterests(NODE, me, ['food', 'tools']);
+        await new Promise(r => setTimeout(r, 0));
+        node.held.shift()!();
+        await Promise.all([first, second]);
+        expect(node.kept.interests).toEqual(['food']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food', 'tools']);
+        expect(owed()).toBe('owed');
+        // The next landing: the account still says ['food']; the phone's newer list is owed, so it is sent and kept.
+        expect(await reconcileInterests(NODE, me, ['food'])).toEqual(['food', 'tools']);
+        expect(node.kept.interests).toEqual(['food', 'tools']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food', 'tools']);
+        expect(owed()).toBe('synced');
+    });
+
+    it('stars tapped while a save is out wait for it, and the node takes the latest list last; one overtaken is never sent', async () => {
+        node.saves = ['hold'];
+        const first = saveInterests(NODE, me, ['food']);
+        await until(() => node.held.length === 1);
+        const second = saveInterests(NODE, me, ['food', 'tools']);
+        const third = saveInterests(NODE, me, ['food', 'tools', 'garden']);
+        await new Promise(r => setTimeout(r, 0));
+        // Nothing else is sent while the first is out.
+        expect(interestPosts()).toEqual([]);
+        node.held.shift()!();
+        expect(await Promise.all([first, second, third])).toEqual([false, false, true]);
+        expect(interestPosts()).toEqual([['food'], ['food', 'tools', 'garden']]);
+        expect(node.kept.interests).toEqual(['food', 'tools', 'garden']);
+        expect(owed()).toBe('synced');
+    });
+
+    it('an answer asked before a star was tapped can\'t undo it at the landing', async () => {
+        const since = interestsTurnNow();
+        expect(await saveInterests(NODE, me, ['food'])).toBe(true);
+        // The landing's answer was made before the save: its account list is the old one.
+        expect(await reconcileInterests(NODE, me, [], since)).toEqual(['food']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food']);
+        expect(node.kept.interests).toEqual(['food']);
+    });
+});
+
+describe('a save the node refuses is not sent again and again (PR #1483 review 4165383753)', () => {
+    it('saveHomePreferences tells a refusal (4xx) from a save that didn\'t land (no answer, 5xx, 429)', async () => {
+        node.refuse = 400;
+        expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBe('refused');
+        node.refuse = 403;
+        expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBe('refused');
+        node.refuse = 429;
+        expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBeNull();
+        node.refuse = 503;
+        expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBeNull();
+        node.refuse = 0;
+        node.down = true;
+        expect(await saveHomePreferences(NODE, me, { interests: ['food'] })).toBeNull();
+    });
+
+    it('a refused star stays on the phone and is sent at most once more, never at every landing', async () => {
+        node.refuse = 400;
+        expect(await saveInterests(NODE, me, ['food'])).toBe(false);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['food']);
+        for (let i = 0; i < 4; i++) await reconcileInterests(NODE, me, []);
+        expect(node.requests.filter(r => r.method === 'POST').length).toBeLessThanOrEqual(2);
     });
 });
 

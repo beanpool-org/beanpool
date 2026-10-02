@@ -13,9 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-
-const ROOT = path.resolve(__dirname, '../..');
-const APP = path.join(ROOT, 'app');
+import { APP, ROOT, resolves } from './route-resolve';
 
 function sources(): { file: string; text: string }[] {
     const out: { file: string; text: string }[] = [];
@@ -49,37 +47,6 @@ function routesIn(text: string): { route: string; line: number }[] {
         }
     }
     return found;
-}
-
-/** Does expo-router find a screen for this path? Groups may be left out; `[x]` files take any one segment. */
-function resolves(route: string): string | null {
-    const clean = route.replace(/\$\{[^}]*\}/g, '__dyn__').split(/[?#]/)[0].replace(/\/+$/, '') || '/';
-    const segs = clean === '/' ? [] : clean.slice(1).split('/');
-    const walk = (dir: string, rest: string[]): string | null => {
-        if (!fs.existsSync(dir)) return null;
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        if (rest.length === 0) {
-            if (fs.existsSync(path.join(dir, 'index.tsx'))) return path.join(dir, 'index.tsx');
-        }
-        // A group folder may be skipped in the path.
-        for (const g of entries.filter(e => e.isDirectory() && /^\(.+\)$/.test(e.name))) {
-            const hit = walk(path.join(dir, g.name), rest[0] === g.name ? rest.slice(1) : rest);
-            if (hit) return hit;
-        }
-        if (rest.length === 0) return null;
-        const [head, ...tail] = rest;
-        const exact = head === '__dyn__' ? [] : [head];
-        const dynamic = entries.map(e => e.name.replace(/\.tsx$/, '')).filter(n => /^\[.+\]$/.test(n));
-        for (const name of [...exact, ...(head.startsWith('[') ? [head] : []), ...dynamic]) {
-            if (tail.length === 0 && fs.existsSync(path.join(dir, `${name}.tsx`))) return path.join(dir, `${name}.tsx`);
-            if (fs.existsSync(path.join(dir, name)) && fs.statSync(path.join(dir, name)).isDirectory()) {
-                const hit = walk(path.join(dir, name), tail);
-                if (hit) return hit;
-            }
-        }
-        return null;
-    };
-    return walk(APP, segs);
 }
 
 const all = sources();
@@ -137,7 +104,9 @@ describe('links that mean the Market go to the Market', () => {
         expect(chats).toMatch(/onPress=\{\(\) => router\.push\('\/\(tabs\)\/market'\)\}[\s\S]{0,300}Browse Market/);
         const sheet = fs.readFileSync(path.join(ROOT, 'components', 'MyDealsSheet.tsx'), 'utf-8');
         expect(sheet).toMatch(/router\.push\('\/\(tabs\)\/market'\); \}\}[\s\S]{0,200}\+ Create a Post/);
+        const needs = fs.readFileSync(path.join(ROOT, 'utils', 'needs-you.ts'), 'utf-8');
+        expect(needs).toContain("case 'my-deals': return { pathname: '/(tabs)/market', params: { tab: 'deals' } };");
         const icons = fs.readFileSync(path.join(ROOT, 'components', 'NeedsYouIcons.tsx'), 'utf-8');
-        expect(icons).toContain("case 'my-deals': return router.push({ pathname: '/(tabs)/market', params: { tab: 'deals' } });");
+        expect(icons).toContain('return router.push(needsTargetHref(target));');
     });
 });

@@ -10,9 +10,9 @@ import { resolvePulseThumbnailUrl } from '../../utils/pulse';
 import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
-    RSVP_WORDS, beansLines, communityLines, dealsLine, decideLine, enterpriseLine, eventDay, eventLine, formatBeans,
+    RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
     groupLine, joinedLine, needsLineA11y, pulseTitle, sentence,
-    type HomeCards, type HomeMarketItem, type StepLine,
+    type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
 import { FabAware, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
 
@@ -204,11 +204,14 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
     );
 }
 
-export function DecideBody({ card, colors, now }: { card: NonNullable<HomeCards['decide']>; colors: AppColors; now: number }) {
-    const line = decideLine(card, now);
+/** One line per place (utils/home-cards.ts `decideLines`): Decisions open Commons → Decide, polls the Market's Polls. */
+export function DecideBody({ card, features, colors, now }: { card: NonNullable<HomeCards['decide']>; features: HomeAnswer['features']; colors: AppColors; now: number }) {
     return (
-        <HomeRow colors={colors} text={line} a11y={`${sentence(line)} Opens Decide.`}
-            onPress={() => router.push({ pathname: '/(tabs)/projects', params: { section: 'decide' } })} testID="home-decide-line" />
+        <>
+            {decideLines(card, features, now).map(l => (
+                <HomeRow key={l.id} colors={colors} text={l.text} a11y={l.a11y} onPress={() => router.push(l.href)} testID={`home-decide-${l.id}`} />
+            ))}
+        </>
     );
 }
 
@@ -319,13 +322,14 @@ export function CommunityBody({ card, profile, invitesOn, colors, onEdit }: {
     profile: string;
     invitesOn: boolean;
     colors: AppColors;
-    onEdit: () => void;
+    /** Absent for a visitor, who tailors nothing here (utils/home-cards.ts `canTailor`). */
+    onEdit?: () => void;
 }) {
     const { line } = communityLines(card, profile, invitesOn);
     return (
         <>
             {!!line && <HomeRow colors={colors} text={line} a11y={line} lines={3} testID="home-community-line" />}
-            <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: hide, show or move cards" onPress={onEdit} testID="home-edit" />
+            {onEdit && <HomeLink id="community:edit" colors={colors} text="Edit home" a11y="Edit home: hide, show or move cards" onPress={onEdit} testID="home-edit" />}
         </>
     );
 }

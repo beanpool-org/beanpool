@@ -171,8 +171,17 @@ export function homeInterestsOwedStoreKey(publicKey: string, url: string): strin
 }
 
 /**
+ * The phone's copy of the account's interests: the categories starred in the Market's For You and on Home's interests
+ * card (utils/home-store.ts, design §4.3), so For You works offline. It holds what one person cares about and names no
+ * account, and the first Home landing of an account with none sends it as that account's, so Sign Out and a replacing
+ * restore wipe it with the account (utils/identity.ts wipeIdentityScopedStorage).
+ */
+export const FAV_CATEGORIES_STORE_KEY = 'bp_fav_categories';
+
+/**
  * Home's one-time reveal and its one-line hint (design §6.2), per account: '1' once each has been seen. Kept through Sign
- * Out on purpose, as the "one way back" card is: the same account restored here doesn't get the welcome again.
+ * Out on purpose, as the "one way back" card is: each names its account, so no other account reads it, and the same
+ * account restored here doesn't get the welcome again.
  */
 export function homeRevealStoreKey(publicKey: string): string {
     return `beanpool_home_reveal:${publicKey.toLowerCase()}`;

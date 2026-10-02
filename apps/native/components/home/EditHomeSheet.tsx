@@ -4,20 +4,22 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { AppColors } from '../../constants/colors';
 import {
-    HOME_CARD_NAMES, HOME_DRAWN, canMoveCard, cardOrder, hideCard, isHidden, marketCaption, moveCard, resetLayout, showCard,
-    type HomeCardId, type HomeLayout,
+    HOME_CARD_NAMES, canMoveCard, cardOnNode, cardOrder, hideCard, isHidden, marketCaption, moveCard, resetLayout, showCard,
+    type HomeAnswer, type HomeCardId, type HomeLayout,
 } from '../../utils/home-cards';
 import { HOME_TARGET_DP } from './HomeParts';
 
 /**
  * Edit home (design §4.1): every card with a switch and up/down arrows, the hidden ones greyed under "Hidden" so they come
  * back, and Reset to defaults. Nothing is dragged (fragile on old Android, poor with large text and a screen reader) and
- * nothing is typed. Needs you stays at the top and the community's card at the bottom: they are not in the list.
+ * nothing is typed. Needs you stays at the top and the community's card at the bottom: they are not in the list. Only the
+ * cards this node can show are offered (utils/home-cards.ts `cardOnNode`): no money cards on the global node.
  */
-export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onChange, onClose }: {
+export function EditHomeSheet({ visible, layout, node, drawnNow, colors, onChange, onClose }: {
     visible: boolean;
     layout: HomeLayout | null;
-    profile: string;
+    /** The node's profile and switches, from its answer. */
+    node: Pick<HomeAnswer, 'profile' | 'features'>;
     /** The cards on Home now; the others say they have nothing to show yet. */
     drawnNow: readonly HomeCardId[];
     colors: AppColors;
@@ -25,10 +27,10 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
     onClose: () => void;
 }) {
     const insets = useSafeAreaInsets();
-    const listed = cardOrder(layout).filter(id => canMoveCard(id) && HOME_DRAWN.includes(id));
+    const listed = cardOrder(layout).filter(id => canMoveCard(id) && cardOnNode(id, node));
     const shown = listed.filter(id => !isHidden(layout, id));
     const hidden = listed.filter(id => isHidden(layout, id));
-    const name = (id: HomeCardId) => (id === 'market' ? marketCaption(profile) : HOME_CARD_NAMES[id]);
+    const name = (id: HomeCardId) => (id === 'market' ? marketCaption(node.profile) : HOME_CARD_NAMES[id]);
     const apply = (next: HomeLayout | null) => { if (next) onChange(next); };
 
     const row = (id: HomeCardId, on: boolean) => {
@@ -129,7 +131,7 @@ export const editHomeStyles = StyleSheet.create({
     rowText: { flex: 1, minWidth: 0, paddingVertical: 6 },
     name: { fontSize: 15, fontWeight: '600' },
     sub: { fontSize: 12, marginTop: 1 },
-    arrow: { width: HOME_TARGET_DP - 4, height: HOME_TARGET_DP, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    arrow: { width: HOME_TARGET_DP, height: HOME_TARGET_DP, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
     reset: { marginTop: 20, minHeight: HOME_TARGET_DP, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
     resetText: { fontSize: 15, fontWeight: '700' },
 });

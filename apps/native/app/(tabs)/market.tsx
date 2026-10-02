@@ -35,7 +35,7 @@ import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
 import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
 import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
 import {
-    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
+    MARKET_TYPE_PILLS, marketFilterFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
@@ -687,10 +687,11 @@ export default function MarketScreen() {
 
     const params = useLocalSearchParams<{ tab?: string, dealsTab?: string, filter?: string }>();
 
-    // Home's "All events ›" opens the Market on its Events pill.
+    // Home's "All events ›" opens the Market on its Events pill, and its Decide card's polls line on Polls.
     useEffect(() => {
-        if (params.filter === 'events') {
-            selectType('events');
+        const pill = marketFilterFromLink(params.filter);
+        if (pill) {
+            selectType(pill);
             router.setParams({ filter: '' });
         }
     }, [params.filter]);

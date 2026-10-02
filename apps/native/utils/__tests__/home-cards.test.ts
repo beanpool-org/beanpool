@@ -14,7 +14,7 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 
 import {
     HOME_CARD_IDS, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
-    createDoorbellDebounce, decideLine, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
+    DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     hideCard, isHidden, joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     needsLineA11y, resetLayout, safetyWord, sentence, showCard, starredFirst, stepLines, voteLabelHere,
     type HomeAnswer, type HomeCards, type HomeLayout,
@@ -409,9 +409,11 @@ describe('each card\'s words', () => {
         expect(dealsLine({ open: 2, waiting: 0, waitingOnMe: null })).toBe('2 open');
         expect(enterpriseLine({ id: 'x', name: 'T', requests: 3, others: 1 })).toBe('3 requests to approve · and 1 more you keep');
         expect(enterpriseLine({ id: 'x', name: 'T', requests: 0, others: 0 })).toBe('No requests waiting');
-        expect(decideLine({ open: 1, soonestClosesAt: new Date(2026, 9, 3, 20, 0, 0).toISOString(), polls: 2, pollsMore: false }, NOW)).toBe('1 Decision open, closes tomorrow · 2 polls open');
-        expect(decideLine({ open: 3, soonestClosesAt: new Date(2026, 9, 2, 21, 0, 0).toISOString(), polls: 0, pollsMore: false }, NOW)).toBe('3 Decisions open, the first closes in 7 hours');
-        expect(decideLine({ open: 0, soonestClosesAt: null, polls: 50, pollsMore: true }, NOW)).toBe('50+ polls open');
+        const local = { beans: true, decisions: true };
+        const texts = (card: Parameters<typeof decideLines>[0]) => decideLines(card, local, NOW).map(l => l.text);
+        expect(texts({ open: 1, soonestClosesAt: new Date(2026, 9, 3, 20, 0, 0).toISOString(), polls: 2, pollsMore: false })).toEqual(['1 Decision open, closes tomorrow', '2 polls open']);
+        expect(texts({ open: 3, soonestClosesAt: new Date(2026, 9, 2, 21, 0, 0).toISOString(), polls: 0, pollsMore: false })).toEqual(['3 Decisions open, the first closes in 7 hours']);
+        expect(texts({ open: 0, soonestClosesAt: null, polls: 50, pollsMore: true })).toEqual(['50+ polls open']);
         expect(groupLine({ id: 'g', kind: 'group', name: 'Garden Group', unread: 4, muted: false })).toBe('Garden Group · 4 new');
         expect(groupLine({ id: 'g', kind: 'group', name: 'Tool Library', unread: 0, muted: false })).toBe('Tool Library · quiet');
         expect(groupLine({ id: 'g', kind: 'group', name: 'Noisy', unread: 9, muted: true })).toBe('Noisy · muted');
@@ -509,5 +511,52 @@ describe('deep links and doorbells', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+});
+
+describe('what a node can show, and where the Decide card leads (PR #1483 review 4165383429, 4165384151)', () => {
+    const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
+    const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
+
+    it('the money cards and the invite card only where the node has them; First steps not on global until H4; never `find` (H4)', () => {
+        const on = (n: typeof LOCAL) => HOME_CARD_IDS.filter(id => cardOnNode(id, n));
+        expect(on(LOCAL)).toEqual(HOME_CARD_IDS.filter(id => id !== 'find'));
+        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        // A node that says nothing has everything, as every node before the switches.
+        expect(on({ profile: 'local', features: { invites: true } } as typeof LOCAL)).toEqual(on(LOCAL));
+    });
+
+    it('Home never draws a card its node can\'t show, whatever the answer holds', () => {
+        const a = answer({
+            profile: 'global', features: GLOBAL.features,
+            cards: {
+                beans: { balance: 5, room: 0, tier: 'Newcomer', activated: true, frozen: false },
+                deals: { open: 1, waiting: 1, waitingOnMe: null },
+                enterprise: { id: 'x', name: 'T', requests: 1, others: 0 },
+                decide: { open: 2, soonestClosesAt: null, polls: 0, pollsMore: false },
+                community: { name: 'BeanPool', members: 2, communities: 1 },
+            },
+        });
+        expect(cardsToDraw(a, null, ctx({ interests: ['food'] }))).toEqual(['community']);
+    });
+
+    it('Decisions open Commons → Decide; polls open the Market\'s Polls; each line says where it goes', () => {
+        const card = { open: 1, soonestClosesAt: null, polls: 2, pollsMore: false };
+        expect(decideLines(card, LOCAL.features, NOW)).toEqual([
+            { id: 'decisions', text: '1 Decision open', a11y: '1 Decision open. Opens Decide, in Commons.', href: DECIDE_HREF },
+            { id: 'polls', text: '2 polls open', a11y: '2 polls open. Opens the polls, in the Market.', href: POLLS_HREF },
+        ]);
+        expect(DECIDE_HREF).toEqual({ pathname: '/(tabs)/projects', params: { section: 'decide' } });
+        expect(POLLS_HREF).toEqual({ pathname: '/(tabs)/market', params: { filter: 'polls' } });
+        // The global node: no Decisions and no Commons tab, so never a line there.
+        expect(decideLines(card, GLOBAL.features, NOW).map(l => l.id)).toEqual(['polls']);
+        // A node with Beans but no Decisions: the same.
+        expect(decideLines(card, { ...LOCAL.features, decisions: false }, NOW).map(l => l.id)).toEqual(['polls']);
+    });
+
+    it('a member tailors their Home; a visitor\'s answer (no `me`) tailors nothing', () => {
+        expect(canTailor(answer())).toBe(true);
+        expect(canTailor(answer({ me: null, welcome: true }))).toBe(false);
+        expect(canTailor(null)).toBe(false);
     });
 });

@@ -9,8 +9,8 @@ import { announceAccountOnPhone } from './account-on-phone';
 import { generateMnemonic, mnemonicToKeypair } from './crypto';
 import { forgetAllPulseTokens } from './pulse-token-store';
 import {
-    CANONICAL_PROFILE_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY, PENDING_ABUSE_REPORTS_STORE_KEY,
-    PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
+    CANONICAL_PROFILE_STORE_KEY, FAV_CATEGORIES_STORE_KEY, HOME_STORE_PREFIX, IDENTITY_THIS_DEVICE_STORE_KEY, KNOCKS_STORE_KEY,
+    PENDING_ABUSE_REPORTS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY,
 } from './storage-keys';
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
@@ -424,6 +424,9 @@ interface WipeableStorage {
  * And the record of where the phone sent its push token for this key (push-registrations.ts): the account
  * leaving the phone has already unregistered there (account-leaves-phone.ts), and the next account starts its own.
  * So do its registrations still due, which its leave has already dropped: none is ever tried for another key.
+ * And Home's copies (storage-keys.ts `HOME_STORE_PREFIX`: its last answer, its layout, an interests save it owes) with the
+ * phone's copy of its interests (`FAV_CATEGORIES_STORE_KEY`), which names no account: left behind, the next account's
+ * first Home landing would send them to its community as its own (PR #1483 review 4165383582).
  *
  * `beanpool_saved_nodes` stays on purpose: it is a list of community addresses, not anything about
  * who the member is.
@@ -451,6 +454,7 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem(PENDING_ABUSE_REPORTS_STORE_KEY);
     await storage.removeItem(PUSH_REGISTERED_AT_STORE_KEY);
     await storage.removeItem(PUSH_REGISTRATIONS_DUE_STORE_KEY);
+    await storage.removeItem(FAV_CATEGORIES_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
     // Home's copies hold the account's own Beans, deals and who wrote to it (utils/home-store.ts).

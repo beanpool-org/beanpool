@@ -175,6 +175,7 @@ export {
 };
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
+    CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
@@ -6537,6 +6538,19 @@ export function actionReport(
  * post: each author hears once, with the count, that this was routine tidying, not a takedown.
  */
 export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfall?: (s: EscrowRefundShortfall) => void }): number {
+    // While the Commons pot isn't a number, a listing holding a deal can't be removed (its refund moves Beans). Checked for
+    // every listing BEFORE any is removed, so a mixed batch is refused whole in the pause words, naming the held ones,
+    // rather than taking some down silently and then failing (#1465 follow-up, A).
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        const held = postIds.filter(id => db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(id));
+        if (held.length > 0) {
+            const names = held.map(id => {
+                const t = (db.prepare('SELECT title FROM posts WHERE id = ?').get(id) as { title?: string } | undefined)?.title;
+                return t ? `"${t}"` : id;
+            });
+            throw new CommonsPotUnknownError(`${held.length === 1 ? 'This listing holds a deal' : 'These listings hold deals'} that can't be refunded yet: ${names.join(', ')}. None of the listings you chose were removed; take those out of the list and try again.`);
+        }
+    }
     const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
     const reportersByPost = new Map<string, string[]>();
     for (const postId of postIds) {

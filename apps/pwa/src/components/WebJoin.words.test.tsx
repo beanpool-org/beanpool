@@ -302,21 +302,35 @@ describe('the two doors', () => {
         expect(screen.getByRole('button', { name: '← Choose another way' })).not.toBeDisabled();
     });
 
-    // Review 4161724226: no signed work request for a key that is gone.
+    // Review 4161724226: no signed work request for a key that is gone. On the test's clock, not the wall's, and with a
+    // solver that answers at once (this test never joins, so nothing checks its counters): a real solve is 64 MB of
+    // JavaScript SHA-256 on the main thread, and renewals every second of real time ran past 15 s on a loaded CI runner.
     it('a key let go by ← Back takes its work with it: no more work is asked for it', async () => {
-        // A challenge that lives 91 s is renewed a second after it is ready (90 s before it runs out).
-        const node = stubNode({ life: () => 91 });
-        renderJoin({ wordsDoor: true, solveWork: heldSolver().solver });
-        await toTheDoors();
-        await waitFor(() => expect(node.works()).toHaveLength(1));
-        fireEvent.click(screen.getByRole('button', { name: '← Change name' }));
-        fireEvent.click(await screen.findByRole('button', { name: '← Back' }));
-        await screen.findByTestId('join-screen-guard');
-        expect(await loadPendingJoin()).toBeNull();
-        const atBack = node.works().length;
-        await new Promise((r) => setTimeout(r, 2_500));
-        expect(node.works()).toHaveLength(atBack);
-    }, 15_000);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true });
+        try {
+            // 600 s challenges: one left unused is renewed 90 s before it runs out, 510 s after it is ready.
+            const node = stubNode();
+            const instant: DoorWorkSolver = () => ({ done: Promise.resolve([0, 1, 2, 3, 4, 5, 6, 7]), cancel: () => {} });
+            renderJoin({ wordsDoor: true, solveWork: instant });
+            await toTheDoors();
+            await waitFor(() => expect(screen.getByTestId('join-screen-providers')).toHaveAttribute('data-words-work', 'ready'));
+            expect(node.works()).toHaveLength(1);
+            // While the key is kept, its work is renewed when due: so the count after ← Back means something.
+            await vi.advanceTimersByTimeAsync(511_000);
+            await waitFor(() => expect(node.works()).toHaveLength(2));
+            await waitFor(() => expect(screen.getByTestId('join-screen-providers')).toHaveAttribute('data-words-work', 'ready'));
+            fireEvent.click(screen.getByRole('button', { name: '← Change name' }));
+            fireEvent.click(await screen.findByRole('button', { name: '← Back' }));
+            await screen.findByTestId('join-screen-guard');
+            expect(await loadPendingJoin()).toBeNull();
+            const atBack = node.works().length;
+            // An hour on the test's clock: every renewal the let-go key could have had (at most 5, ten minutes apart).
+            await vi.advanceTimersByTimeAsync(60 * 60_000);
+            expect(node.works()).toHaveLength(atBack);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 
     it('from level 3: the busy sentence with this browser\'s own estimate, beside the sign-in, and never a refusal', async () => {
         stubNode({ level: (d) => (d === 'words' ? 3 : null) });

@@ -34,7 +34,7 @@ vi.mock('expo-secure-store', () => ({
 import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, makeNamesGeneration, makeNamesShare, readNamesGeneration,
-    readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
+    readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, emptyNamesPin, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
     type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
@@ -44,7 +44,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS,
+    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -1192,7 +1192,7 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         expect(f.ok && f.value.plan.kind).toBe('ready');
         const three = node.current()!;
         expect(three).toMatchObject({ maker: bea.publicKey, drops: [abe.publicKey, zed.publicKey].sort() });
-        expect(f.ok && f.value.notices.some((w) => w.startsWith('The list has a new key without') && w.includes('@Abe') && w.includes('@Zed') && w.includes('the history it followed hadn’t'))).toBe(true);
+        expect(f.ok && f.value.notices.some((w) => w.startsWith('The list has a new key without') && w.includes('@Abe') && w.includes('@Zed') && w.includes('on a key history it has since left'))).toBe(true);
         expect(f.ok && f.value.pin.trusted).not.toContain(abe.publicKey);
         // Nothing from Bea to Abe after the tap; his lost phone holds neither key.
         expect(sent.slice(tap).filter((x) => x.method === 'POST' && new URL(x.url).pathname === '/api/names/shares'
@@ -1683,6 +1683,7 @@ describe('J10. Round 13: the card promises a new key only when a removal will st
         const b = await open(bea);
         expect(b.plan).toMatchObject({ kind: 'refused', reason: 'different_history', canFollow: true });
         expect(planWords(b)).toBe(NAMES_COPY.refusedDifferentNone);
+        expect(followRemovesAny(b)).toBe(false); // the Follow question's condition, the same as the card's
         await followServerHistory(COMMUNITY, bea, STORE);
         await open(ada);
         expect((await open(bea)).plan.kind).toBe('ready');
@@ -1777,6 +1778,124 @@ describe('Q. Round 13: no request waits for good; a write decides from the pin',
         const src = fs.readFileSync(path.join(__dirname, '../names-list.ts'), 'utf8');
         expect(src).not.toMatch(/requireAuthentication/);
         expect(NAMES_REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(30_000);
+    });
+});
+
+describe('S. Round 14: one check per statement and header per state', () => {
+    it("S1 (the re-review's :812) drawing 1,000 locked entries in a community of 8 admins and 30 keys checks each statement and header once: under 500 ms", async () => {
+        const admins = await Promise.all(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((n) => admin(n)));
+        const gens: NamesGeneration[] = [];
+        const ring: Record<string, Uint8Array> = {};
+        for (let n = 1; n <= 30; n++) {
+            const g = makeNamesGeneration({ communityId: CID, n, parentId: n === 1 ? null : gens[n - 2].id, drops: [] }, admins[n % 8]);
+            gens.push(g);
+            ring[g.id] = newNamesListKey();
+        }
+        const head = gens[gens.length - 1];
+        const shares: NamesShare[] = [];
+        for (const from of admins) for (const to of admins) {
+            if (from === to) continue;
+            shares.push(makeNamesShare({ communityId: CID, from, to: to.publicKey, headId: head.id, ring, trusts: admins.map((a) => a.publicKey) }));
+        }
+        const me = admins[0];
+        const state = {
+            communityId: CID, current: { id: head.id, n: head.n },
+            generations: gens.map((g) => ({ statement: g.statement, signature: g.signature, id: g.id, n: g.n, parentId: g.parentId, maker: g.maker, drops: g.drops })),
+            shares: shares.map((x) => ({ header: x.header, signature: x.signature, from: x.from, to: x.to, headId: x.headId, keyIds: x.keyIds, trusts: x.trusts })),
+            admins: admins.map((a) => ({ pubkey: a.publicKey, callsign: a.callsign, role: 'admin' as const, keyIds: gens.map((g) => g.id), holdsCurrent: true })),
+            holdersOfCurrent: admins.map((a) => a.publicKey), droppedHolders: [], nobodyHoldsKey: false, newKeyNeeded: false, callsigns: {},
+            settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
+            counts: { entries: 1000, confirmed: 0, awaitingSecond: 0, byKey: {}, locked: 0 },
+            me: { pubkey: me.publicKey, role: 'admin' as const, owner: false },
+        } as unknown as NamesState;
+        const pin = { ...emptyNamesPin(CID, me.publicKey), trusted: admins.map((a) => a.publicKey).sort() };
+        const entries: SealedEntryRow[] = Array.from({ length: 1000 }, (_, i) => ({
+            id: newNamesEntryId(), ciphertext: 'sealed', keyId: gens[i % 30].id, createdBy: me.publicKey, createdAt: '2026-10-02', updatedBy: null, updatedAt: '',
+        }));
+        const t0 = performance.now();
+        const drawn = openEntries({ current: head.id, entries, confirmations: [] }, { ring: {}, pin, generations: new Map(), state, justChecked: [] });
+        const ms = performance.now() - t0;
+        expect(drawn.length).toBe(1000);
+        expect(drawn.every((e) => e.locked === 'no_key' && e.holders.length === 7)).toBe(true);
+        expect(ms).toBeLessThan(500);
+        // The refusal card's words reuse the same checks.
+        const t1 = performance.now();
+        planWords({ plan: { kind: 'wait', keyId: head.id, n: 30, holders: admins.slice(1).map((a) => a.publicKey), newKeyNeeded: false, canMakeNew: false, drops: [] }, state, pin, justChecked: [] });
+        expect(performance.now() - t1).toBeLessThan(200);
+    }, 20_000);
+});
+
+describe('T. Round 14: limits that fit the request, one limit per open, notices kept, a true Follow question', () => {
+    const never = () => new Promise<void>(() => { /* never answers */ });
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+    afterEach(() => setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS));
+
+    it("T1 (the re-review's :147) a list read slower than a small request's limit but still arriving completes; and a Remove tapped during it isn't held up", async () => {
+        const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+        setNamesRequestTimeout(100, { listPerEntryMs: 300 });
+        let release!: () => void;
+        const gate = new Promise<void>((r) => { release = r; });
+        let used = false;
+        hold = (req) => {
+            if (used || req.method !== 'GET' || new URL(req.url).pathname !== '/api/names/entries') return null;
+            used = true;
+            return gate;
+        };
+        const opening = openNamesList(COMMUNITY, owen, STORE);
+        await sleep(30);
+        const t0 = performance.now();
+        expect(await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey)).toBe(true);
+        expect(performance.now() - t0).toBeLessThan(100); // the slow read holds no pin operation
+        await sleep(250); // slower than the 100 ms small-request limit
+        release();
+        const o = await opening;
+        expect(o.ok && o.value.plan.kind).toBe('ready');
+        expect(o.ok && o.value.list?.entries.length).toBe(2);
+        expect((await pinOf(owen))!.manualDrops).toEqual([abe.publicKey]); // the Remove survives the read's save
+        void node; void ada;
+    });
+
+    it("T2 (the re-review's :584) the connection stops answering partway through an open that owes three shares: the open stops at the first request that runs out, and a Remove tapped during it starts after one limit, not four", async () => {
+        const { node, phones: [owen, ada, bea, cy, zed] } = await community(['Owen', 'Ada', 'Bea', 'Cy', 'Zed']);
+        node.admins = node.admins.filter((a) => a.pubkey !== zed.publicKey); // Owen's open makes key 2 and owes 3 shares
+        setNamesRequestTimeout(100, { stateMs: 100, listPerEntryMs: 0 });
+        let stateReads = 0;
+        hold = (req) => {
+            if (req.headers['X-Public-Key'] !== owen.publicKey) return null;
+            if (req.method === 'GET' && new URL(req.url).pathname === '/api/names/state') { stateReads++; return stateReads > 2 ? never() : null; }
+            return stateReads >= 2 && new URL(req.url).pathname !== '/api/names/generations' ? never() : null;
+        };
+        const t0 = performance.now();
+        const opening = openNamesList(COMMUNITY, owen, STORE);
+        await sleep(20);
+        await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
+        const removedAt = performance.now() - t0;
+        const o = await opening;
+        hold = null;
+        expect(o.ok === false && o.status).toBe(0);
+        expect(removedAt).toBeLessThan(250); // one 100 ms limit and the open's own work, not three shares and a read
+        void bea; void cy;
+    });
+
+    it("T3 (the re-review's :890, C7 with a save first) the walk's notices aren't lost when a save is the first to see a new key: the next open says them", async () => {
+        const { phones: [owen, ada, bea] } = await community(['Owen', 'Ada', 'Bea']);
+        const b = await open(bea); // Bea's list is open
+        await removeOldKey(STORE, ada, COMMUNITY, owen.publicKey);
+        await removeOldKey(STORE, ada, COMMUNITY, bea.publicKey);
+        await open(ada); // Ada's key 2 drops Owen and Bea
+        const r = await saveNamesEntry(COMMUNITY, bea, STORE, b, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+        expect(r.ok).toBe(false);
+        const next = await open(bea);
+        expect(next.notices).toContain(NAMES_COPY.droppedMe('Ada'));
+        expect(next.notices).toContain(NAMES_COPY.newKeyBy('Ada', ['Owen']));
+        // Said once: the open after it doesn't say them again.
+        expect((await open(bea)).notices).not.toContain(NAMES_COPY.droppedMe('Ada'));
+    });
+
+    it("T4 (the re-review's :1204) the Follow question promises a key of its own only when a removal will still stand", () => {
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/followRemovesAny\(opened\) \? COPY\.follow : COPY\.followNone/);
+        expect(NAMES_COPY.followNone.replace(/’/g, "'")).toBe("This phone follows the key history the server shows, from the last key both share. It keeps the keys it holds, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them.");
     });
 });
 
@@ -1968,7 +2087,8 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         expect(plain(NAMES_COPY.followTitle)).toBe("Follow the server's history?");
         // Round 7: when the new key is this phone's own drop, the holder only sends the key; this phone makes the new one.
         expect(plain(NAMES_COPY.waitOwnKey(['A'], ['X']))).toBe("The list needs a new key without @X before anything more is written. This phone makes it once it holds the list's current key: @A will send that the next time they open the names list.");
-        expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: this phone had removed their key, and the history it followed hadn't.");
+        // Round 14 (the re-review's :1078): true when the followed history removed them too, in another statement.
+        expect(plain(NAMES_COPY.newKeyCarried(['X']))).toBe("The list has a new key without @X: this phone had removed their key on a key history it has since left.");
         expect(plain(NAMES_COPY.checkAgain('X', 4))).toBe("Key 4 removed @X's key. If @X is an admin again, check each other's phones again: a check made before this phone took key 4 doesn't count past it.");
         expect(plain(`${NAMES_COPY.newKeyMade(['X'])} ${NAMES_COPY.newKeySent(['A'], [])}`)).toBe('The list has a new key because @X is no longer an admin. Nothing this phone writes from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');
         expect(plain(NAMES_COPY.newKeyRemoved(['X']))).toBe("The list has a new key that @X's old phone can't read. If @X gets a new phone, check it in person and this phone will send the keys.");

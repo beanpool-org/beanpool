@@ -36,7 +36,7 @@ import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
-    logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals,
+    logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 
@@ -192,7 +192,8 @@ export default function NamesListScreen() {
     /** "Follow the server's history" (design Addendum 3): asked first; no check in person needed. */
     const follow = () => {
         if (!identity) return;
-        ask(COPY.followTitle, COPY.follow, COPY.followButton, () => {
+        if (!opened) return;
+        ask(COPY.followTitle, followRemovesAny(opened) ? COPY.follow : COPY.followNone, COPY.followButton, () => {
             void run((url) => followServerHistory(url, identity, STORE));
         });
     };

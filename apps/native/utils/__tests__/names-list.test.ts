@@ -2295,6 +2295,16 @@ describe('V. Round 16: a Remove that isn\'t kept stops; a new key\'s words said 
         }, 30_000);
     }
 
+    it("V3 (the re-review's guide :40) the operators' guide names the check buttons the screen has, not the check screen's title", () => {
+        const guide = fs.readFileSync(path.join(__dirname, '../../../../packages/beanpool-guide/operators/people/running-a-known-community.md'), 'utf8');
+        const plain = (w: string) => `**${w.replace(/’/g, "'")}**`;
+        expect(guide).toContain(`tap ${plain(NAMES_COPY.checkSomeone)} (or ${plain(NAMES_COPY.checkButton('name'))})`);
+        expect(guide).not.toContain(plain(NAMES_COPY.checkEachOtherTitle)); // bb0755ec: "tap **Check each other**"
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/const checkSomeone = btn\(COPY\.checkSomeone,/);
+        expect(screen).not.toMatch(/btn\(COPY\.checkEachOtherTitle/); // the title only
+    });
+
     it('V2 a new key whose POST the node refused (it never stored it) says nothing: no key landed', async () => {
         const { node, phones: [owen, bea], k1 } = await community(['Owen', 'Bea', 'Ada']);
         expect(await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey)).toBe(true);

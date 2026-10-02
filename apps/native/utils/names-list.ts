@@ -18,7 +18,7 @@
  *   - a generation is written ahead: the pin keeps it and its key before the request (`pending`), so a phone that dies
  *     after the node took it still has the key, and one whose request never landed sends it again
  *     ({@link openNamesList});
- *   - the asked actions: "Check each other" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKeyAndOpen}), "Put
+ *   - the asked actions: "Check an admin's code" ({@link checkEachOther}), "Remove @X's old key" ({@link removeOldKeyAndOpen}), "Put
  *     the key history back" ({@link putHistoryBack}), "Start again" / a new key nobody can hand over
  *     ({@link makeKeyOnThisPhone}), "Follow the server's history" ({@link followServerHistory}), "Send the keys to @X again"
  *     ({@link sendKeysAgain});

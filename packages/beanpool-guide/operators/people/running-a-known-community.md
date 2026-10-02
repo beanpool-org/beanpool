@@ -37,7 +37,7 @@ Keep a paper copy, or a PDF, somewhere safe. If every admin who holds the list's
 
 ## Checking each other
 
-Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap **Check each other** (or **Check @name's code**). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.
+Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap **Check an admin's code** (or **Check @name's code**). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.
 
 After that, your phone trusts their phone: it sends them the list's keys by itself, every time it has a key they lack, and takes new keys their phone makes. Every send is in the access log. Your phone also trusts the admins they checked, so not every admin has to check every other.
 

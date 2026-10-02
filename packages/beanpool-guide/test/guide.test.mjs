@@ -377,7 +377,7 @@ test("the names list's pages say the design's sentences, and none of the old pro
         // Decided with the design (§12 Q3): the 12 words alone don't make a lost phone safe.
         "The 12 words alone aren't enough for an admin whose phone was lost",
         // Round 15 (Marty, 2026-10-03): admins check each other at a distance; the code is read out on a call, or scanned together.
-        "Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap Check each other (or Check @name's code). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.",
+        "Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap Check an admin's code (or Check @name's code). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.",
         "Make them an admin first, then check each other's code once, on a call or in person.",
     ]) assert.ok(operators.includes(sentence), `running-a-known-community says: ${sentence.slice(0, 70)}…`);
     assert.ok(members.includes("Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked, on a call or in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. An admin whose phone still shows the removed admin removes their key by hand, and that phone then makes a new key without them or writes nothing."),
@@ -390,7 +390,9 @@ test("the names list's pages say the design's sentences, and none of the old pro
         /every admin's phone holds every key it was sent/i,
         /Take @/, /take their history/i, /an admin whose phone has the server's history can (check yours|meet you)/i, /only at a meeting/i,
         // Round 15: no sentence asks admins to meet; a check is on a call or in person.
-        /by meeting/i, /\bmeet (that|and|every|them|one|an|@)/i, /in front of you/i, /(?<!on a call or )in person/i]) {
+        /by meeting/i, /\bmeet (that|and|every|them|one|an|@)/i, /in front of you/i, /(?<!on a call or )in person/i,
+        // Round 16 (:40): "Check each other" is the check screen's title, not a button; the button is Check an admin's code.
+        /tap Check each other/i]) {
         assert.doesNotMatch(`${operators}\n${members}`, gone);
     }
 });

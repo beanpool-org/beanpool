@@ -401,12 +401,19 @@ async function main(): Promise<void> {
     assert(stop.status === 200 && stop.body?.live === 0 && stop.body?.stopped === before,
         `one Stop from Eve stops all ${before} live sessions (${stop.status}: stopped ${stop.body?.stopped}, live ${stop.body?.live} ${stop.body?.error ?? ''})`);
     assert(liveFor(eve) === 0, `...and the node agrees: ${liveFor(eve)} live`);
-    const kept6 = db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections WHERE owner_pubkey = ?
-        AND id NOT IN (SELECT collection_id FROM recovery_releases)`).get(eve.key.pk) as { n: number };
-    assert(kept6.n === 0, `...the ones that released nothing are gone (${kept6.n} left)...`);
-    assert(getRow(evesRestore.collectionId)?.status === 'cancelled', "...and Eve's own restore, which released her copy, is kept as evidence, stopped");
+    assert(getRow(evesRestore.collectionId)?.status === 'cancelled', "...Eve's own restore, which released her copy, among them");
     const afterStop = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
     assert(afterStop.body?.count === 0 && afterStop.body?.collections?.length === 0, 'her banner then reads nothing live');
+    const aStranger = (db.prepare(`SELECT id, requester_ephemeral_pubkey AS k FROM recovery_collections WHERE owner_pubkey = ?
+        AND id NOT IN (SELECT collection_id FROM recovery_releases) LIMIT 1`).get(eve.key.pk) as { id: string } | undefined)?.id;
+    const emptyLeft = () => (db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections WHERE owner_pubkey = ?
+        AND id NOT IN (SELECT collection_id FROM recovery_releases)`).get(eve.key.pk) as { n: number }).n;
+    assert(!!aStranger && getRow(aStranger)?.status === 'cancelled', "for a while a stopped stranger's session is kept, so its device reads 'cancelled'");
+    db.prepare(`UPDATE recovery_collections SET updated_at = ? WHERE owner_pubkey = ? AND status = 'cancelled'`)
+        .run(new Date(Date.now() - 31 * 60_000).toISOString(), eve.key.pk);
+    await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
+    assert(emptyLeft() === 0, `half an hour on, Eve's next poll deletes every stopped session that released nothing (${emptyLeft()} left)`);
+    assert(getRow(evesRestore.collectionId)?.status === 'cancelled', "...while her own restore, which released her copy, is kept as evidence");
 
     // An app from before names one session per Stop: its first request stops them all, so its "all cancelled" is true.
     await flood(eve.callsign, 3, 10, 15);

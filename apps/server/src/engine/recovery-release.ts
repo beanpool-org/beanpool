@@ -109,6 +109,13 @@ const MAX_LIVE_COLLECTIONS_PER_OWNER = 10;
 export const SIGN_IN_WINDOW_MS = 30 * 60 * 1000;
 
 /**
+ * How long a session the owner stopped is kept when it released nothing: long enough for the device using it to be told
+ * "That recovery session was cancelled" rather than that it never existed. Then the prune deletes it, so a Stop of a
+ * stranger's pile frees it within the half hour.
+ */
+export const STOPPED_SESSION_KEPT_MS = SIGN_IN_WINDOW_MS;
+
+/**
  * Retention, decided rather than defaulted (CR).
  *
  * The two tables are not the same kind of thing, and the difference is the policy:
@@ -155,12 +162,14 @@ export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evi
         )
     `).run(ownerPubkey, now, windowStart, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
 
+    // Dead and empty: past its expiry, or evicted just now, goes at once. One the owner STOPPED stays for
+    // STOPPED_SESSION_KEPT_MS first, so the device using it reads "cancelled" rather than "no such session".
     const deleted = db.prepare(`
         DELETE FROM recovery_collections
         WHERE owner_pubkey = ?
-          AND (status != 'open' OR expires_at <= ?)
+          AND (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
           AND id NOT IN (SELECT collection_id FROM recovery_releases)
-    `).run(ownerPubkey, now).changes;
+    `).run(ownerPubkey, now, new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString()).changes;
 
     return { deleted, evicted };
 }
@@ -736,7 +745,8 @@ export function cancelCollection(collectionId: string, byPubkey: string): boolea
  * MAX_LIVE_COLLECTIONS_PER_OWNER: nothing evicts those, so nobody can push out the member's own sign-in). A stop that
  * took them one request at a time ran into the owner's own rate limits a few hundred in, with the rest still live (PR
  * #1456 deciding review). This one takes them all, however many, and the owner's "all stopped" is then true. The
- * sessions that released nothing are deleted in the same pass; one that released something stays as evidence.
+ * ones that released nothing are deleted by the prune once STOPPED_SESSION_KEPT_MS has passed; one that released
+ * something stays as evidence.
  *
  * @returns how many were live and are now stopped
  */
@@ -747,7 +757,6 @@ export function cancelAllCollectionsFor(ownerPubkey: string): number {
                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
         WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
     `).run(ownerPubkey, nowIso()).changes;
-    pruneCollectionsFor(ownerPubkey);
     return stopped;
 }
 

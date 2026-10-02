@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { sealSeedToSso, toEd25519Seed } from '@beanpool/core';
+import { KEEPER_ALG_RELEASE, sealReleaseToDevice, sealSeedToSso, toEd25519Seed } from '@beanpool/core';
 import { WebRestore } from './WebRestore';
 import {
     generateIdentity,
@@ -312,6 +312,55 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await screen.findByTestId('restore-provider-google');
         expect(screen.queryByTestId('join-notice')).toBeNull();
+    });
+
+    // FABLE-sec-sso finding 2: a community with the seal sends the copy sealed to the throwaway key when asked.
+    it('the copy comes back sealed to the throwaway key, and opens to Alice', async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': async (body) => {
+                const f = await copyOf(account, 'google', 'g-sub-1');
+                if (body?.seal !== KEEPER_ALG_RELEASE) return json(200, { fragments: [f] });
+                const s = sealReleaseToDevice({ encryptedShare: f.payload, shareIv: f.payloadIv, shareTag: f.payloadTag, kdfParams: f.kdfParams },
+                    eph.publicKey, { collectionId: 'col-1', holderType: 'sso' });
+                return json(200, { fragments: [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv,
+                    payloadTag: s.shareTag, ephemeralPubkey: s.ephemeralPubkey, kdfParams: s.kdfParams }] });
+            },
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(1));
+        expect(onRestored.mock.calls[0][0].publicKey).toBe(account.publicKey);
+        expect(node.recovery().find((c) => c.path === '/api/recovery/collect/fragments')?.body).toEqual({ collectionId: 'col-1', seal: KEEPER_ALG_RELEASE });
+    });
+
+    it("a sealed copy that doesn't open with this restore's key: nothing handed on, nothing saved, and said", async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': async () => {
+                const f = await copyOf(account, 'google', 'g-sub-1');
+                const s = sealReleaseToDevice({ encryptedShare: f.payload, shareIv: f.payloadIv, shareTag: f.payloadTag, kdfParams: f.kdfParams },
+                    makeEphemeralKey().publicKey, { collectionId: 'col-1', holderType: 'sso' });
+                return json(200, { fragments: [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv,
+                    payloadTag: s.shareTag, ephemeralPubkey: s.ephemeralPubkey, kdfParams: s.kdfParams }] });
+            },
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('restore-no-copy')).toHaveTextContent("didn't open in this browser, so nothing was changed");
+        expect(onRestored).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    // FABLE-sec-sso finding 4: a session its owner stopped hands nothing over, even a copy it already released.
+    it('the session was stopped between the release and the fetch: back to the name, said, nothing restored', async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': () => json(400, { error: 'That recovery session was cancelled.' }),
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('That restore was stopped on the community, or has ended. Start again.');
+        await screen.findByTestId('restore-screen-name');
+        expect(onRestored).not.toHaveBeenCalled();
     });
 
     it("a copy that opens to another account than the name's: nothing handed on, nothing saved, and said", async () => {

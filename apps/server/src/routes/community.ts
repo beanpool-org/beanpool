@@ -86,6 +86,7 @@ import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -982,39 +983,43 @@ router.get('/api/community/members', async (ctx) => {
         }
     }
 
-    // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
-    // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
-    // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
-    // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
-    // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
-    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    const members = getMembers()
-        .filter(m => !m.isTreasury)
-        .map(m => {
-            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer);
-            return {
-                publicKey: m.publicKey,
-                callsign: m.callsign,
-                joinedAt: m.joinedAt,
-                avatarUrl: avatarUrlOf(m.publicKey, m.avatarRef),
-                profileUpdatedAt: m.profileUpdatedAt,
-                bio: m.bio,
-                contactValue: showContact ? m.contactValue : null,
-                contactVisibility: showContact ? m.contactVisibility : null,
-                status: m.status,
-                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
-                earnedCredit: m.earnedCredit,
-                elderVouchedBy: m.elderVouchedBy,
-                archetype: m.archetype,
-                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            };
-        });
+    // Built per reader, every member's row in full: the heaviest read of all (15.4 MB and 190 MB of heap at 30,000
+    // members), so it waits for room under the heavy-read cap (heavy-reads.ts) or is answered "busy".
+    await heavyRead(ctx, 'community-members', () => {
+        // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+        // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
+        // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
+        // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
+        // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
+        const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+        const members = getMembers()
+            .filter(m => !m.isTreasury)
+            .map(m => {
+                const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer);
+                return {
+                    publicKey: m.publicKey,
+                    callsign: m.callsign,
+                    joinedAt: m.joinedAt,
+                    avatarUrl: avatarUrlOf(m.publicKey, m.avatarRef),
+                    profileUpdatedAt: m.profileUpdatedAt,
+                    bio: m.bio,
+                    contactValue: showContact ? m.contactValue : null,
+                    contactVisibility: showContact ? m.contactVisibility : null,
+                    status: m.status,
+                    lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
+                    earnedCredit: m.earnedCredit,
+                    elderVouchedBy: m.elderVouchedBy,
+                    archetype: m.archetype,
+                    nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+                };
+            });
 
-    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
+        const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
-    ctx.status = 200;
-    ctx.type = 'application/json';
-    ctx.body = bodyStr;
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = bodyStr;
+    });
 });
 
 router.post('/api/community/register', async (ctx) => {
@@ -2122,6 +2127,8 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 
 // ======================== MEMBERS LIST ========================
 
+/** A member-directory delta whose cursor is this recent goes straight past the heavy-read cap; an older one is weighed. */
+const MEMBERS_DELTA_FRESH_MS = 60 * 60 * 1000;
 
 router.get('/api/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
@@ -2160,28 +2167,40 @@ router.get('/api/members', async (ctx) => {
     // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
     // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
     // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
-    const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
-        .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
+    const answer = () => {
+        const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
+            .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
-    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
-    const members = rows.map(r => ({
-        publicKey: r.public_key,
-        callsign: r.callsign,
-        joinedAt: r.joined_at,
-        nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
-        profileUpdatedAt: r.profile_updated_at || null,
-        earnedCredit: r.earned_credit ?? 0,
-        elderVouchedBy: r.elder_vouched_by || null,
-        archetype: r.archetype || null,
-    }));
+        const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+        // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
+        const members = rows.map(r => ({
+            publicKey: r.public_key,
+            callsign: r.callsign,
+            joinedAt: r.joined_at,
+            nodeRole: rolesByPubkey.get(r.public_key) ?? null,
+            avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
+            profileUpdatedAt: r.profile_updated_at || null,
+            earnedCredit: r.earned_credit ?? 0,
+            elderVouchedBy: r.elder_vouched_by || null,
+            archetype: r.archetype || null,
+        }));
 
-    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
+        const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
-    ctx.status = 200;
-    ctx.type = 'application/json';
-    ctx.body = bodyStr;
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = bodyStr;
+    };
+    // The whole directory (every phone's first sync, and hourly) waits for room under the heavy-read cap
+    // (heavy-reads.ts) or is answered "busy". A delta is the rows changed since its cursor, so only a recent cursor's is
+    // small for sure: one at or after an hour ago (compared as the query compares it, as text) is the rows changed in
+    // the last hour, and goes straight through. Any other (0, 1970, a phone back after a day, an array) can be the whole
+    // directory, so it waits under the cap too, weighed by the last answer to that same cursor: a cursor's answer only
+    // grows as members join, so a small one never stands in for a bigger one under its key.
+    const cursor = ctx.query.updatedAfter;
+    if (!cursor) await heavyRead(ctx, 'members', answer);
+    else if (typeof cursor === 'string' && cursor >= new Date(Date.now() - MEMBERS_DELTA_FRESH_MS).toISOString()) answer();
+    else await heavyRead(ctx, heavyReadKey('members-delta', { after: JSON.stringify(cursor) }), answer);
 });
 
 router.post('/api/admin/reports', async (ctx) => {

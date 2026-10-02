@@ -141,10 +141,13 @@ export function GroupChatView({ kind, id, justCreated, initialName }: Props) {
         const details = await fetchGroupDetails(id);
         if (!details) return;
         setGroup(details.group);
-        setMemberKeys(new Set(details.members
+        // No roster this time (the node busy, or offline): keep who we knew was in, and the count.
+        const members = details.members;
+        if (!members) return;
+        setMemberKeys(new Set(members
             .filter(m => m.status === 'active' || m.status === 'invited')
             .map(m => m.memberPubkey)));
-        setInvitedCount(details.members.filter(m => m.status === 'invited').length);
+        setInvitedCount(members.filter(m => m.status === 'invited').length);
     }, [kind, id]);
 
     // Opening the chat reads it (decision 7: only Talk shows counts, so only reading clears one). The node's marker

@@ -143,7 +143,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 const [bal, txn, mem] = await Promise.all([
                     getBalance(identity.publicKey).catch(() => null),
                     getTransactions(identity.publicKey).catch(() => []),
-                    getMembers().catch(() => []),
+                    // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
+                    // the Send picker keeps who it had and the next refresh reads them again.
+                    getMembers().catch(() => null),
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -156,7 +158,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
                 setTxns(txn);
-                setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                if (mem) setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
                 setError(null);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale

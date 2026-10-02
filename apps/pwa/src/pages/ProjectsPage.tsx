@@ -112,7 +112,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
                 getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
-                getAllMembers ? getAllMembers().catch(() => []) : [],
+                // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
+                // members list below keeps who it had, and the next fetch reads them again.
+                getAllMembers ? getAllMembers().catch(() => null) : [],
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);

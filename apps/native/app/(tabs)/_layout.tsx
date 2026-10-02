@@ -286,8 +286,20 @@ export default function TabLayout() {
                 // that component's style array, so this widens it to the whole tab.
                 tabBarIconStyle: { width: '100%', height: '100%' },
             }}>
+                {/* Home (scratch/global-node/DESIGN-home-dashboard-fable.md, slice H2): the screen the app opens on, a
+                    short list of cards. `index` stays the tabs' first route, so every link to `/(tabs)` or `/` lands
+                    here; the Market has its own route since. */}
                 <Tabs.Screen
                     name="index"
+                    options={{
+                        title: 'Home',
+                        tabBarAccessibilityLabel: 'Home',
+                        tabBarButtonTestID: 'tab-home',
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Home" icon="🏠" focused={focused} color={color} />
+                    }}
+                />
+                <Tabs.Screen
+                    name="market"
                     options={{
                         title: 'Market',
                         tabBarAccessibilityLabel: 'Market',
@@ -305,8 +317,8 @@ export default function TabLayout() {
                     }}
                 />
 
-                {/* Talk hosts Messages + People behind a segmented control. Merging them frees
-                    the slot Pulse needs — six labelled tabs is the ceiling at 320dp. */}
+                {/* Talk hosts Messages + People behind a segmented control. Merging them freed
+                    a slot — six labelled tabs is the ceiling at 320dp. */}
                 <Tabs.Screen
                     name="chats"
                     options={{
@@ -327,12 +339,13 @@ export default function TabLayout() {
                         tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
                     }}
                 />
+                {/* A card on Home since H2 (its slot went to Home), and still a route: the card's "See all" opens it. */}
                 <Tabs.Screen
                     name="pulse"
                     options={{
                         title: 'Pulse',
                         tabBarAccessibilityLabel: 'Pulse',
-                        tabBarButtonTestID: 'tab-pulse',
+                        href: null,
                         tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
                     }}
                 />

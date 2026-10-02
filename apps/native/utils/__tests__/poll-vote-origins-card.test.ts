@@ -158,7 +158,7 @@ describe('the phone\'s poll card: where the votes came from', () => {
     it('fits a 320dp phone at 1.3x text: the lines wrap, each on its own line, and their longest word fits', async () => {
         await draw(poll());
         const SCREEN = 320, FONT_SCALE = 1.3;
-        // app/(tabs)/index.tsx listContent 16 each side; the card's padding 16 and border 1; an answer's border 1.
+        // app/(tabs)/market.tsx listContent 16 each side; the card's padding 16 and border 1; an answer's border 1.
         const cardInner = SCREEN - 2 * 16 - 2 * 16 - 2 * 1;
         const wordWidth = (w: string, size: number) => [...w].reduce((n, ch) => n + (/\p{Extended_Pictographic}/u.test(ch) ? 1.25 : 0.62) * size * FONT_SCALE, 0);
         const longest = (text: string, size: number) => Math.max(...text.split(/\s+/).map(w => wordWidth(w, size)));

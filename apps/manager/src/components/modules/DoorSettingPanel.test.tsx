@@ -65,6 +65,12 @@ describe('the presets', () => {
         for (const p of DOOR_PRESETS) expect(`${p.plain} ${p.detail}`).not.toMatch(/tier|Steward|Elder|Resident|Newcomer|badge/i);
     });
 
+    it("Known says where the names list is: in the app, on an admin's own phone, with their key, not this password", () => {
+        const known = DOOR_PRESETS.find((p) => p.door === 'admins')!;
+        expect(known.detail).toMatch(/names list/);
+        expect(known.detail).toMatch(/BeanPool app on their own phones, signed in with their key, not with this password/);
+    });
+
     it('a door the node names, else none', () => {
         expect(readDoor('members')).toBe('members');
         expect(readDoor('admins')).toBe('admins');

@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, Pressable, View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { DOOR_WORK_PARTS, doorWorkExpectedTries, makeDoorWorkChallenge } from '@beanpool/core';
 import { solveOnPhone } from '../utils/door-work';

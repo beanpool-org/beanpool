@@ -390,7 +390,7 @@ describe('a tap is followed only for a valid notice; anything else goes nowhere 
         const forgotten = mullum.notice('trade.update', kim.publicKey);
         mullum.details.clear();
         await tap(push(forgotten));
-        expect(navigated).toEqual(['/(tabs)/chats', '/(tabs)']);
+        expect(navigated).toEqual(['/(tabs)/chats', '/(tabs)/market']);
     });
 
     it('wrong key, replayed to another member, a community the phone doesn\'t keep: no request, no navigation, the line once each', async () => {
@@ -515,7 +515,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
 
     it('noticeRoute takes a post or chat id only in the node\'s own shape; anything else lands on the kind\'s tab', () => {
         for (const bad of [...FORGED, 42, null, ['a'], { a: 1 }]) {
-            expect(noticeRoute('market.request', { screen: 'post', postId: bad })).toBe('/(tabs)');
+            expect(noticeRoute('market.request', { screen: 'post', postId: bad })).toBe('/(tabs)/market');
             expect(noticeRoute('chat.message', { screen: 'chat', conversationId: bad })).toBe('/(tabs)/chats');
         }
         expect(noticeRoute('market.request', { screen: 'post', postId: POST_ID })).toBe(`/post/${POST_ID}`);
@@ -530,13 +530,13 @@ describe('no string from a push, nor a forged target from an answer, reaches the
             await tap(push(mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: bad } })));
             await tap(push(mullum.notice('chat.message', kim.publicKey, { data: { screen: 'chat', conversationId: bad } })));
         }
-        expect(new Set(navigated)).toEqual(new Set(['/(tabs)', '/(tabs)/chats']));
+        expect(new Set(navigated)).toEqual(new Set(['/(tabs)/market', '/(tabs)/chats']));
     });
 
     it('what a push itself carries (screen, postId, conversationId, url) is never read, signed or not', async () => {
         const signed = { ...mullum.notice('market.request', kim.publicKey), screen: 'post', postId: '../(tabs)/settings', url: 'https://evil.example' };
         await tap(push(signed));
-        expect(navigated).toEqual(['/(tabs)']);
+        expect(navigated).toEqual(['/(tabs)/market']);
 
         // An old-style push with its own target: the warning (every registered community signs), and no route at all.
         navigated = [];
@@ -549,7 +549,7 @@ describe('no string from a push, nor a forged target from an answer, reaches the
         const data = mullum.notice('market.request', kim.publicKey, { data: { screen: 'post', postId: POST_ID } });
         vi.mocked(fetch).mockImplementationOnce(async () => new Response(JSON.stringify({ id: 'f'.repeat(32), data: { screen: 'post', postId: POST_ID } }), { status: 200 }));
         await tap(push(data));
-        expect(navigated).toEqual(['/(tabs)']);
+        expect(navigated).toEqual(['/(tabs)/market']);
     });
 });
 
@@ -674,7 +674,7 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
         expect(takeNoticeWarning()).toBe(false);
     });
 
-    it('a tap when the community can\'t say where, or answers a forged target: the Market tab, no warning', async () => {
+    it('a tap when the community can\'t say where, or answers a forged target: Home, where the app opens, no warning', async () => {
         down.add(MULLUM);
         await tap(push(mullum.notice(NEW_KIND, kim.publicKey)));
         down.clear();
@@ -731,7 +731,7 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
         }
     });
 
-    it('noticeRoute has a place for a kind it doesn\'t know: what the answer names, else the Market tab', () => {
+    it('noticeRoute has a place for a kind it doesn\'t know: what the answer names, else Home, where the app opens', () => {
         expect(noticeRoute(null, null)).toBe('/(tabs)');
         expect(noticeRoute(null, { screen: 'post', postId: POST_ID })).toBe(`/post/${POST_ID}`);
         expect(noticeRoute(null, { screen: 'settings' })).toBe('/(tabs)/settings');

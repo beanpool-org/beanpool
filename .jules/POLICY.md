@@ -586,3 +586,29 @@ intentional; do not open PRs or issues attempting to alter them:
 - **Claim:** the 2026-09-25 entry for #1127 says the NodeAdminLink anchor's focus ring is still wanted.
 - **Why not to re-file:** it landed in #1263 (dc66f025, 2026-09-28). The anchor carries
   `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`.
+
+### 2026-10-03 — Flow: spinning ⏳ emoji in AppVersionsCard (#1497) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the static "Counting…" text in the manager's AppVersionsCard needs an animated spinner.
+- **Why not to re-file:** it's cosmetic only, and the class it used (`text-terra-400`) isn't in the manager's Tailwind palette
+  (only terra 500/600 emit CSS), so it rendered nothing new. A loading indicator is wanted only where a user can't tell that
+  something is happening.
+
+### 2026-10-03 — Forge: try/catch around app-addresses admin routes (#1502) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the three `/api/local/admin/app-addresses` handlers (GET, confirm, remove) need try/catch to avoid uncaught 500s.
+- **Why not to re-file:** no failure was reproduced (rule 1). Koa already turns a throw into a 500, and the PR's catch blocks put
+  the raw `e.message` in the response, against the generic-error convention (A2-13: a generic message, the detail logged
+  server-side). Forge: show a reproduced failure first.
+
+### 2026-10-03 — Bolt: memoize decision list filtering in DecideSection (#1504) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE
+- **Claim:** `useMemo` on openDecisions, pastDecisions and filteredPastDecisions saves redundant filtering on re-render.
+- **Why not to re-file:** the lists are small and the filters cheap, so memoizing costs about what it saves (rule 11; see the
+  Bolt #745 entry). `pastDecisions` isn't stable enough for `filteredPastDecisions` to benefit.
+
+### 2026-10-03 — Atlas: unit test for getEngineVolumeCap (#1506) — CLOSED, TAUTOLOGICAL
+- **Category:** CLAIM FALSE
+- **Claim:** `getEngineVolumeCap` in `apps/manager/src/lib/engine-helpers.ts` lacks test coverage.
+- **Why not to re-file:** the function is `return PER_COUNTERPARTY_VOLUME_CAP`. A test that it equals that constant (and 500)
+  only restates it.

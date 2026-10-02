@@ -347,3 +347,52 @@ test('publishing raises a version by one exactly where the text or its schema ch
     assert.equal(nextPublished({ guide: null, manual: published.manual }, { guide: edited, manual: asPages(published.manual) }).guide.version, 1);
 });
 
+
+// The names list's trust model (scratch/global-node/DESIGN-names-list-trust-fable.md §9, matrix F6): its pages say exactly
+// the design's sentences, true under its proof, and none of the promises the earlier model made.
+test("the names list's pages say the design's sentences, and none of the old promises", () => {
+    const { guide, manual } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    const operators = words(manual.guides.find((g) => g.slug === 'running-a-known-community'));
+    const members = words(guide.guides.find((g) => g.slug === 'what-the-admins-can-see'));
+    for (const sentence of [
+        "Only your owners and admins can read the names, on their own phones. Each name is sealed on an admin's phone before it is sent. A backup, a snapshot, a standby's copy, a stolen database and BeanPool hold nothing readable.",
+        "Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).",
+        // The fifth deciding review's BLOCKING finding (52e1a759), in the design addendum's (e) words: the new key protects
+        // what the phones that took it write, and the limit is per phone.
+        "When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on by a phone that has taken the new key can be read with the keys the person had. What they already saw, they keep, as with a paper list.",
+        "When an admin loses their phone, tell another admin the same day: they tap Remove @X's old key. Until that is done, whoever has the phone can read what is written. The admin's new phone's code is checked once, on a call or in person, and the keys are sent to it. Names written under a key that only the lost phone held can't be opened by anyone: the app counts them, and your paper copy is how they come back.",
+        "What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; a PDF or a note an admin writes; and an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had.",
+        // Design Addendum 2 (§3): the removal check is Remove by hand; the comparison only shows two phones are shown different things.
+        "Every admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, each admin looks at the admins their phone shows: a phone that still shows the removed admin taps Remove @X's old key. Whatever the server says, that phone then makes a new key without them or writes nothing. Two phones that show different list keys are being shown different things: add no names until they match, and tell your admins.",
+        // The design addendum's (e): the vouched history gives a way forward through any admin whose phone opens the list.
+        // Round 12: a phone keeps the keys it takes, for the history it follows (B8, H3).
+        "Each name stays sealed under the key it was written with, and every admin's phone keeps every key it takes for the key history it follows.",
+        // Design Addendum 4 (§4): the stop at a maker this phone had removed, and Follow from it.
+        "A key made by someone no admin your phone trusts has checked. Check codes with that admin, or with an admin whose phone already opens the list, on a call or in person. If your phone had removed that admin's key, checking their phone admits them again; checking another admin's phone doesn't, and your phone then makes a new key without them before it writes. Where nobody can be reached, a phone that has opened the list before can tap Follow the server's history: your phone takes the key for its place only, trusts nobody new, and, if it had removed an admin and the key that removed them isn't in the server's history, makes a new key without them before it writes.",
+        "Whenever a phone opens the list and names it saw before are no longer there, and the log shows no admin deleting them, it says how many. A server put back to an older copy does that, and so does a standby that took over from one, whether or not a key changed in between. The missing names are sealed rows that may still be on the other copy: whoever runs the servers can copy them back, and the admins' phones still hold the keys they were written under, so they open again. Otherwise, the paper copy.",
+        // Design Addendum 3 (§5): Follow the server's history replaces Take @name's history; the standby paragraph names it.
+        "The server shows a key history your phone didn't take. A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Ask your admins what happened. Tap Follow the server's history: your phone keeps the other history's keys, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin your phone had removed stays removed: unless the key that removed them on your phone is in the server's history, your phone makes a new key without them before it writes.",
+        "If the standby's copy was older than the main server's, the phones say how many names are missing; if the key history is older too, they say so and can put it back. If an admin's phone made a new key on the standby first, the other phones say the server shows a different key history and offer to follow it (see When the app refuses).",
+        // Decided with the design (§12 Q3): the 12 words alone don't make a lost phone safe.
+        "The 12 words alone aren't enough for an admin whose phone was lost",
+        // Round 15 (Marty, 2026-10-03): admins check each other at a distance; the code is read out on a call, or scanned together.
+        "Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap Check an admin's code (or Check @name's code). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.",
+        "Make them an admin first, then check each other's code once, on a call or in person.",
+    ]) assert.ok(operators.includes(sentence), `running-a-known-community says: ${sentence.slice(0, 70)}…`);
+    assert.ok(members.includes("Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked, on a call or in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. An admin whose phone still shows the removed admin removes their key by hand, and that phone then makes a new key without them or writes nothing."),
+        'what-the-admins-can-see says the members\' sentence');
+    for (const gone of [/remembers it/i, /first (use|time a phone opens)/i, /whoever (first )?shares/i, /carried over/i, /seals? (every entry|them) again/i, /sealed again under/i,
+        /any admin can (\*\*)?start a new key/i, /working with whoever runs/i, /removed admin working with/i,
+        /can't read a name without an admin checking the wrong phone/i, /Nothing written from then on can be read/i,
+        /To be sure, meet another admin and compare the list key/i, /they should show the same one/i,
+        /Admins check for that by meeting and comparing their phones/i, /for reading only/i, /stay on it, for reading/i,
+        /every admin's phone holds every key it was sent/i,
+        /Take @/, /take their history/i, /an admin whose phone has the server's history can (check yours|meet you)/i, /only at a meeting/i,
+        // Round 15: no sentence asks admins to meet; a check is on a call or in person.
+        /by meeting/i, /\bmeet (that|and|every|them|one|an|@)/i, /in front of you/i, /(?<!on a call or )in person/i,
+        // Round 16 (:40): "Check each other" is the check screen's title, not a button; the button is Check an admin's code.
+        /tap Check each other/i]) {
+        assert.doesNotMatch(`${operators}\n${members}`, gone);
+    }
+});

@@ -1,6 +1,8 @@
 /**
- * The Market's floating "+ ADD POST" button (app/(tabs)/index.tsx `styles.fab`) and the "one way back" card's actions
- * (components/OneWayBackCard.tsx), at 320dp with 1.3x text (PR #1452 re-review, finding 4).
+ * The floating "+ ADD POST" button (the Market's, app/(tabs)/market.tsx `styles.fab`, and Home's, app/(tabs)/index.tsx)
+ * and the actions of the cards it floats over, at 320dp with 1.3x text: the "one way back" card's
+ * (components/OneWayBackCard.tsx, PR #1452 re-review, finding 4), Find your community's (components/FindCommunityCard.tsx)
+ * and every Home card's buttons, chips and trailing links (H2, components/home/FabAware.tsx).
  *
  * The button floats 32dp above the screen's bottom edge, about 58dp tall at the app's largest text. On a small screen the
  * card's two actions rest right there on the Market's first view, and the button then read as one of the card's own
@@ -30,4 +32,10 @@ export function fabStepsAside(actions: CardActionsAt | null, scrollY: number, wi
     const top = actions.top - moved;
     const bottom = actions.bottom - moved;
     return bottom > windowHeight - FAB_BAND_DP && top < windowHeight - FAB_BOTTOM_DP;
+}
+
+/** Several cards' actions: the button steps aside while any of them is in its band, and is back once none is. */
+export function fabStepsAsideAny(actions: Iterable<CardActionsAt | null>, scrollY: number, windowHeight: number): boolean {
+    for (const at of actions) if (fabStepsAside(at, scrollY, windowHeight)) return true;
+    return false;
 }

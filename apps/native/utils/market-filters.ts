@@ -32,6 +32,15 @@ export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: str
     { id: 'polls', label: 'Polls' },
 ];
 
+/**
+ * The pill a link opens the Market on (`/(tabs)/market?filter=…`): Home's "All events" and its Decide card's polls line
+ * (utils/home-cards.ts `POLLS_HREF`). Null for anything else, and the Market stays as it was.
+ */
+export function marketFilterFromLink(value: string | string[] | undefined): Extract<MarketTypeFilter, 'events' | 'polls'> | null {
+    const v = Array.isArray(value) ? value[0] : value;
+    return v === 'events' || v === 'polls' ? v : null;
+}
+
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';
 
 export type MarketSecondRow =

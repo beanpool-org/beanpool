@@ -439,11 +439,12 @@ export async function checkTap(n: IncomingNotice, ctx: NoticeContext): Promise<T
 
 // ── Where a tap lands ──────────────────────────────────────────────────────────────────────────────────────────
 
-export type NoticeRoute = '/(tabs)' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`;
+export type NoticeRoute = '/(tabs)' | '/(tabs)/market' | '/(tabs)/chats' | '/(tabs)/settings' | `/post/${string}` | `/chat/${string}`;
 
 const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
+    // Home is the tabs' first screen (app/(tabs)/index.tsx); the Market has its own route since Home came (H2).
     home: '/(tabs)',
-    market: '/(tabs)',
+    market: '/(tabs)/market',
     chats: '/(tabs)/chats',
     settings: '/(tabs)/settings',
 };
@@ -451,8 +452,8 @@ const TAB_ROUTES: Record<PushNoticeTab, NoticeRoute> = {
 /**
  * Where a valid notice's tap lands, from what its community answered for it (`data` of `GET /api/notices/push/<id>`,
  * or nothing when it couldn't be had): a post or a chat when the answer names one by an id in the node's own shape,
- * Settings when it says so, and otherwise the tab for the notice's kind; the Market tab for a kind this build doesn't
- * know (`kind` null). Every route is one of a fixed few; the only text taken from the answer is an id that matched
+ * Settings when it says so, and otherwise the tab for the notice's kind; Home, where the app opens, for a kind this
+ * build doesn't know (`kind` null). Every route is one of a fixed few; the only text taken from the answer is an id that matched
  * {@link NODE_ID}.
  */
 export function noticeRoute(kind: PushNoticeKind | null, details: unknown): NoticeRoute {
@@ -460,8 +461,8 @@ export function noticeRoute(kind: PushNoticeKind | null, details: unknown): Noti
     if (d.screen === 'post' && typeof d.postId === 'string' && NODE_ID.test(d.postId)) return `/post/${d.postId}`;
     if (d.screen === 'chat' && typeof d.conversationId === 'string' && NODE_ID.test(d.conversationId)) return `/chat/${d.conversationId}`;
     if (d.screen === 'settings') return '/(tabs)/settings';
-    const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'market';
-    return TAB_ROUTES[tab] ?? TAB_ROUTES.market;
+    const tab = kind && isPushNoticeKind(kind) ? PUSH_NOTICE_KINDS[kind].tab : 'home';
+    return TAB_ROUTES[tab] ?? TAB_ROUTES.home;
 }
 
 // ── Following a tap ────────────────────────────────────────────────────────────────────────────────────────────

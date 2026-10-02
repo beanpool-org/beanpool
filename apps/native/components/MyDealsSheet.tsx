@@ -624,7 +624,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <Pressable
                                         accessibilityRole="button"
                                         style={styles.ctaBtn}
-                                        onPress={() => { onClose(); router.push('/'); }}
+                                        onPress={() => { onClose(); router.push('/(tabs)/market'); }}
                                     >
                                         <Text style={styles.ctaBtnText}>+ Create a Post</Text>
                                     </Pressable>

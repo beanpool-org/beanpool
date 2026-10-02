@@ -425,7 +425,13 @@ describe('the phone\'s door against a real global-profile node', () => {
         newPhone();
         await control('limiters');
         expect(await readOneWayBack(ben.publicKey)).toBeNull();
-        const standing = await askOneWayBackStanding(URL_BASE, ben);
+        /** The node's word on Ben's account (never `not_member` here: he is a member). */
+        const word = async () => {
+            const a = await askOneWayBackStanding(URL_BASE, ben);
+            if (a === 'not_member') throw new Error('the node says Ben is not a member');
+            return a;
+        };
+        const standing = await word();
         expect(sent.at(-1)).toMatchObject({ method: 'GET', path: '/api/community/me', status: 200 });
         expect(standing?.words).toBe(true);
         expect(Math.abs((standing?.joinedAt ?? 0) - Date.now())).toBeLessThan(STEP_MS * 10);
@@ -434,7 +440,7 @@ describe('the phone\'s door against a real global-profile node', () => {
 
         // Suspended: the card still says so (the node still says 12 words), and adding a sign-in is refused in a sentence.
         await control('status', { key: ben.publicKey, status: 'suspended' });
-        expect((await askOneWayBackStanding(URL_BASE, ben))?.words).toBe(true);
+        expect((await word())?.words).toBe(true);
         google.sub = 'e2e-google-sub-ben';
         const refused = await linkSignIn({ url: URL_BASE, identity: ben, provider: 'google', phoneLock: null });
         expect(refused).toMatchObject({ kind: 'refused', reason: 'not_a_member' });
@@ -448,13 +454,15 @@ describe('the phone\'s door against a real global-profile node', () => {
         await control('status', { key: ben.publicKey, status: 'active' });
         await control('limiters');
         expect(await linkSignIn({ url: URL_BASE, identity: ben, provider: 'google', phoneLock: null })).toMatchObject({ kind: 'linked' });
-        const after = await askOneWayBackStanding(URL_BASE, ben);
+        const after = await word();
         expect(after).toEqual({ words: false, joinedAt: null });
         expect(oneWayBackPlace(await oneWayBackFromNode(ben.publicKey, URL_BASE, after), Date.now(), false)).toBe('none');
     }, STEP_MS);
 
     it('a key that never joined can\'t add a sign-in: said in words', async () => {
         const stranger = await draftIdentity();
+        // Not a member there: the node's 403 is its own word (the card keeps it like any answer: re-review finding 3).
+        expect(await askOneWayBackStanding(URL_BASE, stranger)).toBe('not_member');
         const answer = await linkSignIn({ url: URL_BASE, identity: stranger, provider: 'google', phoneLock: null });
         expect(answer.kind).toBe('refused');
         if (answer.kind === 'refused') expect(answer.message).not.toMatch(/\b[a-z]+_[a-z_]+\b/);

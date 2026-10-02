@@ -42,7 +42,8 @@ import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
 import { FindCommunityCard } from '../../components/FindCommunityCard';
-import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { OneWayBackCard, type OneWayBackActionsAt } from '../../components/OneWayBackCard';
+import { fabStepsAside, type CardActionsAt } from '../../utils/fab-band';
 import { ExampleListings } from '../../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
 import * as Location from 'expo-location';
@@ -114,7 +115,7 @@ const MIN_FEED_UNDER_PANEL = 48;
 export default function MarketScreen() {
     const { theme, colors } = useTheme();
     // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
-    const { width: winW, fontScale } = useWindowDimensions();
+    const { width: winW, height: winH, fontScale } = useWindowDimensions();
     const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
     const { identity } = useIdentity();
 
@@ -594,7 +595,27 @@ export default function MarketScreen() {
      * down and come back on any scroll up (components/QuickReturn). They stay while in use: the category
      * panel open, or the search field focused (typing narrows the list under the keyboard).
      */
-    const qr = useQuickReturn({ pinned: categoryPanel.open || searchFocused, resetKey: viewMode });
+    /**
+     * "+ ADD POST" steps aside while the "one way back" card's actions rest under it (utils/fab-band.ts; at 320dp × 1.3
+     * they do on the first view), and is back as soon as the feed scrolls them clear or the card goes.
+     */
+    const marketScrollY = useRef(0);
+    const cardActions = useRef<CardActionsAt | null>(null);
+    const [fabAside, setFabAside] = useState(false);
+    const updateFabAside = useCallback(() => {
+        const aside = fabStepsAside(cardActions.current, marketScrollY.current, winH);
+        setFabAside(prev => (prev === aside ? prev : aside));
+    }, [winH]);
+    useEffect(() => { updateFabAside(); }, [updateFabAside]);
+    const onCardActionsAt = useCallback((at: OneWayBackActionsAt | null) => {
+        cardActions.current = at ? { ...at, scrollY: marketScrollY.current } : null;
+        updateFabAside();
+    }, [updateFabAside]);
+    const qr = useQuickReturn({
+        pinned: categoryPanel.open || searchFocused,
+        resetKey: viewMode,
+        onScrollY: (y) => { marketScrollY.current = y; updateFabAside(); },
+    });
     // Tapping Market again scrolls to the top, and brings the controls with it.
     useTabRetapScrollTop(listRef, qr.show);
     // Measured with the title showing: at worst that leaves the panel a title's height shorter than it could be.
@@ -1170,7 +1191,7 @@ export default function MarketScreen() {
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
             {/* In by 12 words with no sign-in: "Your account has one way back" (two-doors design §2.5). Dismissible. */}
-            {!categoryPanel.open && <OneWayBackCard place="landing" colors={colors} />}
+            {!categoryPanel.open && <OneWayBackCard place="landing" colors={colors} onActionsAt={onCardActionsAt} />}
             {/* The worldwide community's way out to a local one (design §3.1). */}
             {isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}
             {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}
@@ -1726,8 +1747,9 @@ export default function MarketScreen() {
                 <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
             )}
             </View>
-            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
-            {!categoryPanel.open && (
+            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. And while
+                the "one way back" card's actions rest under it, so it never reads as one of the card's buttons. */}
+            {!categoryPanel.open && !fabAside && (
             <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>

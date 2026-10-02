@@ -85,9 +85,12 @@ import { startDoorWork, type DoorWorkRun } from '../door-work';
 import { LINK_MESSAGES, linkSignIn, linkedNotice, readLinkAnswer, type LinkRefusal } from '../join-link';
 import {
     ONE_WAY_BACK_WEEK_MS,
+    ONE_WAY_BACK_ASK_EVERY_MS,
     askOneWayBackStanding,
+    oneWayBackAskNow,
     oneWayBackCommunity,
     oneWayBackFromNode,
+    standingFromAsked,
     dismissOneWayBack,
     dismissedOneWayBack,
     finishOneWayBack,
@@ -487,8 +490,9 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         // No word: offline, a refusal (not a member there), or an older node that doesn't say.
         nodeSays('offline');
         expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
+        // Not a member there (a guest): the node's own word, kept by the card like any answer (re-review finding 3).
         nodeSays({ status: 403, body: { error: 'Read access requires a member identity' } });
-        expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
+        expect(await askOneWayBackStanding(GLOBAL, member)).toBe('not_member');
         nodeSays({ status: 200, body: { probation: { onProbation: false } } });
         expect(await askOneWayBackStanding(GLOBAL, member)).toBeNull();
     });
@@ -509,10 +513,10 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: false, joinedAt: null });
         expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('none');
         expect((await readOneWayBack(member.publicKey))?.done).toBe('linked');
-        // And a member who never joined by words, with no record: nothing.
+        // And a member who never joined by words, with no record: a done record, so the phone stops asking (re-review 3).
         const other = await draftIdentity();
-        expect(await oneWayBackFromNode(other.publicKey, GLOBAL, { words: false, joinedAt: null })).toBeNull();
-        expect(await readOneWayBack(other.publicKey)).toBeNull();
+        expect(oneWayBackPlace(await oneWayBackFromNode(other.publicKey, GLOBAL, { words: false, joinedAt: null }), joined, false)).toBe('none');
+        expect((await readOneWayBack(other.publicKey))?.done).toBe('linked');
     });
 
     it('the phone thought a sign-in was added, the node says not: the node is right, and the card is back', async () => {
@@ -522,9 +526,20 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined });
         expect(record?.done).toBeUndefined();
         expect(oneWayBackPlace(record, joined + HOUR, false)).toBe('card');
-        // "I still have my 12 words" stays the member's own: Settings keeps the sign-in offered, quietly.
+        // "I still have my 12 words" stays the member's own while the node says 12 words: Settings keeps the sign-in
+        // offered, quietly. A sign-in added later, anywhere, wins over it (re-review, finding 1).
         await finishOneWayBack(member.publicKey, 'checked');
         expect((await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined }))?.done).toBe('checked');
+        expect((await oneWayBackFromNode(member.publicKey, GLOBAL, { words: false, joinedAt: null }))?.done).toBe('linked');
+        // And from this phone: a link over "checked" is linked.
+        const local = await draftIdentity();
+        await startOneWayBack(local.publicKey, GLOBAL, joined);
+        await finishOneWayBack(local.publicKey, 'checked');
+        await finishOneWayBack(local.publicKey, 'linked');
+        expect((await readOneWayBack(local.publicKey))?.done).toBe('linked');
+        // Never the other way round.
+        await finishOneWayBack(local.publicKey, 'checked');
+        expect((await readOneWayBack(local.publicKey))?.done).toBe('linked');
     });
 
     it('no word from the node (offline, an older node): the phone\'s own record, as before', async () => {
@@ -532,6 +547,33 @@ describe('"Add a sign-in" on any phone holding a 12-words account: the node\'s w
         expect(await oneWayBackFromNode(member.publicKey, GLOBAL, null)).toBeNull();
         await startOneWayBack(member.publicKey, GLOBAL, joined);
         expect(await oneWayBackFromNode(member.publicKey, GLOBAL, null)).toEqual({ url: GLOBAL, joinedAt: joined });
+    });
+
+    it('the key vault keeps a copy: the node\'s 12 words start no record here (re-review, finding 2)', async () => {
+        const member = await draftIdentity();
+        const record = await oneWayBackFromNode(member.publicKey, GLOBAL, { words: true, joinedAt: joined }, joined + HOUR, { vaultCopy: true });
+        expect(record).toEqual({ url: GLOBAL, joinedAt: joined });
+        expect(await readOneWayBack(member.publicKey)).toBeNull();
+    });
+
+    it('when the card asks (re-review, finding 3): never once linked; never from another community once done; else every 30 minutes', () => {
+        const words: OneWayBack = { url: GLOBAL, joinedAt: 0 };
+        const t = 10 * ONE_WAY_BACK_ASK_EVERY_MS;
+        const asked = (ago: number, answer: 'words' | 'ordinary' | 'not_member' | 'none' = 'words') => ({ at: t - ago, answer });
+        expect(oneWayBackAskNow({ ...words, done: 'linked' }, true, null, t)).toBe('never');
+        expect(oneWayBackAskNow({ ...words, done: 'linked' }, true, null, t, true)).toBe('never');
+        expect(oneWayBackAskNow({ ...words, done: 'checked' }, false, null, t)).toBe('never');
+        expect(oneWayBackAskNow(null, false, null, t)).toBe('never');
+        expect(oneWayBackAskNow({ ...words, done: 'checked' }, true, null, t)).toBe('ask');
+        expect(oneWayBackAskNow(words, false, null, t)).toBe('ask');
+        expect(oneWayBackAskNow(null, true, asked(ONE_WAY_BACK_ASK_EVERY_MS - 1, 'not_member'), t)).toBe('kept');
+        expect(oneWayBackAskNow(null, true, asked(ONE_WAY_BACK_ASK_EVERY_MS, 'not_member'), t)).toBe('ask');
+        expect(oneWayBackAskNow(words, true, asked(60_000, 'none'), t)).toBe('kept');
+        expect(oneWayBackAskNow(words, true, asked(60_000), t, true)).toBe('ask');
+        // A phone clock set back past the last ask: asked again rather than trusted for ever.
+        expect(oneWayBackAskNow(words, true, { at: t + 3600_000, answer: 'words' }, t)).toBe('ask');
+        expect(standingFromAsked({ at: 0, answer: 'not_member' })).toBeNull();
+        expect(standingFromAsked({ at: 0, answer: 'ordinary' })).toEqual({ words: false, joinedAt: null });
     });
 
     it('asked only where it is about: the record\'s community, else the global community when it is the one in use', () => {
@@ -654,8 +696,17 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
         expect(backup).toMatch(/<LinkSignInSheet[\s\S]*askPhoneLock=\{!pendingWordsAreNew\}/);
     });
 
+    it('the Market\'s "+ ADD POST" steps aside while the card\'s actions rest under it; the actions stay full width (re-review, finding 4)', () => {
+        const market = src('app/(tabs)/index.tsx');
+        expect(market).toMatch(/\{!categoryPanel\.open && !fabAside && \(\s*<Pressable accessibilityRole="button" style=\{styles\.fab\}/);
+        expect(market).toMatch(/onScrollY: \(y\) => \{ marketScrollY\.current = y; updateFabAside\(\); \}/);
+        const card = src('components/OneWayBackCard.tsx');
+        expect(card).not.toMatch(/marginRight|clearOfFab/);
+        expect(card).toMatch(/measureInWindow\?\.\(\(_x, y, _w, h\) => \{\s*if \(h > 0\) reportAt\.current\?\.\(\{ top: y, bottom: y \+ h \}\);/);
+    });
+
     it('the card is on the landing screen and in Account Protection', () => {
-        expect(src('app/(tabs)/index.tsx')).toContain('<OneWayBackCard place="landing" colors={colors} />');
+        expect(src('app/(tabs)/index.tsx')).toContain('<OneWayBackCard place="landing" colors={colors} onActionsAt={onCardActionsAt} />');
         expect(src('app/(tabs)/settings.tsx')).toContain('<OneWayBackCard place="settings" colors={colors} />');
         // A 12-words join starts it; a sign-in join never does.
         expect(src('app/welcome.tsx')).toContain("if (way === 'words') await startOneWayBack(identity.publicKey, GLOBAL_NODE_URL);");

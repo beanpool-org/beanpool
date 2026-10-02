@@ -1,5 +1,5 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { colors as lightColors, type AppColors } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
@@ -9,28 +9,27 @@ import {
     askOneWayBackStanding,
     dismissOneWayBack,
     finishOneWayBack,
+    isGlobalInUse,
+    noteOneWayBackAsked,
+    oneWayBackAskNow,
     oneWayBackCommunity,
     oneWayBackFromNode,
     oneWayBackPlace,
     readOneWayBack,
+    readOneWayBackAsked,
+    standingFromAsked,
     type OneWayBack,
+    type OneWayBackAsked,
     type OneWayBackPlace,
-    type OneWayBackStanding,
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
+import { vaultCopyKnown } from '../utils/vault';
 
-/**
- * The Market's "+ ADD POST" button floats over the feed's bottom right (app/(tabs)/index.tsx `styles.fab`: 32dp from the
- * bottom, about 58dp tall, 24dp from the right, up to about 150dp wide at the app's largest text). On a small screen with
- * large text (320dp at 1.3x) the landing card's actions sit under it until the feed is scrolled (PR #1452 review). Where
- * they would, they keep out of its column instead.
- */
-const FAB_BAND_DP = 100;
-const FAB_CLEARANCE_DP = 150;
-
-/** The node's word, kept a few minutes per account and community: the card asks again on focus only after that. */
-const STANDING_KEPT_MS = 5 * 60 * 1000;
-const standings = new Map<string, { at: number; standing: OneWayBackStanding }>();
+/** Where the landing card's actions are on screen (window coordinates, dp), for the Market's floating button. */
+export interface OneWayBackActionsAt {
+    top: number;
+    bottom: number;
+}
 
 /**
  * "Your account has one way back: your 12 words" (two-doors design §2.5, utils/one-way-back.ts), for a member who joined
@@ -45,36 +44,52 @@ const standings = new Map<string, { at: number; standing: OneWayBackStanding }>(
  * Who it is for is the community's own word (`GET /api/community/me`, utils/one-way-back.ts `askOneWayBackStanding`),
  * so it shows on ANY phone holding a 12-words account, not only the one the join was made on (#1454 review, finding
  * 2), and goes once a sign-in was added anywhere. While the node is asked, and when it can't say, the phone's own record.
+ * The asking is bounded (`oneWayBackAskNow`): at most once every 30 minutes per account, whatever the answer, and
+ * never once a sign-in is known (PR #1452 re-review, finding 3).
+ *
+ * Where the key vault keeps a copy of the key, that copy is a way back in every community: the card never says "one
+ * way back", and Settings only offers a sign-in quietly, as after "I still have my 12 words" (re-review, finding 2).
+ *
+ * `onActionsAt` (landing): where the actions rest on screen, so the Market's "+ ADD POST" can step aside while it would
+ * float over them (re-review, finding 4); null when the card isn't up.
  */
-export function OneWayBackCard({ place, colors = lightColors }: { place: 'landing' | 'settings'; colors?: AppColors }): React.JSX.Element | null {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
+    place: 'landing' | 'settings';
+    colors?: AppColors;
+    onActionsAt?: (at: OneWayBackActionsAt | null) => void;
+}): React.JSX.Element | null {
     const { identity } = useIdentity();
     const [record, setRecord] = useState<OneWayBack | null>(null);
     const [shown, setShown] = useState<OneWayBackPlace>('none');
     const [hasPosted, setHasPosted] = useState(false);
     const [linking, setLinking] = useState(false);
+    const [vaultCopy, setVaultCopy] = useState(false);
     const s = styles(colors);
 
     const latest = useRef(0);
-    const { height: windowHeight } = useWindowDimensions();
     const actionsRef = useRef<View>(null);
-    const [clearOfFab, setClearOfFab] = useState(false);
-    // Where the landing card's actions rest on screen: under the floating button's band, they move out of its column.
-    // Measured again shortly after layout, as the feed's top inset settles. Once moved, they stay moved.
+    const reportAt = useRef(onActionsAt);
+    reportAt.current = onActionsAt;
+    // Where the landing card's actions rest on screen, for the floating button. Measured again shortly after layout,
+    // as the feed's top inset settles.
     const measureActions = useCallback(() => {
-        if (place !== 'landing') return;
-        actionsRef.current?.measureInWindow((_x, y, _w, h) => {
-            if (h > 0 && y + h > windowHeight - FAB_BAND_DP) setClearOfFab(true);
+        if (place !== 'landing' || !reportAt.current) return;
+        actionsRef.current?.measureInWindow?.((_x, y, _w, h) => {
+            if (h > 0) reportAt.current?.({ top: y, bottom: y + h });
         });
-    }, [place, windowHeight]);
+    }, [place]);
     const onActionsLayout = useCallback(() => {
         measureActions();
         setTimeout(measureActions, 300);
     }, [measureActions]);
 
-    const refresh = useCallback(async (askNode: 'cached' | 'now' = 'cached') => {
+    const refresh = useCallback(async (askNode: 'kept' | 'now' = 'kept') => {
         const call = ++latest.current;
         const key = identity?.publicKey;
-        const stored = await readOneWayBack(key);
+        const [stored, vault] = await Promise.all([
+            readOneWayBack(key),
+            key ? vaultCopyKnown(key).catch(() => false) : Promise.resolve(false),
+        ]);
         if (call !== latest.current) return;
         // The phone's own record at once; then the node's word, which decides when it comes.
         const show = async (found: OneWayBack | null) => {
@@ -91,30 +106,43 @@ export function OneWayBackCard({ place, colors = lightColors }: { place: 'landin
             }
             if (call !== latest.current) return;
             setRecord(found);
+            setVaultCopy(vault);
             setHasPosted(posted);
             setShown(oneWayBackPlace(found, Date.now(), posted));
         };
         await show(stored);
         if (!identity || !key) return;
-        const where = oneWayBackCommunity(stored, await anchorUrl().catch(() => null));
+        const inUse = await anchorUrl().catch(() => null);
+        const where = oneWayBackCommunity(stored, inUse);
         if (!where) return;
-        const cacheKey = `${key}@${where}`;
-        const kept = standings.get(cacheKey);
-        // A sign-in added on this phone since the word was kept: asked again, never reopened from an old word.
-        const usable = kept && Date.now() - kept.at < STANDING_KEPT_MS && !(stored?.done === 'linked' && kept.standing.words);
-        let standing = askNode === 'cached' && usable ? kept.standing : null;
-        if (!standing) {
-            standing = await askOneWayBackStanding(where, identity);
-            if (standing) standings.set(cacheKey, { at: Date.now(), standing });
+        const now = Date.now();
+        const asked = await readOneWayBackAsked(key);
+        const decision = oneWayBackAskNow(stored, isGlobalInUse(inUse), asked, now, askNode === 'now');
+        if (decision === 'never') return;
+        let word: OneWayBackAsked | null = asked;
+        if (decision === 'ask') {
+            const answer = await askOneWayBackStanding(where, identity);
+            word = answer === null ? { at: now, answer: 'none' }
+                : answer === 'not_member' ? { at: now, answer: 'not_member' }
+                    : { at: now, answer: answer.words ? 'words' : 'ordinary', joinedAt: answer.joinedAt };
+            await noteOneWayBackAsked(key, word);
         }
+        const standing = standingFromAsked(word);
         if (!standing || call !== latest.current) return;
-        await show(await oneWayBackFromNode(key, where, standing));
+        await show(await oneWayBackFromNode(key, where, standing, now, { vaultCopy: vault }));
     }, [identity]);
 
     useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
 
-    if (!identity || !record || record.done === 'linked') return null;
-    if (place === 'landing' && shown !== 'card') return null;
+    const quiet = record?.done === 'checked' || vaultCopy;
+    const up = !!identity && !!record && record.done !== 'linked' && (place === 'settings' || (shown === 'card' && !quiet));
+    // The floating button learns when the landing card goes (put away, done, or a vault copy found).
+    useEffect(() => {
+        if (place === 'landing' && !up) reportAt.current?.(null);
+    }, [place, up]);
+    useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
+
+    if (!identity || !record || !up) return null;
 
     const sheet = (
         <LinkSignInSheet
@@ -127,8 +155,9 @@ export function OneWayBackCard({ place, colors = lightColors }: { place: 'landin
         />
     );
 
-    // Settings, after the member said they still have their words: the sign-in is still offered, quietly.
-    if (record.done === 'checked') {
+    // Settings, after the member said they still have their words, or where the key vault keeps a copy: the sign-in is
+    // still offered, quietly (it lifts the 12-words limits).
+    if (quiet) {
         if (place !== 'settings') return null;
         return (
             <View style={s.quietCard}>
@@ -158,7 +187,7 @@ export function OneWayBackCard({ place, colors = lightColors }: { place: 'landin
                 )}
             </View>
             {/* Not flattened away (Android), so it can be measured on screen. */}
-            <View ref={actionsRef} collapsable={false} onLayout={onActionsLayout} style={clearOfFab ? s.clearOfFab : null}>
+            <View ref={actionsRef} collapsable={false} onLayout={onActionsLayout}>
             <Pressable style={s.primary} onPress={() => setLinking(true)} accessibilityRole="button">
                 <Text style={s.primaryText}>{ONE_WAY_BACK_TEXT.addSignIn}</Text>
             </Pressable>
@@ -203,7 +232,6 @@ function make(colors: AppColors) {
             borderRadius: 14, padding: 14, marginBottom: 12,
         },
         landing: { marginHorizontal: 16, marginBottom: 8 },
-        clearOfFab: { marginRight: FAB_CLEARANCE_DP },
         quietCard: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12, marginBottom: 12 },
         row: { flexDirection: 'row', alignItems: 'flex-start' },
         title: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.heading, lineHeight: 21 },

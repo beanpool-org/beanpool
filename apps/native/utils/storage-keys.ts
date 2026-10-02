@@ -142,3 +142,8 @@ export function vaultApprovedHoldsStoreKey(publicKey: string): string {
 export function oneWayBackStoreKey(publicKey: string): string {
     return `beanpool_one_way_back:${publicKey.toLowerCase()}`;
 }
+
+/** The last time the "one way back" card asked the global community about this account, and its answer (one-way-back.ts). */
+export function oneWayBackAskedStoreKey(publicKey: string): string {
+    return `beanpool_one_way_back_asked:${publicKey.toLowerCase()}`;
+}

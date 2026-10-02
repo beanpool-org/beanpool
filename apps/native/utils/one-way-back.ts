@@ -20,7 +20,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { oneWayBackStoreKey } from './storage-keys';
+import { oneWayBackAskedStoreKey, oneWayBackStoreKey } from './storage-keys';
 import { signedGet } from './node-post';
 import { GLOBAL_NODE_URL } from './node-profile';
 import type { BeanPoolIdentity } from './identity';
@@ -115,10 +115,14 @@ export async function dismissOneWayBack(publicKey: string, hasPosted: boolean, n
     if (record && !record.done) await write(publicKey, dismissedOneWayBack(record, now, hasPosted));
 }
 
-/** One of the two was done: a sign-in was added, or the member checked their 12 words. Never shown again. */
+/**
+ * One of the two was done: a sign-in was added, or the member checked their 12 words. Never shown again. A sign-in wins
+ * over "I still have my 12 words": Settings' quiet offer to add one goes too (PR #1452 re-review, finding 1).
+ */
 export async function finishOneWayBack(publicKey: string, how: 'linked' | 'checked'): Promise<void> {
     const record = await readOneWayBack(publicKey);
-    if (record && !record.done) await write(publicKey, { ...record, done: how });
+    if (!record || record.done === 'linked' || (record.done && how === 'checked')) return;
+    await write(publicKey, { ...record, done: how });
 }
 
 /** What the community says of this account: came in with 12 words and has no sign-in (`words`), and when it joined. */
@@ -132,16 +136,18 @@ export interface OneWayBackStanding {
 export const ONE_WAY_BACK_ASK_MS = 10_000;
 
 /**
- * The community's word on this account (`GET /api/community/me`, signed by it, as the web app asks): null when there is
- * none (offline, no answer in time, not a member there, or an older node that doesn't say which rules).
+ * The community's word on this account (`GET /api/community/me`, signed by it, as the web app asks): its standing,
+ * `not_member` when the node refuses to say (403: a guest there, or no account), or null when there is no word at all
+ * (offline, no answer in time, or an older node that doesn't say which rules).
  */
 export async function askOneWayBackStanding(
     url: string, identity: BeanPoolIdentity, options: { timeoutMs?: number } = {},
-): Promise<OneWayBackStanding | null> {
+): Promise<OneWayBackStanding | 'not_member' | null> {
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? ONE_WAY_BACK_ASK_MS);
     try {
         const res = await signedGet(url, '/api/community/me', identity, stop.signal);
+        if (res.status === 403) return 'not_member';
         if (!res.ok) return null;
         const p = ((await res.json().catch(() => null)) as { probation?: { rules?: unknown; ageEndsAt?: unknown; endsWhen?: { hours?: unknown } } } | null)?.probation;
         if (p?.rules !== 'words' && p?.rules !== 'ordinary') return null;
@@ -157,26 +163,30 @@ export async function askOneWayBackStanding(
 }
 
 /**
- * The record, made to agree with the node's word, and kept: started when the node says 12 words and this phone has none
- * (the account restored here), opened again when the phone thought a sign-in was added and the node says not, and done
- * when the node says the account has a sign-in (added anywhere). "I still have my 12 words" stays the member's own. No
- * word: the record as it is.
+ * The record, made to agree with the node's word, and kept:
+ * - the node says 12 words and this phone has no record (the account restored here): started, unless the key vault
+ *   keeps a copy of the key (`vaultCopy`), which is a way back in every community: then nothing is written, and the
+ *   card offers a sign-in quietly in Settings only (join-global.tsx skips the card for the same reason);
+ * - the phone thought a sign-in was added and the node says not: opened again;
+ * - the node says the account has a sign-in (added anywhere): done for good, over "I still have my 12 words" too, and
+ *   written even with no record yet, so the phone stops asking (PR #1452 re-review, findings 1-3).
+ * No word: the record as it is.
  */
 export async function oneWayBackFromNode(
     publicKey: string, url: string, standing: OneWayBackStanding | null, now: number = Date.now(),
+    options: { vaultCopy?: boolean } = {},
 ): Promise<OneWayBack | null> {
     const record = await readOneWayBack(publicKey);
     if (!standing) return record;
     if (!standing.words) {
-        if (!record) return null;
-        if (record.done) return record;
-        const done: OneWayBack = { ...record, done: 'linked' };
+        if (record?.done === 'linked') return record;
+        const done: OneWayBack = { ...(record ?? { url, joinedAt: now }), done: 'linked' };
         await write(publicKey, done);
         return done;
     }
     if (!record) {
         const started: OneWayBack = { url, joinedAt: standing.joinedAt ?? now };
-        await write(publicKey, started);
+        if (!options.vaultCopy) await write(publicKey, started);
         return started;
     }
     if (record.done === 'linked') {
@@ -188,12 +198,69 @@ export async function oneWayBackFromNode(
     return record;
 }
 
+/** At most one ask of the node per account in this long (PR #1452 re-review, finding 3). */
+export const ONE_WAY_BACK_ASK_EVERY_MS = 30 * 60 * 1000;
+
+/** The last ask of the node for an account, kept on the phone: when, and what it said (`none`: no word came). */
+export interface OneWayBackAsked {
+    at: number;
+    answer: 'words' | 'ordinary' | 'not_member' | 'none';
+    joinedAt?: number | null;
+}
+
+export async function readOneWayBackAsked(publicKey: string): Promise<OneWayBackAsked | null> {
+    try {
+        const raw = await AsyncStorage.getItem(oneWayBackAskedStoreKey(publicKey));
+        const parsed = raw ? JSON.parse(raw) : null;
+        return parsed && typeof parsed.at === 'number' && typeof parsed.answer === 'string' ? parsed as OneWayBackAsked : null;
+    } catch {
+        return null;
+    }
+}
+
+export async function noteOneWayBackAsked(publicKey: string, asked: OneWayBackAsked): Promise<void> {
+    try {
+        await AsyncStorage.setItem(oneWayBackAskedStoreKey(publicKey), JSON.stringify(asked));
+    } catch {
+        // Not kept: asked again at the next focus. Never a gate.
+    }
+}
+
+/**
+ * Whether the card asks the node now (`ask`), uses its last answer (`kept`), or never asks (`never`):
+ * - never for a record that is linked (a sign-in was added: nothing left to offer);
+ * - never from another community's screens once the member has said they still have their 12 words (only the quiet
+ *   offer is left, and it can wait until the phone is using the global community);
+ * - never with no record and no global community in use (the card is about the global community alone);
+ * - otherwise at most once every {@link ONE_WAY_BACK_ASK_EVERY_MS}, whatever the answer was (a guest's 403 and
+ *   `ordinary` included), unless `now` is forced (just after a link).
+ */
+export function oneWayBackAskNow(
+    record: OneWayBack | null, globalInUse: boolean, asked: OneWayBackAsked | null, now: number, force = false,
+): 'ask' | 'kept' | 'never' {
+    if (record?.done === 'linked') return 'never';
+    if (!globalInUse && (!record || record.done)) return 'never';
+    if (force) return 'ask';
+    return asked && now >= asked.at && now - asked.at < ONE_WAY_BACK_ASK_EVERY_MS ? 'kept' : 'ask';
+}
+
+/** The node's word from what was asked: a standing, or null (no word, or not a member there). */
+export function standingFromAsked(asked: OneWayBackAsked | null): OneWayBackStanding | null {
+    if (asked?.answer === 'words') return { words: true, joinedAt: asked.joinedAt ?? null };
+    if (asked?.answer === 'ordinary') return { words: false, joinedAt: null };
+    return null;
+}
+
 /**
  * Where to ask: the community the record is about, or the global community when it is the one this phone is using (an
  * account restored there). Nowhere else: a phone in another community never asks global about itself.
  */
 export function oneWayBackCommunity(record: OneWayBack | null | undefined, inUse: string | null | undefined): string | null {
     if (record?.url) return record.url;
-    const using = inUse ? inUse.trim().replace(/\/+$/, '').toLowerCase() : '';
-    return using === GLOBAL_NODE_URL ? GLOBAL_NODE_URL : null;
+    return isGlobalInUse(inUse) ? GLOBAL_NODE_URL : null;
+}
+
+/** Whether `inUse` (the phone's community now) is the global community. */
+export function isGlobalInUse(inUse: string | null | undefined): boolean {
+    return (inUse ? inUse.trim().replace(/\/+$/, '').toLowerCase() : '') === GLOBAL_NODE_URL;
 }

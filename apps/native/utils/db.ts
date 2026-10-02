@@ -25,7 +25,7 @@ import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey,
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { GroupSuccessionData } from './group-succession';
-import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, type LocalMessageRow } from './chat-sync';
+import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
@@ -3236,7 +3236,7 @@ async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversation
     return messages.filter((m: any) => {
         const local = localById.get(m.id);
         if (!local) return true;
-        if ((m.metadata || null) !== (local.metadata || null)) return true;
+        if ((withoutSendState(m.metadata || null) || null) !== (local.metadata || null)) return true;
         const editedAt = m.editedAt || m.edited_at || null;
         if (editedAt && editedAt !== local.edited_at) return true;
         // A delete or a removal that the node recorded without touching the metadata we hold (an older row
@@ -3883,8 +3883,13 @@ function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { cipher
     }
 }
 
-function isUndeliveredRow(metadata: string | null | undefined): boolean {
-    if (!metadata) return false;
+/**
+ * A line of mine this phone hasn't had confirmed by the node: `__sendState` 'sending' or 'failed', which only this phone
+ * writes (the sync drops it from the node's metadata: chat-sync withoutSendState), on a row by my own key. Never another
+ * person's row, whatever its metadata says.
+ */
+function isUndeliveredRow(metadata: string | null | undefined, author: string | null | undefined, myPubkey: string | null | undefined): boolean {
+    if (!metadata || !myPubkey || author !== myPubkey) return false;
     try {
         const s = JSON.parse(metadata)?.__sendState;
         return s === 'sending' || s === 'failed';
@@ -3901,11 +3906,12 @@ function isUndeliveredRow(metadata: string | null | undefined): boolean {
 async function lineToWriteAfter(conversationId: string, exceptId?: string): Promise<string | null> {
     const database = await getDb();
     const rows = await database.getAllAsync<any>(
-        'SELECT id, nonce, metadata FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
+        'SELECT id, nonce, metadata, author_pubkey FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
         [conversationId, `${V2_NONCE_PREFIX}%`]
     ).catch(() => [] as any[]);
+    const me = (await loadIdentity().catch(() => null))?.publicKey ?? null;
     const newestFirst = (rows || []).filter((r: any) => r?.id && r.id !== exceptId);
-    return dmAfterReference(newestFirst.reverse().map((r: any) => ({ id: r.id, nonce: r.nonce, pending: isUndeliveredRow(r.metadata) })));
+    return dmAfterReference(newestFirst.reverse().map((r: any) => ({ id: r.id, nonce: r.nonce, pending: isUndeliveredRow(r.metadata, r.author_pubkey, me) })));
 }
 
 /**
@@ -4049,8 +4055,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
                 ? '[Encrypted — update your app to read]'
                 : dmLineShownText(view);
             // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
-            // not had it, so it is never marked (a clock behind the node's would sort it before the line it follows).
-            integrityNote = isUndeliveredRow(row.metadata) ? null : dmLineMarkText(view.mark);
+            // not had it, so it is never marked out of order (a clock behind the node's would sort it before the line it
+            // follows). Only that mark, and only on my own unconfirmed row: no other mark applies to a line I just wrote,
+            // and another person's row is never one (isUndeliveredRow).
+            integrityNote = view.mark === 'out-of-order' && isUndeliveredRow(row.metadata, row.author_pubkey, myPubkey) ? null : dmLineMarkText(view.mark);
             // Shown in the middle of the chat as nobody's, never in its named author's bubble.
             unattributed = dmLineIsUnattributed(view);
         } else if (row.nonce === '00000') {
@@ -4076,7 +4084,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
         // If the app died mid-delivery the row would show a clock forever —
         // downgrade stale in-flight sends to 'failed' so the bubble offers resend.
-        let sendState = parsedMeta?.__sendState;
+        // Only my own row has a send state: another person's never does, whatever its metadata says.
+        let sendState = outgoing ? parsedMeta?.__sendState : undefined;
         if (sendState === 'sending' && Date.now() - new Date(row.timestamp).getTime() > 60_000) {
             sendState = 'failed';
         }

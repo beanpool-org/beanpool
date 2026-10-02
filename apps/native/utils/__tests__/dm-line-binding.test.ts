@@ -646,6 +646,96 @@ describe('the node retyping a DM as a group\'s, an event\'s or an enterprise\'s 
     });
 });
 
+describe('a "still sending" flag in the node\'s metadata', () => {
+    const FLAG = (s: string) => JSON.stringify({ __sendState: s });
+    const oldOf = (from: Person, to: Person, text: string): Line => {
+        const line: Line = {
+            id: randomUUID(), conversationId: dm.id, authorPubkey: from.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null,
+            ...encryptDmFormat2(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: dm.id }),
+        };
+        node.lines.push(line);
+        return line;
+    };
+    const drawnFull = async (id: string) => {
+        await syncMessages(h.me.publicKey);
+        const m = (await getMessages(dm.id) as any[]).find((x) => x.id === id);
+        return { text: m?.text, note: m?.integrityNote ?? null, sendState: m?.sendState };
+    };
+
+    it('takes no mark off another person\'s line: an old line replayed as Ben\'s, flagged sending or failed, stays marked', async () => {
+        const sell = oldOf(ana, ben, 'yes, sell it');
+        await phoneOf(ben);
+        await says(ben, dm, 'ok');
+        await phoneOf(ana);
+        await says(ana, dm, "I'm here");
+        const asBens = { ...sell, id: randomUUID(), authorPubkey: ben.publicKey, timestamp: tick(), metadata: FLAG('sending') };
+        node.lines.push(asBens);
+        await phoneOf(ana);
+        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
+        // The same phone, which already showed it marked: the operator flags it failed.
+        asBens.metadata = FLAG('failed');
+        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
+        // Ben's fresh phone: never his own unsent line, and still marked.
+        await phoneOf(ben);
+        expect(await drawnFull(asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, sendState: undefined });
+        // The flag is not kept on this phone at all.
+        expect((sql.prepare('SELECT metadata FROM messages WHERE id = ?').get(asBens.id) as any)?.metadata ?? null).toBeNull();
+    });
+
+    it('takes no note off a quote, a moved line, a reordered answer or the admins\' message', async () => {
+        // A quote: Ben's verified "Yes" answers Ana's old question; the operator swaps in her other old line and flags it.
+        const q = oldOf(ana, ben, 'Can I borrow the ladder?');
+        const other = oldOf(ana, ben, 'Can I keep the 200 Beans you sent by mistake?');
+        await phoneOf(ben);
+        const before = node.lines.length;
+        await insertMessage(dm.id, ben.publicKey, 'Yes', JSON.stringify({ replyToId: q.id }));
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        const yes = node.lines[node.lines.length - 1];
+        Object.assign(q, { ciphertext: other.ciphertext, nonce: other.nonce, metadata: FLAG('sending') });
+        await phoneOf(ana);
+        await syncMessages(ana.publicKey);
+        const all = await getMessages(dm.id) as any[];
+        const byId = new Map(all.map((m) => [m.id, m]));
+        expect({ text: byId.get(yes.id).text, note: byId.get(yes.id).integrityNote ?? null }).toEqual({ text: 'Yes', note: null });
+        expect(dmQuoteFor(byId.get(q.id), ana.publicKey, 'Ben')).toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
+
+        // A reordered answer, flagged.
+        const { question, answer } = await aQuestionAndAnAnswer();
+        [question.timestamp, answer.timestamp] = [answer.timestamp, question.timestamp];
+        answer.metadata = FLAG('sending');
+        await phoneOf(ana);
+        expect((await drawnFull(answer.id)).note).toBe('Shown out of the order it was written in.');
+
+        // The admins' message, flagged.
+        const admin = written(dm, ana, b64('Welcome'), 'plaintext-v1', { metadata: JSON.stringify({ fromCommunityAdmins: true, __sendState: 'failed' }) });
+        await phoneOf(ana);
+        expect((await drawnFull(admin.id)).note).toBe("From your community's admins. Not a private message: the community's server can read it.");
+    });
+
+    it('a moved line, flagged: still "Moved here"', async () => {
+        await phoneOf(ana);
+        const line = await says(ana, dm, 'Yes, go ahead');
+        const again: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        node.convs.push(again);
+        Object.assign(line, { conversationId: again.id, metadata: JSON.stringify({ originalConversationId: dm.id, __sendState: 'sending' }) });
+        await phoneOf(ben);
+        await syncMessages(ben.publicKey);
+        const m = (await getMessages(again.id) as any[]).find((x) => x.id === line.id);
+        expect({ text: m.text, note: m.integrityNote }).toEqual({ text: 'Yes, go ahead', note: 'Moved here from another conversation.' });
+    });
+
+    it('this phone\'s own unsent line still shows as sending, then failed, unmarked', async () => {
+        await phoneOf(ben);
+        await says(ben, dm, 'Are you coming?');
+        node.refuseSends = true;
+        await insertMessage(dm.id, ben.publicKey, 'Hello?');
+        const mine = (await getMessages(dm.id) as any[]).find((m) => m.text === 'Hello?');
+        expect(['sending', 'failed']).toContain(mine.sendState);
+        await vi.waitFor(async () => expect((await getMessages(dm.id) as any[]).find((m) => m.text === 'Hello?')?.sendState).toBe('failed'));
+        expect((await getMessages(dm.id) as any[]).find((m) => m.text === 'Hello?')?.integrityNote ?? null).toBeNull();
+    });
+});
+
 describe('a photo this phone has opened before', () => {
     it('is not shown again once its words no longer verify: re-attributed after a wipe-and-fetch, or moved', async () => {
         await phoneOf(ana);

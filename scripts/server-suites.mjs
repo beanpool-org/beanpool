@@ -212,6 +212,7 @@ export const SUITES = [
     'test-dos-caps',
     'test-writer-bounds',
     'test-money-limits',
+    'test-money-limits-gate',
     'test-economic-hardening',
     'test-federation-api',
     'test-federation-receipt',

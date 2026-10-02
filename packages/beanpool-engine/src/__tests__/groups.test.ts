@@ -297,6 +297,21 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.deepStrictEqual(listGroups(db, { query: 'needle' }).map(x => x.id), [short.id]);
     });
 
+    it('normalises lone surrogates to U+FFFD before counting and storing so text holds limits in SQLite (#1496)', () => {
+        const max = GROUP_DESCRIPTION_LIMIT.chars;
+        // Lone surrogates at the limit
+        const loneSurrogates = '\ud800'.repeat(max);
+        const g = createGroup(db, { name: 'Lone Surrogates', createdBy: 'alice_pub', description: loneSurrogates });
+        const stored = getGroup(db, g.id);
+        assert.strictEqual(stored?.description, '\ufffd'.repeat(max));
+        assert.strictEqual(stored?.description?.length, max);
+        assert.strictEqual(Buffer.byteLength(stored!.description!, 'utf8'), GROUP_DESCRIPTION_LIMIT.bytes);
+
+        // Single lone high surrogate in group name
+        const g2 = createGroup(db, { name: 'Group \ud83c End', createdBy: 'alice_pub' });
+        assert.strictEqual(getGroup(db, g2.id)?.name, 'Group \ufffd End');
+    });
+
     it('keeps a description stored before its limit: no edit cuts it unless it is replaced, and lists stay bounded (#1493)', () => {
         const g = createGroup(db, { name: 'Old', createdBy: 'alice_pub' });
         const old = `${'Long ago. '.repeat(190_000)}The end.`; // ~1.9 MB, as #1490's review measured

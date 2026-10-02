@@ -6,6 +6,7 @@ import {
     fitsTextLimit,
     isPreviewed,
     previewText,
+    replaceLoneSurrogates,
     utf8ByteLength,
 } from '../text-limits.js';
 
@@ -15,6 +16,40 @@ describe('text limits (#1493)', () => {
             expect(utf8ByteLength(text)).toBe(Buffer.byteLength(text, 'utf8'));
             expect(utf8ByteLength(text)).toBe(new TextEncoder().encode(text).length);
         }
+    });
+
+    it('normalises lone surrogates to U+FFFD so text fits limits and stores within byte limit (#1496)', () => {
+        // a lone high surrogate
+        expect(replaceLoneSurrogates('\ud83c')).toBe('\ufffd');
+        expect(replaceLoneSurrogates('a\ud83cb')).toBe('a\ufffdb');
+
+        // a lone low surrogate
+        expect(replaceLoneSurrogates('\udf31')).toBe('\ufffd');
+        expect(replaceLoneSurrogates('a\udf31b')).toBe('a\ufffdb');
+
+        // a valid pair (an emoji must stay intact)
+        expect(replaceLoneSurrogates('🌱')).toBe('🌱');
+        expect(replaceLoneSurrogates('a🌱b')).toBe('a🌱b');
+
+        // a value at the limit made of lone surrogates must store within the byte limit
+        const limit = GROUP_DESCRIPTION_LIMIT; // 2,000 chars, 6,000 bytes
+        const loneHighAtLimit = '\ud800'.repeat(limit.chars);
+        const normalised = replaceLoneSurrogates(loneHighAtLimit);
+
+        expect(normalised.length).toBe(limit.chars);
+        expect(fitsTextLimit(normalised, limit)).toBe(true);
+        expect(utf8ByteLength(normalised)).toBe(limit.bytes);
+        expect(Buffer.byteLength(normalised, 'utf8')).toBe(limit.bytes);
+        expect(new TextEncoder().encode(normalised).length).toBe(limit.bytes);
+        expect(normalised).toBe('\ufffd'.repeat(limit.chars));
+
+        // Lone low surrogates at the limit
+        const loneLowAtLimit = '\udc00'.repeat(limit.chars);
+        const normLow = replaceLoneSurrogates(loneLowAtLimit);
+        expect(normLow.length).toBe(limit.chars);
+        expect(fitsTextLimit(normLow, limit)).toBe(true);
+        expect(utf8ByteLength(normLow)).toBe(limit.bytes);
+        expect(Buffer.byteLength(normLow, 'utf8')).toBe(limit.bytes);
     });
 
     it("a group's description: 2,000 characters as the apps' fields count them, 6,000 bytes, and any script fits", () => {
@@ -42,3 +77,4 @@ describe('text limits (#1493)', () => {
         expect(isPreviewed(null)).toBe(false);
     });
 });
+

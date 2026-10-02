@@ -20,7 +20,7 @@
 // test-posts-fts-same-ms makes its oversized titles through the engine's own writer, past this check, on purpose.
 
 import {
-    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, textTooLongMessage, type TextLimit,
+    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage, type TextLimit,
 } from '@beanpool/core';
 
 /** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
@@ -81,9 +81,12 @@ export const LISTING_TITLE_TOO_LONG = textTooLongMessage("A listing's title", LI
 export const LISTING_DESCRIPTION_TOO_LONG = textTooLongMessage("A listing's description", LISTING_DESCRIPTION_LIMIT);
 export const LISTING_CATEGORY_TOO_LONG = textTooLongMessage("A listing's category", LISTING_CATEGORY_LIMIT);
 
-function text(v: unknown, label: string, required: boolean, limit: TextLimit, tooLong: string, stored: unknown): void {
-    if (typeof v !== 'string') throw new Error(`${label} must be text`);
-    if (required && v.trim().length === 0) throw new Error(`${label} is required`);
+function text(fields: PostFieldsIn, key: 'title' | 'description' | 'category', label: string, required: boolean, limit: TextLimit, tooLong: string, stored: unknown): void {
+    const raw = fields[key];
+    if (typeof raw !== 'string') throw new Error(`${label} must be text`);
+    if (required && raw.trim().length === 0) throw new Error(`${label} is required`);
+    const v = replaceLoneSurrogates(raw);
+    fields[key] = v;
     // The text the listing already holds, sent back by an edit, is not new: kept, however long it was stored.
     if (v !== stored && !fitsTextLimit(v, limit)) throw new Error(tooLong);
 }
@@ -110,9 +113,9 @@ export interface PostTextStored {
  */
 export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', stored: PostTextStored = {}): void {
     const has = (k: keyof PostFieldsIn) => fields[k] !== undefined;
-    if (mode === 'create' || has('title')) text(fields.title, 'Title', true, LISTING_TITLE_LIMIT, LISTING_TITLE_TOO_LONG, stored.title);
-    if (has('description')) text(fields.description, 'Description', false, LISTING_DESCRIPTION_LIMIT, LISTING_DESCRIPTION_TOO_LONG, stored.description);
-    if (has('category')) text(fields.category, 'Category', true, LISTING_CATEGORY_LIMIT, LISTING_CATEGORY_TOO_LONG, stored.category);
+    if (mode === 'create' || has('title')) text(fields, 'title', 'Title', true, LISTING_TITLE_LIMIT, LISTING_TITLE_TOO_LONG, stored.title);
+    if (has('description')) text(fields, 'description', 'Description', false, LISTING_DESCRIPTION_LIMIT, LISTING_DESCRIPTION_TOO_LONG, stored.description);
+    if (has('category')) text(fields, 'category', 'Category', true, LISTING_CATEGORY_LIMIT, LISTING_CATEGORY_TOO_LONG, stored.category);
     if (has('credits') && !isListingPrice(fields.credits)) {
         throw new Error(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`);
     }

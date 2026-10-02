@@ -26,7 +26,7 @@ import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
 import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
-import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
+import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
@@ -2194,6 +2194,7 @@ export function reconcileLedgerFromDb(): void {
 
 
 export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
+    if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
     // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
     assertBeansOn();
@@ -4727,7 +4728,11 @@ export function createPost(
 ): MarketplacePost | null {
     // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
     // number of Beans never reaches a listing, whichever route made it.
-    assertPostFields({ title, description, category, credits, priceType, lat, lng }, 'create');
+    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng };
+    assertPostFields(postFields, 'create');
+    title = postFields.title as string;
+    description = postFields.description as string;
+    category = postFields.category as string;
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The

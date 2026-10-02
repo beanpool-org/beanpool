@@ -17,7 +17,7 @@
 import type { Libp2p } from 'libp2p';
 import { db } from './db/db.js';
 import {
-    reachAdmitsPeer, parseReachPeers, isSyntheticAccount, cutToLimit, fitsTextLimit,
+    reachAdmitsPeer, parseReachPeers, isSyntheticAccount, cutToLimit, fitsTextLimit, replaceLoneSurrogates,
     LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT,
 } from '@beanpool/core';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
@@ -206,7 +206,7 @@ export function cacheRemoteListings(
                     // A peer's listing is a copy this node shows and never edits, held to the limits a member's is (#1493):
                     // a title or description past its limit is kept cut to it, ending "…", and a category past its limit
                     // is no category this node knows.
-                    typeof l.category === 'string' && l.category && fitsTextLimit(l.category, LISTING_CATEGORY_LIMIT) ? l.category : 'other',
+                    typeof l.category === 'string' && l.category && fitsTextLimit(l.category, LISTING_CATEGORY_LIMIT) ? replaceLoneSurrogates(l.category) : 'other',
                     cutToLimit(l.title, LISTING_TITLE_LIMIT),
                     typeof l.description === 'string' ? cutToLimit(l.description, LISTING_DESCRIPTION_LIMIT) : '',
                     Number(l.credits),

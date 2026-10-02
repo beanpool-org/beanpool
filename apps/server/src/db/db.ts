@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
-import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
 import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
@@ -2431,6 +2431,8 @@ export function createCrowdfundProject(
     if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
     // The title is the enterprise's name and the description its purpose: each held to its limit (#1493).
+    title = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
+    description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
     assertEnterpriseText(title, description);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
@@ -2511,6 +2513,8 @@ export function updateCrowdfundProject(
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
     // As on a create (#1493); the title and description it already holds, sent back unchanged, are kept.
+    title = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
+    description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
     assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
@@ -2557,6 +2561,7 @@ export function updateCrowdfundProject(
 }
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
+    if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // SECURITY (SRV-8): defense-in-depth — reject non-positive amounts at the data
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.

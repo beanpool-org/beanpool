@@ -41,22 +41,32 @@ export function GroupDetailModal({
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const loadDetails = useCallback(async () => {
+    const loadCard = useCallback(async () => {
+        if (!group?.id) return;
+        try {
+            const g = await getGroup(group.id);
+            setGroupData(g);
+        } catch (err: any) {
+            console.warn('[GroupDetail] Failed to load group card:', err);
+        }
+    }, [group?.id]);
+
+    const loadRoster = useCallback(async () => {
         if (!group?.id) return;
         setLoading(true);
         try {
-            const [g, m] = await Promise.all([
-                getGroup(group.id),
-                getGroupMembers(group.id)
-            ]);
-            setGroupData(g);
+            const m = await getGroupMembers(group.id);
             setMembers(Array.isArray(m) ? m : []);
         } catch (err: any) {
-            console.warn('[GroupDetail] Failed to load:', err);
+            console.warn('[GroupDetail] Failed to load roster:', err);
         } finally {
             setLoading(false);
         }
     }, [group?.id]);
+
+    const loadDetails = useCallback(async () => {
+        await Promise.all([loadCard(), loadRoster()]);
+    }, [loadCard, loadRoster]);
 
     useEffect(() => {
         if (isOpen && group?.id) {

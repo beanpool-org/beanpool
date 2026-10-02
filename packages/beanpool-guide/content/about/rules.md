@@ -10,7 +10,7 @@ related: decisions, proposing-a-decision, polls, keepers, groups, people
 - A **Poll** is a question in the feed, like "Market on Sunday?". It shows what people think. It never changes anything by itself.
 - A **Decision** is binding. If it passes, your community's server carries it out by itself. Nobody has to press a button, and nobody can quietly ignore it.
 
-The global community has Polls but no Decisions: anyone can join it with one sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities.
+The global community has Polls but no Decisions: anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities.
 
 ## What a Decision can do
 

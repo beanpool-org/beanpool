@@ -39,6 +39,8 @@ If the sign-in account was linked from a phone that had your 12 words, on an up-
 
 This works on a phone with no 12 words too.
 
+If you joined the global community with 12 words, use **Add a sign-in**, near the top of **Account Protection**, instead. It is a way back too, and it also lifts the limits on a new 12-words account. See "Your 12 words".
+
 If this phone has your 12 words, the linked account keeps them as well, so restoring with it gives them back. An account you linked on an older version of the app keeps only your key: tap **Connect again** next to it, and pass your phone's lock screen check, to include the words. On a phone with no 12 words there is nothing to include, so **Connect again** is not shown.
 
 This is not a way to log in. Your account is still your own key. The linked account only helps you get it back, in that community.

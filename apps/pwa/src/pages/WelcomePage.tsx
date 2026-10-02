@@ -4,8 +4,8 @@
  * New users:  Enter invite code + callsign → create → show seed phrase → joined
  * Existing:   Import identity from another device
  * Recovery:   Enter 12-word phrase to recover identity
- * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in
- *             (components/WebJoin.tsx), then the same photo, 12 words and tour
+ * Open door:  On a node whose door is open (the global community), no invite: a name and one sign-in, or where the
+ *             node takes them, 12 words alone (components/WebJoin.tsx), then the same photo, 12 words and tour
  * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
@@ -26,6 +26,7 @@ import {
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
+import { AddSignIn } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../lib/node-invites';
@@ -270,6 +271,12 @@ function doorOf(info: CommunityInfo | null | undefined): Door {
     return info?.profile === 'global' && info.features?.openJoin === true ? 'open' : 'invite';
 }
 
+/**
+ * Before leaving for a provider at the end of onboarding: how long the guide's count and the browser's "keep this site's
+ * data" ask are given, together. Both never fail (recordOnboardingEvent and askPersistentStorage swallow errors).
+ */
+const LEAVE_WAIT_MS = 5_000;
+
 export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A sign-in coming back to this page: read and taken out of the address bar before anything else runs.
     const [authReturn] = useState(() => captureAuthReturn());
@@ -277,6 +284,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     // A local community (every node but the global one, an older node that says no profile included): its listings are
     // its members' (2026-09-28), so this page points a stranger to the global community to look around.
     const [localCommunity, setLocalCommunity] = useState(() => !!initialInfo && initialInfo.profile !== 'global');
+    // The open door also takes 12 words alone, beside the sign-in (two-doors design §2; the node's `features.wordsDoor`).
+    const [wordsDoor, setWordsDoor] = useState(() => initialInfo?.features?.wordsDoor === true);
     const [doorCheck, setDoorCheck] = useState(0);
     useEffect(() => {
         // The lobby read it a moment ago: asked again only on Try again.
@@ -284,7 +293,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
         let cancelled = false;
         setDoor('checking');
         getCommunityInfo()
-            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); } })
+            .then((info) => { if (!cancelled) { setDoor(doorOf(info)); setLocalCommunity(info?.profile !== 'global'); setWordsDoor(info?.features?.wordsDoor === true); } })
             .catch((e) => { if (!cancelled) { setDoor(isRouteMissing(e) ? 'invite' : 'unreachable'); setLocalCommunity(isRouteMissing(e)); } });
         return () => { cancelled = true; };
     }, [doorCheck]);
@@ -294,6 +303,14 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     const [joinedAsNote, setJoinedAsNote] = useState<string | null>(null);
     // The sign-in the door join also enrolled as this account's way back (G11-c), when the node stored the copy.
     const [signInRecovery, setSignInRecovery] = useState<JoinProvider | null>(null);
+    // Joined with 12 words alone: the account has one way back, and the Safety Backup step says so (two-doors §2.5).
+    const [joinedByWords, setJoinedByWords] = useState(false);
+    // That member chose "Add a sign-in as a second way back" at Safety Backup: offered at the end of the tour, and the page
+    // leaves for the provider only once the steps every new member has are finished (the photo on the node, the browser
+    // asked to keep the key), because the page does not come back to them (App opens the member's app on the return).
+    const [addSignInAfterTour, setAddSignInAfterTour] = useState(false);
+    // The end of onboarding ran (finishOnboarding): a second run, after a sign-in that didn't start, does not repeat it.
+    const onboardingFinished = useRef(false);
     // A key restored here (phone or 12 words) that is not a member of this open community yet: it joins as it is. Also
     // a member's key, while a join that went out from this browser is settled first (below).
     const [restoredForDoor, setRestoredForDoor] = useState<BeanPoolIdentity | null>(null);
@@ -1037,6 +1054,18 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
 
     async function handleSeedConfirmed() {
         if (!pendingIdentity) return;
+        if (await finishOnboarding()) onComplete(pendingIdentity);
+    }
+
+    /**
+     * Everything the end of onboarding does but opening the app: the registration where the door has not done it, the
+     * photo, the guide counted, the location and storage asks. False when it could not finish (said in `error`).
+     * `leaving`: the page leaves for a provider next (a sign-in added at the end of the tour), so the storage ask is
+     * waited for, and the location ask, whose prompt the leaving page would only dismiss, is left to the map's own.
+     */
+    async function finishOnboarding({ leaving = false }: { leaving?: boolean } = {}): Promise<boolean> {
+        if (!pendingIdentity) return false;
+        if (onboardingFinished.current) return true;
         setLoading(true);
         try {
             // Wraps the whole thing, rather than being folded into the first condition.
@@ -1077,7 +1106,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                         if (!alreadyIn) {
                             setError(err.message || 'Invalid invite code');
                             setLoading(false);
-                            return;
+                            return false;
                         }
                     }
                 } else {
@@ -1086,7 +1115,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     } catch (err: any) {
                         setError(err.message || 'Registration failed.');
                         setLoading(false);
-                        return;
+                        return false;
                     }
                 }
             }
@@ -1106,16 +1135,21 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // that started it. Both branches above bail out early with an error, so counting
             // on the tap booked a completion for people who never got in — and booked it
             // again each time they retried.
-            recordOnboardingEvent('guide_complete');
+            const counted = recordOnboardingEvent('guide_complete');
 
             // Onboarding complete — explicitly ask for location once
-            if ('geolocation' in navigator) {
+            if (!leaving && 'geolocation' in navigator) {
                 navigator.geolocation.getCurrentPosition(() => {}, () => {});
             }
             // A browser member's key lives only in this site's storage: ask the browser to keep it (design G11 §4.2).
             // Nothing waits on the answer, and the words warning stays either way.
-            if (joinedByDoor) void askPersistentStorage();
-            onComplete(pendingIdentity);
+            const asked = joinedByDoor ? askPersistentStorage() : Promise.resolve(null);
+            // Before leaving the page for a provider, the count's request and the storage ask are given a moment to
+            // finish (review 4162062917: a count sent as the page left was lost 1 time in 8). Never a gate: the page
+            // leaves after LEAVE_WAIT_MS whatever has answered.
+            if (leaving) await Promise.race([Promise.all([counted, asked]), new Promise((r) => setTimeout(r, LEAVE_WAIT_MS))]);
+            onboardingFinished.current = true;
+            return true;
         } finally {
             setLoading(false);
         }
@@ -1132,6 +1166,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             return;
         }
         setJoinedByDoor(true);
+        setJoinedByWords(joined.door === 'words');
         setSignInRecovery(joined.recovery?.enrolled ? joined.recovery.provider : null);
         setInviteRedeemed(true);
         setJoinedAsNote(joined.earlierJoinKept
@@ -1493,7 +1528,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) && showAvatarSetup ? (
                         /* ===== STEP 2: CHOOSE YOUR LOOK ===== */
                         <>
-                            <OnboardingStepper step={2} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={2} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                                 📸 Choose your look
                             </h3>
@@ -1732,7 +1767,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) && showOnboardingGuide ? (
                         /* ===== ONBOARDING GUIDE (Step 4) ===== */
                         <>
-                            <OnboardingStepper step={4} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={4} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 className="text-xl font-bold mb-2 text-nature-950 dark:text-oat-50">🫘 Welcome to BeanPool</h3>
                             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem', lineHeight: 1.5 }}>
                                 Let's look at how this community economy works.
@@ -1864,6 +1899,22 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 {loading ? 'Entering...' : "Let's Begin! 🚀"}
                             </button>
 
+                            {/* Chosen at Safety Backup: the sign-in, now that nothing of onboarding is left to lose. The
+                                page leaves only once finishOnboarding has saved the photo and asked to keep the key. */}
+                            {addSignInAfterTour && joinedByWords && !signInRecovery && pendingIdentity && (
+                                <section data-testid="tour-add-sign-in" aria-labelledby="tour-add-sign-in-title" style={{ marginTop: '1rem', textAlign: 'left' }}>
+                                    <h4 id="tour-add-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+                                        Add a sign-in as a second way back
+                                    </h4>
+                                    <AddSignIn
+                                        identity={pendingIdentity}
+                                        label="Add a sign-in as a second way back"
+                                        autoStart
+                                        onLeaving={() => finishOnboarding({ leaving: true })}
+                                    />
+                                </section>
+                            )}
+
                             <button
                                 onClick={() => { setShowOnboardingGuide(false); setError(null); }}
                                 style={{
@@ -1878,14 +1929,23 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                     ) : hasMnemonic(pendingIdentity) ? (
                         /* ===== SAFETY BACKUP (Step 3) ===== */
                         <>
-                            <OnboardingStepper step={3} firstLabel={joinedByDoor ? 'Sign in' : undefined} />
+                            <OnboardingStepper step={3} firstLabel={joinedByDoor && !joinedByWords ? 'Sign in' : undefined} />
                             <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>🔑 Your Safety Backup</h3>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
-                                Write these 12 words down on paper and keep them safe.
-                                {signInRecovery
-                                    ? <> They bring your identity back if you lose this device.</>
-                                    : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
-                            </p>
+                            {joinedByWords && !signInRecovery ? (
+                                /* Joined with 12 words alone (two-doors design §2.5): said first and plainly, never a gate.
+                                   The tickbox below stays as it is, and adding a sign-in is offered, both skippable. */
+                                <p data-testid="backup-words-only" style={{ fontSize: '0.85rem', marginBottom: '1rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
+                                    These 12 words <strong>are</strong> your account. Nobody can reset them: not us, not this
+                                    community. If you lose them and this device, the account is gone for good.
+                                </p>
+                            ) : (
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
+                                    Write these 12 words down on paper and keep them safe.
+                                    {signInRecovery
+                                        ? <> They bring your identity back if you lose this device.</>
+                                        : <> This is the <strong>only</strong> way to recover your identity if you lose this device.</>}
+                                </p>
+                            )}
                             {/* The join also enrolled the sign-in as a way back (G11-c): said once, next to the words. */}
                             {signInRecovery && (
                                 <p data-testid="backup-signin-recovery" style={{ fontSize: '0.8rem', marginBottom: '1rem', lineHeight: 1.5 }}>
@@ -1974,6 +2034,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             */}
                             <button
                                 onClick={() => {
+                                    setAddSignInAfterTour(false);
                                     recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
                                     // A member who ticked "I've written them down" has done the thing
                                     // Settings' banner nags about. Without this, finishing onboarding
@@ -1998,6 +2059,34 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                             >
                                 Next →
                             </button>
+
+                            {/* One secondary action for an account with one way back (two-doors design §2.5): a sign-in
+                                as a second. Chosen here, it is offered at the end of the tour, and the page leaves for the
+                                provider only after the steps every new member has are finished: the photo is on the node
+                                and the browser asked to keep the key before the page goes (it does not come back here;
+                                App.tsx finishes the link on the return and opens Settings with the result). Skipping it
+                                changes nothing. */}
+                            {joinedByWords && !signInRecovery && pendingIdentity && (
+                                <div data-testid="backup-add-sign-in" style={{ marginTop: '0.75rem', textAlign: 'left' }}>
+                                    <button
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={() => {
+                                            recordOnboardingEvent('protection_choice', seedConfirmed ? 'words' : 'skip');
+                                            if (seedConfirmed) localStorage.setItem(seedViewedKey(pendingIdentity.publicKey), 'true');
+                                            setAddSignInAfterTour(true);
+                                            setShowOnboardingGuide(true);
+                                            setError(null);
+                                        }}
+                                        className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-transparent text-nature-900 dark:text-white border border-nature-300 dark:border-nature-700 cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                    >
+                                        Add a sign-in as a second way back
+                                    </button>
+                                    <p className="text-xs text-nature-600 dark:text-nature-300 mt-2 mb-0 leading-relaxed break-words">
+                                        You'll choose it after a quick look at how things work here.
+                                    </p>
+                                </div>
+                            )}
 
                             <button
                                 onClick={() => {
@@ -2322,6 +2411,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onSettled={handleSettled}
                                 onExisting={onComplete}
                                 onJoined={handleJoined}
+                                wordsDoor={wordsDoor}
                                 onRestore={(how, provider) => {
                                     setError(null);
                                     setRestoredForDoor(null);

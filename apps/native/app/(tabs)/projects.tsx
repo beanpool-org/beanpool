@@ -339,7 +339,7 @@ export default function ProjectsScreen() {
     }, [enterprises, filter, sortBy]);
 
     const renderItem = ({ item }: { item: TreasurySummary }) => {
-        const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, currentRaised, meta } = enterpriseCardStatus(item);
+        const { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta } = enterpriseCardStatus(item);
         const goalAmount = item.goalAmount || 1;
         const progress = Math.min(100, (currentRaised / goalAmount) * 100);
         const daysRemaining = getDaysRemaining(item.deadlineAt);
@@ -450,8 +450,8 @@ export default function ProjectsScreen() {
                         </View>
                     )}
 
-                    {/* Primary CTA if has goal and not funded */}
-                    {hasGoal && !isFunded && (
+                    {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
+                    {takesPledges && (
                         <View style={styles.pledgeCardBtn} aria-hidden={true}>
                             <MaterialCommunityIcons name="sprout" size={16} color={colors.text.inverse} />
                             <Text style={styles.pledgeCardBtnText}>Pledge Beans</Text>

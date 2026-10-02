@@ -40,11 +40,23 @@
  * Every sign-in that reaches `submit` carries the provider's `sub` (the token's claim). The join screens seal the key
  * (and its 12 words) to that `sub` (lib/join-recovery.ts) and pass the shares as `joinBody`'s `recovery`, so one
  * sign-in both joins and becomes the member's way back, as on the phone.
+ *
+ * ## The 12-words door and door work (two-doors design §2, §3; slice S5)
+ *
+ * Where the node says `features.wordsDoor`, a join may go with the 12 words alone: `POST /api/join { door: 'words',
+ * callsign, work }`, signed by the joining key like any door request, with no provider, token or nonce. The work is the
+ * node's challenge (`POST /api/join/work`, `requestDoorWork`) solved by lib/door-work.ts. A sign-in join carries work
+ * too when the node asks for it (from the 30th join an hour from one network), and none otherwise. The door's answers
+ * are said as sentences (`doorOutcome`), a `Retry-After` as "Try again in N minutes" (`tryAgainIn`).
+ *
+ * A words join can land only while its challenge is good (ten minutes from when the node issued it, which is before
+ * the join went), as a sign-in join can only while its nonce is: so SENT_JOIN_CAN_LAND_MS holds for both.
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
+import type { DoorWorkChallenge, DoorWorkDoor, DoorWorkSolution } from './door-work';
 import {
     identityStoreProblem,
     isDefiniteJoinRefusal,
@@ -300,6 +312,28 @@ export function refusalMessage(reason: ReturnRefusal, provider: JoinProvider | n
 export interface DoorAnswer {
     status: number;
     body: Record<string, any>;
+    /** The answer's `Retry-After`, in seconds (or its body's `retryAfterSeconds`); null or absent when it named no wait. */
+    retryAfterSeconds?: number | null;
+}
+
+/** Seconds from a `Retry-After` header (whole seconds, or an HTTP date), else from the body; null when neither says. */
+export function retryAfterOf(header: string | null | undefined, body: Record<string, any> = {}, now: number = Date.now()): number | null {
+    const raw = (header ?? '').trim();
+    if (/^\d{1,9}$/.test(raw)) return Number(raw);
+    if (raw) {
+        const at = Date.parse(raw);
+        if (Number.isFinite(at)) return Math.max(0, Math.ceil((at - now) / 1000));
+    }
+    const said = body.retryAfterSeconds;
+    return typeof said === 'number' && Number.isFinite(said) && said >= 0 ? Math.ceil(said) : null;
+}
+
+/** "Try again in 5 minutes.": a wait the node named, said as one. Whole minutes, at least one; hours past 90 minutes. */
+export function tryAgainIn(seconds: number): string {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    if (minutes <= 90) return minutes === 1 ? 'Try again in 1 minute.' : `Try again in ${minutes} minutes.`;
+    const hours = Math.round(minutes / 60);
+    return hours === 1 ? 'Try again in about an hour.' : `Try again in about ${hours} hours.`;
 }
 
 /** No answer at all: the node could not be reached, or the connection dropped before it answered. */
@@ -332,10 +366,8 @@ export async function door(method: string, path: string, body: unknown, identity
             throw new DoorUnreachableError(e);
         }
         const parsed = await res.json().catch(() => null);
-        return {
-            status: res.status,
-            body: parsed && typeof parsed === 'object' ? parsed : {},
-        };
+        const answered = parsed && typeof parsed === 'object' ? parsed : {};
+        return { status: res.status, body: answered, retryAfterSeconds: retryAfterOf(res.headers?.get?.('Retry-After'), answered) };
     } finally {
         clearTimeout(timer);
     }
@@ -388,9 +420,52 @@ export interface JoinRecovery {
     shares: unknown[];
 }
 
-/** The `POST /api/join` body. */
-export function joinBody(callsign: string, proof: SignInProof, recovery?: JoinRecovery): Record<string, unknown> {
-    return { callsign, provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce, ...(recovery ? { recovery } : {}) };
+/** The `POST /api/join` body. `work`: only when the node asked for some (a sign-in from a busy network). */
+export function joinBody(callsign: string, proof: SignInProof, recovery?: JoinRecovery, work?: DoorWorkSolution | null): Record<string, unknown> {
+    return {
+        callsign, provider: proof.provider, idToken: proof.idToken, nonce: proof.nonce,
+        ...(recovery ? { recovery } : {}),
+        ...(work ? { work: { challenge: work.challenge, counters: work.counters } } : {}),
+    };
+}
+
+/** The `POST /api/join` body of a 12-words join: the name and the work, nothing about any sign-in. */
+export function wordsJoinBody(callsign: string, work: DoorWorkSolution): Record<string, unknown> {
+    return { door: 'words', callsign, work: { challenge: work.challenge, counters: work.counters } };
+}
+
+/** The node's answer to `POST /api/join/work`. */
+export type DoorWorkAnswer =
+    /** A challenge to solve. */
+    | { kind: 'work'; work: DoorWorkChallenge }
+    /** None is needed (a sign-in at ordinary rates, or a node from before the work). */
+    | { kind: 'none' }
+    /** Refused (a network's ceiling, the 12-words door shut here, …): `answer` says why. */
+    | { kind: 'refused'; answer: DoorAnswer };
+
+/**
+ * Ask the node for work for `which` door, signed by the joining key. A node from before the work (no such route: a 404
+ * without the door's own code) needs none. Throws DoorUnreachableError when there is no answer.
+ */
+export async function requestDoorWork(identity: BeanPoolIdentity, which: DoorWorkDoor, now: () => number = Date.now): Promise<DoorWorkAnswer> {
+    const answer = await door('POST', '/api/join/work', { door: which }, identity);
+    const b = answer.body;
+    if (answer.status === 404 && b.code !== 'invite_only') return { kind: 'none' };
+    if (answer.status !== 200) return { kind: 'refused', answer };
+    if (b.work === null) return { kind: 'none' };
+    const w = b.work;
+    if (!w || typeof w.challenge !== 'string' || !w.challenge) return { kind: 'refused', answer };
+    const seconds = typeof w.expiresInSeconds === 'number' && w.expiresInSeconds > 0 ? w.expiresInSeconds : 600;
+    return {
+        kind: 'work',
+        work: {
+            challenge: w.challenge,
+            level: typeof w.level === 'number' ? w.level : 0,
+            parts: typeof w.parts === 'number' ? w.parts : 8,
+            bits: typeof w.bits === 'number' ? w.bits : 7,
+            expiresAt: now() + seconds * 1000,
+        },
+    };
 }
 
 export function submitJoin(identity: BeanPoolIdentity, body: Record<string, unknown>): Promise<DoorAnswer> {
@@ -460,21 +535,49 @@ export async function checkSentJoin(p: PendingJoin): Promise<SentJoinCheck> {
         : { kind: 'may_still_land' };
 }
 
-/** What the member sees next, for each answer the door can give (design §2, screen 4). */
+/** The door work's refusals (apps/server/src/routes/open-join.ts): each answered by new work, solved again. */
+export const DOOR_WORK_REFUSALS = ['work_required', 'work_invalid', 'work_expired', 'work_spent'] as const;
+export type DoorWorkRefusal = (typeof DOOR_WORK_REFUSALS)[number];
+
+export function isDoorWorkRefusal(code: unknown): code is DoorWorkRefusal {
+    return typeof code === 'string' && (DOOR_WORK_REFUSALS as readonly string[]).includes(code);
+}
+
+/** What the member sees next, for each answer the door can give (design §2, screen 4; the two-doors design §3, §4). */
 export type DoorOutcome =
     | { kind: 'joined'; callsign: string | null; recovery: { enrolled?: boolean } | null }
     | { kind: 'already_member' }
     | { kind: 'already_joined'; message: string }
     | { kind: 'expired'; message: string }
     | { kind: 'rate_limited'; message: string }
+    /** The work was refused: the page fetches new work and sends again, once, before it says anything. */
+    | { kind: 'work'; code: DoorWorkRefusal; message: string }
+    /** The node takes no 12-words joins now (its operator turned that door off): the sign-in is the way in. */
+    | { kind: 'sign_in_required'; message: string }
     | { kind: 'unavailable'; message: string }
     | { kind: 'door_closed'; message: string }
     | { kind: 'refused'; message: string };
 
 const DOOR_CLOSED = "This community isn't taking new members right now.";
 const EXPIRED = "That took a while and the sign-in expired. Let's try once more.";
+/** A work refusal said twice (design §3.3): the node's own words ask an old app to update, which a web page can't. */
+const WORK_FAILED = "Setting up your account didn't work out. Please try again.";
+const SIGN_IN_REQUIRED = 'This community needs a sign-in to join: Google, Apple or Facebook.';
+/** A busy network's ceiling or the door's own limiter, with no sentence from the node. */
+const TOO_MANY = 'Too many tries from this network just now.';
 
-export function doorOutcome(answer: DoorAnswer, provider: JoinProvider): DoorOutcome {
+/**
+ * A wait in a sentence: "Please try again later." becomes "Try again in N minutes." when the node named the wait, and
+ * a sentence that names no time gets it added. One that already says when (the 12-words ceiling's) is left as it is.
+ */
+export function withRetryAfter(sentence: string, seconds: number | null | undefined): string {
+    if (typeof seconds !== 'number' || /try again in /i.test(sentence)) return sentence;
+    const later = /please try again later\.?$/i;
+    return later.test(sentence) ? sentence.replace(later, tryAgainIn(seconds)) : `${sentence} ${tryAgainIn(seconds)}`;
+}
+
+/** `provider`: the sign-in this join went with, or null for a 12-words join. */
+export function doorOutcome(answer: DoorAnswer, provider: JoinProvider | null): DoorOutcome {
     const { status, body } = answer;
     const said = typeof body.error === 'string' && body.error ? body.error : null;
     if (status === 200 && body.success === true) {
@@ -483,13 +586,27 @@ export function doorOutcome(answer: DoorAnswer, provider: JoinProvider): DoorOut
         return { kind: 'joined', callsign, recovery };
     }
     if (status === 409 && body.code === 'already_member') return { kind: 'already_member' };
-    if (status === 409 && body.code === 'already_joined') {
+    if (status === 409 && body.code === 'already_joined' && provider) {
         // Said here rather than in the node's words: the screen under it offers the ways back (G11-d: the sign-in too).
         return { kind: 'already_joined', message: `This ${providerLabel(provider)} account already has a BeanPool identity here. Restore it instead.` };
     }
-    if (status === 401) return { kind: 'expired', message: EXPIRED };
-    if (status === 429) return { kind: 'rate_limited', message: said ?? 'Too many new accounts have joined from this network. Please try again later.' };
-    if (status === 503) return { kind: 'unavailable', message: said ?? `${providerLabel(provider)} sign-in could not be checked right now. Please try again in a minute.` };
+    if (status === 400 && isDoorWorkRefusal(body.code)) {
+        return { kind: 'work', code: body.code, message: body.code === 'work_required' || !said ? WORK_FAILED : said };
+    }
+    if (status === 403 && body.code === 'sign_in_required') return { kind: 'sign_in_required', message: said ?? SIGN_IN_REQUIRED };
+    if (status === 401 && provider) return { kind: 'expired', message: EXPIRED };
+    if (status === 429) {
+        const sentence = body.code === 'network_busy' && said ? said : said && !/^Too many attempts/.test(said) ? said : TOO_MANY;
+        return { kind: 'rate_limited', message: withRetryAfter(sentence, answer.retryAfterSeconds) };
+    }
+    if (status === 503) {
+        return {
+            kind: 'unavailable',
+            message: said ?? (provider
+                ? `${providerLabel(provider)} sign-in could not be checked right now. Please try again in a minute.`
+                : "The community couldn't take your join right now. Please try again in a minute."),
+        };
+    }
     if (status === 404) return { kind: 'door_closed', message: DOOR_CLOSED };
     return { kind: 'refused', message: said ?? `The community could not add you (${status}). Please try again.` };
 }
@@ -511,7 +628,7 @@ export type JoinVerdict =
 export function joinVerdict(
     answer: DoorAnswer,
     sent: { identity: BeanPoolIdentity; sentAt?: number },
-    provider: JoinProvider,
+    provider: JoinProvider | null,
     answeredAt: number = Date.now(),
 ): JoinVerdict {
     const { status, body } = answer;
@@ -535,23 +652,51 @@ export function joinVerdict(
 export function doorRefusalMessage(answer: DoorAnswer): string {
     if (answer.status === 404) return DOOR_CLOSED;
     const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (answer.status === 429) return withRetryAfter(said && !/^Too many attempts/.test(said) ? said : TOO_MANY, answer.retryAfterSeconds);
     return said ?? `The community could not start a sign-in (${answer.status}). Please try again in a minute.`;
+}
+
+/**
+ * What a refused `POST /api/join/work` for the 12-words door means for that door: busy (a network's ceiling, or the
+ * door's limiter: the sign-in is still open, and the sentence says so), shut here (the operator turned the 12-words
+ * door off), or something else, said as the node said it.
+ */
+export function wordsWorkRefusal(answer: DoorAnswer): { kind: 'busy' | 'closed' | 'failed'; message: string } {
+    const said = typeof answer.body.error === 'string' && answer.body.error ? answer.body.error : null;
+    if (answer.status === 403 && answer.body.code === 'sign_in_required') return { kind: 'closed', message: said ?? SIGN_IN_REQUIRED };
+    if (answer.status === 429) {
+        const sentence = answer.body.code === 'network_busy' && said ? said : TOO_MANY;
+        return { kind: 'busy', message: withRetryAfter(sentence, answer.retryAfterSeconds) };
+    }
+    if (answer.status === 404) return { kind: 'closed', message: DOOR_CLOSED };
+    return { kind: 'failed', message: said ?? `The community couldn't start a 12-words account (${answer.status}). Try again, or sign in.` };
 }
 
 // ===================== THE NAME (design §2 screen 2) =====================
 
 export type CallsignCheck = 'available' | 'taken' | 'unknown';
 
+/** How long the name field rests before its name is checked: a fast typist's pauses don't each cost a request. */
+export const NAME_CHECK_DEBOUNCE_MS = 700;
+
 /**
  * Is `callsign` free here? UX only: the door lands a taken name on a free variant, and never blocks on it. `exclude`: a
  * member's own key, whose own name is never taken for a rename (engine/members.ts isCallsignAvailable).
+ *
+ * `joining`: the key joining through the open door, which signs the check (two-doors design §4.4): the node then counts
+ * it against the door's limiter, 20 a minute for that key, instead of the 15 a minute that every check from one
+ * address shares, which a hall on one Wi-Fi would spend on names alone. The join screens ask it debounced
+ * (NAME_CHECK_DEBOUNCE_MS) and once per name.
  */
-export async function checkCallsign(callsign: string, exclude?: string): Promise<CallsignCheck> {
+export async function checkCallsign(callsign: string, exclude?: string, joining?: BeanPoolIdentity | null): Promise<CallsignCheck> {
     const c = callsign.trim();
     if (c.length < 2) return 'unknown';
     try {
         const qs = exclude ? `?exclude=${encodeURIComponent(exclude)}` : '';
-        const res = await fetch(`${getNodeApiUrl()}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`, { cache: 'no-store' });
+        const path = `/api/members/callsign-available/${encodeURIComponent(c)}${qs}`;
+        const res = joining
+            ? await signedFetchWithKey('GET', path, undefined, joining.privateKey, joining.publicKey)
+            : await fetch(`${getNodeApiUrl()}${path}`, { cache: 'no-store' });
         if (!res.ok) return 'unknown';
         const data = await res.json();
         return data?.available === true ? 'available' : data?.available === false && !data?.tooShort ? 'taken' : 'unknown';
@@ -630,6 +775,9 @@ export async function browserKeyProblem(): Promise<'storage' | 'reload' | 'old' 
         return 'old';
     }
 }
+
+/** A nonce lives ten minutes on the node; one held longer than this is fetched again before it is sent to a provider. */
+export const NONCE_FRESH_MS = 5 * 60 * 1000;
 
 /**
  * Ask the browser to keep this site's storage (design §4.2): Chrome grants it quietly to an installed or much-used

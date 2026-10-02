@@ -24,6 +24,7 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
+import { pledgeClosedLine } from '../lib/enterprise-pledge';
 import { ReportModal } from '../components/ReportModal';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 
@@ -955,6 +956,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             const progress = Math.min(100, (current / goal) * 100);
                             const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
+                            const pledgesClosed = pledgeClosedLine(detail.status);
 
                             return (
                                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -992,7 +995,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </p>
 
                                     {/* Inline Pledge Form — pledging moves the member's own beans */}
-                                    {viewerIsMember && (
+                                    {viewerIsMember && pledgesClosed && (
+                                    <p data-testid="pledges-closed" className="pt-3 border-t border-nature-100 dark:border-nature-800 text-sm font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">
+                                        {pledgesClosed}
+                                    </p>
+                                    )}
+                                    {viewerIsMember && !pledgesClosed && (
                                     <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                             Back this initiative

@@ -1939,6 +1939,93 @@ describe('T. Round 14: limits that fit the request, one limit per open, notices 
     });
 });
 
+describe('U. Round 15: notices kept until said, one limit for a claim, a pin read that fails never saves or wipes', () => {
+    const never = () => new Promise<void>(() => { /* never answers */ });
+    afterEach(() => setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS));
+    const times = (said: string[], w: string) => said.filter((x) => x === w).length;
+
+    for (const how of ['the open works (control)', 'its list read answers 502', 'its list read runs out of time', 'its share to Owen runs out of time'] as const) {
+        it(`U1 (the re-review's :598) notices a save kept are said once, on the first open that works: ${how}`, async () => {
+            const { node, phones: [owen, ada, cy] } = await community(['Owen', 'Ada', 'Cy']);
+            const onScreen = await open(ada); // Ada's list is open, under key 1
+            node.admins = node.admins.filter((a) => a.pubkey !== cy.publicKey);
+            await open(owen); // key 2 drops Cy and goes to Ada
+            node.admins = [...node.admins, role(cy)]; // Cy's role comes back
+            const saved = await saveNamesEntry(COMMUNITY, ada, STORE, onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+            expect(saved.ok && saved.value.keyId).toBe(node.current()!.id); // under key 2; the save's look kept the walk's words
+            const words = [NAMES_COPY.newKeyBy('Owen', ['Cy']), NAMES_COPY.checkAgain('Cy', 2)];
+            setNamesRequestTimeout(1000, { stateMs: 1000, listPerEntryMs: 0 });
+            let failing = how !== 'the open works (control)';
+            /** The requests made to fail, as each case means them to. */
+            const hit: string[] = [];
+            const mine = (req: Sent, method: string, p: string) => {
+                const is = failing && req.headers['X-Public-Key'] === ada.publicKey && req.method === method && new URL(req.url).pathname === p;
+                if (is) hit.push(`${method} ${p}${method === 'POST' ? ` to ${JSON.parse(req.body).header.split('\n')[3] === owen.publicKey ? 'Owen' : '?'}` : ''}`);
+                return is;
+            };
+            answer = (req) => (how === 'its list read answers 502' && mine(req, 'GET', '/api/names/entries') ? { status: 502 } : node.answer(req));
+            hold = (req) => ((how === 'its list read runs out of time' && mine(req, 'GET', '/api/names/entries'))
+                // Ada's next open owes Owen a header: she took key 2 from his box and has sent none since.
+                || (how === 'its share to Owen runs out of time' && mine(req, 'POST', '/api/names/shares')) ? never() : null);
+            const first = await openNamesList(COMMUNITY, ada, STORE);
+            expect(hit).toEqual(({
+                'the open works (control)': [], 'its list read answers 502': ['GET /api/names/entries'],
+                'its list read runs out of time': ['GET /api/names/entries'], 'its share to Owen runs out of time': ['POST /api/names/shares to Owen'],
+            } as const)[how]);
+            failing = false;
+            answer = (req) => node.answer(req);
+            hold = null;
+            if (how === 'the open works (control)') {
+                expect(first.ok).toBe(true);
+                for (const w of words) expect(first.ok && times(first.value.notices, w)).toBe(1);
+            } else {
+                expect(first.ok).toBe(false); // nothing said: f8d11de4 lost them here, said 0 times on this open and the next
+                const next = await open(ada);
+                for (const w of words) expect(times(next.notices, w)).toBe(1);
+            }
+            // Said once: the open after that doesn't say them again.
+            const after = await open(ada);
+            for (const w of words) expect(times(after.notices, w)).toBe(0);
+        }, 30_000);
+    }
+
+    for (const how of ['its list read answers 502', "its new key's POST is lost"] as const) {
+        it(`U2 (the re-review's :598, the Follow's own words) a Follow whose open then fails (${how}): what the Follow dropped is said on the next open, once`, async () => {
+            const { node, phones: [owen, bea, zed, cy] } = await community(['Owen', 'Bea', 'Zed', 'Cy']);
+            const standby = { gens: new Map(node.gens), shares: new Map(node.shares) };
+            node.admins = [role(owen, 'owner'), role(bea), role(zed)];
+            await open(owen); // main: 2 drops Cy
+            expect((await open(bea)).plan.kind).toBe('ready');
+            // The standby takes over from a copy made before that, with Owen gone there: Zed's 2′ drops Owen.
+            node.gens = new Map(standby.gens); node.shares = new Map(standby.shares); node.marks = new Set();
+            node.admins = [role(bea, 'owner'), role(zed), role(cy)];
+            node.former[owen.publicKey] = 'Owen';
+            expect((await open(zed)).plan.kind).toBe('ready');
+            expect(node.current()!).toMatchObject({ maker: zed.publicKey, drops: [owen.publicKey] });
+            expect((await open(bea)).plan).toEqual({ kind: 'refused', reason: 'different_history', canFollow: true });
+            const word = NAMES_COPY.newKeyBy('Zed', ['Owen']);
+            let failing = true;
+            if (how === 'its list read answers 502') {
+                answer = (req) => (failing && new URL(req.url).pathname === '/api/names/entries' ? { status: 502 } : node.answer(req));
+            } else {
+                drop = (req) => (failing && req.method === 'POST' && new URL(req.url).pathname === '/api/names/generations' ? 'before' : null);
+            }
+            // The Follow is saved; then Bea's phone makes its own key without Cy (a removal on the history it left).
+            const f = await followServerHistory(COMMUNITY, bea, STORE);
+            expect(f.ok).toBe(false); // nothing was said
+            failing = false;
+            const next = await open(bea);
+            expect(times(next.notices, word)).toBe(1); // f8d11de4: 0
+            // Said once. (A lost POST's statement is sent again, refused `ask_for_share`, and made afresh with a claim on
+            // the open after: the key lands there.)
+            const later = [await open(bea), await open(bea)];
+            for (const o of later) expect(times(o.notices, word)).toBe(0);
+            expect(later[1].plan.kind).toBe('ready');
+            expect(node.current()!).toMatchObject({ maker: bea.publicKey, drops: [cy.publicKey] });
+        }, 30_000);
+    }
+});
+
 describe('E. Rollback, forks', () => {
     for (const [id, what] of [['E1', 'a server put back to key 1'], ['E2', 'a standby that took over from an older copy']] as const) {
         it(`${id} ${what}: phones ahead refuse and read nothing; "Put the key history back" replays it; the lost entries are counted`, async () => {

@@ -326,7 +326,8 @@ export async function writeNamesPinTo(store: NamesPinStore, publicKey: string, a
 
 const fromHex = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16));
 
-const NOT_KEPT: NamesResult<never> = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
+type NamesFailure = Extract<NamesResult<never>, { ok: false }>;
+const NOT_KEPT: NamesFailure = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
 
 // ── Checking each other in person ────────────────────────────────────────────────────────────
 
@@ -478,6 +479,9 @@ interface Synced { state: NamesState; pin: NamesPin; plan: NamesPlan; notices: N
 /**
  * The walk's notices are said once (they come from taking a statement, which happens once). An operation that syncs but
  * isn't an open (a save, a follow, a new key, Put back, Send again) keeps them here, and the next open says them (round 14).
+ * An open reads them without taking them, and forgets them only once it has said them (round 15, :598): after its list
+ * read for a ready plan, at its end for any other. An open that fails keeps its own words here too. Every change to this
+ * store runs on the pin's chain.
  */
 const unsaidLabel = (publicKey: string, anchor: string) => `beanpool:names-unsaid:${publicKey.toLowerCase()}:${communityAddress(anchor) ?? anchor}`;
 async function keepUnsaid(store: NamesPinStore, publicKey: string, anchor: string, words: string[]): Promise<void> {
@@ -488,16 +492,25 @@ async function keepUnsaid(store: NamesPinStore, publicKey: string, anchor: strin
         await store.setItem(unsaidLabel(publicKey, anchor), JSON.stringify([...new Set([...was, ...words])].slice(-50)));
     } catch { /* words only */ }
 }
-async function takeUnsaid(store: NamesPinStore, publicKey: string, anchor: string): Promise<string[]> {
+async function peekUnsaid(store: NamesPinStore, publicKey: string, anchor: string): Promise<string[]> {
     try {
         const raw = await store.getItem(unsaidLabel(publicKey, anchor));
-        if (!raw) return [];
-        await store.setItem(unsaidLabel(publicKey, anchor), '[]');
-        const words = JSON.parse(raw);
+        const words = raw ? JSON.parse(raw) : [];
         return Array.isArray(words) ? words.filter((w): w is string => typeof w === 'string') : [];
     } catch {
         return [];
     }
+}
+/** Forgets the kept words that were just said; any kept since (a save during the list read) stay. */
+async function forgetSaid(store: NamesPinStore, publicKey: string, anchor: string, said: string[]): Promise<void> {
+    try {
+        const raw = await store.getItem(unsaidLabel(publicKey, anchor));
+        if (!raw) return;
+        const was = JSON.parse(raw);
+        const gone = new Set(said);
+        const left = Array.isArray(was) ? was.filter((w): w is string => typeof w === 'string' && !gone.has(w)) : [];
+        if (!Array.isArray(was) || left.length !== was.length) await store.setItem(unsaidLabel(publicKey, anchor), JSON.stringify(left));
+    } catch { /* words only */ }
 }
 
 /** The node's state, the sync, the pin kept. `say`: an open says the notices itself; anything else keeps them for the next open. */
@@ -595,21 +608,43 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
 async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
     let l = await look(anchor, identity, store, true);
     if (!l.ok) return l;
-    const unsaid = await takeUnsaid(store, identity.publicKey, anchor);
-    if (!l.value.kept) return NOT_KEPT;
+    const unsaid = await peekUnsaid(store, identity.publicKey, anchor);
     const notices: NamesNotice[] = [...l.value.notices];
     let made: string[] | null = null;
     let carried: string[] = [];
     let madeN = 0;
     let askedFor = '';
+    /** The words for the key this open made, if it made one; `sending`: whom it reached, once the open got that far. */
+    const madeWords = (state: NamesState, sending: string): string[] => {
+        if (!made || !made.length) return [];
+        // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
+        // sent" only for the admins the key reached; the rest get it on the next open.
+        const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
+        const rest = made.filter((k) => !carried.includes(k));
+        const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
+        const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
+        return [
+            carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
+            gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
+            // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
+            ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
+        ].filter((w) => w);
+    };
+    let seen = l.value.state;
+    /** A failure from here keeps this open's own words for the next open (round 15, :598); the kept ones never left. */
+    const failed = async (r: NamesFailure): Promise<NamesResult<NamesOpened>> => {
+        await keepUnsaid(store, identity.publicKey, anchor, [...madeWords(seen, ''), ...noticeWords(notices, seen)]);
+        return r;
+    };
+    if (!l.value.kept) return failed(NOT_KEPT);
     const pend = l.value.pin.pending;
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
         // Ours, never landed, and the node is still where it was: the same statement again (never a second key).
         const sent = await sendGeneration(anchor, identity, store, l.value.pin, pend);
-        if (!sent.ok && sent.status === 0) return sent;
+        if (!sent.ok && sent.status === 0) return failed(sent);
         l = await look(anchor, identity, store, true);
-        if (!l.ok) return l;
+        if (!l.ok) return failed(l);
         notices.push(...l.value.notices);
     } else if (l.value.plan.kind === 'make_first' || l.value.plan.kind === 'make_new') {
         const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
@@ -620,52 +655,42 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
         const chainIds = new Set(before.chain.map((x) => x.id));
         carried = drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k]));
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
-        if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return sent;
+        if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return failed(sent);
         if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
         if (!sent.ok && sent.code === 'ask_for_share') askedFor = askForShareWords(l.value.state, identity.publicKey);
         l = await look(anchor, identity, store, true);
-        if (!l.ok) return l;
+        if (!l.ok) return failed(l);
         notices.push(...l.value.notices);
     }
     const { state, pin, plan, generations } = l.value;
+    seen = state;
     const sentTo: string[] = [];
     const kept = pin;
-    const due: string[] = [];
-    if (plan.kind === 'ready') {
-        for (const share of namesSharesToSend(pin, state, identity)) {
-            due.push(share.to);
-            const done = await postShare(anchor, identity, share);
-            if (done.ok) sentTo.push(share.to);
-            // A request ran out of time (round 14): stop here, so one open waits one limit, not one per request. The next
-            // open sends any share still due; the list isn't read. A connection that fails at once costs nothing: go on.
-            else if (done.code === NAMES_TIMED_OUT) return done;
-        }
+    const toSend = plan.kind === 'ready' ? namesSharesToSend(pin, state, identity) : [];
+    const due = toSend.map((s) => s.to);
+    for (const share of toSend) {
+        const done = await postShare(anchor, identity, share);
+        if (done.ok) sentTo.push(share.to);
+        // A request ran out of time (round 14): stop here, so one open waits one limit, not one per request. The next
+        // open sends any share still due; the list isn't read. A connection that fails at once costs nothing: go on.
+        else if (done.code === NAMES_TIMED_OUT) return failed(done);
     }
-    const words = [...unsaid, ...noticeWords(notices, state)];
+    const sending = made && made.length
+        ? NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)))
+        : '';
+    const words = [...madeWords(state, sending), ...unsaid, ...noticeWords(notices, state)];
     if (askedFor) words.push(askedFor);
-    if (made && made.length) {
-        // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
-        // sent" only for the admins the key reached; the rest get it on the next open.
-        const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
-        const rest = made.filter((k) => !carried.includes(k));
-        const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
-        const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
-        const sending = NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)));
-        words.unshift(...[
-            carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
-            gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
-            // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
-            ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
-        ].filter((w) => w));
-    }
     // The rolled-back card's estimate, before anything is read; the exact count comes on the ready read after it.
     const estimate = plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.seen.length - (state.counts?.entries ?? 0)) : 0;
     if (estimate) words.push(NAMES_COPY.lostSinceCopy(estimate));
     const justChecked = await justCheckedNow(store, identity.publicKey, anchor, state);
+    const said = [...new Set(words)];
+    // A ready plan's words are said with the list, after its read (readTheList); any other plan's are said now.
+    if (plan.kind !== 'ready') await forgetSaid(store, identity.publicKey, anchor, said);
     return {
         ok: true,
         value: {
-            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: words, made, sentTo, justChecked,
+            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: said, made, sentTo, justChecked,
             toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
             lost: estimate,
         },
@@ -681,9 +706,14 @@ async function readTheList(anchor: string, identity: BeanPoolIdentity, store: Na
     if (!opened.ok || opened.value.plan.kind !== 'ready') return opened;
     const o = opened.value;
     const got = await fetchNamesList(anchor, identity, false, o.state.counts?.entries ?? 2000);
-    if (!got.ok) return got;
+    if (!got.ok) {
+        // Nothing was said (round 15, :598): this open's words are kept for the next one, on the pin's chain.
+        await withPin(identity.publicKey, anchor, () => keepUnsaid(store, identity.publicKey, anchor, o.notices));
+        return got;
+    }
     const list = got.value;
     return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<NamesOpened>> => {
+        await forgetSaid(store, identity.publicKey, anchor, o.notices);
         // Names this phone saw that are neither on the node nor deleted by an admin: a loss, said with its count.
         // Only what the pin had seen when the read began can be missing from it; an id seen since (a Save that landed during
         // the read) is kept, never counted lost.
@@ -789,7 +819,10 @@ async function followUnlocked(anchor: string, identity: BeanPoolIdentity, store:
         ? NAMES_COPY.checkAgain(callsignIn(state, d.key), d.n)
         : NAMES_COPY.newKeyBy(callsignIn(state, d.maker), [callsignIn(state, d.key)])));
     const opened = await openUnlocked(anchor, identity, store);
-    if (!opened.ok) return opened;
+    if (!opened.ok) {
+        await keepUnsaid(store, identity.publicKey, anchor, said); // said on the next open (round 15, :598)
+        return opened;
+    }
     return { ok: true, value: { ...opened.value, notices: [...new Set([...said, ...opened.value.notices])] } };
 }
 

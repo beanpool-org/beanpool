@@ -222,7 +222,7 @@ async function main(): Promise<void> {
             let r = await look();
             let made: number | null = null;
             if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
-                const m = core.makeNamesGenerationFor(this.pin, r.state, keysOf(this.id), r.plan.kind === 'make_new' ? r.plan.drops : []);
+                const m = core.makeNamesGenerationFor(this.pin, keysOf(this.id), r.plan.kind === 'make_new' ? r.plan.drops : []);
                 this.pin = m.pin;
                 made = (await signedCall(base, 'POST', '/api/names/generations', this.id, { statement: m.generation.statement, signature: m.generation.signature })).status;
                 r = await look();

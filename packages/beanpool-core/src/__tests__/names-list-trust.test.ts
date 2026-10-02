@@ -14,7 +14,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     NAMES_REFUSAL_REASONS, checkNamesKeyInPerson, emptyNamesPin, makeNamesGeneration, makeNamesGenerationFor, makeNamesShare,
     namesKeyCheckMatches, namesKeyCode, namesKeyQr, namesReplay, namesSharesToSend, readNamesGeneration, readNamesPin, readNamesShare,
-    removeNamesKey, syncNames, takeNamesHistory, namesRingKeys, namesShareHeader, namesStatementId, readNamesKeyCheck,
+    removeNamesKey, startNamesAgain, syncNames, takeNamesHistory, namesRingKeys, namesShareHeader, namesStatementId, readNamesKeyCheck,
     type NamesGeneration, type NamesPin, type NamesServerState, type NamesShare, type NamesSyncResult, type NamesSigner,
 } from '../names-list-trust.js';
 import { namesBoxDigest, newNamesListKey, sealNamesRing, openNamesEntry, sealNamesEntry, newNamesEntryId } from '../names-list-crypto.js';
@@ -96,7 +96,7 @@ class Phone {
     open(world: World, view: Parameters<World['stateFor']>[1] = {}): NamesSyncResult {
         let r = this.sync(world.stateFor(this.pk, view));
         if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
-            const made = makeNamesGenerationFor(this.pin!, world.stateFor(this.pk, view), this.who, r.plan.kind === 'make_new' ? r.plan.drops : []);
+            const made = makeNamesGenerationFor(this.pin!, this.who, r.plan.kind === 'make_new' ? r.plan.drops : []);
             this.pin = made.pin;
             world.post(made.generation);
             r = this.sync(world.stateFor(this.pk, view));
@@ -127,6 +127,22 @@ function community(names = ['Owen', 'Ada']): { world: World; phones: Phone[] } {
 }
 
 const curN = (w: World) => w.gens.get(w.current!)!.n;
+
+/**
+ * "Start again" as the app runs it (design addendum (c)): offered on an empty chain when nobody holds the current key;
+ * the server's whole path goes onto the chain for its drops and place, then the ordinary new key off it, written ahead.
+ */
+function startAgain(phone: Phone, world: World): ReturnType<typeof makeNamesGenerationFor> {
+    const st = world.stateFor(phone.pk);
+    expect(phone.sync(st).plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', canStartAgain: true });
+    phone.pin = startNamesAgain(phone.pin!, st);
+    const r = phone.sync(st);
+    expect(r.plan).toMatchObject({ kind: 'wait', canMakeNew: true });
+    const made = makeNamesGenerationFor(phone.pin!, phone.who, (r.plan as { drops: string[] }).drops);
+    phone.pin = made.pin;
+    expect(world.post(made.generation)).toBe(201);
+    return made;
+}
 
 describe('statements and shares: signed bytes, ids computed here', () => {
     it('a generation reads back only in its one form, signed by its maker; its id is the hash of its bytes', () => {
@@ -422,7 +438,7 @@ describe('C. Drops and removal', () => {
         dark.current = one;
         for (const s of world.shares.values()) if (s.headId === one) dark.putShare(s);
         gone.sync(dark.stateFor(gone.pk));
-        const made = makeNamesGenerationFor(gone.pin!, dark.stateFor(gone.pk), gone.who, []);
+        const made = makeNamesGenerationFor(gone.pin!, gone.who, []);
         gone.pin = made.pin;
         expect(dark.post(made.generation)).toBe(201);
         gone.open(dark);
@@ -532,14 +548,14 @@ describe('C. Drops and removal', () => {
         st.newKeyNeeded = true;
         const r = owen.sync(st);
         expect(r.plan).toEqual({ kind: 'make_new', drops: [] });
-        const made = makeNamesGenerationFor(owen.pin!, st, owen.who, []);
+        const made = makeNamesGenerationFor(owen.pin!, owen.who, []);
         expect(made.generation.drops).toEqual([]);
         expect(made.generation.n).toBe(2);
     });
 
     it('C7 a trusted admin drops everyone else: taken (governance, not crypto), the self-drop ignored, Bea dropped; Owen waits on Ada and is told', () => {
         const { world, phones: [owen, ada, bea] } = community(['Owen', 'Ada', 'Bea']);
-        const made = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, [owen.pk, bea.pk]);
+        const made = makeNamesGenerationFor(ada.pin!, ada.who, [owen.pk, bea.pk]);
         ada.pin = made.pin;
         world.post(made.generation);
         ada.open(world);
@@ -569,7 +585,7 @@ describe('C. Drops and removal', () => {
     it("C9 a drop is due but this phone lacks the current key: it waits for Ada, makes nothing, and its own removals ride into the next key it makes", () => {
         const { world, phones: [owen, ada, cy, abe] } = community(['Owen', 'Ada', 'Cy', 'Abe']);
         // Ada makes 2 (dropping nobody); Cy takes it but Ada's box hasn't arrived.
-        const made = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+        const made = makeNamesGenerationFor(ada.pin!, ada.who, []);
         ada.pin = made.pin;
         world.post(made.generation);
         ada.sync(world.stateFor(ada.pk));
@@ -590,7 +606,7 @@ describe('C. Drops and removal', () => {
 describe('D. Lost phones, re-keys, dead ends', () => {
     it('D1 the POST lands but the phone dies before saving: the pending key was saved first and moves into the ring', () => {
         const { world, phones: [owen] } = community(['Owen']);
-        const made = makeNamesGenerationFor(owen.pin!, world.stateFor(owen.pk), owen.who, []);
+        const made = makeNamesGenerationFor(owen.pin!, owen.who, []);
         const saved = made.pin; // written before the request
         expect(world.post(made.generation)).toBe(201);
         owen.pin = readNamesPin(JSON.parse(JSON.stringify(saved)), owen.pk);
@@ -605,12 +621,12 @@ describe('D. Lost phones, re-keys, dead ends', () => {
 
     it('D2 the POST never lands: kept while the parent still matches; dropped when the server moved on (the winner taken)', () => {
         const { world, phones: [owen, ada] } = community();
-        const made = makeNamesGenerationFor(owen.pin!, world.stateFor(owen.pk), owen.who, []);
+        const made = makeNamesGenerationFor(owen.pin!, owen.who, []);
         owen.pin = made.pin;
         owen.sync(world.stateFor(owen.pk));
         expect(owen.pin!.pending?.id).toBe(made.generation.id);
         // Ada's key lands first.
-        const theirs = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+        const theirs = makeNamesGenerationFor(ada.pin!, ada.who, []);
         ada.pin = theirs.pin;
         world.post(theirs.generation);
         const r = owen.sync(world.stateFor(owen.pk));
@@ -621,8 +637,8 @@ describe('D. Lost phones, re-keys, dead ends', () => {
 
     it('D3 two makers at once: one lands, the other is refused, takes the winner\'s statement and gets its key on the winner\'s next open', () => {
         const { world, phones: [owen, bea] } = community(['Owen', 'Bea']);
-        const a = makeNamesGenerationFor(owen.pin!, world.stateFor(owen.pk), owen.who, []);
-        const b = makeNamesGenerationFor(bea.pin!, world.stateFor(bea.pk), bea.who, []);
+        const a = makeNamesGenerationFor(owen.pin!, owen.who, []);
+        const b = makeNamesGenerationFor(bea.pin!, bea.who, []);
         owen.pin = a.pin;
         bea.pin = b.pin;
         expect(world.post(a.generation)).toBe(201);
@@ -638,7 +654,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
     it('D4 the only holder of the newest key is lost before sharing: Owen is offered a new key; its names stay locked; older ones open; Ada\'s new phone gets the ring without it', () => {
         const { world, phones: [owen, ada] } = community();
         const one = world.current!;
-        const made = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+        const made = makeNamesGenerationFor(ada.pin!, ada.who, []);
         ada.pin = made.pin;
         world.post(made.generation);
         ada.sync(world.stateFor(ada.pk)); // never shared: Owen's phone was off
@@ -647,7 +663,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         const st = world.stateFor(owen.pk);
         const r = owen.sync(st);
         expect(r.plan).toMatchObject({ kind: 'wait', keyId: made.generation.id, n: 2, holders: [], canMakeNew: true, newKeyNeeded: true });
-        const again = makeNamesGenerationFor(owen.pin!, st, owen.who, (r.plan as any).drops);
+        const again = makeNamesGenerationFor(owen.pin!, owen.who, (r.plan as any).drops);
         owen.pin = again.pin;
         expect(world.post(again.generation)).toBe(201);
         expect(owen.open(world).plan.kind).toBe('ready');
@@ -660,7 +676,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
 
     it('D5 the lost phone shared its last key first: Owen makes 3 dropping the old key, every entry opens, Ada\'s new phone gets every key after a scan', () => {
         const { world, phones: [owen, ada] } = community();
-        const made = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+        const made = makeNamesGenerationFor(ada.pin!, ada.who, []);
         ada.pin = made.pin;
         world.post(made.generation);
         ada.open(world);
@@ -677,21 +693,20 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         expect(adaNew.ringIds().length).toBe(3);
     });
 
-    it('D6 the only admin loses their phone: the new phone may start again (asked), chained onto the server\'s current; a later admin it checks joins (the history a trusted admin vouches for)', () => {
+    it('D6 the only admin loses their phone: the new phone may start again (asked): it takes the server\'s path for its drops and place, then a new key off the current one; a later admin it checks joins (the history a trusted admin vouches for)', () => {
         const { world, phones: [owen] } = community(['Owen']);
         const cur = world.gens.get(world.current!)!;
         const owenNew = new Phone(admin('Owen'));
         world.admins = [owenNew.who];
         const st = world.stateFor(owenNew.pk);
-        const r = owenNew.sync(st);
-        expect(r.plan).toEqual({ kind: 'refused', reason: 'untrusted_maker', maker: owen.pk, n: 1, canCheck: false, canStartAgain: true });
-        const made = makeNamesGenerationFor(owenNew.pin!, st, owenNew.who, [], { startAgain: true });
+        expect(owenNew.sync(st).plan).toEqual({ kind: 'refused', reason: 'untrusted_maker', maker: owen.pk, n: 1, canCheck: false, canStartAgain: true });
+        const made = startAgain(owenNew, world);
         expect(made.generation.n).toBe(cur.n + 1);
         expect(made.generation.parentId).toBe(cur.id);
-        owenNew.pin = made.pin;
-        expect(world.post(made.generation)).toBe(201);
         expect(owenNew.open(world).plan.kind).toBe('ready');
         expect(owenNew.ringIds()).toEqual([made.generation.id]);
+        expect(owenNew.pin!.chain.map((l) => l.id)).toEqual([cur.id, made.generation.id]);
+        expect(owenNew.trusts(owen)).toBe(false);
         // A new admin: Cy meets Owen's new phone.
         const cy = new Phone(admin('Cy'));
         world.admins.push(cy.who);
@@ -707,7 +722,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         const { world, phones: [owen, ada, bea] } = community(['Owen', 'Ada', 'Bea']);
         world.admins = [owen.who, ada.who, bea.who];
         // Ada makes 2 so the history has a maker other than Owen.
-        const made = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+        const made = makeNamesGenerationFor(ada.pin!, ada.who, []);
         ada.pin = made.pin;
         world.post(made.generation);
         ada.open(world);
@@ -728,7 +743,7 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         expect([...NAMES_REFUSAL_REASONS]).toEqual(['other_community', 'untrusted_maker', 'missing_record', 'different_history', 'rolled_back']);
     });
 
-    it('a new admin joins a community whose first key\'s maker has left (the history a trusted admin vouches for): taken through the admin they checked', () => {
+    it('G1 a new admin joins a community whose first key\'s maker has left (the history a trusted admin vouches for): taken through the admin they checked', () => {
         const { world, phones: [ann, bob] } = community(['Ann', 'Bob']);
         world.admins = [bob.who];
         bob.open(world); // 2 drops Ann
@@ -746,6 +761,177 @@ describe('D. Lost phones, re-keys, dead ends', () => {
     });
 });
 
+describe('G. The vouched history and starting again (design addendum, 2026-10-02)', () => {
+    it("G2 after a start again, an admin who still holds key 1 meets the new phone: its share opens the old entries (§4.3.1's promise); no prefix key comes from a box an untrusted key signed", () => {
+        const { world, phones: [owen] } = community(['Owen']);
+        const one = world.current!;
+        const id = newNamesEntryId();
+        const sealed = sealNamesEntry(namesRingKeys(owen.pin!)[one], id, one, { name: 'Zeb', note: '' });
+        const owenNew = new Phone(admin('Owen'));
+        world.admins = [owenNew.who];
+        const made = startAgain(owenNew, world);
+        expect(owenNew.open(world).plan.kind).toBe('ready');
+        expect(owenNew.pin!.chain.map((l) => l.id)).toEqual([one, made.generation.id]);
+        // An operator's key sends the new phone a box with a key for the old statement: not from a trusted key, so not taken.
+        const z = admin('Zed');
+        world.putShare(makeNamesShare({ communityId: CID, from: z, to: owenNew.pk, headId: made.generation.id, ring: { [one]: newNamesListKey() }, trusts: [z.publicKey] }));
+        owenNew.open(world);
+        expect(owenNew.pin!.ring[one]).toBeUndefined();
+        // The old phone is found: the owner makes its key an admin again, and the two phones check each other.
+        world.admins.push(owen.who);
+        owenNew.meet(owen);
+        owenNew.open(world);
+        owen.open(world);
+        owen.open(world);
+        owenNew.open(world);
+        expect([...owenNew.pin!.trusted].sort()).toEqual([owenNew.pk, owen.pk].sort());
+        expect(owenNew.pin!.ring[one]).toBe(owen.pin!.ring[one]);
+        expect(openNamesEntry(namesRingKeys(owenNew.pin!)[one], id, one, sealed).name).toBe('Zeb');
+    });
+
+    it('G3 a planted prefix (the operator\'s root and a 2 that drops V): V starts again on top; P meets V and takes the prefix for its drops, stalls at V\'s key with V dropped, never holds a prefix key and is never ready under 2; a rescan of V reaches V\'s key and only it', () => {
+        const world = new World();
+        const o = admin('Op');
+        const [v, p] = [new Phone(admin('Vi')), new Phone(admin('Pat'))];
+        const root = makeNamesGeneration({ communityId: CID, n: 1, parentId: null, drops: [] }, o);
+        world.plant(root);
+        const two = makeNamesGeneration({ communityId: CID, n: 2, parentId: root.id, drops: [v.pk] }, o);
+        world.plant(two, true);
+        world.admins = [v.who, p.who];
+        expect(world.stateFor(v.pk).nobodyHoldsKey).toBe(true);
+        const made = startAgain(v, world);
+        expect(made.generation.n).toBe(3);
+        expect(v.open(world).plan.kind).toBe('ready');
+        v.meet(p);
+        v.open(world);
+        const r = p.open(world);
+        expect(p.pin!.chain.map((l) => l.id)).toEqual([root.id, two.id]);
+        expect(p.trusts(v)).toBe(false);
+        expect(p.pin!.dropped[v.pk]).toBe(2);
+        expect(r.plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', maker: v.pk, canCheck: true });
+        expect(p.ringIds()).toEqual([]);
+        // A rescan of V: the next open takes V's key, and only it.
+        p.pin = checkNamesKeyInPerson(p.pin!, v.pk);
+        v.open(world);
+        expect(p.open(world).plan.kind).toBe('ready');
+        expect(p.ringIds()).toEqual([made.generation.id]);
+    });
+
+    it('G4 the whole path is needed: the server hides a statement between V\'s start again and V\'s head; nothing under it is vouched, and P reads nothing', () => {
+        const world = new World();
+        const o = admin('Op');
+        const [v, p] = [new Phone(admin('Vi')), new Phone(admin('Pat'))];
+        world.plant(makeNamesGeneration({ communityId: CID, n: 1, parentId: null, drops: [] }, o), true);
+        world.admins = [v.who, p.who];
+        const s1 = startAgain(v, world);
+        v.open(world);
+        for (let i = 0; i < 2; i++) {
+            const m = makeNamesGenerationFor(v.pin!, v.who, []);
+            v.pin = m.pin;
+            expect(world.post(m.generation)).toBe(201);
+            v.open(world);
+        }
+        const gap = world.gens.get(world.gens.get(world.current!)!.parentId!)!;
+        expect(gap.parentId).toBe(s1.generation.id);
+        v.meet(p);
+        v.open(world);
+        const r = p.open(world, { hide: [gap.id] });
+        expect(r.plan.kind).toBe('refused');
+        expect(p.pin!.chain).toEqual([]);
+        expect(p.ringIds()).toEqual([]);
+    });
+
+    for (const copy of ['the old history without the start again', 'only the first statement', 'no key history at all'] as const) {
+        it(`G5 (the review's :702) a start again, then a take-over from a copy with ${copy}: rolled back, and the replay puts the whole history back in order, then this phone's key; ready (one admin)`, () => {
+            const { world, phones: [owen] } = community(['Owen']);
+            const root = world.current!;
+            const second = makeNamesGenerationFor(owen.pin!, owen.who, []);
+            owen.pin = second.pin;
+            expect(world.post(second.generation)).toBe(201);
+            owen.open(world);
+            const old = new Map(world.gens);
+            const owenNew = new Phone(admin('Owen'));
+            world.admins = [owenNew.who];
+            const made = startAgain(owenNew, world);
+            expect(owenNew.open(world).plan.kind).toBe('ready');
+            expect(readNamesPin(JSON.parse(JSON.stringify(owenNew.pin)), owenNew.pk)).toEqual(owenNew.pin);
+            // The standby's copy.
+            if (copy === 'the old history without the start again') {
+                world.gens = new Map(old);
+                world.current = second.generation.id;
+            } else if (copy === 'only the first statement') {
+                world.gens = new Map([[root, old.get(root)!]]);
+                world.current = root;
+            } else {
+                world.gens = new Map();
+                world.current = null;
+            }
+            world.shares.clear();
+            const r = owenNew.sync(world.stateFor(owenNew.pk));
+            expect(r.plan).toMatchObject({ kind: 'refused', reason: 'rolled_back', newest: { id: made.generation.id, n: 3 } });
+            const replay = namesReplay(owenNew.pin!, world.stateFor(owenNew.pk));
+            expect(replay.map((l) => l.n)).toEqual(copy === 'no key history at all' ? [1, 2, 3] : copy === 'only the first statement' ? [2, 3] : [3]);
+            for (const l of replay) expect(world.post(readNamesGeneration(l, CID)!)).toBe(201);
+            expect(world.current).toBe(made.generation.id);
+            expect(owenNew.open(world).plan.kind).toBe('ready');
+            expect(owenNew.ringIds()).toEqual([made.generation.id]);
+            // Nothing from the history it took is trusted: the old key's maker stays untrusted, its keys untaken.
+            expect(owenNew.trusts(owen)).toBe(false);
+        });
+    }
+
+    it("G6 a stale header to a phone that started again: Abe dropped at 2 on the old history; the server replays W's header from before the drop, vouching Abe; Abe stays dropped, and gets nothing though the server lists him", () => {
+        const { world, phones: [owen, abe, w] } = community(['Owen', 'Abe', 'W']);
+        const one = world.current!;
+        const stale = [...world.shares.values()].find((x) => x.from === w.pk && x.trusts.includes(abe.pk) && x.headId === one)!;
+        expect(stale).toBeDefined();
+        world.admins = [owen.who, w.who];
+        owen.open(world); // 2 drops Abe
+        expect(world.gens.get(world.current!)!.drops).toEqual([abe.pk]);
+        // Every phone lost; the operator lists Abe again; Q, the new admin, starts again.
+        const q = new Phone(admin('Quin'));
+        world.admins = [q.who, abe.who];
+        world.shares.clear();
+        startAgain(q, world);
+        expect(q.pin!.dropped[abe.pk]).toBe(2);
+        q.open(world);
+        // Q checks W (same key, a person Q trusts); the server replays W's header from before the drop.
+        q.pin = checkNamesKeyInPerson(q.pin!, w.pk);
+        world.putShare(stale);
+        const r = q.open(world);
+        expect(r.plan.kind).toBe('ready');
+        expect(q.trusts(abe)).toBe(false);
+        expect(q.pin!.dropped[abe.pk]).toBe(2);
+        expect(namesSharesToSend(q.pin!, world.stateFor(q.pk), q.who).map((x) => x.to)).not.toContain(abe.pk);
+    });
+
+    it("G7 A2 stands: Z's planted statement, with Z's own header naming it, is refused on every phone (no trusted admin's head descends from it)", () => {
+        const { world, phones } = community(['Owen', 'Ada']);
+        const z = admin('Zed');
+        world.admins.push(z);
+        const zs = makeNamesGeneration({ communityId: CID, n: 2, parentId: world.current, drops: [] }, z);
+        world.plant(zs, true);
+        for (const p of phones) world.putShare(makeNamesShare({ communityId: CID, from: z, to: p.pk, headId: zs.id, ring: { [zs.id]: newNamesListKey() }, trusts: [z.publicKey, ...phones.map((x) => x.pk)] }));
+        for (const p of phones) {
+            const r = p.sync(world.stateFor(p.pk));
+            expect(r.plan).toMatchObject({ kind: 'refused', reason: 'untrusted_maker', maker: z.publicKey });
+            expect(p.ringIds()).not.toContain(zs.id);
+            expect(p.trusts(z.publicKey)).toBe(false);
+        }
+    });
+
+    it('a pin whose chain does not start at a first statement reads as none (every chain is a path from the root)', () => {
+        const { world, phones: [owen] } = community(['Owen']);
+        const m = makeNamesGenerationFor(owen.pin!, owen.who, []);
+        owen.pin = m.pin;
+        world.post(m.generation);
+        owen.open(world);
+        const cut = JSON.parse(JSON.stringify(owen.pin));
+        cut.chain = cut.chain.slice(1);
+        expect(readNamesPin(cut, owen.pk)).toBeNull();
+    });
+});
+
 describe('E. Rollback, forks', () => {
     it('E1 a rollback to generation 1: phones at 3 refuse; replay puts 2 and 3 back; a name written then is under 3, which Abe\'s key 1 doesn\'t open', () => {
         const { world, phones: [owen, ada, abe] } = community(['Owen', 'Ada', 'Abe']);
@@ -753,7 +939,7 @@ describe('E. Rollback, forks', () => {
         world.admins = [owen.who, ada.who];
         owen.open(world); // 2 drops Abe
         ada.open(world);
-        const m = makeNamesGenerationFor(owen.pin!, world.stateFor(owen.pk), owen.who, []);
+        const m = makeNamesGenerationFor(owen.pin!, owen.who, []);
         owen.pin = m.pin;
         world.post(m.generation);
         owen.open(world);
@@ -785,7 +971,7 @@ describe('E. Rollback, forks', () => {
         shown.shares = new Map(world.shares);
         const owenThere = new Phone(owen.who);
         owenThere.pin = JSON.parse(JSON.stringify(owen.pin));
-        const mb = makeNamesGenerationFor(owenThere.pin!, shown.stateFor(owen.pk), owen.who, []);
+        const mb = makeNamesGenerationFor(owenThere.pin!, owen.who, []);
         owenThere.pin = mb.pin;
         shown.post(mb.generation);
         owenThere.open(shown);
@@ -794,7 +980,7 @@ describe('E. Rollback, forks', () => {
         expect(bea.head()).toBe(b.id);
         // Everyone else's: Ada's a, numbered 2, then her 3; Owen's phone takes both and their keys.
         for (const n of [2, 3]) {
-            const m = makeNamesGenerationFor(ada.pin!, world.stateFor(ada.pk), ada.who, []);
+            const m = makeNamesGenerationFor(ada.pin!, ada.who, []);
             ada.pin = m.pin;
             expect(world.post(m.generation)).toBe(201);
             expect(m.generation.n).toBe(n);

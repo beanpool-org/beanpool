@@ -41,14 +41,30 @@
  * trusts that maker, so nothing vouches for them, and the first statement can never be taken. So a statement whose
  * parent is this phone's head may also be accepted when a trusted admin's signed share header names a head whose
  * history (by parent links, through the statements the server shows) includes it, and its maker was never dropped on
- * this phone. That admin's phone accepted it under the same rules, so it adds nothing the proof (design §6) doesn't
- * already rest on: a key in `trusted` is an honest admin's phone. It never takes a statement off another parent, so a
- * phone that saw a drop still refuses whatever a dropped key makes after it.
+ * this phone. Every statement on that path is on that admin's chain, taken under rule 1, this rule, or the start-again
+ * rule; its maker was checked by the phone that took it under rule 1, or by nobody. Taking a statement adds no key and no
+ * trust (rules 2, 3 and 5 are untouched): it applies the statement's drops and moves this phone's place in the history,
+ * nothing else. So this rule rests on what the proof (design §6, addendum) already rests on: a key in `trusted` is an
+ * honest admin's phone, and that phone's signed head is its history as it stood when it signed. It never takes a
+ * statement off another parent, so a phone that saw a drop still refuses whatever a dropped key makes after it.
+ *
+ * ## Starting again (design addendum (c), signed off 2026-10-02)
+ *
+ * A phone with no history, when nobody holds the current key, may start again ({@link startNamesAgain}, asked first): it
+ * takes the server's whole path from the first statement to the current one onto its chain, for its drops and its place
+ * only (each signature checked; no trust, no key, no notice), then makes an ordinary new key off it. So every chain is a
+ * path from a first statement: an old key's holder, checked later, can send the old keys (the locked entries open), a
+ * server put back to an older copy can be given the whole history again, and the drops under it stand.
  *
  * ## What this doesn't protect against (the app and the guide say the same)
  *
  * A check made with the wrong person; a phone someone else gets into; a lost phone until an admin removes its key (or
- * the server's role change does); and a server that hides things, which costs availability, never confidentiality.
+ * the server's role change does); and an admin's phone that the server keeps from learning of a removal. Proof (ii) is
+ * about the phone that saw the drop and the phones that took its key: a phone the server keeps from seeing it stays at a
+ * key the removed admin holds, and seals under it, until it is shown the removal (design §10 C4; the addendum's
+ * per-phone window). Each phone's window ends separately. Two admins comparing the list key their phones show
+ * ({@link namesListKeyCode}) see whether one is behind. Otherwise a server that hides things costs availability, never
+ * confidentiality.
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -334,7 +350,7 @@ function readLink(raw: unknown): NamesChainLink | null {
 /**
  * The pin as this phone saved it, for `me`, or null when it isn't one (another phone's, another version, or damaged:
  * then the phone starts from an empty pin, which trusts nobody but itself). Its chain must link, parent to child,
- * number by number; only its first statement may have a parent this phone never accepted (a start again, §4.3.1).
+ * number by number, from a first statement (a start again takes the whole path too: {@link startNamesAgain}).
  */
 export function readNamesPin(raw: unknown, me: string): NamesPin | null {
     if (!raw || typeof raw !== 'object') return null;
@@ -354,7 +370,7 @@ export function readNamesPin(raw: unknown, me: string): NamesPin | null {
             const link = readLink(raw);
             if (!link) return null;
             const g = readNamesGeneration(link, p.communityId as string, new Set([link.id]))!;
-            if (prev && (g.parentId !== prev.id || g.n !== prev.n + 1)) return null;
+            if (prev ? g.parentId !== prev.id || g.n !== prev.n + 1 : g.parentId !== null || g.n !== 1) return null;
             chain.push(link);
             prev = g;
         }
@@ -586,11 +602,6 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
 
     for (let round = 0; round < 10_000; round++) {
         let changed = false;
-        // 0. This phone's own start-again statement (§4.3.1), the one first link whose parent it never accepted.
-        if (chain.length === 0 && pending && gens.get(pending.id)?.maker === me) {
-            accept(gens.get(pending.id)!);
-            changed = true;
-        }
         // 1. Extend the chain, in order.
         for (;;) {
             const head = chain[chain.length - 1];
@@ -716,29 +727,50 @@ export function planNames(pin: NamesPin, state: NamesServerState, toDrop: string
 // ── Actions ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * A generation this phone makes now (design §4.3.1): the first, a new one off its head, or a start again chained onto
- * the server's current (only on an empty chain, when nobody holds the current key). The pin keeps it as `pending`, with
- * its key, before anything is sent: save that pin first.
+ * A generation this phone makes now (design §4.3.1): the first, or a new one off its head (after a start again, the head
+ * is the server's current: {@link startNamesAgain}). The pin keeps it as `pending`, with its key, before anything is
+ * sent: save that pin first.
  */
-export function makeNamesGenerationFor(pin: NamesPin, state: Pick<NamesServerState, 'current'>, me: NamesSigner, drops: string[], opts: { startAgain?: boolean } = {}):
-    { generation: NamesGeneration; key: Uint8Array; pin: NamesPin } {
+export function makeNamesGenerationFor(pin: NamesPin, me: NamesSigner, drops: string[]): { generation: NamesGeneration; key: Uint8Array; pin: NamesPin } {
     const head = headOf(pin);
-    const cur = state.current && isNamesKeyId(state.current.id) ? state.current : null;
-    let n: number;
-    let parentId: string | null;
-    if (head) {
-        n = head.n + 1;
-        parentId = head.id;
-    } else if (opts.startAgain && cur) {
-        n = cur.n + 1;
-        parentId = cur.id;
-    } else {
-        n = 1;
-        parentId = null;
-    }
+    const n = head ? head.n + 1 : 1;
+    const parentId = head ? head.id : null;
     const generation = makeNamesGeneration({ communityId: pin.communityId, n, parentId, drops: drops.filter((k) => lower(k) !== pin.me) }, me);
     const key = newNamesListKey();
     return { generation, key, pin: { ...pin, pending: { statement: generation.statement, signature: generation.signature, id: generation.id, n, key: bytesToHex(key) } } };
+}
+
+/**
+ * "Start again" (design addendum (c); only on an empty chain, when the plan offers it: nobody holds the current key; asked
+ * first, with the count): the server's whole path from its first statement to its current one goes onto this phone's
+ * chain for its drops and its place only. Each statement's signature is checked for its maker and its drops applied in
+ * order (never this phone's own key, never the maker's); no trust is taken, no key, and nothing is said. Its head is then
+ * the server's current, and the ordinary new key follows ({@link makeNamesGenerationFor}). The pin as it was when the
+ * path isn't whole, or the chain isn't empty.
+ */
+export function startNamesAgain(pin: NamesPin, state: Pick<NamesServerState, 'current' | 'generations'>): NamesPin {
+    const curId = state.current && isNamesKeyId(state.current.id) ? state.current.id : null;
+    if (pin.chain.length > 0 || !curId) return pin;
+    const gens = new Map<string, NamesGeneration>();
+    for (const r of (Array.isArray(state.generations) ? state.generations : []).slice(0, NAMES_TRUST_BOUNDS.generations)) {
+        const g = readNamesGeneration(r, pin.communityId);
+        if (g) gens.set(g.id, g);
+    }
+    const back = pathBack(gens, curId);
+    if (!back.complete) return pin;
+    const T = new Set([...pin.trusted, pin.me]);
+    const D: Record<string, number> = { ...pin.dropped };
+    const chain: NamesChainLink[] = [];
+    for (const id of [...back.ids].reverse()) {
+        const g = gens.get(id)!;
+        chain.push({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
+        for (const d of g.drops) {
+            if (d === pin.me || d === g.maker) continue;
+            T.delete(d);
+            D[d] = g.n;
+        }
+    }
+    return { ...pin, chain, trusted: [...T].sort(), dropped: D };
 }
 
 /** The keys this phone holds, as bytes, by generation id. */
@@ -826,6 +858,20 @@ export function namesKeyQr(pubkey: string): string {
  */
 export function namesKeyCode(pubkey: string): string {
     const h = sha256(utf8ToBytes(`beanpool-key-code-v1\n${pubkey.toLowerCase()}`));
+    const groups: string[] = [];
+    for (let i = 0; i < 5; i++) {
+        const n = ((h[4 * i] << 24) >>> 0) + (h[4 * i + 1] << 16) + (h[4 * i + 2] << 8) + h[4 * i + 3];
+        groups.push(String(n % 10000).padStart(4, '0'));
+    }
+    return groups.join(' ');
+}
+
+/**
+ * The list key a phone adds names under (its head's id), as 20 digits two admins compare in person: the same digits mean
+ * the same key history, drops included (ids chain by hash). About 66 bits, so nobody can make another history to match.
+ */
+export function namesListKeyCode(id: string): string {
+    const h = sha256(utf8ToBytes(`beanpool-list-key-code-v1\n${id.toLowerCase()}`));
     const groups: string[] = [];
     for (let i = 0; i < 5; i++) {
         const n = ((h[4 * i] << 24) >>> 0) + (h[4 * i + 1] << 16) + (h[4 * i + 2] << 8) + h[4 * i + 3];

@@ -145,7 +145,7 @@ class Phone {
         let r = await this.sync();
         let made: Res | null = null;
         if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
-            const m = makeNamesGenerationFor(this.pin!, r.state, this.signer, r.plan.kind === 'make_new' ? r.plan.drops : []);
+            const m = makeNamesGenerationFor(this.pin!, this.signer, r.plan.kind === 'make_new' ? r.plan.drops : []);
             this.pin = m.pin;
             made = await postGen(this.id, m.generation);
             r = await this.sync();
@@ -591,7 +591,8 @@ async function main(): Promise<void> {
 
     // ── 11. The only holder out and back (C6), and a rollback (E1) ───────────────────────────────
     // Ada's phone makes key N and dies before sending it: she is its only holder. Then she is made a moderator and an admin again.
-    const mN = makeNamesGenerationFor(adaRealP.pin!, (await state(adaReal)).body, adaRealP.signer, []);
+    await state(adaReal);
+    const mN = makeNamesGenerationFor(adaRealP.pin!, adaRealP.signer, []);
     adaRealP.pin = mN.pin;
     require_((await postGen(adaReal, mN.generation)).status === 201, "11. Ada's phone makes a new key and its answer lands, but it sends nothing more");
     await adaRealP.sync();

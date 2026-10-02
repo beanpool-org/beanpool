@@ -26,8 +26,9 @@
  *    parent is this phone's head (or `-` with an empty chain), its number is the head's plus one, and its maker is
  *    trusted. Accepting applies its drops (never this phone's own key, never the maker's).
  * 2. **Trust.** `trusted` grows only by an in-person check here, or by a header signed by a trusted key, for each key in
- *    its `trusts`; a dropped key is re-admitted only by a header whose head is on this phone's chain at or after the drop.
- *    It shrinks only by rule 1.
+ *    its `trusts`; a dropped key is re-admitted only by a header whose head is on this phone's chain at or after the
+ *    statement that dropped it, both on this chain, compared by id (design Addendum 2). A drop that sits only on an
+ *    abandoned statement is lifted by an in-person check on this phone and by nothing else. It shrinks only by rule 1.
  * 3. **Keys.** A key enters the ring only from a box opened here under a header a trusted key signed, and only for a
  *    statement this phone accepted; or from a statement this phone made itself.
  * 4. **Seal.** A phone writes only under its head's key, and only when the server's current is its head.
@@ -41,12 +42,18 @@
  * trusts that maker, so nothing vouches for them, and the first statement can never be taken. So a statement whose
  * parent is this phone's head may also be accepted when a trusted admin's signed share header names a head whose
  * history (by parent links, through the statements the server shows) includes it, and its maker was never dropped on
- * this phone. Every statement on that path is on that admin's chain, taken under rule 1, this rule, or the start-again
+ * this phone, or was dropped by a statement on this chain (an ancestor of it: Addendum 2, ruling 5). Every statement on that path is on that admin's chain, taken under rule 1, this rule, or the start-again
  * rule; its maker was checked by the phone that took it under rule 1, or by nobody. Taking a statement adds no key and no
  * trust (rules 2, 3 and 5 are untouched): it applies the statement's drops and moves this phone's place in the history,
  * nothing else. So this rule rests on what the proof (design §6, addendum) already rests on: a key in `trusted` is an
  * honest admin's phone, and that phone's signed head is its history as it stood when it signed. It never takes a
  * statement off another parent, so a phone that saw a drop still refuses whatever a dropped key makes after it.
+ *
+ * ## A phone writes nothing on a branch that hasn't made every drop it stands by (Addendum 2, ruling 2)
+ *
+ * After "Take @X's history" the drops of the abandoned statements are not on the new chain. They go into the next
+ * generation this phone makes, before it writes, as a removal by hand does: `toDrop` includes every key in `dropped`
+ * whose dropping statement is not on the chain.
  *
  * ## Starting again (design addendum (c), signed off 2026-10-02)
  *
@@ -62,9 +69,10 @@
  * the server's role change does); and an admin's phone that the server keeps from learning of a removal. Proof (ii) is
  * about the phone that saw the drop and the phones that took its key: a phone the server keeps from seeing it stays at a
  * key the removed admin holds, and seals under it, until it is shown the removal (design §10 C4; the addendum's
- * per-phone window). Each phone's window ends separately. Two admins comparing the list key their phones show
- * ({@link namesListKeyCode}) see whether one is behind. Otherwise a server that hides things costs availability, never
- * confidentiality.
+ * per-phone window). Each phone's window ends separately. The check that works is "Remove @X's old key" on a phone that
+ * still shows the removed admin (Addendum 2, ruling 4): it then makes a key without them or writes nothing. Two phones
+ * showing different list keys ({@link namesListKeyCode}) are being shown different things; the same key proves nothing.
+ * Otherwise a server that hides things costs availability, never confidentiality.
  */
 
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -322,8 +330,8 @@ export interface NamesPin {
     me: string;
     /** Every key this phone trusts; `me` always. */
     trusted: string[];
-    /** Keys dropped, by the number of the generation that dropped them on this phone. */
-    dropped: Record<string, number>;
+    /** Keys dropped, by the id of the statement that dropped them on this phone (on its chain, or abandoned). */
+    dropped: Record<string, string>;
     /** The statements this phone accepted, in order; the head is the last. */
     chain: NamesChainLink[];
     /** Statements accepted, then left behind by "Take @X's history" (design §4.3.9); usually empty. */
@@ -358,11 +366,7 @@ export function readNamesPin(raw: unknown, me: string): NamesPin | null {
     if (p.v !== 3 || !isNamesCommunityId(p.communityId) || p.me !== lower(me)) return null;
     try {
         const trusted = normaliseNamesKeys(p.trusted, 10_000);
-        const dropped: Record<string, number> = {};
-        for (const [k, n] of Object.entries((p.dropped && typeof p.dropped === 'object' ? p.dropped : {}) as Record<string, unknown>)) {
-            if (!HEX_KEY.test(k) || !Number.isSafeInteger(n) || (n as number) < 1) return null;
-            dropped[k] = n as number;
-        }
+        const droppedRaw = Object.entries((p.dropped && typeof p.dropped === 'object' ? p.dropped : {}) as Record<string, unknown>);
         if (!Array.isArray(p.chain) || !Array.isArray(p.abandoned) || !Array.isArray(p.manualDrops)) return null;
         const chain: NamesChainLink[] = [];
         let prev: NamesGeneration | null = null;
@@ -376,6 +380,12 @@ export function readNamesPin(raw: unknown, me: string): NamesPin | null {
         }
         const abandoned = p.abandoned.filter((id): id is string => isNamesKeyId(id));
         const ids = new Set([...chain.map((l) => l.id), ...abandoned]);
+        // Every drop names the statement that made it, on the chain or abandoned.
+        const dropped: Record<string, string> = {};
+        for (const [k, id] of droppedRaw) {
+            if (!HEX_KEY.test(k) || typeof id !== 'string' || !ids.has(id)) return null;
+            dropped[k] = id;
+        }
         const ring: Record<string, string> = {};
         for (const [id, k] of Object.entries((p.ring && typeof p.ring === 'object' ? p.ring : {}) as Record<string, unknown>)) {
             if (ids.has(id) && typeof k === 'string' && HEX_KEY.test(k)) ring[id] = k;
@@ -407,10 +417,13 @@ export function checkNamesKeyInPerson(pin: NamesPin, key: string): NamesPin {
     return { ...pin, trusted: [...new Set([...pin.trusted, k])].sort(), dropped, manualDrops: pin.manualDrops.filter((m) => m !== k) };
 }
 
-/** "Remove @X's old key" (design §4.3.2): the key goes into the next generation this phone makes. Never this phone's own. */
+/**
+ * "Remove @X's old key" (design §4.3.2; Addendum 2, ruling 4): the key goes into the next generation this phone makes.
+ * Any key the server lists as an admin, trusted here or not (the screen offers it for those); never this phone's own.
+ */
 export function removeNamesKey(pin: NamesPin, key: string): NamesPin {
     const k = lower(key);
-    if (!HEX_KEY.test(k) || k === pin.me || !pin.trusted.includes(k)) return pin;
+    if (!HEX_KEY.test(k) || k === pin.me) return pin;
     return { ...pin, manualDrops: [...new Set([...pin.manualDrops, k])].sort() };
 }
 
@@ -472,6 +485,12 @@ export type NamesNotice =
     | { kind: 'different_keys'; id: string; n: number; from: string }
     /** A trusted admin's phone is on a key history this phone didn't take (§4.3.10). */
     | { kind: 'other_history'; who: string }
+    /**
+     * A generation this phone accepted dropped a key it trusted that the server still lists as an admin (Addendum 2,
+     * ruling 5): if they are an admin again, check each other again; a check made before this phone took key `n` doesn't
+     * count past it.
+     */
+    | { kind: 'check_again'; who: string; n: number }
     /** A generation this phone accepted dropped these keys (for the screen's "the list has a new key because…"). */
     | { kind: 'dropped'; maker: string; n: number; keys: string[] }
     /** The server sent more than the phone reads (§4.1 bounds). */
@@ -551,13 +570,16 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     const onServerPath = new Set(pathBack(gens, curId).ids);
 
     const T = new Set([...pin0.trusted, me]);
-    const D: Record<string, number> = { ...pin0.dropped };
+    const D: Record<string, string> = { ...pin0.dropped };
     const chain = [...pin0.chain];
     const position = new Map(chain.map((l) => [l.id, l.n] as const));
     const ring: Record<string, string> = { ...pin0.ring };
     const abandoned = [...pin0.abandoned];
     let pending = pin0.pending;
     let manualDrops = [...pin0.manualDrops];
+    const listed = new Set((state.admins ?? []).map((a) => lower(String(a.pubkey ?? ''))));
+    /** Whether the statement that dropped `k` is on this chain (not abandoned). */
+    const droppedOnChain = (k: string) => k in D && position.has(D[k]);
 
     const accept = (g: NamesGeneration) => {
         chain.push({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
@@ -571,9 +593,12 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
             if (d === me) { notices.push({ kind: 'dropped_me', maker: g.maker, n: g.n }); continue; }
             if (d === g.maker) continue;
             if (T.delete(d)) out.push(d);
-            D[d] = g.n;
+            D[d] = g.id;
         }
-        if (out.length && g.maker !== me) notices.push({ kind: 'dropped', maker: g.maker, n: g.n, keys: out });
+        if (out.length && g.maker !== me) {
+            notices.push({ kind: 'dropped', maker: g.maker, n: g.n, keys: out });
+            for (const d of out) if (listed.has(d)) notices.push({ kind: 'check_again', who: d, n: g.n });
+        }
         manualDrops = manualDrops.filter((k) => !g.drops.includes(k));
     };
 
@@ -582,9 +607,13 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
         if (!histories.has(id)) histories.set(id, new Set(pathBack(gens, id).ids));
         return histories.get(id)!;
     };
-    /** Whether a trusted admin's header names a head whose history includes `g` (the extension in the header). */
+    /**
+     * Whether a trusted admin's header names a head whose history includes `g` (rule 1b), for a maker never dropped here
+     * or dropped by a statement on this chain (an ancestor of `g`: Addendum 2, ruling 5). A maker whose drop is abandoned
+     * stays refused.
+     */
     const vouchedHistory = (g: NamesGeneration): boolean => {
-        if (g.maker in D) return false;
+        if (g.maker in D && !droppedOnChain(g.maker)) return false;
         return shares.some((w) => w.from !== me && T.has(w.from) && historyOf(w.headId).has(g.id));
     };
 
@@ -625,7 +654,7 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
                 if (!(k in D)) {
                     T.add(k);
                     added = true;
-                } else if (position.has(w.headId) && position.get(w.headId)! >= D[k]) {
+                } else if (droppedOnChain(k) && position.has(w.headId) && position.get(w.headId)! >= position.get(D[k])!) {
                     T.add(k);
                     delete D[k];
                     added = true;
@@ -669,9 +698,11 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
         if (!ahead) notices.push({ kind: 'other_history', who });
     }
 
-    const admins = new Set((state.admins ?? []).map((a) => lower(String(a.pubkey ?? ''))));
-    manualDrops = manualDrops.filter((k) => T.has(k) && k !== me);
-    const toDrop = [...new Set([...[...T].filter((k) => k !== me && !admins.has(k)), ...manualDrops])].sort().slice(0, NAMES_TRUST_BOUNDS.keys);
+    // A by-hand removal this chain has already made is done. toDrop: trusted keys the server no longer lists, the ones
+    // removed by hand, and every drop this phone stands by that this chain hasn't made (Addendum 2, ruling 2).
+    manualDrops = manualDrops.filter((k) => k !== me && !droppedOnChain(k));
+    const standing = Object.keys(D).filter((k) => k !== me && !droppedOnChain(k));
+    const toDrop = [...new Set([...[...T].filter((k) => k !== me && !listed.has(k)), ...manualDrops, ...standing])].sort().slice(0, NAMES_TRUST_BOUNDS.keys);
     const pin: NamesPin = {
         v: 3, communityId, me, trusted: [...T].sort(), dropped: D, chain, abandoned, ring, pending, manualDrops, lastCount: pin0.lastCount,
     };
@@ -759,7 +790,7 @@ export function startNamesAgain(pin: NamesPin, state: Pick<NamesServerState, 'cu
     const back = pathBack(gens, curId);
     if (!back.complete) return pin;
     const T = new Set([...pin.trusted, pin.me]);
-    const D: Record<string, number> = { ...pin.dropped };
+    const D: Record<string, string> = { ...pin.dropped };
     const chain: NamesChainLink[] = [];
     for (const id of [...back.ids].reverse()) {
         const g = gens.get(id)!;
@@ -767,7 +798,7 @@ export function startNamesAgain(pin: NamesPin, state: Pick<NamesServerState, 'cu
         for (const d of g.drops) {
             if (d === pin.me || d === g.maker) continue;
             T.delete(d);
-            D[d] = g.n;
+            D[d] = g.id;
         }
     }
     return { ...pin, chain, trusted: [...T].sort(), dropped: D };

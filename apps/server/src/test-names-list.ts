@@ -456,7 +456,7 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM names_generations WHERE id = ?').run(abeGen.id);
     await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: abe.pk, role: 'admin' }, PASSWORD);
     const o6b = await owenP.open();
-    assert(!sharedTo(o6b.shares).includes(abe.pk) && owenP.pin!.dropped[abe.pk] === 2,
+    assert(!sharedTo(o6b.shares).includes(abe.pk) && owenP.pin!.dropped[abe.pk] === k2, // by the dropping statement's id (Addendum 2)
         "6. made an admin again, Abe gets nothing from Owen's phone: it dropped him, and only a check in person brings him back");
 
     // ── 7. A member leaving, and re-keys ─────────────────────────────────────────────────────────

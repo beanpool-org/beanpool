@@ -244,3 +244,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-10 - Single-Pass Event RSVP Processing and Viewer Lookup in Engine
 **Learning:** In `packages/beanpool-engine/src/posts.ts`, `getPostsRankedBy` performed a separate `rsvps.find(...)` array scan per event post to locate the viewer's own RSVP record before running a `for...of` loop to count `goingCount` and `interestedCount`.
 **Action:** Consolidated viewer RSVP record lookup into the existing `for...of` loop pass over `rsvps`, computing counts and resolving the viewer's RSVP in a single pass with zero redundant array scans.
+
+## 2026-10-11 - Memoize Decision List Filtering in PWA DecideSection
+**Learning:** In `apps/pwa/src/components/DecideSection.tsx`, filtering `decisions` into `openDecisions`, `pastDecisions`, and `filteredPastDecisions` ran unmemoized in the component body on every render, re-filtering arrays whenever local state like `voteError` or vote counts changed.
+**Action:** Wrapped `openDecisions`, `pastDecisions`, and `filteredPastDecisions` calculations in `useMemo` hooks to avoid redundant array filtering and heap allocations across re-renders.

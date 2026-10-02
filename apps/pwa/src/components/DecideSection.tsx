@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     castDecisionVote,
     type DecisionWithTally,
@@ -39,15 +39,16 @@ export function DecideSection({
     const [historyFilter, setHistoryFilter] = useState<'all' | 'executed' | 'failed' | 'void'>('all');
     const [voteError, setVoteError] = useState<string | null>(null);
 
-    const openDecisions = decisions.filter(d => d.status === 'open');
-    const pastDecisions = decisions.filter(d => d.status !== 'open');
+    // ⚡ Bolt: Memoize filtered decision arrays to avoid redundant array filtering & allocations on re-renders (e.g. typing or vote state changes)
+    const openDecisions = useMemo(() => decisions.filter(d => d.status === 'open'), [decisions]);
+    const pastDecisions = useMemo(() => decisions.filter(d => d.status !== 'open'), [decisions]);
 
-    const filteredPastDecisions = pastDecisions.filter(d => {
+    const filteredPastDecisions = useMemo(() => pastDecisions.filter(d => {
         if (historyFilter === 'executed') return d.status === 'executed' || d.status === 'passed';
         if (historyFilter === 'failed') return d.status === 'failed' || d.status === 'unresolved';
         if (historyFilter === 'void') return d.status === 'execution_void' || d.status === 'execution_blocked' || d.status === 'admin_halted';
         return true;
-    });
+    }), [pastDecisions, historyFilter]);
 
     const formatTimeLeft = (closesAt: string) => {
         const diffMs = new Date(closesAt).getTime() - Date.now();

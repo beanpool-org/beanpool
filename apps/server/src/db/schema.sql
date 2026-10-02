@@ -325,6 +325,9 @@ CREATE TABLE IF NOT EXISTS event_reminders_sent (
     PRIMARY KEY (post_id, member_pubkey, offset_min)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
+-- "Coming up" on Home (engine posts.ts PostFilter.upcomingUntil): the events in start order, so the soonest few are read
+-- without sorting every event the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would

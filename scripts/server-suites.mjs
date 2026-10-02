@@ -83,6 +83,7 @@ export const SUITES = [
     'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-home',
     'test-knock',
     'test-commons-conservation',
     'test-commons-pot-edges',
@@ -255,6 +256,7 @@ export const SUITES = [
     'test-request-body',
     'test-admin-thresholds',
     'test-push-preferences',
+    'test-home-preferences',
     'test-push-token-own-rows',
     'test-push-leave-statement',
     'test-push-access-token',
@@ -414,6 +416,9 @@ export const VARIANTS = [
     // The plain run makes those 403 assertions; this covers the operator opt-out, where they are skipped and the
     // push-token and preference round-trips must still work.
     { name: 'test-push-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's Home layout and interests (H1) are served to their owner alone whatever ENFORCE_READ_AUTH says: under the
+    // opt-out, another member's read and an unsigned one get the push settings without them.
+    { name: 'test-home-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Distance search (G4) with read enforcement opted out. Nothing stands in front of the People list, so its own
     // refusal of a distance to an unsigned caller or a key that is not a member is what holds.

@@ -60,6 +60,11 @@ export interface PendingOnboarding {
      */
     joinEnrolment?: KeeperEnrolmentResult | null;
     /**
+     * Global flow only: the member came in by the 12-words door (two-doors design §2), so Safety Backup says what the
+     * words are for them and offers a sign-in as a second way back, after a restart too. Absent: a sign-in.
+     */
+    joinDoor?: 'words';
+    /**
      * Global flow only, at the door: the record this phone had before it (an invite join part-way through,
      * with the key the global join now uses), given back if the door refuses for good (global-join.ts
      * `releaseJoinKey`).
@@ -183,6 +188,8 @@ export type ResumePlan =
         /** The stored key is one this join made ({@link keyMadeForThisJoin}): Safety Backup shows its words with no lock. */
         newKey: boolean;
         joinEnrolment: KeeperEnrolmentResult | null;
+        /** Global flow: the member came in by the 12-words door (`joinDoor`). */
+        joinDoor: 'words' | null;
     };
 
 /**
@@ -228,6 +235,7 @@ export function resumePlan(
         freshKey: flow === 'global' && typeof pending.freshKey === 'string' && pending.freshKey === stored.publicKey,
         newKey: keyMadeForThisJoin(pending, stored.publicKey),
         joinEnrolment: flow === 'global' ? savedJoinEnrolment(pending.joinEnrolment) : null,
+        joinDoor: flow === 'global' && pending.joinDoor === 'words' ? 'words' : null,
     };
 }
 

@@ -89,6 +89,8 @@ import { enrolmentFromJoin, enrolmentFromVault, sealSsoShares, type KeeperEnrolm
 import { depositWithVault, signInCopiesAt, vaultConfig, vaultTicket, VaultError } from './vault';
 import { getPendingOnboarding, setPendingOnboarding, clearPendingOnboarding, type PendingOnboarding } from './onboarding-state';
 import { GLOBAL_DOOR_MESSAGES, GLOBAL_NODE_URL } from './node-profile';
+import type { DoorWorkDoor } from '@beanpool/core';
+import type { DoorWorkOutcome, DoorWorkRun, DoorWorkSolution } from './door-work';
 
 export const JOIN_NONCE_PATH = '/api/join/sso-nonce';
 export const JOIN_PATH = '/api/join';
@@ -133,10 +135,25 @@ export type DoorAnswer =
     | { kind: 'account_closed'; message: string }
     /** 404 (`invite_only`) or another 403: the door is shut. */
     | { kind: 'door_closed'; message: string }
-    /** 429: too many joins from this network, or the sign-in limiter. */
-    | { kind: 'rate_limited'; message: string; retryAfterSeconds: number | null }
+    /**
+     * 429: too many joins from this network (`network_busy`, with the door it was about), or the door's own limiter.
+     * `timed`: the message already says when to try again, from `Retry-After` ({@link doorMessage} adds nothing).
+     */
+    | { kind: 'rate_limited'; message: string; retryAfterSeconds: number | null; door?: DoorWorkDoor; timed?: boolean }
+    /**
+     * 400 `work_required`, `work_invalid`, `work_expired`, `work_spent`: the door work didn't count. The phone fetches a
+     * new challenge and solves it by itself; the member reads `message` only when that happens twice.
+     */
+    | { kind: 'work_again'; code: WorkRefusalCode; message: string }
+    /** 403 `sign_in_required`: this door takes no 12-words joins (now). The sign-in door is still open. */
+    | { kind: 'sign_in_required'; message: string }
     /** 401: the sign-in was refused (expired, or not this request's). A new sign-in may work. */
     | { kind: 'sign_in_again'; message: string }
+    /**
+     * 401 with no code on the 12-words path ({@link readWordsDoorAnswer}): the node's signature check refused the request's
+     * time, which is the phone's clock. There is no sign-in there to redo: the phone's date and time are the fix.
+     */
+    | { kind: 'phone_clock'; message: string }
     /** 400, 5xx, anything else: nothing is wrong with the member. */
     | { kind: 'try_again'; message: string }
     /** No answer at all. */
@@ -151,7 +168,9 @@ export type DoorNext =
     /** This door won't open for this phone. Invites still work. */
     | 'closed'
     /** Stay on the door with the message, and sign in again to retry. */
-    | 'retry';
+    | 'retry'
+    /** The 12-words way is shut here: the sign-in buttons, with the message. */
+    | 'sign_in';
 
 export const DOOR_MESSAGES = {
     unreachable: GLOBAL_DOOR_MESSAGES.unreachable,
@@ -161,7 +180,11 @@ export const DOOR_MESSAGES = {
     removed: 'The BeanPool identity this sign-in joined with was removed from the global community, so it can\'t join again. You can still join a community with an invite.',
     keyInvalidated: 'This phone\'s key was replaced by a new one, so it can\'t join. Use the device or the 12 words that hold the new key.',
     rateLimited: 'Too many new accounts have joined from this network. Please try again later.',
+    /** 403 `sign_in_required`: a door that takes no 12-words joins. */
+    signInRequired: 'This community needs a sign-in to join: Google, Apple or Facebook. You can sign in below.',
     signInAgain: 'Your sign-in could not be used. Please sign in again.',
+    /** A 401 with no code on the 12-words path: the phone's clock (PR #1452 review, finding 3). */
+    phoneClock: 'The global community couldn\'t accept this because your phone\'s date and time look wrong. Check them in your phone\'s settings (set them to automatic), then try again.',
     tryAgain: 'Your join could not be completed, and nothing was saved. Please try again in a minute.',
     /** Under the joining spinner while the provider's sheet opens once more, with the door's own nonce ({@link submitJoin}). */
     signInAnotherWay: 'Checking your sign-in another way…',
@@ -190,10 +213,71 @@ export function retryAfterSeconds(res: { headers?: { get?(name: string): string 
     return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : null;
 }
 
+/** The door work's refusals (apps/server services/door-work.ts): each means "fetch a new challenge and solve it". */
+export type WorkRefusalCode = 'work_required' | 'work_invalid' | 'work_expired' | 'work_spent';
+const WORK_REFUSAL_CODES: readonly string[] = ['work_required', 'work_invalid', 'work_expired', 'work_spent'];
+
 /**
- * Read one answer from a door route (the nonce, or the join) into what the member
- * meets. The node's own words are kept where they are about the member (already joined, removed, the
- * limit); its "This community is invite-only." is not, and is replaced.
+ * What the member reads when the work didn't count twice in a row. The node's own sentence for `work_required` tells an
+ * app from before the work to update, which this app is not, so the phone says its own for every code.
+ */
+export const WORK_MESSAGES: Record<WorkRefusalCode, string> = {
+    work_required: 'Setting up your account didn\'t finish. Please try again.',
+    work_invalid: 'Setting up your account didn\'t work out. Please try again.',
+    work_expired: 'That took a while, so setting up your account had to start again, and it didn\'t finish. Please try again.',
+    work_spent: 'Setting up your account didn\'t work out. Please try again.',
+};
+
+/**
+ * "in 5 minutes", "in a minute", "in about 3 hours": `Retry-After` in the member's words. Under a minute reads as a
+ * minute: nobody can act on seconds.
+ */
+export function tryAgainIn(seconds: number): string {
+    const minutes = Math.max(1, Math.ceil(seconds / 60));
+    if (minutes < 60) return minutes === 1 ? 'in a minute' : `in ${minutes} minutes`;
+    const hours = Math.round(minutes / 60);
+    return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
+}
+
+/** The node's `Retry-After`, or its body's `retryAfterSeconds` when a header was lost on the way. */
+function waitFrom(body: unknown, header: number | null): number | null {
+    if (header) return header;
+    const own = (body as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds;
+    return typeof own === 'number' && Number.isFinite(own) && own > 0 ? Math.ceil(own) : null;
+}
+
+/**
+ * A 429, said by the phone with when to try again in it. `network_busy` names its door: the 12-words door's sentence
+ * sends the member to the sign-in door, which stays open (design §4.3). Anything else at 429 with no code is the door's
+ * own limiter (too many tries from one phone or network in a minute).
+ */
+function busyAnswer(body: unknown, retryAfter: number | null): Extract<DoorAnswer, { kind: 'rate_limited' }> | null {
+    const b = body as { code?: unknown; door?: unknown; window?: unknown } | null;
+    const wait = waitFrom(body, retryAfter);
+    const when = wait ? tryAgainIn(wait) : 'later';
+    const span = b?.window === 'day' ? 'today' : 'in the last hour';
+    if (b?.code === 'network_busy' || b?.code === 'network_busy_words') {
+        const words = b.door === 'words' || b.code === 'network_busy_words';
+        return words
+            ? {
+                kind: 'rate_limited', door: 'words', timed: true, retryAfterSeconds: wait,
+                message: `A very large number of 12-words accounts were made from your network ${span}. Sign in to join now, or try again ${when}.`,
+            }
+            : {
+                kind: 'rate_limited', door: 'sign-in', timed: true, retryAfterSeconds: wait,
+                message: `Too many new accounts have joined from your network ${span}. Please try again ${when}.`,
+            };
+    }
+    if (b?.code === undefined && wait) {
+        return { kind: 'rate_limited', timed: true, retryAfterSeconds: wait, message: `There were too many tries in a short time. Please try again ${when}.` };
+    }
+    return null;
+}
+
+/**
+ * Read one answer from a door route (the work, the nonce, or the join) into what the member meets: a sentence, never a
+ * code. The node's own words are kept where they are about the member (already joined, removed); its "This community
+ * is invite-only." is not, and is replaced, and the phone says the limits and the work's refusals itself.
  */
 export function readDoorAnswer(status: number, body: unknown, retryAfter: number | null = null): DoorAnswer {
     const code = codeOf(body);
@@ -206,12 +290,28 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     if (status === 403 && code === 'removed') return { kind: 'removed', message: said(body) ?? DOOR_MESSAGES.removed };
     if (status === 403 && code === 'key_invalidated') return { kind: 'key_invalidated', message: said(body) ?? DOOR_MESSAGES.keyInvalidated };
     if (status === 403 && code === 'account_closed') return { kind: 'account_closed', message: DOOR_MESSAGES.accountClosed };
+    if (status === 403 && code === 'sign_in_required') return { kind: 'sign_in_required', message: DOOR_MESSAGES.signInRequired };
     if (status === 403 || status === 404) return { kind: 'door_closed', message: DOOR_MESSAGES.doorClosed };
+    if (status === 400 && code && WORK_REFUSAL_CODES.includes(code)) {
+        return { kind: 'work_again', code: code as WorkRefusalCode, message: WORK_MESSAGES[code as WorkRefusalCode] };
+    }
     if (status === 429) {
-        return { kind: 'rate_limited', message: said(body) ?? DOOR_MESSAGES.rateLimited, retryAfterSeconds: retryAfter };
+        return busyAnswer(body, retryAfter)
+            ?? { kind: 'rate_limited', message: said(body) ?? DOOR_MESSAGES.rateLimited, retryAfterSeconds: waitFrom(body, retryAfter) };
     }
     if (status === 401) return { kind: 'sign_in_again', message: DOOR_MESSAGES.signInAgain };
     return { kind: 'try_again', message: said(body) ?? DOOR_MESSAGES.tryAgain };
+}
+
+/**
+ * {@link readDoorAnswer} for the routes the 12-words way meets (the work route, at either door, and the 12-words join):
+ * none of them carries a sign-in, so a 401 with no code can only be the signature check refusing the request's time,
+ * which is the phone's clock (more than 5 minutes off). Never "sign in again" there: there is no sign-in to redo.
+ */
+export function readWordsDoorAnswer(status: number, body: unknown, retryAfter: number | null = null): DoorAnswer {
+    if (status === 401 && codeOf(body) === undefined) return { kind: 'phone_clock', message: DOOR_MESSAGES.phoneClock };
+    if (status === 401) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
+    return readDoorAnswer(status, body, retryAfter);
 }
 
 export function nextStepFor(answer: DoorAnswer): DoorNext {
@@ -222,21 +322,27 @@ export function nextStepFor(answer: DoorAnswer): DoorNext {
         case 'key_invalidated':
         case 'account_closed':
         case 'door_closed': return 'closed';
+        case 'sign_in_required': return 'sign_in';
         default: return 'retry';
     }
 }
 
 /** What the member reads for an answer that is not `joined`, with when to try again if the node said. */
 export function doorMessage(answer: Exclude<DoorAnswer, { kind: 'joined' }>): string {
-    if (answer.kind === 'rate_limited' && answer.retryAfterSeconds) {
-        const minutes = Math.ceil(answer.retryAfterSeconds / 60);
-        return `${answer.message} (Try again in ${minutes === 1 ? 'a minute' : `${minutes} minutes`}.)`;
+    if (answer.kind === 'rate_limited' && answer.retryAfterSeconds && !answer.timed) {
+        return `${answer.message} (Try again ${tryAgainIn(answer.retryAfterSeconds)}.)`;
     }
     return answer.message;
 }
 
-/** The door's screen, step by step (welcome.tsx). */
-export type DoorPhase = 'checking' | 'unavailable' | 'signIn' | 'name' | 'joining' | 'restore' | 'closed';
+/**
+ * The door's screen, step by step (welcome.tsx, join-global.tsx). `choose` is the door's first screen on a node with
+ * the 12-words door: 12 words, or a sign-in, side by side. A node without it starts at `signIn`, as before.
+ */
+export type DoorPhase = 'checking' | 'unavailable' | 'choose' | 'signIn' | 'name' | 'joining' | 'restore' | 'closed';
+
+/** Which way in the member chose at the door. */
+export type DoorWay = 'words' | 'sign-in';
 
 /**
  * Which ways off the door's screen are open: "← Back to Home", and "Use a different sign-in" on the name step.
@@ -285,14 +391,15 @@ export async function checkNameAtDoor(
     const timer = setTimeout(() => { timedOut = true; stop.abort(); }, options.timeoutMs ?? JOIN_TIMEOUT_MS);
     const stopped = new Promise<typeof STOPPED>((resolve) => stop.signal.addEventListener('abort', () => resolve(STOPPED)));
     try {
-        // A key the phone already has is left out: its own name there reads as free.
+        // A key the phone already has is left out: its own name there reads as free. Signed by the joining key, so the
+        // door's limiter counts it (20 a minute per key), not the 15 a minute every unsigned check from one network shares.
         const exclude = key.createdHere ? undefined : key.identity.publicKey;
-        const availability = await Promise.race([checkCallsignAvailable(name, exclude, url, { signal: stop.signal }), stopped]);
+        const availability = await Promise.race([checkCallsignAvailable(name, exclude, url, { signal: stop.signal, signer: key.identity }), stopped]);
         if (availability === STOPPED) return timedOut ? { kind: 'timed_out' } : { kind: 'cancelled' };
         if (availability !== 'taken') return { kind: 'free' };
         // No longer than the join keeps: a suggestion is sent exactly as it was checked and shown.
         const suggestions = await Promise.race([
-            suggestCallsigns(name, undefined, 3, url, MAX_JOIN_NAME, { signal: stop.signal }),
+            suggestCallsigns(name, undefined, 3, url, MAX_JOIN_NAME, { signal: stop.signal, signer: key.identity }),
             stopped,
         ]);
         if (suggestions === STOPPED) {
@@ -374,7 +481,7 @@ export function doorTicketKeys(doorKeys: { ticketKeys: string[] } | null): strin
  * the door doesn't list (a key rotation the door's list hasn't caught up with). Null is never a refusal: the door's own
  * nonce is used, and the member joins without a copy.
  */
-async function doorVaultTicket(
+export async function doorVaultTicket(
     provider: SsoProvider, identity: BeanPoolIdentity, ticketKeys: string[],
 ): Promise<{ ticket: string; nonce: string } | null> {
     if (ticketKeys.length === 0) {
@@ -423,7 +530,7 @@ async function askTheDoor(
 }
 
 /** The provider's sheet with `nonce` (a vault build's one call), read into a door sign-in. */
-async function providerSignIn(provider: SsoProvider, nonce: string, ticket?: string): Promise<DoorSignIn> {
+export async function providerSignIn(provider: SsoProvider, nonce: string, ticket?: string): Promise<DoorSignIn> {
     const signin = await signInWithProvider(provider, nonce);
     let sub: string;
     try {
@@ -496,6 +603,9 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
         case 'door_closed':
         case 'rate_limited':
         case 'sign_in_again':
+        case 'phone_clock':
+        case 'work_again':
+        case 'sign_in_required':
             return true;
         default:
             return false;
@@ -528,7 +638,7 @@ async function countJoinRefused(publicKey: string): Promise<void> {
  * unreachable, the ticket out of time): the join stands, and Safety Backup offers the ordinary connect. Why goes to the
  * log; never the words or the key.
  */
-async function depositDoorCopy(identity: BeanPoolIdentity, signin: DoorSignIn): Promise<KeeperEnrolmentResult | null> {
+export async function depositDoorCopy(identity: BeanPoolIdentity, signin: DoorSignIn): Promise<KeeperEnrolmentResult | null> {
     if (!signin.vaultTicket) return null;
     try {
         const sealed = await sealSsoShares(identity, signin.provider, signin.sub);
@@ -563,9 +673,19 @@ async function depositDoorCopy(identity: BeanPoolIdentity, signin: DoorSignIn): 
  */
 export async function submitJoin(
     url: string, identity: BeanPoolIdentity, callsign: string, signin: DoorSignIn,
-    options: { onSignInAgain?: (notice: string) => void } = {},
+    options: { onSignInAgain?: (notice: string) => void; work?: DoorWorkRun | null } = {},
 ): Promise<DoorAnswer> {
-    const first = await sendJoin(url, identity, callsign, signin);
+    const run = options.work ?? null;
+    let work = await workForJoin(run, 'sign-in', false);
+    if (work.kind === 'answer') return work.answer;
+    let first = await sendJoin(url, identity, callsign, signin, work.work);
+    // The work didn't count (a new work key after a restart, or it ran out): a new challenge, quietly, and once more.
+    // The door checks the work before the sign-in, so the sign-in was not spent.
+    if (first.answer.kind === 'work_again' && run) {
+        work = await workForJoin(run, 'sign-in', true);
+        if (work.kind === 'answer') return work.answer;
+        first = await sendJoin(url, identity, callsign, signin, work.work);
+    }
     if (!signin.vaultTicket || first.status !== 401) return first.answer;
 
     console.log(`[JOIN] ${signin.provider}: the door refused the key vault ticket (${first.code ?? 'no code'}); signing in once more with its own nonce`);
@@ -583,12 +703,87 @@ export async function submitJoin(
         console.log(`[JOIN] ${signin.provider}: no second sign-in (${(e as { reason?: string } | null)?.reason ?? (e as Error).message})`);
         return first.answer;
     }
-    return (await sendJoin(url, identity, callsign, signinAgain)).answer;
+    // Work the first join carried was spent there (the door checks it before the ticket): new work for this one.
+    if (work.work) {
+        work = await workForJoin(run, 'sign-in', true);
+        if (work.kind === 'answer') return work.answer;
+    }
+    return (await sendJoin(url, identity, callsign, signinAgain, work.work)).answer;
+}
+
+/**
+ * The door work a join carries, from the door's run ({@link DoorWorkRun}, started when the door opened): a solution,
+ * none (the sign-in door at ordinary rates asks none), or the door's answer when it gives no work (a ceiling, the door
+ * shut). `again`: the node refused the work it was sent, so a new challenge.
+ *
+ * The sign-in door needs no work at ordinary rates, so only a ceiling at its work route stops its join; anything else
+ * there (no answer, a door from before the work that has no such route, a solver that can't run) leaves the join to
+ * the door, which asks for work only when it wants it (`work_again`). The 12-words door always needs it.
+ */
+async function workForJoin(
+    run: DoorWorkRun | null, door: DoorWorkDoor, again: boolean,
+): Promise<{ kind: 'work'; work: DoorWorkSolution | null } | { kind: 'answer'; answer: DoorAnswer }> {
+    if (!run) return { kind: 'work', work: null };
+    const outcome: DoorWorkOutcome = again ? await run.again() : await run.solution();
+    switch (outcome.kind) {
+        case 'solved': return { kind: 'work', work: outcome.work };
+        case 'none': return { kind: 'work', work: null };
+        case 'cancelled': return { kind: 'answer', answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain } };
+        case 'refused':
+            if (door === 'sign-in' && outcome.answer.kind !== 'rate_limited' && outcome.answer.kind !== 'joined') {
+                return { kind: 'work', work: null };
+            }
+            return { kind: 'answer', answer: outcome.answer };
+    }
+}
+
+/**
+ * The 12-words join (design §2.1): `POST /api/join` with `door: 'words'`, the name and the door work, signed by the
+ * joining key. No provider, no token, no email: nothing about the member reaches the node but the key and the name.
+ * Never throws: every outcome is a {@link DoorAnswer}.
+ *
+ * The screen waits for the work (`run.solution()`) while the member can still leave, then writes the key to the phone
+ * (`commitJoinKey`), then calls this: the work is ready by then, unless it ran out meanwhile (then a new challenge,
+ * quietly). The join is counted on the phone before it goes (`joinsOut`), as the sign-in door's is, and a work refusal
+ * (`work_again`) fetches a new challenge, solves it, and sends once more: the member reads it only if it happens twice.
+ */
+export async function submitWordsJoin(url: string, identity: BeanPoolIdentity, callsign: string, run: DoorWorkRun): Promise<DoorAnswer> {
+    let work = await workForJoin(run, 'words', false);
+    if (work.kind === 'answer') return work.answer;
+    let answer = await sendWordsJoin(url, identity, callsign, work.work);
+    if (answer.kind === 'work_again') {
+        work = await workForJoin(run, 'words', true);
+        if (work.kind === 'answer') return work.answer;
+        answer = await sendWordsJoin(url, identity, callsign, work.work);
+    }
+    return answer;
+}
+
+/** One 12-words join sent ({@link submitWordsJoin}). */
+async function sendWordsJoin(url: string, identity: BeanPoolIdentity, callsign: string, work: DoorWorkSolution | null): Promise<DoorAnswer> {
+    const body = {
+        door: 'words',
+        callsign: callsign.trim().slice(0, MAX_JOIN_NAME).trim(),
+        ...(work ? { work } : {}),
+    };
+    if (!(await countJoinOut(identity.publicKey))) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
+    let res: Response | null;
+    try {
+        res = await withTimeout(signedPost(url, JOIN_PATH, body, identity), JOIN_TIMEOUT_MS);
+    } catch {
+        res = null;
+    }
+    if (!res) return { kind: 'unreachable', message: DOOR_MESSAGES.unreachable };
+    const answerBody = await res.json().catch(() => ({}));
+    const answer = readWordsDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
+    console.log(`[JOIN] words: the door answered ${res.status} (${answer.kind})`);
+    if (refusedByTheNode(answer)) await countJoinRefused(identity.publicKey);
+    return answer;
 }
 
 /** One join sent ({@link submitJoin}), with the door's status and code when it answered. */
 async function sendJoin(
-    url: string, identity: BeanPoolIdentity, callsign: string, signin: DoorSignIn,
+    url: string, identity: BeanPoolIdentity, callsign: string, signin: DoorSignIn, work: DoorWorkSolution | null = null,
 ): Promise<{ answer: DoorAnswer; status: number | null; code?: string }> {
     // A build without a vault: a copy that can't be made never stops the join: the 12 words are the key, and Safety
     // Backup offers the ordinary connect. Why it failed goes to the log; never the words or the key.
@@ -611,6 +806,8 @@ async function sendJoin(
         nonce: signin.nonce,
         ...(recovery ? { recovery } : {}),
         ...(signin.vaultTicket ? { vaultTicket: signin.vaultTicket } : {}),
+        // Door work, when the door asked for some (from the 30th join an hour from one network, design §4.2).
+        ...(work ? { work } : {}),
     };
 
     if (!(await countJoinOut(identity.publicKey))) return { answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain }, status: null };

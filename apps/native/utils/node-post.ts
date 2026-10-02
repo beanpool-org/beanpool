@@ -52,14 +52,14 @@ export async function signedPost(
  * Empty body, as for {@link signedDelete}.
  */
 export async function signedGet(
-    url: string, path: string, identity: BeanPoolIdentity,
+    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal,
 ): Promise<Response> {
     const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
         'GET', target, '', identity.privateKey, identity.publicKey,
     );
     return fetch(target, {
-        method: 'GET', headers,
+        method: 'GET', headers, ...(signal ? { signal } : {}),
     });
 }
 

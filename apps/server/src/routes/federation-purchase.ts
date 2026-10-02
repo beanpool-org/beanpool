@@ -31,6 +31,7 @@ import {
     FEDERATION_SETTLEMENT_ENABLED, SETTLEMENT_REFUSED_CODE, SETTLEMENT_REFUSED_MESSAGE, isVisitor,
 } from '../federation-settlement.js';
 import { SettlementError, settlementKeyFor } from '../federation-settlement-exchange.js';
+import { answerPotPaused } from '../engine/audit.js';
 import { settlementStartedBy } from '../engine/money-limits.js';
 import { refuseOverMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
@@ -274,6 +275,8 @@ export function createFederationPurchaseRoutes(_deps: RouteDeps): Router {
             // member's to see ("not enough credit to cover this purchase and its fee"). Everything after step 1
             // returns an outcome rather than throwing, precisely so that beans-in-flight are never reported as
             // an error.
+            // The Commons pot is unknown: every Bean move is paused, said in its plain words (503).
+            if (answerPotPaused(ctx, e)) return;
             if (e instanceof SettlementError) {
                 ctx.status = 400;
                 ctx.body = { error: e.message, reason: e.reason, key };

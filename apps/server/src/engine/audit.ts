@@ -77,6 +77,18 @@ export class CommonsPotUnknownError extends Error {
     }
 }
 
+/**
+ * For a route's own catch: answers a CommonsPotUnknownError with 503 in its plain words and returns true, or returns
+ * false for anything else. A route that catches everything itself never reaches the server's middleware for it, and its
+ * general words ("please try again") sent people into retries that can't work until the row is mended (#1465 re-review).
+ */
+export function answerPotPaused(ctx: { status: number; body: unknown }, e: unknown): boolean {
+    if (!(e instanceof CommonsPotUnknownError)) return false;
+    ctx.status = 503;
+    ctx.body = { error: e.message, code: e.code };
+    return true;
+}
+
 let potRefusalLoggedAt = 0;
 
 function assertCommonsPotFinite(): void {

@@ -614,10 +614,34 @@ describe('C. Drops and removal', () => {
         const c = await open(cy);
         expect(c.plan).toMatchObject({ kind: 'wait', holders: [owen.publicKey] });
         expect(c.notices).toContain(NAMES_COPY.droppedMe('Owen'));
-        expect(planWords(c)).toBe(NAMES_COPY.wait(['Owen']));
+        // Owen's phone dropped Cy: it sends nothing until they check each other, and the words say so (round 9).
+        expect(planWords(c)).toBe(NAMES_COPY.waitNotTrusted(['Owen']));
         await meet(node, owen, cy);
         await open(owen);
         expect((await open(cy)).plan.kind).toBe('ready');
+    });
+
+    it("W2 (round 9) a holder whose phone no longer trusts this one is never said to send: Zed's role removed and given back; Owen's and Bea's phones dropped him, so Zed's phone says to meet one of them; after a check, the keys come", async () => {
+        const { node, phones: [owen, bea, zed] } = await community(['Owen', 'Bea', 'Zed']);
+        node.admins = [role(owen, 'owner'), role(bea)];
+        await open(owen); // 2 drops Zed
+        await open(bea);
+        node.admins.push(role(zed)); // the role given back
+        for (let i = 0; i < 3; i++) for (const p of [owen, bea]) await open(p);
+        sent = [];
+        const z = await open(zed);
+        expect(z.plan).toMatchObject({ kind: 'wait', holders: [owen.publicKey, bea.publicKey] });
+        expect(planWords(z)).toBe(NAMES_COPY.waitNotTrusted(['Owen', 'Bea']));
+        expect(planWords(z)).not.toMatch(/will send/);
+        // A locked entry under that key says the same.
+        const k2 = node.current()!.id;
+        const e = openEntries({ current: k2, entries: [{ ...node.entries[0], keyId: k2 }], confirmations: [] }, z)[0];
+        expect(e.holders).toEqual([]);
+        expect(e.notTrusting).toEqual(['Owen', 'Bea']);
+        expect(NAMES_COPY.lockedEntry(2, 'Owen', e.holders, e.notTrusting)).toBe('Sealed with key 2 (made by @Owen). This phone doesn’t hold it. @Owen or @Bea hold it, but their phones don’t trust this one yet: meet one of them and check each other’s phones.');
+        await meet(node, owen, zed);
+        await open(owen);
+        expect((await open(zed)).plan.kind).toBe('ready');
     });
 
     it('C7 a trusted admin drops everyone else: taken; Bea dropped; Owen waits on Ada and is told "@Ada made a key without this phone"', async () => {
@@ -946,7 +970,7 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
     const sharesSent = (from: BeanPoolIdentity, to: BeanPoolIdentity) => sentAs('POST', '/api/names/shares')
         .filter((x) => x.headers['X-Public-Key'] === from.publicKey && readNamesShare(JSON.parse(x.body), CID)?.to === to.publicKey);
 
-    it("H1 (the re-review's :628) a fork through an admin kept in the dark, then Take @Cy's history: Cy's header re-admits nobody; Bea's phone makes a key without Abe before it writes, and says so; it never sends Abe anything, and Abe never gets the key Owen's name is under", async () => {
+    it("H1 (the re-review's :628) a fork through an admin kept in the dark, then Follow the server's history: Cy's header re-admits nobody; Bea's phone makes a key without Abe before it writes, and says so; it never sends Abe anything, and Abe never gets the key Owen's name is under", async () => {
         const { node, phones: [owen, bea, cy, abe], k1 } = await community(['Owen', 'Bea', 'Cy', 'Abe']);
         node.admins = [role(owen, 'owner'), role(bea), role(cy)];
         await open(owen); // 2 drops Abe
@@ -1058,7 +1082,7 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         expect(screen).toMatch(/checkButton\(a\.callsign\)[\s\S]{0,200}removeKeyButton\(a\.callsign\), \(\) => removeKey\(a\)/);
     });
 
-    it("I1 (the re-review's :639, end to end) a standby takes over from an older copy, Cy's phone makes 2″ by itself, Bea takes Cy's history; the main copy comes back: Cy and then Bea take Owen's history, and Bea's phone re-takes the 2 it left and is ready on it; nothing goes to Abe", async () => {
+    it("I1 (the re-review's :639, end to end) a standby takes over from an older copy, Cy's phone makes 2″ by itself, Bea follows it; the main copy comes back: Cy and Bea follow it again, make their own keys where they stand by a drop, and are ready on one head with key 2 in their history; nothing goes to Abe", async () => {
         const { node, phones: [owen, bea, cy, abe] } = await community(['Owen', 'Bea', 'Cy', 'Abe']);
         const copy = () => ({ gens: new Map(node.gens), shares: new Map(node.shares) });
         const put = (c: ReturnType<typeof copy>) => { node.gens = new Map(c.gens); node.shares = new Map(c.shares); };
@@ -1393,6 +1417,8 @@ describe('F6 the words are the design\'s (§9), and the old ones are gone', () =
         expect(plain(NAMES_COPY.refusedRolledBack(2, 5))).toBe('The server offers an older key history (up to key 2) than this phone has (key 5). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.');
         expect(plain(NAMES_COPY.refusedDifferent)).toBe("The server shows a key history this phone didn't take. A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Nothing was read or written. Ask your admins what happened. You can follow the server's history: this phone keeps the keys it holds, and before it writes again it makes a new key without any admin it had removed.");
         expect(plain(NAMES_COPY.wait(['A', 'B']))).toBe("You don't hold the list's keys yet. @A or @B will send them the next time they open the names list.");
+        expect(plain(NAMES_COPY.waitNotTrusted(['A']))).toBe("@A holds the list's keys, but their phone doesn't trust this one yet: meet them and check each other's phones.");
+        expect(plain(NAMES_COPY.waitNotTrusted(['A', 'B']))).toBe("@A or @B hold the list's keys, but their phones don't trust this one yet: meet one of them and check each other's phones.");
         expect(plain(NAMES_COPY.wait([]))).toBe("Nobody this phone trusts holds the list's keys. Meet an admin who does and check each other's phones.");
         expect(plain(NAMES_COPY.lockedEntry(3, 'X', ['A']))).toBe("Sealed with key 3 (made by @X). This phone doesn't hold it. @A holds it and will send it on their next open.");
         expect(plain(NAMES_COPY.lockedEntry(3, 'X', []))).toBe("Sealed with key 3 (made by @X). This phone doesn't hold it. Nobody who is an admin now holds it: type it again from your paper copy, or delete it.");

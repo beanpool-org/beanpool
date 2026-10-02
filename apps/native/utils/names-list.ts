@@ -35,7 +35,7 @@ import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
-    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -573,10 +573,47 @@ export interface OpenedEntry {
     locked: 'no_key' | 'did_not_open' | null;
     /** The key's number and maker, where this phone took its statement; null for a key it has never seen. */
     key: { n: number; maker: string } | null;
-    /** The trusted admins the node says hold its key, by callsign. */
+    /** The trusted admins the node says hold its key and whose phones trust this one (they will send it), by callsign. */
     holders: string[];
+    /** Trusted admins the node says hold its key whose phones don't trust this one: a check in person comes first. */
+    notTrusting: string[];
     /** The live confirmation against it (confirmed or waiting for a second admin), if any. */
     confirmation: ConfirmationRow | null;
+}
+
+/**
+ * Of `holders` (keys), the ones whose phones still trust this one, so will send it the keys on their next open (round 9):
+ * the holder's newest share header (each is public) names this phone, and no statement on the server's path after that
+ * header's head dropped it. Trust isn't mutual: a holder whose phone dropped this key sends nothing until a check.
+ */
+export function holdersWhoWillSend(state: Pick<NamesState, 'communityId' | 'generations' | 'shares' | 'current'>, me: string, holders: string[]): string[] {
+    const gens = new Map<string, NamesGeneration>();
+    for (const r of Array.isArray(state.generations) ? state.generations : []) {
+        const g = readNamesGeneration(r, state.communityId);
+        if (g) gens.set(g.id, g);
+    }
+    const newest = new Map<string, NamesShare>();
+    for (const r of Array.isArray(state.shares) ? state.shares : []) {
+        const w = readNamesShare(r, state.communityId);
+        if (!w) continue;
+        const prev = newest.get(w.from);
+        if (!prev || (gens.get(w.headId)?.n ?? 0) > (gens.get(prev.headId)?.n ?? 0)) newest.set(w.from, w);
+    }
+    const mine = me.toLowerCase();
+    return holders.filter((h) => {
+        const w = newest.get(h.toLowerCase());
+        if (!w || !w.trusts.includes(mine)) return false;
+        // Walk back from the server's current to that header's head: a drop of this phone on the way means they dropped it.
+        let at: string | null = state.current?.id ?? null;
+        for (let i = 0; at && i <= gens.size; i++) {
+            if (at === w.headId) return true;
+            const g = gens.get(at);
+            if (!g) return false;
+            if (g.drops.includes(mine)) return false;
+            at = g.parentId;
+        }
+        return false;
+    });
 }
 
 /** Every entry, opened where this phone can; open ones by name, then the locked ones. */
@@ -590,11 +627,14 @@ export function openEntries(list: NamesListBody, opened: Pick<NamesOpened, 'ring
         if (key) {
             try { text = openNamesEntry(key, e.id, e.keyId, e.ciphertext); } catch { locked = 'did_not_open'; }
         }
-        const holders = text ? [] : opened.state.admins
-            .filter((a) => a.pubkey !== opened.pin.me && opened.pin.trusted.includes(a.pubkey) && (a.keyIds ?? []).includes(e.keyId)).map((a) => a.callsign);
+        const all = text ? [] : opened.state.admins
+            .filter((a) => a.pubkey !== opened.pin.me && opened.pin.trusted.includes(a.pubkey) && (a.keyIds ?? []).includes(e.keyId));
+        const sending = new Set(holdersWhoWillSend(opened.state, opened.pin.me, all.map((a) => a.pubkey)));
+        const holders = all.filter((a) => sending.has(a.pubkey)).map((a) => a.callsign);
+        const notTrusting = all.filter((a) => !sending.has(a.pubkey)).map((a) => a.callsign);
         return {
             id: e.id, keyId: e.keyId, createdAt: e.createdAt, updatedAt: e.updatedAt, text, locked,
-            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, confirmation: live.get(e.id) ?? null,
+            key: text ? null : namesKeyLabel(opened.pin, opened.generations, e.keyId), holders, notTrusting, confirmation: live.get(e.id) ?? null,
         };
     });
     return out.sort((a, b) => {
@@ -850,10 +890,12 @@ export const NAMES_COPY = {
     wait: (holders: string[]) => (holders.length
         ? `You don’t hold the list’s keys yet. ${either(holders)} will send them the next time they open the names list.`
         : 'Nobody this phone trusts holds the list’s keys. Meet an admin who does and check each other’s phones.'),
-    lockedEntry: (n: number | null, who: string, holders: string[]) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
+    lockedEntry: (n: number | null, who: string, holders: string[], notTrusting: string[] = []) => `${n === null ? 'Sealed with a key this phone has never seen.' : `Sealed with key ${n} (made by ${at(who)}).`} `
         + 'This phone doesn’t hold it. '
         + (holders.length
             ? `${either(holders)} ${holders.length > 1 ? 'hold' : 'holds'} it and will send it on their next open.`
+            : notTrusting.length
+            ? `${either(notTrusting)} ${notTrusting.length > 1 ? 'hold it, but their phones don’t trust this one yet: meet one of them' : 'holds it, but their phone doesn’t trust this one yet: meet them'} and check each other’s phones.`
             : 'Nobody who is an admin now holds it: type it again from your paper copy, or delete it.'),
     startAgain: (count: number) => 'Nobody who is an admin now holds the list’s keys. You can start a new key; the '
         + `${count} ${count === 1 ? 'entry' : 'entries'} written before stay locked until an admin who held a key comes back, or they are typed again from your paper copy.`,
@@ -861,6 +903,10 @@ export const NAMES_COPY = {
     otherCommunity: 'The server says this list belongs to a different community from the one this phone opened before. Nothing was read or written.',
     missingRecord: 'The server is missing part of the list’s key history, so this phone can’t check the newest key. Nothing was read or written. '
         + 'Ask whoever runs the server, or an admin.',
+    /** Holders whose phones don't trust this one (round 9): nothing comes until a check in person. */
+    waitNotTrusted: (holders: string[]) => `${either(holders)} ${holders.length > 1
+        ? 'hold the list’s keys, but their phones don’t trust this one yet: meet one of them'
+        : 'holds the list’s keys, but their phone doesn’t trust this one yet: meet them'} and check each other’s phones.`,
     waitNewKey: (holders: string[]) => (holders.length
         ? `The list needs a new key before anything more is written. ${either(holders)} will make it the next time they open the names list.`
         : 'The list needs a new key before anything more is written, and nobody this phone trusts holds the current one. Meet an admin who does and check each other’s phones.'),
@@ -933,7 +979,10 @@ export function planWords(o: Pick<NamesOpened, 'plan' | 'state' | 'pin'>): strin
     const name = (k: string) => callsignIn(state, k);
     if (plan.kind === 'ready' || plan.kind === 'make_first' || plan.kind === 'make_new') return null;
     if (plan.kind === 'wait') {
-        const holders = plan.holders.map(name);
+        // "Will send" only for holders whose phones trust this one; otherwise a check in person comes first (round 9).
+        const sending = holdersWhoWillSend(state, o.pin.me, plan.holders);
+        const holders = sending.map(name);
+        if (!plan.canMakeNew && !sending.length && plan.holders.length) return NAMES_COPY.waitNotTrusted(plan.holders.map(name));
         if (plan.canMakeNew) {
             const maker = o.pin.chain.length ? readNamesGeneration(o.pin.chain[o.pin.chain.length - 1], undefined, new Set([plan.keyId]))?.maker ?? '' : '';
             return NAMES_COPY.nobodyHoldsKey(plan.n, state.counts?.byKey?.[plan.keyId] ?? 0, name(maker));

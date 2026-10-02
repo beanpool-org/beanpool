@@ -437,7 +437,7 @@ export default function NamesListScreen() {
             <>
                 {entry && !entry.text ? (
                     <View style={styles.warn}>
-                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders)}</Text>
+                        <Text style={styles.warnText}>{COPY.lockedEntry(entry.key?.n ?? null, callsignOf(entry.key?.maker ?? ''), entry.holders, entry.notTrusting)}</Text>
                     </View>
                 ) : null}
                 <Text style={styles.label}>NAME</Text>
@@ -582,7 +582,7 @@ export default function NamesListScreen() {
                                     {e.text.note ? <Text style={styles.entryNote}>{e.text.note}</Text> : null}
                                 </>
                             ) : (
-                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders)}</Text>
+                                <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting)}</Text>
                             )}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
                             <View style={styles.buttonRow}>

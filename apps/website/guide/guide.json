@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 102,
-  "hash": "7fa7670a939031ee01dc755beaa07609a54394bffce8ecaef2cd53ba98b10b4d",
+  "version": 103,
+  "hash": "f84f4bcc01f584d7a87e077a233b572b11686717db8a449b74123345890e641b",
   "sections": [
     {
       "id": "about",
@@ -17,8 +17,9 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "summary": "Home, joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
       "slugs": [
+        "home",
         "joining",
         "finding-a-community",
         "your-12-words",
@@ -723,12 +724,23 @@
       "summary": "What changed in each version of the app, in plain words.",
       "section": "about",
       "related": [
+        "home",
         "the-bean",
         "how-it-works",
         "rules",
         "faq"
       ],
       "blocks": [
+        {
+          "type": "h2",
+          "text": "Home"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You can customize which cards appear and their order with **Edit home**."
+          ]
+        },
         {
           "type": "h2",
           "text": "Privacy by default"
@@ -857,11 +869,178 @@
       ]
     },
     {
+      "slug": "home",
+      "title": "Home",
+      "summary": "What Home is, which cards it shows on the phone and in the web app, how to reorder or hide them, picking what you're into, and privacy when you sign out.",
+      "section": "getting-started",
+      "related": [
+        "the-top-bar",
+        "browsing-the-market",
+        "your-profile",
+        "finding-a-community"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What Home is"
+        },
+        {
+          "type": "p",
+          "text": "**Home** is the first tab, and the screen the app opens on, on the phone and in the web app. It is a dashboard of cards answering what needs you, what is happening around you, and what you could do next. Each card is a few lines and one tap into that part of the app. A card with nothing to say takes no room on the screen."
+        },
+        {
+          "type": "p",
+          "text": "The phone and the web app show the same cards, with a few differences. This page says \"on the phone\" or \"in the web app\" where they differ."
+        },
+        {
+          "type": "p",
+          "text": "When a member first sees Home, a one-line tip appears under the first card: \"This is your Home. Tap … on any card to move or hide it.\" Tap **✕** to put it away."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "On the phone it is shown once, and never again, whether or not you tap **✕**. Hiding a card also puts it away.",
+            "In the web app it comes back each time you open Home, until you tap **✕**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The cards"
+        },
+        {
+          "type": "p",
+          "text": "Home shows only the cards that have something to tell you, in this order from top to bottom unless you change it:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Needs you:** only while something is waiting for you: a deal waiting on you, unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone these are the same things the small icons at the top of the screen show. This card stays first and cannot be moved or hidden.",
+            "**Your way back in:** if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap **✕** to put it away. It comes back once after your first post and once after a week, then lives only in **Settings**, under **Account Protection**. It does not show where your community's key vault already holds a copy of your key.",
+            "**Find your community:** on the global community only. It shows the communities nearest you and lets you ask to join them (see \"Finding a community near you\"). On the phone it has **Communities near you**, **Start a community** and **Tell me when one starts here**. In the web app, each community is a link to its own page, and **Share my area** helps if it does not know where you are. For your first 30 days on the global community it stays at the top, and it cannot be hidden or moved. After that it is a card like any other.",
+            "**First steps:** a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on and you may invite, invite someone. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.",
+            "**First steps on the global community:** post something free or for swap, and, if a community near you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. On the phone it goes when the post is done and the limits are over. In the web app it stays for your first 14 days.",
+            "**What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.",
+            "**Your deals:** shows your open deals and deals waiting on you. Not on the global community.",
+            "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. Not on the global community.",
+            "**Coming up:** upcoming events near you, with your RSVP.",
+            "**New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.",
+            "**Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Decisions show only where your community has them, so not on the global community.",
+            "**Your groups:** your groups and chats, with unread message counts.",
+            "**Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.",
+            "**The Pulse:** posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap **See all** to open the Pulse.",
+            "**Your Beans:** your balance and credit line (room to spend). Not on the global community.",
+            "**From your community:** announcements and notices from your community's admins.",
+            "**Grow your community:** lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.",
+            "**Your community:** member count and trades this month. Tap **Edit home** here to customize your cards. This card stays at the bottom and cannot be moved or hidden."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The \"…\" menu"
+        },
+        {
+          "type": "p",
+          "text": "Most cards have a **…** button at the top right. These do not:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Needs you**, **Your way back in** and **Your community**.",
+            "In the web app, **Find your community** during your first 30 days."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap **…** to:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Hide:** removes the card from Home. Edit home brings it back.",
+            "**Move up:** swaps the card with the card above it.",
+            "**Move down:** swaps the card with the card below it."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A move is greyed out when there is nowhere to go: at the top or bottom of the cards you can move. The first card under **Needs you** cannot move up, and the last card above **Your community** cannot move down."
+        },
+        {
+          "type": "h2",
+          "text": "Edit home"
+        },
+        {
+          "type": "p",
+          "text": "At the bottom of Home, on your community's card, tap **Edit home**:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Switch any card on or off to show or hide it.",
+            "Tap the up and down arrows to change the order of your cards.",
+            "Hidden cards sit under **Hidden** with their switches off so you can bring them back at any time.",
+            "Tap **Reset to defaults** to return all cards to their original order and unhide them.",
+            "On the phone, a card with nothing to show right now says **Nothing to show now**. It will appear on Home when it has something.",
+            "Only the cards your community can show are listed. For example, there is no **Your Beans** or **Your deals** on the global community.",
+            "**Needs you** always stays at the top, and **Your community** always stays at the bottom.",
+            "**Find your community**, in your first 30 days on the global community, is not listed. It stays near the top for now.",
+            "**Your way back in** is listed on the phone, where it has a switch and arrows. In the web app it is not listed. It has only its own **✕**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What are you into?"
+        },
+        {
+          "type": "p",
+          "text": "Tap categories you like (Food, Tools, Services, Garden and others) to star them:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Starred categories come first on Home in **New in the Market** and **The Pulse**.",
+            "Starred categories never hide anything: other listings and posts follow right after.",
+            "The stars you pick on Home are the exact same stars used under **★ For You** in the Market tab.",
+            "Tap **Tune** on the Market card anytime to change your stars."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "On the web lobby"
+        },
+        {
+          "type": "p",
+          "text": "Before you join or sign in on the web, a visitor sees a simpler Home:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A **Join** card at the top.",
+            "Only public cards: a card of communities near you, **Coming up**, **What people post** (listings with photos and categories but no member names or faces), and **Your community**.",
+            "Visitors have no **…** menu, no **Edit home**, and no private cards like **Needs you** or **Your Beans**."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Privacy and signing out"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "When you sign out of a device (in the web app, **Sign Out (Device Only)**, also labelled **Remove from This Device Only**), the copies of your Home that device kept are removed from it: its last answer, your layout and your stars. In the web app, **Force Clear & Re-Sync** and deleting your account clear the same copies.",
+            "Your layout and starred categories are also saved on your account at your community. Sign in again, on this device or another, and you get them back. A different account starts with its own layout and stars.",
+            "In the web app, signing out in another tab clears Home immediately from the browser."
+          ]
+        }
+      ]
+    },
+    {
       "slug": "joining",
       "title": "Joining BeanPool",
       "summary": "Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.",
       "section": "getting-started",
       "related": [
+        "home",
         "finding-a-community",
         "your-12-words",
         "your-profile",
@@ -953,7 +1132,7 @@
         },
         {
           "type": "p",
-          "text": "If you join with 12 words, nothing about you reaches the community but your key and your name, and your 12 words are your only way back: nobody can reset them, not BeanPool and not the community. **Safety Backup** says so, and offers **Add a sign-in as a second way back**. After joining, a card at the top of the Market says **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** Tap **✕** to put it away: it comes back once after your first post and once after a week, then stays in **Settings**, under **Account Protection**, until you add a sign-in or tap **I still have my 12 words**. An account made with 12 words also has smaller limits for its first 7 days, and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message a day, and one report hides its post while it is new. Adding a sign-in, any time, lifts it to the usual new-account limits. You can add one from any phone where you are in your account, not only the one you joined on. If BeanPool's key vault already keeps a copy of your account, the card is not shown, and **Settings** offers **Add a sign-in** quietly."
+          "text": "If you join with 12 words, nothing about you reaches the community but your key and your name, and your 12 words are your only way back: nobody can reset them, not BeanPool and not the community. **Safety Backup** says so, and offers **Add a sign-in as a second way back**. After joining, a card on **Home** says **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** Tap **✕** to put it away: it comes back once after your first post and once after a week, then stays in **Settings**, under **Account Protection**, until you add a sign-in or tap **I still have my 12 words**. An account made with 12 words also has smaller limits for its first 7 days, and until 3 of its posts have stayed up: 2 posts, 4 photos and 3 new people to message a day, and one report hides its post while it is new. Adding a sign-in, any time, lifts it to the usual new-account limits. You can add one from any phone where you are in your account, not only the one you joined on. If BeanPool's key vault already keeps a copy of your account, the card is not shown, and **Settings** offers **Add a sign-in** quietly."
         },
         {
           "type": "p",
@@ -1077,6 +1256,7 @@
       "section": "getting-started",
       "related": [
         "joining",
+        "home",
         "communities",
         "near-you",
         "recovery"
@@ -1096,7 +1276,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community, the top of the **Market** shows **Find your community**, with the communities nearest you."
+          "text": "On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and cannot be hidden; after that you can hide it like any other card. In the web app, each community on the card is a link to its own page, and **Share my area** helps if it does not know where you are. The steps below are for the phone app."
         },
         {
           "type": "ul",
@@ -1289,7 +1469,7 @@
         },
         {
           "type": "p",
-          "text": "The app says so at **Safety Backup**. After you join, a card at the top of the Market says it again: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything."
+          "text": "The app says so at **Safety Backup**. After you join, a card on **Home** says it again (in the web app it also shows at the top of the other screens, except the map): **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything."
         },
         {
           "type": "ul",
@@ -1455,6 +1635,7 @@
       "summary": "The bean, the small icons that show when something needs you, and the buttons at the top right.",
       "section": "getting-started",
       "related": [
+        "home",
         "the-bean",
         "communities",
         "my-deals",
@@ -1612,7 +1793,7 @@
         },
         {
           "type": "p",
-          "text": "Under the top bar are the tabs: **Market**, **Map**, **Talk**, **Pulse**, **Commons** and **Ledger**. The name of each tab sits above its icon."
+          "text": "Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon."
         },
         {
           "type": "p",
@@ -1661,7 +1842,7 @@
           "items": [
             "**Your community:** its name, and whether its server can be reached right now. Tap it to switch to another community or add one.",
             "**Guides:** how BeanPool works, the rules and how decisions are made, and common questions.",
-            "**How to use the app:** one short page for each task, grouped the way the app is: Market, Map, Talk, Pulse, Commons, Ledger and Settings.",
+            "**How to use the app:** one short page for each task, grouped the way the app is: Home, Market, Map, Talk, Pulse, Commons, Ledger and Settings.",
             "**The BeanPool project:** what is new in this version, and a link to the website beanpool.org, with a **Share** button to send it to a friend."
           ]
         },
@@ -1880,6 +2061,7 @@
       "summary": "The web app does most of what the phone app does. Joining the global community in a browser, getting your account back there with your sign-in, and where the web app's buttons have different names.",
       "section": "getting-started",
       "related": [
+        "home",
         "the-bean",
         "your-12-words",
         "joining",
@@ -1905,7 +2087,7 @@
         },
         {
           "type": "p",
-          "text": "Before you join, the page shows the **Market** and the **Map** as a visitor sees them: the listings, their photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings."
+          "text": "Before you join, the page shows **Home**, the **Market** and the **Map** as a visitor sees them: the public cards, listings, photos and roughly where they are, but no names, no faces and no exact places. Nothing there lets you post or reply until you join. **Join** is at the top of the page and in the card above the listings."
         },
         {
           "type": "p",
@@ -2048,7 +2230,7 @@
           "type": "ul",
           "items": [
             "**Joining with an invite:** the first step's button says **Create Identity & Join →**. If someone here already has the name you chose, you get it with a number added. **← Back** on **Your Photo** shows your name alone, with **Next →**: change it (up to 20 characters) or keep it, on the same account. If someone already has the new name, the page says so and suggests others.",
-            "**Tabs:** the web app has **Market**, **Pulse**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.",
+            "**Tabs:** the web app has **Home**, **Market**, **Map**, **Commons**, **Chat**, **People** and **Ledger**. What the phone app calls **Talk** is **Chat** on the web, and **People** has its own tab.",
             "**Settings and your profile:** the two small buttons at the top right. On a wide screen they are at the bottom of the menu on the left.",
             "**Posting an Offer or a Need:** use **New Post** on the **Map** page.",
             "**Appearance:** the choice is called **Same as device** instead of \"Same as phone\".",
@@ -2109,6 +2291,7 @@
       "summary": "Find Offers and Needs with search, filters and distance.",
       "section": "market",
       "related": [
+        "home",
         "posting",
         "a-deal-step-by-step",
         "near-you",
@@ -2155,7 +2338,7 @@
           "type": "ul",
           "items": [
             "**All**, **Offers** or **Needs**.",
-            "**For You:** only the categories you star under **Customize interests**.",
+            "**For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and your upcoming events you have said you are going to.",
             "**Events** and **Polls**."
           ]
         },
@@ -3420,6 +3603,7 @@
       "summary": "What your neighbours make and share elsewhere, in one feed.",
       "section": "pulse",
       "related": [
+        "home",
         "learn",
         "your-channels",
         "reporting",
@@ -3432,7 +3616,11 @@
         },
         {
           "type": "p",
-          "text": "Tap **Pulse** in the row of tabs. The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do."
+          "text": "Open the Pulse from the **The Pulse** card on **Home**: tap a post, or tap **See all**. If you have hidden the card, bring it back with **Edit home**. On the phone you can also open it from **Settings**, under **The Pulse**."
+        },
+        {
+          "type": "p",
+          "text": "The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do."
         },
         {
           "type": "ul",
@@ -3447,7 +3635,7 @@
         },
         {
           "type": "p",
-          "text": "The buttons along the top slide away as you scroll down. Scroll up a little and they come back. Tap **Pulse** again to jump to the top."
+          "text": "The buttons along the top slide away as you scroll down. Scroll up a little and they come back."
         },
         {
           "type": "h2",

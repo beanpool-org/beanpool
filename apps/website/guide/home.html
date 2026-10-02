@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<!-- Generated from packages/beanpool-guide/content by packages/beanpool-guide/scripts/build.mjs. Do not edit by hand. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home — BeanPool members' guide</title>
+    <meta name="description" content="What Home is, which cards it shows on the phone and in the web app, how to reorder or hide them, picking what you're into, and privacy when you sign out.">
+    <link rel="icon" type="image/png" href="../favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css?v=2.5">
+    <style>
+        /* Width only: .legal-content's top margin is what clears the fixed navbar. */
+        .guide { max-width: 760px; }
+        .guide .kicker { color: var(--text-muted); font-size: 0.85rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .guide .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .guide h3 { font-family: var(--font-header); color: var(--text-primary); font-size: 1.1rem; margin: 1.4rem 0 0.5rem; }
+        .guide strong { color: var(--text-primary); }
+        .guide .guide-list { list-style: none; padding: 0; margin: 1.5rem 0 0; }
+        .guide .guide-list li { margin: 0 0 0.75rem; }
+        .guide .guide-list a { display: block; padding: 1rem 1.15rem; border: 1px solid var(--border); border-radius: 12px; text-decoration: none; }
+        .guide .guide-list a span { display: block; color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.2rem; }
+        .guide .guide-toc { border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.15rem; margin: 1rem 0 0.5rem; }
+        .guide .guide-toc h2 { margin: 0 0 0.4rem; font-size: 1rem; }
+        .guide .guide-toc ul { margin: 0; padding-left: 1.1rem; }
+        .guide .guide-toc a { display: inline-block; padding: 0.7rem 0; min-height: 48px; box-sizing: border-box; }
+        .guide h2[id], .guide h3[id] { scroll-margin-top: 110px; }
+        .guide .guide-manual, .guide .guide-related { margin-top: 2.5rem; }
+        .guide .guide-foot { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.95rem; }
+        .guide-nav .nav-links { gap: 1.25rem; }
+        /* The site hides nav links on phones (the home page has a menu instead); these stay, as 48px targets. */
+        @media (max-width: 768px) { .guide-nav .nav-links a { display: inline-flex !important; align-items: center; min-height: 48px; } }
+        @media (max-width: 480px) {
+            .guide { margin-left: 16px; margin-right: 16px; padding: 1.5rem 1.1rem; }
+            .guide-nav .logo span { display: none; }
+            /* Three links don't fit beside the logo at 320px with large text; the bean logo already goes home. */
+            .guide-nav .nav-inner { padding-left: 16px; padding-right: 16px; }
+            .guide-nav .nav-links a.guide-nav-home { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <nav id="navbar" class="guide-nav">
+        <div class="nav-inner">
+            <a href="../index.html" class="logo"><img src="../bean.png" alt="BeanPool" style="width: 44px; height: 44px; object-fit: contain; vertical-align: middle; margin-right: 0.2rem;" /> <span>BeanPool</span></a>
+            <div class="nav-links">
+                <a href="index.html">Members' guide</a>
+                <a href="../help.html">Help</a>
+                <a href="../index.html" class="guide-nav-home">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="legal-content glass-panel guide">
+        <p class="kicker"><a href="index.html">Members' guide</a> · <a href="index.html#getting-started">Getting started</a></p>
+        <h1>Home</h1>
+        <p class="lede">What Home is, which cards it shows on the phone and in the web app, how to reorder or hide them, picking what you're into, and privacy when you sign out.</p>
+        <h2>What Home is</h2>
+        <p><strong>Home</strong> is the first tab, and the screen the app opens on, on the phone and in the web app. It is a dashboard of cards answering what needs you, what is happening around you, and what you could do next. Each card is a few lines and one tap into that part of the app. A card with nothing to say takes no room on the screen.</p>
+        <p>The phone and the web app show the same cards, with a few differences. This page says &quot;on the phone&quot; or &quot;in the web app&quot; where they differ.</p>
+        <p>When a member first sees Home, a one-line tip appears under the first card: &quot;This is your Home. Tap … on any card to move or hide it.&quot; Tap <strong>✕</strong> to put it away.</p>
+        <ul>
+            <li>On the phone it is shown once, and never again, whether or not you tap <strong>✕</strong>. Hiding a card also puts it away.</li>
+            <li>In the web app it comes back each time you open Home, until you tap <strong>✕</strong>.</li>
+        </ul>
+        <h2>The cards</h2>
+        <p>Home shows only the cards that have something to tell you, in this order from top to bottom unless you change it:</p>
+        <ul>
+            <li><strong>Needs you:</strong> only while something is waiting for you: a deal waiting on you, unread messages from people, new lines in your groups, a vote you have not cast yet (amber when it closes within two days), and, for owners, admins and moderators, the admin work waiting for them, such as reports to review. On the phone these are the same things the small icons at the top of the screen show. This card stays first and cannot be moved or hidden.</li>
+            <li><strong>Your way back in:</strong> if you joined with 12 words and have no connected sign-in, this card reminds you to keep them safe or add a sign-in. Tap <strong>✕</strong> to put it away. It comes back once after your first post and once after a week, then lives only in <strong>Settings</strong>, under <strong>Account Protection</strong>. It does not show where your community's key vault already holds a copy of your key.</li>
+            <li><strong>Find your community:</strong> on the global community only. It shows the communities nearest you and lets you ask to join them (see &quot;Finding a community near you&quot;). On the phone it has <strong>Communities near you</strong>, <strong>Start a community</strong> and <strong>Tell me when one starts here</strong>. In the web app, each community is a link to its own page, and <strong>Share my area</strong> helps if it does not know where you are. For your first 30 days on the global community it stays at the top, and it cannot be hidden or moved. After that it is a card like any other.</li>
+            <li><strong>First steps:</strong> a short checklist. On a local community: post your first Offer, add a profile photo, pick a few things you like, and, once you have posted an Offer, where invites are on and you may invite, invite someone. On the phone the card goes when every line is done. In the web app it also stays for your first 14 days.</li>
+            <li><strong>First steps on the global community:</strong> post something free or for swap, and, if a community near you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. On the phone it goes when the post is done and the limits are over. In the web app it stays for your first 14 days.</li>
+            <li><strong>What are you into?:</strong> lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap <strong>Tune</strong> on the Market card, and it stays on screen while you pick.</li>
+            <li><strong>Your deals:</strong> shows your open deals and deals waiting on you. Not on the global community.</li>
+            <li><strong>Your enterprise:</strong> shows requests waiting to be approved for enterprises you keep. Not on the global community.</li>
+            <li><strong>Coming up:</strong> upcoming events near you, with your RSVP.</li>
+            <li><strong>New in the Market:</strong> the newest listings, with starred categories first. On the global community it is called <strong>Near you</strong>, and the nearest listings come first. Tap <strong>Tune</strong> to pick your interests, or <strong>See all</strong> to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.</li>
+            <li><strong>Decide:</strong> open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open <strong>Decide</strong> in <strong>Commons</strong> and polls open <strong>Polls</strong> in the Market. In the web app it is one line, and tapping it opens Commons. Decisions show only where your community has them, so not on the global community.</li>
+            <li><strong>Your groups:</strong> your groups and chats, with unread message counts.</li>
+            <li><strong>Who joined:</strong> people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.</li>
+            <li><strong>The Pulse:</strong> posts shared by neighbours from external channels like YouTube and blogs, with starred categories first. Tap <strong>See all</strong> to open the Pulse.</li>
+            <li><strong>Your Beans:</strong> your balance and credit line (room to spend). Not on the global community.</li>
+            <li><strong>From your community:</strong> announcements and notices from your community's admins.</li>
+            <li><strong>Grow your community:</strong> lets you invite new members after your first Offer, where invites are on. Not on the global community. On the phone, where only the admins invite, it shows only for an owner or admin.</li>
+            <li><strong>Your community:</strong> member count and trades this month. Tap <strong>Edit home</strong> here to customize your cards. This card stays at the bottom and cannot be moved or hidden.</li>
+        </ul>
+        <h2>The &quot;…&quot; menu</h2>
+        <p>Most cards have a <strong>…</strong> button at the top right. These do not:</p>
+        <ul>
+            <li><strong>Needs you</strong>, <strong>Your way back in</strong> and <strong>Your community</strong>.</li>
+            <li>In the web app, <strong>Find your community</strong> during your first 30 days.</li>
+        </ul>
+        <p>Tap <strong>…</strong> to:</p>
+        <ul>
+            <li><strong>Hide:</strong> removes the card from Home. Edit home brings it back.</li>
+            <li><strong>Move up:</strong> swaps the card with the card above it.</li>
+            <li><strong>Move down:</strong> swaps the card with the card below it.</li>
+        </ul>
+        <p>A move is greyed out when there is nowhere to go: at the top or bottom of the cards you can move. The first card under <strong>Needs you</strong> cannot move up, and the last card above <strong>Your community</strong> cannot move down.</p>
+        <h2>Edit home</h2>
+        <p>At the bottom of Home, on your community's card, tap <strong>Edit home</strong>:</p>
+        <ul>
+            <li>Switch any card on or off to show or hide it.</li>
+            <li>Tap the up and down arrows to change the order of your cards.</li>
+            <li>Hidden cards sit under <strong>Hidden</strong> with their switches off so you can bring them back at any time.</li>
+            <li>Tap <strong>Reset to defaults</strong> to return all cards to their original order and unhide them.</li>
+            <li>On the phone, a card with nothing to show right now says <strong>Nothing to show now</strong>. It will appear on Home when it has something.</li>
+            <li>Only the cards your community can show are listed. For example, there is no <strong>Your Beans</strong> or <strong>Your deals</strong> on the global community.</li>
+            <li><strong>Needs you</strong> always stays at the top, and <strong>Your community</strong> always stays at the bottom.</li>
+            <li><strong>Find your community</strong>, in your first 30 days on the global community, is not listed. It stays near the top for now.</li>
+            <li><strong>Your way back in</strong> is listed on the phone, where it has a switch and arrows. In the web app it is not listed. It has only its own <strong>✕</strong>.</li>
+        </ul>
+        <h2>What are you into?</h2>
+        <p>Tap categories you like (Food, Tools, Services, Garden and others) to star them:</p>
+        <ul>
+            <li>Starred categories come first on Home in <strong>New in the Market</strong> and <strong>The Pulse</strong>.</li>
+            <li>Starred categories never hide anything: other listings and posts follow right after.</li>
+            <li>The stars you pick on Home are the exact same stars used under <strong>★ For You</strong> in the Market tab.</li>
+            <li>Tap <strong>Tune</strong> on the Market card anytime to change your stars.</li>
+        </ul>
+        <h2>On the web lobby</h2>
+        <p>Before you join or sign in on the web, a visitor sees a simpler Home:</p>
+        <ul>
+            <li>A <strong>Join</strong> card at the top.</li>
+            <li>Only public cards: a card of communities near you, <strong>Coming up</strong>, <strong>What people post</strong> (listings with photos and categories but no member names or faces), and <strong>Your community</strong>.</li>
+            <li>Visitors have no <strong>…</strong> menu, no <strong>Edit home</strong>, and no private cards like <strong>Needs you</strong> or <strong>Your Beans</strong>.</li>
+        </ul>
+        <h2>Privacy and signing out</h2>
+        <ul>
+            <li>When you sign out of a device (in the web app, <strong>Sign Out (Device Only)</strong>, also labelled <strong>Remove from This Device Only</strong>), the copies of your Home that device kept are removed from it: its last answer, your layout and your stars. In the web app, <strong>Force Clear &amp; Re-Sync</strong> and deleting your account clear the same copies.</li>
+            <li>Your layout and starred categories are also saved on your account at your community. Sign in again, on this device or another, and you get them back. A different account starts with its own layout and stars.</li>
+            <li>In the web app, signing out in another tab clears Home immediately from the browser.</li>
+        </ul>
+        <h2 class="guide-related">Related</h2>
+        <ul class="guide-list">
+            <li><a href="the-top-bar.html"><strong>The top bar</strong><span>The bean, the small icons that show when something needs you, and the buttons at the top right.</span></a></li>
+            <li><a href="browsing-the-market.html"><strong>Browsing the market</strong><span>Find Offers and Needs with search, filters and distance.</span></a></li>
+            <li><a href="your-profile.html"><strong>Your profile</strong><span>Your name, photo, a few words about you, and who can see your contact details.</span></a></li>
+            <li><a href="finding-a-community.html"><strong>Finding a community near you</strong><span>From the global community, find a community near you and ask to join it, be told when one starts near you, or start one yourself.</span></a></li>
+        </ul>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 103.</p>
+    </main>
+</body>
+</html>

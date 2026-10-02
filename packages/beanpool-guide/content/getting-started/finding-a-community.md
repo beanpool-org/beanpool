@@ -11,7 +11,7 @@ The global community is where people from everywhere meet. A local community is 
 
 ## Communities near you
 
-On the global community, the top of **Home** shows **Find your community**, with the communities nearest you.
+On the global community, the **Find your community** card on **Home** shows the communities nearest you. For your first 30 days it stays at the top of Home and cannot be hidden; after that you can hide it like any other card. In the web app, each community on the card is a link to its own page, and **Share my area** helps if it does not know where you are. The steps below are for the phone app.
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name.

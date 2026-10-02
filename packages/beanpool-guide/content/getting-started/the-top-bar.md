@@ -2,7 +2,7 @@
 slug: the-top-bar
 title: The top bar
 summary: The bean, the small icons that show when something needs you, and the buttons at the top right.
-related: home, the-bean, communities, my-deals, decisions, messages
+related: home, the-bean, communities, my-deals, decisions, messages, notifications
 ---
 
 ## What is in it

@@ -157,7 +157,8 @@ function sign(text: string, signer: NamesSigner): string {
 function verify(text: string, signature: unknown, key: string): boolean {
     if (typeof signature !== 'string' || !HEX_SIG.test(signature)) return false;
     try {
-        return ed25519.verify(hexToBytes(signature), utf8ToBytes(text), hexToBytes(key));
+        // Strict RFC 8032, as every verifier that ships (#1457): a signature only ZIP-215 takes is refused.
+        return ed25519.verify(hexToBytes(signature), utf8ToBytes(text), hexToBytes(key), { zip215: false });
     } catch {
         return false;
     }
@@ -582,6 +583,7 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     const droppedOnChain = (k: string) => k in D && position.has(D[k]);
 
     const accept = (g: NamesGeneration) => {
+        if (abandoned.includes(g.id)) abandoned.splice(abandoned.indexOf(g.id), 1);
         chain.push({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
         position.set(g.id, g.n);
         if (pending && pending.id === g.id) {
@@ -636,7 +638,9 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
             const head = chain[chain.length - 1];
             const want = head ? head.id : '-';
             const n = head ? head.n + 1 : 1;
-            const cands = (byParent.get(want) ?? []).filter((g) => g.n === n && !position.has(g.id) && !abandoned.includes(g.id))
+            // An abandoned statement is taken again only when it is on the server's current path (the server came back to
+            // the history this phone left, round 7): it passes rule 1/1b like any statement, and re-applies its drops.
+            const cands = (byParent.get(want) ?? []).filter((g) => g.n === n && !position.has(g.id) && (!abandoned.includes(g.id) || onServerPath.has(g.id)))
                 .sort((a, b) => a.id.localeCompare(b.id));
             if (cands.length === 0) break;
             const pick = cands.find((g) => onServerPath.has(g.id)) ?? cands.find((g) => T.has(g.maker)) ?? cands[0];

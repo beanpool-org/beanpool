@@ -10,6 +10,8 @@
 import { describe, it, expect } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from '@noble/hashes/utils.js';
+import { sha512 } from '@noble/hashes/sha2.js';
+import { hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import {
     NAMES_REFUSAL_REASONS, checkNamesKeyInPerson, emptyNamesPin, makeNamesGeneration, makeNamesGenerationFor, makeNamesShare,
@@ -128,6 +130,20 @@ function community(names = ['Owen', 'Ada']): { world: World; phones: Phone[] } {
 
 const curN = (w: World) => w.gens.get(w.current!)!.n;
 
+// ── A signature only ZIP-215 takes (as test-storm-smalls makes it, #1457): strict Ed25519 must refuse it ─────────────────
+// R is the identity point encoded with y = p + 1 (non-canonical); with R = O, [8][S]B = [8]R + [8][k]A holds for S = k·a.
+const ED_L = 2n ** 252n + 27742317777372353535851937790883648493n;
+const leToBig = (b: Uint8Array) => { let n = 0n; for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]); return n; };
+const bigToLe32 = (v: bigint) => { const out = new Uint8Array(32); let n = v; for (let i = 0; i < 32; i++) { out[i] = Number(n & 0xffn); n >>= 8n; } return out; };
+function zip215OnlySignature(message: Uint8Array, seed: Uint8Array): Uint8Array {
+    const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(seed);
+    const canonicalIdentity = new Uint8Array(32); canonicalIdentity[0] = 1;
+    const nonCanonicalIdentity = new Uint8Array(32).fill(0xff); nonCanonicalIdentity[0] = 0xee; nonCanonicalIdentity[31] = 0x7f;
+    const k = leToBig(sha512(new Uint8Array([...canonicalIdentity, ...pointBytes, ...message]))) % ED_L;
+    return new Uint8Array([...nonCanonicalIdentity, ...bigToLe32((k * scalar) % ED_L)]);
+}
+
+
 /**
  * "Start again" as the app runs it (design addendum (c)): offered on an empty chain when nobody holds the current key;
  * the server's whole path goes onto the chain for its drops and place, then the ordinary new key off it, written ahead.
@@ -178,6 +194,26 @@ describe('statements and shares: signed bytes, ids computed here', () => {
         const swapped = readNamesShare({ ...wireShare(s, true), box: other }, CID);
         expect(swapped?.box).toBeNull();
         expect(swapped?.trusts).toEqual([a.publicKey, b.publicKey].sort());
+    });
+});
+
+describe('strict Ed25519 (#1457): a signature only ZIP-215 takes is refused', () => {
+    it('on a statement and on a share header, read alone and in the walk', () => {
+        const { world, phones: [owen, ada] } = community();
+        const seed = hexToBytes(owen.who.privateKey);
+        const g = makeNamesGeneration({ communityId: CID, n: 2, parentId: world.current, drops: [] }, owen.who);
+        const lax = bytesToHex(zip215OnlySignature(utf8ToBytes(g.statement), seed));
+        // The control: noble's default (ZIP-215) check takes it, the strict one doesn't.
+        expect(ed25519.verify(hexToBytes(lax), utf8ToBytes(g.statement), hexToBytes(owen.pk))).toBe(true);
+        expect(ed25519.verify(hexToBytes(lax), utf8ToBytes(g.statement), hexToBytes(owen.pk), { zip215: false })).toBe(false);
+        expect(readNamesGeneration({ statement: g.statement, signature: lax }, CID)).toBeNull();
+        const share = makeNamesShare({ communityId: CID, from: owen.who, to: ada.pk, headId: world.current!, ring: namesRingKeys(owen.pin!), trusts: owen.pin!.trusted });
+        const laxShare = bytesToHex(zip215OnlySignature(utf8ToBytes(share.header), seed));
+        expect(readNamesShare({ header: share.header, signature: laxShare, box: share.box }, CID)).toBeNull();
+        // In the walk: the statement planted as current with that signature is never taken, though Owen is trusted.
+        world.plant({ ...g, signature: lax }, true);
+        expect(ada.sync(world.stateFor(ada.pk)).plan).toEqual({ kind: 'refused', reason: 'missing_record' });
+        expect(ada.pin!.chain.map((l) => l.id)).not.toContain(g.id);
     });
 });
 
@@ -1156,6 +1192,132 @@ describe('H. Re-admission by id, abandoned keys, the removal check (design Adden
         f.bea.open(f.world, f.view);
         expect(f.world.gens.get(f.world.current!)).toMatchObject({ maker: f.bea.pk, parentId: f.twoPP, drops: [f.abe.pk] });
     });
+});
+
+/** A copy of the server's rows, as a standby holds them (statements, current, shares). */
+type Copy = { gens: Map<string, NamesGeneration>; current: string | null; shares: Map<string, NamesShare> };
+const copyOf = (w: World): Copy => ({ gens: new Map(w.gens), current: w.current, shares: new Map(w.shares) });
+const restore = (w: World, c: Copy) => { w.gens = new Map(c.gens); w.current = c.current; w.shares = new Map(c.shares); };
+
+/**
+ * The re-review's :639 sequence (round 7), all honest: a standby copies key 1; Abe is removed and Owen's phone makes 2;
+ * the standby takes over from its older copy and Cy's phone, still at 1, makes 2″ without Abe by itself; Owen and Bea
+ * take Cy's history; then whoever runs the server puts the main copy back (current 2).
+ */
+function backAndForth() {
+    const { world, phones: [owen, bea, cy, abe] } = community(['Owen', 'Bea', 'Cy', 'Abe']);
+    const one = world.current!;
+    const standby = copyOf(world);
+    world.admins = [owen.who, bea.who, cy.who];
+    owen.open(world); // 2 drops Abe
+    const two = world.current!;
+    bea.open(world);
+    const main = copyOf(world);
+    restore(world, standby); // the take-over from the older copy
+    expect(cy.open(world).plan.kind).toBe('ready'); // 2″ without Abe, made by itself
+    const twoPP = world.current!;
+    expect(world.gens.get(twoPP)).toMatchObject({ maker: cy.pk, parentId: one, drops: [abe.pk] });
+    for (const p of [owen, bea]) {
+        expect(p.sync(world.stateFor(p.pk)).plan).toEqual({ kind: 'refused', reason: 'different_history' });
+        p.pin = takeNamesHistory(p.pin!, world.stateFor(p.pk));
+        p.open(world);
+    }
+    cy.open(world);
+    for (const p of [owen, bea, cy]) {
+        expect(p.open(world).plan.kind).toBe('ready');
+        expect(p.head()).toBe(twoPP);
+    }
+    restore(world, main); // the main copy is back: current 2
+    return { world, owen, bea, cy, abe, one, two, twoPP };
+}
+
+describe('I. Following the server back to a history this phone left (round 7, the re-review\'s :639)', () => {
+    it('after a take-history, the main copy comes back: taking the history again re-takes the abandoned 2 (on the server\'s path), and all three phones are ready on 2', () => {
+        const { world, owen, bea, cy, abe, one, two, twoPP } = backAndForth();
+        for (const p of [owen, bea, cy]) {
+            expect(p.sync(world.stateFor(p.pk)).plan).toEqual({ kind: 'refused', reason: 'different_history' });
+            p.pin = takeNamesHistory(p.pin!, world.stateFor(p.pk));
+        }
+        for (let i = 0; i < 2; i++) for (const p of [owen, bea, cy]) p.open(world);
+        for (const p of [owen, bea, cy]) {
+            const r = p.open(world);
+            expect(r.plan.kind).toBe('ready');
+            expect(p.pin!.chain.map((l) => l.id)).toEqual([one, two]);
+            expect(p.pin!.abandoned).toEqual(p === cy ? [twoPP] : [twoPP]);
+            expect(p.trusts(abe)).toBe(false);
+            expect(p.pin!.dropped[abe.pk]).toBe(two);
+        }
+    });
+
+    it("then Cy's phone is lost and the owner moves Cy to a new key: Owen's phone makes 3 without Cy's old key, and after a check every phone is ready on 3", () => {
+        const { world, owen, bea, cy } = backAndForth();
+        for (const p of [owen, bea, cy]) p.pin = takeNamesHistory(p.pin!, world.stateFor(p.pk));
+        for (let i = 0; i < 2; i++) for (const p of [owen, bea, cy]) p.open(world);
+        const cyNew = new Phone(admin('Cy'));
+        world.admins = [owen.who, bea.who, cyNew.who];
+        owen.open(world);
+        const three = world.current!;
+        expect(world.gens.get(three)).toMatchObject({ n: 3, drops: [cy.pk] });
+        owen.meet(cyNew);
+        for (let i = 0; i < 2; i++) for (const p of [owen, bea, cyNew]) p.open(world);
+        for (const p of [owen, bea, cyNew]) {
+            expect(p.open(world).plan.kind).toBe('ready');
+            expect(p.head()).toBe(three);
+        }
+    });
+
+    it('a property check: random honest opens, take-overs from older copies, copies put back, histories taken (some opens shown Abe as an admin): no phone that dropped Abe ever trusts him again, is ready under a key Abe was sent, or sends him anything; every ring id is on the chain or abandoned; no ready phone has a standing drop', () => {
+        let retakes = 0;
+        let readies = 0;
+        for (let seed = 1; seed <= 24; seed++) {
+            let x = seed * 2654435761 >>> 0;
+            const rnd = () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+            const pick = <T,>(a: T[]) => a[Math.floor(rnd() * a.length)];
+            const { world, phones: [owen, bea, cy, abe] } = community(['Owen', 'Bea', 'Cy', 'Abe']);
+            const honest = [owen, bea, cy];
+            // Everything Abe was ever sent, and what he held when he was removed.
+            const abeKeys = new Set(abe.ringIds());
+            const toAbe: NamesShare[] = [];
+            const put = world.putShare.bind(world);
+            world.putShare = (sh: NamesShare) => { if (sh.to === abe.pk) { toAbe.push(sh); for (const id of sh.keyIds) abeKeys.add(id); } put(sh); };
+            let copies: Copy[] = [copyOf(world)];
+            world.admins = [owen.who, bea.who, cy.who];
+            const droppedAbe = new Set<string>();
+            for (let step = 0; step < 36; step++) {
+                const r = rnd();
+                if (r < 0.1) copies.push(copyOf(world));
+                else if (r < 0.2 && copies.length) { const c = pick(copies); copies = [...copies, copyOf(world)]; restore(world, c); }
+                else {
+                    const p = pick(honest);
+                    const view = rnd() < 0.25 ? { admins: [owen.who, bea.who, cy.who, abe.who] } : {};
+                    const before = toAbe.length;
+                    let res = p.open(world, view);
+                    if (res.plan.kind === 'refused' && res.plan.reason === 'different_history') {
+                        // The app's way forward: meet an admin on the server's history and take it.
+                        const wasAbandoned = [...p.pin!.abandoned];
+                        p.pin = takeNamesHistory(p.pin!, world.stateFor(p.pk, view));
+                        res = p.open(world, view);
+                        if (wasAbandoned.some((id) => p.pin!.chain.some((l) => l.id === id))) retakes++;
+                    }
+                    const pin = p.pin!;
+                    if (abe.pk in pin.dropped) droppedAbe.add(p.pk);
+                    const chainIds = new Set(pin.chain.map((l) => l.id));
+                    for (const id of Object.keys(pin.ring)) expect(chainIds.has(id) || pin.abandoned.includes(id)).toBe(true);
+                    if (droppedAbe.has(p.pk)) {
+                        expect(pin.trusted).not.toContain(abe.pk);
+                        expect(toAbe.slice(before).filter((sh) => sh.from === p.pk)).toEqual([]);
+                    }
+                    if (res.plan.kind === 'ready') {
+                        readies++;
+                        expect(Object.entries(pin.dropped).filter(([, id]) => !chainIds.has(id))).toEqual([]);
+                        if (droppedAbe.has(p.pk) && pin.dropped[abe.pk] && chainIds.has(pin.dropped[abe.pk])) expect(abeKeys.has(p.head()!)).toBe(false);
+                    }
+                }
+            }
+        }
+        expect(readies).toBeGreaterThan(100);
+        expect(retakes).toBeGreaterThan(0);
+    }, 120_000);
 });
 
 describe('E. Rollback, forks', () => {

@@ -56,6 +56,8 @@ import {
     namesKeyCheckMatches, namesKeyQr, namesKeyCode,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesShare,
 } from '@beanpool/core';
+import { ed25519 } from '@noble/curves/ed25519.js';
+const sha512 = (b: Uint8Array): Uint8Array => new Uint8Array(crypto.createHash('sha512').update(b).digest());
 import { ensureGenesis } from './genesis.js';
 import { initTls } from './services/tls.js';
 import { initStateEngine, exportSyncState } from './state-engine.js';
@@ -127,6 +129,19 @@ const entries = (id: Id, forExport = false) => call(id, 'GET', `/api/names/entri
 const postGen = (id: Id, g: { statement: string; signature: string }, replay = false) =>
     call(id, 'POST', '/api/names/generations', { statement: g.statement, signature: g.signature, ...(replay ? { replay: true } : {}) });
 const postShare = (id: Id, s: NamesShare) => call(id, 'POST', '/api/names/shares', { header: s.header, signature: s.signature, box: s.box });
+
+// ── A signature only ZIP-215 takes (as test-storm-smalls makes it, #1457): strict Ed25519 must refuse it ─────────────────
+// R is the identity point encoded with y = p + 1 (non-canonical); with R = O, [8][S]B = [8]R + [8][k]A holds for S = k·a.
+const ED_L = 2n ** 252n + 27742317777372353535851937790883648493n;
+const leToBig = (b: Uint8Array) => { let n = 0n; for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]); return n; };
+const bigToLe32 = (v: bigint) => { const out = new Uint8Array(32); let n = v; for (let i = 0; i < 32; i++) { out[i] = Number(n & 0xffn); n >>= 8n; } return out; };
+function zip215OnlySignature(message: Uint8Array, seed: Uint8Array): Uint8Array {
+    const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(seed);
+    const canonicalIdentity = new Uint8Array(32); canonicalIdentity[0] = 1;
+    const nonCanonicalIdentity = new Uint8Array(32).fill(0xff); nonCanonicalIdentity[0] = 0xee; nonCanonicalIdentity[31] = 0x7f;
+    const k = leToBig(sha512(new Uint8Array([...canonicalIdentity, ...pointBytes, ...message]))) % ED_L;
+    return new Uint8Array([...nonCanonicalIdentity, ...bigToLe32((k * scalar) % ED_L)]);
+}
 
 /** An admin's phone: its pin, and the steps the app runs on opening the list. */
 class Phone {
@@ -258,6 +273,8 @@ async function main(): Promise<void> {
     const g1 = makeNamesGeneration({ communityId: COMMUNITY, n: 1, parentId: null, drops: [] }, owenP.signer);
     const unsignedGen = await postGen(owen, { statement: g1.statement, signature: '00'.repeat(64) });
     assert(unsignedGen.status === 400 && unsignedGen.body?.code === 'bad_signature', `2. A1 a statement not signed by the maker it names: 400 bad_signature (${show(unsignedGen)})`);
+    const laxGen = await postGen(owen, { statement: g1.statement, signature: Buffer.from(zip215OnlySignature(Buffer.from(g1.statement), Buffer.from(owen.seedHex, 'hex'))).toString('hex') });
+    assert(laxGen.status === 400 && laxGen.body?.code === 'bad_signature', `2. a statement signed in a form only ZIP-215 takes: 400 bad_signature, strict Ed25519 (#1457) (${show(laxGen)})`);
     const elsewhere = makeNamesGeneration({ communityId: 'ffffffffffffffff', n: 1, parentId: null, drops: [] }, owenP.signer);
     const elsewhereGen = await postGen(owen, elsewhere);
     assert(elsewhereGen.status === 400 && elsewhereGen.body?.code === 'bad_statement', `2. a statement for another community: 400 (${show(elsewhereGen)})`);
@@ -302,6 +319,8 @@ async function main(): Promise<void> {
     const swappedBox = sealNamesRing({ [k1]: newNamesListKey() }, { communityId: COMMUNITY, from: owen.pk, to: bea.pk, headId: k1 });
     const badBox = await call(owen, 'POST', '/api/names/shares', { header: realShare.header, signature: realShare.signature, box: swappedBox });
     assert(badBox.status === 400 && badBox.body?.code === 'bad_box', `2. a box its signed header doesn't name: 400 bad_box (${show(badBox)})`);
+    const laxShare = await call(owen, 'POST', '/api/names/shares', { header: realShare.header, signature: Buffer.from(zip215OnlySignature(Buffer.from(realShare.header), Buffer.from(owen.seedHex, 'hex'))).toString('hex'), box: realShare.box });
+    assert(laxShare.status === 400 && laxShare.body?.code === 'bad_signature', `2. a share header signed in a form only ZIP-215 takes: 400 bad_signature (${show(laxShare)})`);
     assert(count('names_shares') === 2, '2. nothing kept from the refused shares');
     const abeSees = (await state(abe)).body;
     const st2 = (await state(ada)).body;

@@ -34,7 +34,7 @@ import { db } from './db/db.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig, hashPassword, setBreakGlassMode } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { SOURCE_FREE_FAILURES } from './password-brake.js';
@@ -142,6 +142,7 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
 
     async function call(method: string, path: string, headers: Record<string, string>, body?: any): Promise<{ status: number; body: any }> {
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
         // A password caller sends it in the body as well as the header, as the old clients did: the old routes read
         // only the body, so this is what reached them without 2FA.
         if (body !== undefined && headers['X-Admin-Password'] && body.password === undefined) {

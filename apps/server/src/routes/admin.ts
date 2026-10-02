@@ -92,6 +92,7 @@ import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
+import { likeContains } from '@beanpool/engine';
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -775,8 +776,8 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += ' AND message LIKE ?';
-        params.push(`%${searchQuery}%`);
+        sql += " AND message LIKE ? ESCAPE '\\'";
+        params.push(likeContains(String(searchQuery)));
     }
 
     sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';

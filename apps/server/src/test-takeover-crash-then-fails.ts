@@ -37,7 +37,8 @@
  *  8. A main server whose journal is one the take-over code never resumes or rolls back (past its restart from a build with
  *     no `undo-copy`; `{}`, `[]`, no steps, another version) boots its database as the main server, as the merge base does.
  *  9. Killed before `role`, finished at the next start, which makes the process the main server in place: an expired vote,
- *     a passed hardship grant and a 10-day-old request are handled within its first ticks, with no restart.
+ *     a passed hardship grant and a 10-day-old request are handled within its first ticks, and a settled escrow left at
+ *     zero is swept, with no restart.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-takeover-crash-then-fails.ts
@@ -495,6 +496,8 @@ async function promotedInPlaceRunsMainServer(world: World, root: string): Promis
             .run(world.anna);
         conn.prepare(`INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status, created_at)
                       VALUES ('seed-tx', 'seed-post', ?, ?, 1, 'requested', ?)`).run(world.ben, world.anna, at(10));
+        // A settled deal's escrow left at zero, which a main server's boot sweeps (state-engine.ts sweepSettledEscrowAccounts).
+        conn.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('escrow_seed-settled', 0, 0)").run();
     } finally {
         conn.close();
     }
@@ -507,7 +510,8 @@ async function promotedInPlaceRunsMainServer(world: World, root: string): Promis
             (SELECT status FROM decisions WHERE id = 'seed-open') AS vote,
             (SELECT status FROM decisions WHERE id = 'seed-passed') AS grant_,
             (SELECT status FROM marketplace_transactions WHERE id = 'seed-tx') AS request,
-            (SELECT value FROM node_config WHERE key = 'migration_members_schema_rules_v1') AS schemaRules` }))[0];
+            (SELECT value FROM node_config WHERE key = 'migration_members_schema_rules_v1') AS schemaRules,
+            (SELECT COUNT(*) FROM accounts WHERE public_key = 'escrow_seed-settled') AS settledEscrow` }))[0];
         let now = await seeded();
         while (Date.now() - started < 75_000 && (now.vote === 'open' || now.grant_ === 'passed' || now.request === 'requested')) {
             await new Promise((r) => setTimeout(r, 2000));
@@ -518,6 +522,7 @@ async function promotedInPlaceRunsMainServer(world: World, root: string): Promis
         assert(now.grant_ !== 'passed', `[${label}] the passed hardship grant is paid or queued for funds (${now.grant_})`);
         assert(now.request === 'cancelled', `[${label}] the request nobody answered for 10 days expires at the first hygiene sweep (${now.request})`);
         assert(now.schemaRules === '1', `[${label}] the members' schema-rules pass ran (${now.schemaRules})`);
+        assert(now.settledEscrow === 0, `[${label}] the settled escrow left at zero is swept, as a main server's boot sweeps it (${now.settledEscrow} left)`);
     } catch (e: any) {
         console.error(`[${label}]\n${node.output().slice(-6000)}`);
         throw e;

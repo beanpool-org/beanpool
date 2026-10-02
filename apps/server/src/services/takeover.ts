@@ -111,7 +111,8 @@ import {
     getReplacedInfo, forgetSyncEpochHeaderValue, newerTakeoverAnswering, type NewerTakeover, type ReplacedInfo,
 } from './identity-epoch.js';
 import {
-    getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, NODE_PROFILE_KEY, type NodeProfile,
+    getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, isMainServerBootRefusal, NODE_PROFILE_KEY,
+    type NodeProfile,
 } from '../config/node-profile.js';
 import {
     resolveNodeRole, roleFromSettings, takeoverMayRollBack, isTakeoverJournal, journalMayRollBack, TAKEOVER_STEPS_BEFORE_RESTART,
@@ -1432,7 +1433,8 @@ export function settleTakeoverBeforeDatabaseBoot(): void {
  * At boot, after the database is open and BEFORE the node key is loaded or the role read for anything else: finish
  * any step before the restart that a crash interrupted (settleTakeoverBeforeDatabaseBoot decided one stopped after `role`
  * before the database's boot), take the role from the config, and run the promotion audit once if it is pending. Never
- * throws; never stops the boot.
+ * stops the boot, except as a main server's boot stops: a promotion in place on settings the node profile refuses throws
+ * that refusal (config/node-profile.ts isMainServerBootRefusal), and the start exits as index.ts main().catch does.
  */
 export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } {
     let resumed = settledBeforeDatabaseBoot?.resumed ?? false;
@@ -1459,7 +1461,12 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
             // Rolled back here: this process is the standby, as local-config.json, or NODE_ROLE, now says. The database's boot
             // read a standby's role already (config/node-role.ts takeoverMayRollBack); this holds should anything have set it.
             const role = resolveNodeRole();
-            if (getNodeRole() !== role) setNodeRole(role);
+            if (getNodeRole() !== role) {
+                setNodeRole(role);
+                // A roll-back that leaves local-config.json saying primary (only a journal no build writes reaches this): a
+                // main server in place, as below.
+                if (role === 'primary') becomeMainServerInPlace();
+            }
         }
 
         const configured = getLocalConfig().nodeRole;
@@ -1478,6 +1485,15 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
         auditRan = runPendingPromotionAudit(j);
         deletePreviousDatabaseOnMainServer(j);
     } catch (e: any) {
+        if (isMainServerBootRefusal(e)) {
+            // Made the main server in place on settings every main server's boot refuses (state-engine.ts
+            // becomeMainServerInPlace): this start stops as such a boot does, before anything serves. The take-over is kept,
+            // its steps up to the restart recorded: the next start boots as the main server, refuses with the same words
+            // until the setting is fixed, and then goes on.
+            logger.error('SYS', `[Takeover] This server took over, but as the main server it may not start: ${e.message} `
+                + 'The take-over goes on at the first start these settings allow.');
+            throw e;
+        }
         logger.error('SYS', `[Takeover] Boot check failed: ${e?.message || e}`);
         // Whatever stopped it, a take-over that is being rolled back still never leaves this server the main one.
         if (readJournal()?.state === 'rolling-back') holdAsStandby();

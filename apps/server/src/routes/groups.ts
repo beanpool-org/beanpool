@@ -45,6 +45,7 @@ import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
 import { db } from '../db/db.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
+import { memberErrorText } from './member-error-text.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -118,8 +119,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
     // 1. List groups
     router.get('/api/groups', async (ctx) => {
-        const category = ctx.query.category as string | undefined;
-        const q = ctx.query.q as string | undefined;
+        // `?q=a&q=b` arrives as an array: one string or none, never a value .trim() throws on.
+        const category = typeof ctx.query.category === 'string' ? ctx.query.category : undefined;
+        const q = typeof ctx.query.q === 'string' ? ctx.query.q : undefined;
         const member = ctx.query.member as string | undefined;
         const limit = clampLimit(ctx.query.limit);
         const offset = clampOffset(ctx.query.offset);
@@ -197,7 +199,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             // A suspended member starts no group until it ends (engine createGroup): 403, as /join answers.
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to create group' };
+            ctx.body = { error: memberErrorText(e, 'Failed to create group') };
         }
     });
 
@@ -214,7 +216,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             // A suspended member joins nothing until it ends (engine joinGroup): 403, like every refusal of who they are.
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to join group' };
+            ctx.body = { error: memberErrorText(e, 'Failed to join group') };
         }
     });
 
@@ -284,7 +286,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to update member' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update member') };
         }
     });
 
@@ -310,7 +312,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to change member role' };
+            ctx.body = { error: memberErrorText(e, 'Failed to change member role') };
         }
     });
 
@@ -327,7 +329,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to remove member' };
+            ctx.body = { error: memberErrorText(e, 'Failed to remove member') };
         }
     });
 
@@ -353,7 +355,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, member };
         } catch (e: any) {
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to hand the lead over' };
+            ctx.body = { error: memberErrorText(e, 'Failed to hand the lead over') };
         }
     });
 
@@ -381,7 +383,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to update group' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update group') };
         }
     });
 
@@ -395,7 +397,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = getGroupThread(ctx.params.id, actor, limit, offset);
         } catch (e: any) {
-            const msg = e?.message || 'Could not open the group chat';
+            const msg = memberErrorText(e, 'Could not open the group chat');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -443,7 +445,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, message };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            const msg = e?.message || 'Could not post the message';
+            const msg = memberErrorText(e, 'Could not post the message');
             ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -463,7 +465,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = { success: true, message: removeGroupThreadMessage(ctx.params.id, messageId, actor) };
         } catch (e: any) {
-            const msg = e?.message || 'Could not remove the message';
+            const msg = memberErrorText(e, 'Could not remove the message');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -477,7 +479,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = getGroupSuccession(ctx.params.id, actor);
         } catch (e: any) {
-            const msg = e?.message || 'Could not load the convenor vote';
+            const msg = memberErrorText(e, 'Could not load the convenor vote');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -498,7 +500,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const res = proposeGroupConvenor(ctx.params.id, actor, candidate);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
-            const msg = e?.message || 'Could not propose a convenor';
+            const msg = memberErrorText(e, 'Could not propose a convenor');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -525,7 +527,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const res = voteGroupConvenor(ctx.params.proposalId, actor, choice);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
-            const msg = e?.message || 'Could not record the vote';
+            const msg = memberErrorText(e, 'Could not record the vote');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -544,7 +546,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to delete group post' };
+            ctx.body = { error: memberErrorText(e, 'Failed to delete group post') };
         }
     });
 

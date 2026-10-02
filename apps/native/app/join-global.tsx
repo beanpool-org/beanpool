@@ -14,7 +14,7 @@ import {
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
-import { DOOR_WORK_MESSAGES } from '../utils/door-work';
+import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
 import { DoorChoices, DoorWorkProgress } from '../components/WordsDoor';
 import { startOneWayBack } from '../utils/one-way-back';
 import { vaultCopyKnown } from '../utils/vault';
@@ -148,9 +148,14 @@ export default function JoinGlobalScreen() {
         else router.replace('/(tabs)');
     }
 
+    /**
+     * "Choose another way" (or "Use a different sign-in"): stops the name check and the wait for the 12-words work, so the
+     * choices, Back and the hardware Back work at once (PR #1452 review, finding 2). The work keeps running in the hook.
+     */
     function signInAgain() {
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
+        setLoading(false);
         setWorkWaiting(false);
         setSignin(null);
         setSuggestions([]);
@@ -276,9 +281,10 @@ export default function JoinGlobalScreen() {
             }
             setSuggestions([]);
             setWorkWaiting(run.state().phase !== 'ready');
-            const ready = await run.solution();
-            setWorkWaiting(false);
+            // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
+            const ready = await solutionUnlessLeft(run, stop.signal);
             if (stop.signal.aborted || ready.kind === 'cancelled') return;
+            setWorkWaiting(false);
             if (ready.kind === 'refused') {
                 await afterAnswer(ready.answer, account, typed, 'words');
                 return;

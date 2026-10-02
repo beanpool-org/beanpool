@@ -345,3 +345,128 @@ describe('the work route', () => {
         expect(await fetchDoorWork('https://global.test', joiner, 'words')).toMatchObject({ kind: 'refused', answer: { kind: 'unreachable' } });
     });
 });
+
+/**
+ * PR #1452 deciding review, finding 1: once the work route refused, every later Join returned that same refusal without
+ * asking the node again. Through the real work route reader (fetchDoorWork, signed by a real key) against a stubbed
+ * fetch: each Join after a refusal asks again, once the node's Retry-After has passed (or a minute has, whichever is
+ * sooner), and inside that wait says when, without asking.
+ */
+describe('"try again" really asks again (PR #1452 review, finding 1)', () => {
+    type Reply = { status: number; body: unknown; headers?: Record<string, string> };
+    function workRouteSaying(replies: Reply[]) {
+        const asked: string[] = [];
+        globalThis.fetch = vi.fn(async (url: any) => {
+            asked.push(new URL(String(url)).pathname);
+            const r = replies.length > 1 ? replies.shift()! : replies[0];
+            return new Response(JSON.stringify(r.body), { status: r.status, headers: r.headers ?? {} });
+        }) as any;
+        return asked;
+    }
+    const challengeReply = (joiner: BeanPoolIdentity): Reply => ({
+        status: 200,
+        body: { work: { challenge: makeDoorWorkChallenge({ workKey: WORK_KEY, level: 0, key: joiner.publicKey, door: 'words', now: Date.now() }), expiresInSeconds: 600 } },
+    });
+    const solve = async (): Promise<PhoneSolve> => ({ counters: [1, 2, 3, 4, 5, 6, 7, 8], tries: 8, ms: 1 });
+    async function joiner() {
+        const { draftIdentity } = await import('../identity');
+        return draftIdentity();
+    }
+    /** The phone's clock, moved by the test. */
+    function phoneClock() {
+        let t = Date.now();
+        return { now: () => t, advance: (ms: number) => { t += ms; } };
+    }
+
+    it('a proxy\'s 502 when the door opened: the next Join asks the node again, and the work is done', async () => {
+        const key = await joiner();
+        const asked = workRouteSaying([{ status: 502, body: {} }, challengeReply(key)]);
+        const run = startDoorWork({ url: 'https://global.test', identity: key, door: 'words', solve, setTimer: () => 1, clearTimer: () => {} });
+        // The member taps Join while the first ask is out: its answer is the refusal.
+        expect((await run.solution()).kind).toBe('refused');
+        expect(asked).toEqual(['/api/join/work']);
+        // Join again: the node is asked again, and this time the work is done.
+        expect(await run.solution()).toMatchObject({ kind: 'solved' });
+        expect(asked).toEqual(['/api/join/work', '/api/join/work']);
+        run.cancel();
+    });
+
+    it('the 12-words ceiling (429, Retry-After 59 minutes): inside a minute Join says when and asks nothing; after it, Join asks again', async () => {
+        const key = await joiner();
+        const clock = phoneClock();
+        const ceiling: Reply = {
+            status: 429,
+            body: { error: 'x', code: 'network_busy', door: 'words', window: 'hour', retryAfterSeconds: 3540 },
+            headers: { 'Retry-After': '3540' },
+        };
+        const asked = workRouteSaying([ceiling, challengeReply(key)]);
+        const run = startDoorWork({ url: 'https://global.test', identity: key, door: 'words', solve, now: clock.now, setTimer: () => 1, clearTimer: () => {} });
+        const first = await run.solution();
+        expect(first).toMatchObject({ kind: 'refused', answer: { kind: 'rate_limited', door: 'words' } });
+        if (first.kind === 'refused') expect((first.answer as { message: string }).message).toMatch(/try again in 59 minutes\.$/);
+
+        // Ten seconds later: no new ask (never hammered), and the sentence still says when.
+        clock.advance(10_000);
+        const soon = await run.solution();
+        expect(asked).toHaveLength(1);
+        expect(soon).toMatchObject({ kind: 'refused', answer: { kind: 'rate_limited' } });
+        if (soon.kind === 'refused') expect((soon.answer as { message: string }).message).toMatch(/Sign in to join now, or try again in 59 minutes\.$/);
+
+        // The ceiling has been lifted meanwhile. A minute on, Join asks the node again: the work comes, and is done.
+        clock.advance(51_000);
+        expect(await run.solution()).toMatchObject({ kind: 'solved' });
+        expect(asked).toEqual(['/api/join/work', '/api/join/work']);
+        run.cancel();
+    });
+
+    it('the door\'s own limiter (429, Retry-After 30 s): asked again once the 30 seconds have passed', async () => {
+        const key = await joiner();
+        const clock = phoneClock();
+        const asked = workRouteSaying([{ status: 429, body: { error: 'Too many attempts. Try again in 30s' }, headers: { 'Retry-After': '30' } }, challengeReply(key)]);
+        const run = startDoorWork({ url: 'https://global.test', identity: key, door: 'words', solve, now: clock.now, setTimer: () => 1, clearTimer: () => {} });
+        const first = await run.solution();
+        if (first.kind === 'refused') expect((first.answer as { message: string }).message).toBe('There were too many tries in a short time. Please try again in a minute.');
+        clock.advance(20_000);
+        expect((await run.solution()).kind).toBe('refused');
+        expect(asked).toHaveLength(1);
+        clock.advance(11_000);
+        expect(await run.solution()).toMatchObject({ kind: 'solved' });
+        expect(asked).toHaveLength(2);
+        run.cancel();
+    });
+
+    it('the solver threw once: Try again fetches and solves anew', async () => {
+        const key = await joiner();
+        const asked = workRouteSaying([challengeReply(key), challengeReply(key)]);
+        let calls = 0;
+        const flaky = async (): Promise<PhoneSolve> => {
+            if (++calls === 1) throw new Error('ExpoCrypto.digest failed once');
+            return solve();
+        };
+        const run = startDoorWork({ url: 'https://global.test', identity: key, door: 'words', solve: flaky, setTimer: () => 1, clearTimer: () => {} });
+        expect(await run.solution()).toEqual({ kind: 'refused', answer: { kind: 'try_again', message: DOOR_WORK_MESSAGES.solverUnavailable } });
+        expect(run.state().phase).toBe('failed');
+        expect(await run.solution()).toMatchObject({ kind: 'solved' });
+        expect(calls).toBe(2);
+        expect(asked).toHaveLength(2);
+        run.cancel();
+    });
+});
+
+/**
+ * PR #1452 deciding review, finding 3: the signature check refuses a request whose timestamp is more than 5 minutes off
+ * with 401 and no code. On the 12-words path there is no sign-in to redo: the member is told to check the phone's date
+ * and time.
+ */
+describe('a phone with a wrong clock at the 12-words door (PR #1452 review, finding 3)', () => {
+    it('the work route\'s 401 with no code says to check the phone\'s date and time, never "sign in again"', async () => {
+        globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ error: 'Request timestamp is stale or invalid' }), { status: 401 })) as any;
+        const { draftIdentity } = await import('../identity');
+        const answer = await fetchDoorWork('https://global.test', await draftIdentity(), 'words');
+        expect(answer).toMatchObject({ kind: 'refused', answer: { kind: 'phone_clock' } });
+        if (answer.kind === 'refused') {
+            expect((answer.answer as { message: string }).message).toMatch(/date and time/);
+            expect((answer.answer as { message: string }).message).not.toMatch(/sign in again/i);
+        }
+    });
+});

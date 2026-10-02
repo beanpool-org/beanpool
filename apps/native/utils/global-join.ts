@@ -149,6 +149,11 @@ export type DoorAnswer =
     | { kind: 'sign_in_required'; message: string }
     /** 401: the sign-in was refused (expired, or not this request's). A new sign-in may work. */
     | { kind: 'sign_in_again'; message: string }
+    /**
+     * 401 with no code on the 12-words path ({@link readWordsDoorAnswer}): the node's signature check refused the request's
+     * time, which is the phone's clock. There is no sign-in there to redo: the phone's date and time are the fix.
+     */
+    | { kind: 'phone_clock'; message: string }
     /** 400, 5xx, anything else: nothing is wrong with the member. */
     | { kind: 'try_again'; message: string }
     /** No answer at all. */
@@ -178,6 +183,8 @@ export const DOOR_MESSAGES = {
     /** 403 `sign_in_required`: a door that takes no 12-words joins. */
     signInRequired: 'This community needs a sign-in to join: Google, Apple or Facebook. You can sign in below.',
     signInAgain: 'Your sign-in could not be used. Please sign in again.',
+    /** A 401 with no code on the 12-words path: the phone's clock (PR #1452 review, finding 3). */
+    phoneClock: 'The global community couldn\'t accept this because your phone\'s date and time look wrong. Check them in your phone\'s settings (set them to automatic), then try again.',
     tryAgain: 'Your join could not be completed, and nothing was saved. Please try again in a minute.',
     /** Under the joining spinner while the provider's sheet opens once more, with the door's own nonce ({@link submitJoin}). */
     signInAnotherWay: 'Checking your sign-in another way…',
@@ -294,6 +301,17 @@ export function readDoorAnswer(status: number, body: unknown, retryAfter: number
     }
     if (status === 401) return { kind: 'sign_in_again', message: DOOR_MESSAGES.signInAgain };
     return { kind: 'try_again', message: said(body) ?? DOOR_MESSAGES.tryAgain };
+}
+
+/**
+ * {@link readDoorAnswer} for the routes the 12-words way meets (the work route, at either door, and the 12-words join):
+ * none of them carries a sign-in, so a 401 with no code can only be the signature check refusing the request's time,
+ * which is the phone's clock (more than 5 minutes off). Never "sign in again" there: there is no sign-in to redo.
+ */
+export function readWordsDoorAnswer(status: number, body: unknown, retryAfter: number | null = null): DoorAnswer {
+    if (status === 401 && codeOf(body) === undefined) return { kind: 'phone_clock', message: DOOR_MESSAGES.phoneClock };
+    if (status === 401) return { kind: 'try_again', message: DOOR_MESSAGES.tryAgain };
+    return readDoorAnswer(status, body, retryAfter);
 }
 
 export function nextStepFor(answer: DoorAnswer): DoorNext {
@@ -585,6 +603,7 @@ function refusedByTheNode(answer: DoorAnswer): boolean {
         case 'door_closed':
         case 'rate_limited':
         case 'sign_in_again':
+        case 'phone_clock':
         case 'work_again':
         case 'sign_in_required':
             return true;
@@ -756,7 +775,7 @@ async function sendWordsJoin(url: string, identity: BeanPoolIdentity, callsign: 
     }
     if (!res) return { kind: 'unreachable', message: DOOR_MESSAGES.unreachable };
     const answerBody = await res.json().catch(() => ({}));
-    const answer = readDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
+    const answer = readWordsDoorAnswer(res.status, answerBody, retryAfterSeconds(res));
     console.log(`[JOIN] words: the door answered ${res.status} (${answer.kind})`);
     if (refusedByTheNode(answer)) await countJoinRefused(identity.publicKey);
     return answer;

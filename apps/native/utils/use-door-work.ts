@@ -6,7 +6,9 @@ import type { BeanPoolIdentity } from './identity';
 /**
  * A door's work for a screen (utils/door-work.ts): started when the door opens, kept while the screen is up, stopped
  * when it goes or the member leaves the door. One run at a time per door (the challenge names one key and one door);
- * starting again for the same key and door keeps the run in hand.
+ * starting again for the same key and door keeps the run in hand, and asks the node again when that run ended in a
+ * refusal whose wait has passed (`run.renew()`: a proxy's 502, the door's limiter, the 12-words ceiling, a solver that
+ * failed once). Without that, every later Join returned the same refusal and sent nothing (PR #1452 review, finding 1).
  *
  * `busy` is the busy-level sentence (from level 3, with this phone's own estimate), counted down once a second while
  * the work runs, and null otherwise.
@@ -32,7 +34,10 @@ export function useDoorWork() {
 
     const start = useCallback((url: string, identity: BeanPoolIdentity, door: DoorWorkDoor): DoorWorkRun => {
         const held = runs.current.get(door);
-        if (held && held.publicKey === identity.publicKey && held.state().phase !== 'cancelled') return held;
+        if (held && held.publicKey === identity.publicKey && held.state().phase !== 'cancelled') {
+            held.renew();
+            return held;
+        }
         held?.cancel();
         // The run reports its first state before startDoorWork returns, so it is named only once it exists: a state from a
         // run that has since been replaced is dropped.

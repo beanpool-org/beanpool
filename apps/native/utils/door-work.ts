@@ -42,7 +42,7 @@ import {
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
-import { readDoorAnswer, retryAfterSeconds, DOOR_MESSAGES, JOIN_TIMEOUT_MS, type DoorAnswer } from './global-join';
+import { readWordsDoorAnswer, retryAfterSeconds, DOOR_MESSAGES, JOIN_TIMEOUT_MS, type DoorAnswer } from './global-join';
 
 export const DOOR_WORK_PATH = '/api/join/work';
 
@@ -57,6 +57,15 @@ export const DOOR_WORK_EXPIRY_MARGIN_MS = 60_000;
 
 /** How many times a challenge that ran out while nobody tapped Join is replaced by itself: an hour's worth. */
 export const DOOR_WORK_MAX_REFRESHES = 6;
+
+/**
+ * After a refusal from the work route, Join asks the node again once the node's `Retry-After` has passed, or once this
+ * long has, whichever comes first. Never sooner, so a member tapping Join never hammers a busy node; never later, so a
+ * ceiling that lifts early (its operator raised it, or the hour's earlier joins aged out) is found on the next Join a
+ * minute on. Inside the wait, Join says the node's sentence again with the time it has left, and asks nothing.
+ * PR #1452 deciding review, finding 1.
+ */
+export const DOOR_WORK_ASK_AGAIN_MAX_MS = 60_000;
 
 /** From this level on the door says joining is busy, with this phone's own estimate (design §3.5). */
 export const BUSY_LEVEL = 3;
@@ -81,11 +90,21 @@ export interface IssuedDoorWork {
     expiresInSeconds: number;
 }
 
+/**
+ * What the door answered when it refused: the status, the body and its `Retry-After` (seconds), kept so the same
+ * sentence can be said again later with the time that is left ({@link DoorWorkRun.solution}).
+ */
+export interface DoorWorkHeard {
+    status: number;
+    body: unknown;
+    retryAfterSeconds: number | null;
+}
+
 /** What the work route said. `none`: no work is needed at this door now (the sign-in door at ordinary rates). */
 export type DoorWorkFetch =
     | { kind: 'work'; work: IssuedDoorWork; receivedAt: number }
     | { kind: 'none' }
-    | { kind: 'refused'; answer: DoorAnswer };
+    | { kind: 'refused'; answer: DoorAnswer; heard?: DoorWorkHeard };
 
 /** The work the join carries. */
 export interface DoorWorkSolution {
@@ -133,7 +152,11 @@ export async function fetchDoorWork(
     }
     if (!res) return { kind: 'refused', answer: { kind: 'unreachable', message: DOOR_MESSAGES.unreachable } };
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) return { kind: 'refused', answer: readDoorAnswer(res.status, body, retryAfterSeconds(res)) };
+    if (!res.ok) {
+        // The work route has no sign-in at either door: a 401 is the signature check (a phone clock set wrong).
+        const heard: DoorWorkHeard = { status: res.status, body, retryAfterSeconds: retryAfterSeconds(res) };
+        return { kind: 'refused', answer: readWordsDoorAnswer(res.status, body, heard.retryAfterSeconds), heard };
+    }
     const work = readIssuedWork(body);
     if (work === 'none') return { kind: 'none' };
     if (!work) return { kind: 'refused', answer: { kind: 'try_again', message: DOOR_MESSAGES.tryAgain } };
@@ -219,9 +242,16 @@ export interface DoorWorkRun {
     state(): DoorWorkState;
     /**
      * The work for the join: waits for the solve in hand, or fetches and solves a new challenge when the one in hand is
-     * about to run out (or there is none yet because the first ask got no answer). Never rejects.
+     * about to run out (or there is none yet because the first ask got no answer). A refusal (or a solver that failed)
+     * already in hand when this is called is asked again, once {@link DOOR_WORK_ASK_AGAIN_MAX_MS} or the node's
+     * `Retry-After` allows; before then it is said again, with the time left, and nothing is sent. Never rejects.
      */
     solution(): Promise<DoorWorkOutcome>;
+    /**
+     * The door's screen came back (start again): a refusal in hand is asked again now, when its wait allows, so the work
+     * runs while the member reads. True when a new round began. Never rejects.
+     */
+    renew(): boolean;
     /** The node refused the work it was sent (`work_*`): a new challenge, solved, quietly. Never rejects. */
     again(): Promise<DoorWorkOutcome>;
     /** Stop: nothing more is fetched or hashed. */
@@ -263,6 +293,10 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
     let roundExpiresAt: number | null = null;
     /** Moved on by every new round, so a round that was replaced never writes over its successor's state. */
     let generation = 0;
+    /** The round in hand has settled (its outcome is known): a Join after this is a new tap, not the one it was for. */
+    let roundSettled = false;
+    /** The round in hand ended refused (the door's answer, or a solver that failed): when, and what the door said. */
+    let refusal: { at: number; answer: DoorAnswer; heard?: DoorWorkHeard } | null = null;
 
     const set = (gen: number, next: Partial<DoorWorkState>) => {
         if (gen !== generation || cancelled) return;
@@ -286,6 +320,8 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
     function begin(): Promise<DoorWorkOutcome> {
         const gen = ++generation;
         roundExpiresAt = null;
+        roundSettled = false;
+        refusal = null;
         set(gen, { phase: 'fetching', level: null, partsDone: 0, estimateMs: null, startedAt: null, answer: undefined });
         const r = (async (): Promise<DoorWorkOutcome> => {
             const fetched = await fetchWork(o.url, o.identity, o.door);
@@ -295,6 +331,7 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
                 return { kind: 'none' };
             }
             if (fetched.kind === 'refused') {
+                if (gen === generation) refusal = { at: now(), answer: fetched.answer, heard: fetched.heard };
                 set(gen, { phase: 'refused', answer: fetched.answer });
                 return { kind: 'refused', answer: fetched.answer };
             }
@@ -316,6 +353,7 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
             } catch (e) {
                 console.log(`[DOOR WORK] the solver could not run: ${(e as Error)?.message ?? e}`);
                 const answer: DoorAnswer = { kind: 'try_again', message: DOOR_WORK_MESSAGES.solverUnavailable };
+                if (gen === generation) refusal = { at: now(), answer };
                 set(gen, { phase: 'failed', answer });
                 return { kind: 'refused', answer };
             }
@@ -324,15 +362,46 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
             set(gen, { phase: 'ready', partsDone: DOOR_WORK_PARTS });
             if (gen === generation) scheduleRefresh(gen, expiresAt);
             return { kind: 'solved', work: { challenge: work.challenge, counters: solved.counters } };
-        })();
+        })().then((outcome) => {
+            if (gen === generation) roundSettled = true;
+            return outcome;
+        });
         round = r;
         return r;
     }
 
     begin();
 
+    /**
+     * How long until a refusal in hand may be asked again (ms, 0 when it may now): the node's `Retry-After`, never more
+     * than {@link DOOR_WORK_ASK_AGAIN_MAX_MS}; none for a refusal that named no wait.
+     */
+    function waitLeft(r: NonNullable<typeof refusal>): number {
+        const asked = r.heard?.retryAfterSeconds ?? (r.answer.kind === 'rate_limited' ? r.answer.retryAfterSeconds : null);
+        if (!asked) return 0;
+        return Math.max(0, r.at + Math.min(asked * 1000, DOOR_WORK_ASK_AGAIN_MAX_MS) - now());
+    }
+
+    /** The refusal in hand, said again with the time the node's `Retry-After` has left ("try again in 58 minutes"). */
+    function saidAgain(r: NonNullable<typeof refusal>): DoorAnswer {
+        if (!r.heard?.retryAfterSeconds) return r.answer;
+        const left = Math.max(1, Math.ceil((r.at + r.heard.retryAfterSeconds * 1000 - now()) / 1000));
+        return readWordsDoorAnswer(r.heard.status, r.heard.body, left);
+    }
+
+    /** A refusal in hand, settled before now, whose wait has passed: ask again. True when a new round began. */
+    function askAgainIfRefused(): boolean {
+        if (cancelled || !roundSettled || !refusal || waitLeft(refusal) > 0) return false;
+        begin();
+        return true;
+    }
+
     async function solution(): Promise<DoorWorkOutcome> {
-        let askedAgain = false;
+        if (cancelled) return { kind: 'cancelled' };
+        // A Join tapped after a refusal (the work route's, or the solver's): ask the node again, once its wait allows.
+        // Inside the wait, the door's own sentence again, with the time left; nothing is sent.
+        if (roundSettled && refusal && waitLeft(refusal) > 0) return { kind: 'refused', answer: saidAgain(refusal) };
+        let askedAgain = askAgainIfRefused();
         for (;;) {
             if (cancelled) return { kind: 'cancelled' };
             const waitingOn = round;
@@ -357,6 +426,7 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
         door: o.door,
         state: () => state,
         solution,
+        renew: askAgainIfRefused,
         async again() {
             if (cancelled) return { kind: 'cancelled' };
             begin();
@@ -370,6 +440,29 @@ export function startDoorWork(o: StartDoorWork): DoorWorkRun {
             state = { ...state, phase: 'cancelled' };
         },
     };
+}
+
+const LEFT = Symbol('left');
+
+/**
+ * The run's work for a join, or `cancelled` as soon as `signal` aborts: the member left the 12-words way ("Choose
+ * another way", Back) while the work finished. The screen stops waiting at once, so its spinner goes and every way off
+ * it works again; the work itself keeps running in the run (the hook's), for a member who comes back to it.
+ * PR #1452 deciding review, finding 2.
+ */
+export async function solutionUnlessLeft(run: DoorWorkRun, signal: AbortSignal): Promise<DoorWorkOutcome> {
+    if (signal.aborted) return { kind: 'cancelled' };
+    let onAbort: (() => void) | null = null;
+    const left = new Promise<typeof LEFT>((resolve) => {
+        onAbort = () => resolve(LEFT);
+        signal.addEventListener('abort', onAbort);
+    });
+    try {
+        const outcome = await Promise.race([run.solution(), left]);
+        return outcome === LEFT ? { kind: 'cancelled' } : outcome;
+    } finally {
+        if (onAbort) signal.removeEventListener('abort', onAbort);
+    }
 }
 
 /** "about 15 seconds", "about 2 minutes": an estimate, never more precise than it is. */

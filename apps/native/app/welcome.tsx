@@ -22,7 +22,7 @@ import {
     type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
 import { useDoorWork } from '../utils/use-door-work';
-import { DOOR_WORK_MESSAGES } from '../utils/door-work';
+import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
 import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
 import { LinkSignInSheet } from '../components/LinkSignInSheet';
 import { linkedNotice, type LinkAnswer } from '../utils/join-link';
@@ -1357,11 +1357,13 @@ export default function WelcomeScreen() {
 
     /**
      * "Use a different sign-in" on the name step, or "Choose another way" on the 12-words one: open while its check runs,
-     * which stops it. Back to the two ways where the door has both. The 12-words work keeps running.
+     * and while the 12-words work finishes, which stops the step waiting on either. Back to the two ways where the door
+     * has both, with both ways and "← Back to Home" usable at once. The 12-words work keeps running in the hook.
      */
     function signInAgainAtDoor() {
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
+        setLoading(false);
         setWorkWaiting(false);
         setDoorSignIn(null);
         setCallsignSuggestions([]);
@@ -1494,10 +1496,11 @@ export default function WelcomeScreen() {
             }
             setCallsignSuggestions([]);
             setWorkWaiting(run.state().phase !== 'ready');
-            const ready = await run.solution();
-            setWorkWaiting(false);
+            // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
+            const ready = await solutionUnlessLeft(run, leave.signal);
             // Left while it finished: the way out they took has already drawn its screen.
             if (leave.signal.aborted || ready.kind === 'cancelled') return;
+            setWorkWaiting(false);
             if (ready.kind === 'refused') {
                 // Nothing was sent: a refusal before any join, like one at the sign-in. Every key and record stays.
                 await afterDoorAnswer(ready.answer, key, { ...key.identity, callsign: name }, 'signIn', 'words');

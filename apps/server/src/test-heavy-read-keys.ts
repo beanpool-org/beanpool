@@ -23,6 +23,11 @@
  *      let straight through as light, and the reader holding the roster held nothing.
  *   6. When the holder hangs up, a full roster is served again, the same bytes.
  *
+ * The member directory's delta (r4170492489): `/api/members?updatedAfter=0` is every member, the whole directory, and a
+ * delta went straight past the cap. Now a cursor older than an hour is weighed like the full read: with the budget full,
+ * a burst of them each waits its 1.5 s and is told "busy" (at 09b35671 each got the whole directory at once), while a
+ * phone's delta from five minutes ago still goes straight through.
+ *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-heavy-read-keys.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -166,6 +171,9 @@ async function main(): Promise<void> {
         convenorsOnly: { route: `${roster}?role=convenor`, key: member },
         invitedOnly: { route: `${roster}?status=invited`, key: convenor },
         allGroups: { route: `/api/groups?limit=${GROUPS}`, key: member },
+        deltaFromZero: { route: '/api/members?updatedAfter=0', key: member },
+        deltaFrom1970: { route: `/api/members?updatedAfter=${encodeURIComponent('1970-01-01T00:00:00.000Z')}`, key: convenor },
+        recentDelta: { route: `/api/members?updatedAfter=${encodeURIComponent(new Date(Date.now() - 5 * 60_000).toISOString())}`, key: member },
     };
     const read = (r: { route: string; key: Key }, o: { hold?: boolean } = {}) => open(port, r.route, r.key, o);
     let holder: Open | null = null;
@@ -176,6 +184,7 @@ async function main(): Promise<void> {
             memberRoster: await read(routes.memberRoster).done,
             convenorRoster: await read(routes.convenorRoster).done,
             allGroups: await read(routes.allGroups).done,
+            deltaFromZero: await read(routes.deltaFromZero).done,
         };
         assert(full.memberRoster.status === 200 && full.memberRoster.bytes >= 4 * MB,
             `a member's full roster is a heavy answer (${full.memberRoster.status}, ${(full.memberRoster.bytes / MB).toFixed(1)} MB)`);
@@ -183,6 +192,8 @@ async function main(): Promise<void> {
             `so is the convenor's, every status (${full.convenorRoster.status}, ${(full.convenorRoster.bytes / MB).toFixed(1)} MB)`);
         assert(full.allGroups.status === 200 && full.allGroups.bytes < LIGHT_BYTES,
             `the list of ${GROUPS} groups, each description at its limit, is under 512 KB: previews only, it can't be heavy (${full.allGroups.status}, ${(full.allGroups.bytes / 1024).toFixed(0)} KB)`);
+        assert(full.deltaFromZero.status === 200 && full.deltaFromZero.bytes >= LIGHT_BYTES,
+            `a delta from ?updatedAfter=0 is the whole directory, a heavy answer (${full.deltaFromZero.status}, ${(full.deltaFromZero.bytes / MB).toFixed(1)} MB)`);
         assert(await free(), `nothing is in flight once they are read (${inFlight()} bytes)`);
 
         // ── 2. The small answers under the same routes ───────────────────────────────────────────────────────────
@@ -217,6 +228,14 @@ async function main(): Promise<void> {
             convenorRoster: await read(routes.convenorRoster).done,
         };
         const said = (a: Answer) => `${a.status} after ${Math.round(a.ms)} ms`;
+        // A burst of deltas from long ago, each the whole directory: weighed like the full read, not let past the line.
+        const oldDeltas = await Promise.all([routes.deltaFromZero, routes.deltaFromZero, routes.deltaFromZero, routes.deltaFrom1970]
+            .map((r) => read(r).done));
+        assert(oldDeltas.every((a) => isBusy(a) && a.ms >= 1400),
+            `with the budget full, a burst of ?updatedAfter=0 and =1970 deltas is weighed: each waits its 1.5 s and is told "busy" (${oldDeltas.map(said).join(', ')})`);
+        const recent = await read(routes.recentDelta).done;
+        assert(recent.status === 200 && recent.ms < 1000 && recent.bytes < 4096,
+            `a phone's delta from five minutes ago still goes straight through (${recent.status} in ${Math.round(recent.ms)} ms, ${recent.bytes} bytes)`);
         assert(isBusy(fullAgain.memberRoster) && fullAgain.memberRoster.ms >= 1400,
             `after a member's ?role=convenor, a member's full roster is still weighed: it waits its 1.5 s and is told "busy" (${said(fullAgain.memberRoster)})`);
         assert(isBusy(fullAgain.convenorRoster) && fullAgain.convenorRoster.ms >= 1400,

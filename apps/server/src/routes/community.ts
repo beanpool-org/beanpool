@@ -86,7 +86,7 @@ import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
-import { heavyRead } from '../heavy-reads.js';
+import { heavyRead, heavyReadKey } from '../heavy-reads.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -2127,6 +2127,8 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 
 // ======================== MEMBERS LIST ========================
 
+/** A member-directory delta whose cursor is this recent goes straight past the heavy-read cap; an older one is weighed. */
+const MEMBERS_DELTA_FRESH_MS = 60 * 60 * 1000;
 
 router.get('/api/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
@@ -2190,9 +2192,15 @@ router.get('/api/members', async (ctx) => {
         ctx.body = bodyStr;
     };
     // The whole directory (every phone's first sync, and hourly) waits for room under the heavy-read cap
-    // (heavy-reads.ts) or is answered "busy"; a delta is the rows changed since its cursor, and goes straight through.
-    if (ctx.query.updatedAfter) answer();
-    else await heavyRead(ctx, 'members', answer);
+    // (heavy-reads.ts) or is answered "busy". A delta is the rows changed since its cursor, so only a recent cursor's is
+    // small for sure: one at or after an hour ago (compared as the query compares it, as text) is the rows changed in
+    // the last hour, and goes straight through. Any other (0, 1970, a phone back after a day, an array) can be the whole
+    // directory, so it waits under the cap too, weighed by the last answer to that same cursor: a cursor's answer only
+    // grows as members join, so a small one never stands in for a bigger one under its key.
+    const cursor = ctx.query.updatedAfter;
+    if (!cursor) await heavyRead(ctx, 'members', answer);
+    else if (typeof cursor === 'string' && cursor >= new Date(Date.now() - MEMBERS_DELTA_FRESH_MS).toISOString()) answer();
+    else await heavyRead(ctx, heavyReadKey('members-delta', { after: JSON.stringify(cursor) }), answer);
 });
 
 router.post('/api/admin/reports', async (ctx) => {

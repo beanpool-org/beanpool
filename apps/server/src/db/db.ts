@@ -597,10 +597,16 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
             after = rows[rows.length - 1].rid;
             if (moved > 0 && moved % (batch * 20) < rows.length) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
         }
+    } catch (e) {
+        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
+        return moved;
+    }
+    try {
         db.exec('ALTER TABLE members DROP COLUMN avatar_url');
         console.log(`[DB] Members' photos are in member_photos now: ${moved} moved, ${dropped} that were no photo left out, in ${Date.now() - started} ms.`);
     } catch (e) {
-        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
+        // Every photo is out; the column stays, empty and read by nothing, until a boot can drop it.
+        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; the next boot tries again:`, e);
     }
     return moved;
 }

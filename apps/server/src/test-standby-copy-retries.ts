@@ -28,6 +28,10 @@
  *     waits RESYNC_RETRY_MS, the same after the next refusal (N2: the same rows would be refused again; a refusal is not
  *     what grows), Settings saying it was refused; what it fetched is kept through an orphan sweep past the sweep's hour of
  *     grace, and the copy that lands once the photo comes right fetches only the rest.
+ *  6. 404 churn (the follow-up review of #1455): a new standby's first copy whose 6th object request is answered 404, in every
+ *     whole copy, so each fails at a different photo and keeps what it fetched. Each wait is the first step again, not twice
+ *     the one before, and the copy lands in about as many tries as there are objects to fetch (before: 5 copies, the waits
+ *     1.5, 2.3, 4.1, 7.4 s, 20.9 s in all, against 12.4 s with a wait that never grew). A photo that stays stuck still backs off (step 1).
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-copy-retries.ts
@@ -66,8 +70,12 @@ const FAILS = 5;
 const ROUTINE_MS = 1000;
 /** The orphan sweep's grace (engine/storage-health.ts ORPHAN_OBJECT_GRACE_MS): an object no row names is kept this long. */
 const ORPHAN_GRACE_MS = 60 * 60_000;
-/** Slack for a reply's way back to this process: a wait read here is at most this much shorter than the one S drew. */
-const SLACK_MS = 150;
+/**
+ * Slack on a wait read as `retryAt - at`, both on S's own clock: `timed-pull` and `timed-resync` (below) take `at` and the
+ * status in the tick the pull returns in, so no reply's trip to this process sits inside the measured wait. What is left
+ * is the few ms between S's catch block drawing the wait and the pull returning.
+ */
+const SLACK_MS = 50;
 
 // ── The orchestrator ───────────────────────────────────────────────────────────────────────
 
@@ -103,10 +111,12 @@ interface Proxy {
     objectGets: string[];
     broken: Set<string>;
     corrupt: Set<string>;
+    /** 404 churn: the `nth` object request of each whole copy (counted from its opening) is answered 404, as one replaced since the snapshot. */
+    gone: { nth: number | null; asked: number };
     close: () => void;
 }
 async function startProxy(target: string): Promise<Proxy> {
-    const px: Proxy = { url: '', opened: [], objectGets: [], broken: new Set(), corrupt: new Set(), close: () => {} };
+    const px: Proxy = { url: '', opened: [], objectGets: [], broken: new Set(), corrupt: new Set(), gone: { nth: null, asked: 0 }, close: () => {} };
     const server = http.createServer((req, res) => {
         void (async () => {
             const chunks: Buffer[] = [];
@@ -120,9 +130,13 @@ async function startProxy(target: string): Promise<Proxy> {
             let status = 502;
             let raw: Buffer = Buffer.alloc(0);
             const outHeaders: Record<string, string> = {};
+            if (opening && !url.searchParams.has('since')) px.gone.asked = 0;
             if (object && px.broken.has(object)) {
                 status = 503;
                 raw = Buffer.from(JSON.stringify({ error: 'the image store is not answering' }));
+            } else if (object && px.gone.nth !== null && ++px.gone.asked === px.gone.nth) {
+                status = 404;
+                raw = Buffer.from(JSON.stringify({ error: 'no such object' }));
             } else {
                 try {
                     const up = await fetch(target + req.url, { method: req.method, headers, body: chunks.length > 0 ? Buffer.concat(chunks) : undefined });
@@ -252,11 +266,9 @@ async function main(): Promise<void> {
             const deadline = Date.now() + 60_000;
             while (tries.length < copies && Date.now() < deadline) {
                 const o0 = px.opened.length;
-                const r = await s.send('pull', {});
-                const answeredAt = Date.now();
+                const { st, at: answeredAt, ...r } = await s.send('timed-pull', {});
                 const mine = px.opened.slice(o0).find(isCopy);
                 if (mine && !r.ok) {
-                    const st = await s.send('status');
                     tries.push({ openedAt: mine.at, answeredAt, retryAt: retryAtOf(st) ?? 0, error: r.error, tries: st.copyWait?.tries ?? null });
                 } else {
                     between.push({ ok: r.ok, mode: r.mode, error: r.error, opened: px.opened.length > o0 });
@@ -308,9 +320,7 @@ async function main(): Promise<void> {
 
             // The operator's resync is taken at once, whatever the wait; failing so too, it waits at the cap.
             const o0 = px.opened.length;
-            const r = await s.send('resync');
-            const answeredAt = Date.now();
-            const st2 = await s.send('status');
+            const { st: st2, at: answeredAt, ...r } = await s.send('timed-resync');
             assert(r.ok === false && px.opened.length === o0 + 1 && st2.copyWait?.tries === FAILS + 1
                 && st2.resyncRetryAt - answeredAt <= CAP_MS && st2.resyncRetryAt - answeredAt >= (1 - JITTER) * CAP_MS - SLACK_MS,
                 `an operator's resync is asked for at once, and, failing so, waits at the cap (${JSON.stringify({ r, opened: px.opened.length - o0, wait: st2.resyncRetryAt - answeredAt, tries: st2.copyWait?.tries })})`);
@@ -403,9 +413,7 @@ async function main(): Promise<void> {
             const need = new Set(mRows.map((r) => r.sha256!));
             const others = (from: number) => px.objectGets.slice(from).filter((x) => x !== bad.sha256);
             const refusedOnce = async () => {
-                const r = await s2.send('pull', {});
-                const answeredAt = Date.now();
-                const st = await s2.send('status');
+                const { st, at: answeredAt, ...r } = await s2.send('timed-pull', {});
                 return { r, wait: (st.resyncRetryAt ?? 0) - answeredAt, st };
             };
             const g0 = px.objectGets.length;
@@ -438,6 +446,34 @@ async function main(): Promise<void> {
                 `once the photo comes right the copy lands, fetching only the ${need.size - fetched.size} it lacked (${got.length} fetched, `
                 + `${got.filter((x) => fetched.has(x)).length} again), and keeps nothing more (${JSON.stringify(c)})`);
         });
+
+        await step('6. 404 churn: each copy fails at a different photo and keeps what it fetched; the wait starts over, and the copy lands', async () => {
+            const s3 = await spawnNode(SCRIPT, dir('standby-3'), envS);
+            nodes.push(s3);
+            await s3.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            const need = new Set((await photosOf(main)).filter((r) => r.sha256 && r.storage_key).map((r) => r.sha256!));
+            const g0 = px.objectGets.length;
+            px.gone.nth = 6;
+            const t0 = Date.now();
+            const tries: { wait: number; error: string | null; tries: number | null; failedOn: string | null }[] = [];
+            let landed = false;
+            const before = s3.swaps();
+            while (!landed && tries.length < 12 && Date.now() - t0 < 60_000) {
+                const { st, at, ...r } = await s3.send('timed-pull', {});
+                if (r.ok) { landed = true; if (r.staged) await until('the new standby to start again on its copy', () => s3.swaps() > before, 60_000); break; }
+                tries.push({ wait: (st.resyncRetryAt ?? 0) - at, error: r.error, tries: st.copyWait?.tries ?? null, failedOn: st.copyWait?.reason ?? null });
+                await sleep(Math.max(0, (st.resyncRetryAt ?? 0) - Date.now()) + 50);
+            }
+            px.gone.nth = null;
+            const took = Date.now() - t0;
+            const got = px.objectGets.slice(g0);
+            require_(tries.length >= 2 && tries.every((t) => /404|not|gone/i.test(t.error ?? '')),
+                `S's first copy fails at a 404 more than once (${tries.length} tries: ${first(tries.map((t) => t.error?.slice(0, 100)))})`);
+            assert(tries.every((t) => t.wait <= RETRY_MS && t.wait >= (1 - JITTER) * RETRY_MS - SLACK_MS && t.tries === 1),
+                `every wait is the first step again, never doubled (${tries.map((t) => `${t.wait} ms, try ${t.tries}`).join('; ')})`);
+            assert(landed && new Set(got).size === got.length && got.length === need.size,
+                `the copy lands after ${tries.length} failed ones in ${(took / 1000).toFixed(1)} s, every object fetched once (${got.length} fetches, ${new Set(got).size} distinct, ${need.size} needed)`);
+        });
     } finally {
         proxy?.close();
         for (const n of nodes) await n.kill().catch(() => {});
@@ -454,6 +490,23 @@ const commands: Record<string, (args: any) => Promise<unknown>> = {
     status: async () => {
         const { getBackupStatus } = await import('./services/backup-puller.js');
         return getBackupStatus();
+    },
+    /**
+     * One pull of the kind the loop makes next, with the status and this server's clock taken in the tick it returns in: a wait
+     * S drew is read against `at` with no reply's trip to the suite inside it (a stall there made a check fail whatever the draw).
+     */
+    'timed-pull': async () => {
+        const { pullNow, getBackupStatus } = await import('./services/backup-puller.js');
+        const result = await pullNow();
+        const st = getBackupStatus();
+        return { ok: result.ok, error: result.error ?? null, mode: st.lastPullMode ?? null, st, at: Date.now() };
+    },
+    /** The operator's force-resync, as `timed-pull` times it. */
+    'timed-resync': async () => {
+        const { requestResync, getBackupStatus } = await import('./services/backup-puller.js');
+        const result = await requestResync();
+        const st = getBackupStatus();
+        return { ...result, st, at: Date.now() };
     },
     /** Listing photos in this server's image store, as a member's upload puts them: `perPost` on every listing, from slot `from`. */
     'add-photos': async (a: { posts: string[]; perPost?: number; bytes?: number; from?: number }) => {

@@ -2245,6 +2245,70 @@ describe('V. Round 16: a Remove that isn\'t kept stops; a new key\'s words said 
         expect(w.ok && w.value.keyId).toBe(node.current()!.id);
         void ada;
     });
+
+    const never = () => new Promise<void>(() => { /* never answers */ });
+    const times = (said: string[], w: string) => said.filter((x) => x === w).length;
+    for (const how of ['answered (control)', 'lost before the node', 'stored, answer lost', 'stored, no answer (time-out)', 'stored, answer lost; a Save takes it'] as const) {
+        it(`V2 (the re-review's :690) Bea's new key without Owen, its POST ${how}: the key lands and its words are said once, where it lands`, async () => {
+            const { node, phones: [owen, bea, ada], k1 } = await community(['Owen', 'Bea', 'Ada']);
+            const onScreen = await open(bea);
+            expect(await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey)).toBe(true); // Owen is still listed: the Remove words
+            const word = NAMES_COPY.newKeyRemoved(['Owen']);
+            let failing = how !== 'answered (control)';
+            const isMine = (req: Sent) => failing && req.headers['X-Public-Key'] === bea.publicKey && req.method === 'POST' && new URL(req.url).pathname === '/api/names/generations';
+            if (how === 'lost before the node') drop = (req) => (isMine(req) ? 'before' : null);
+            if (how.startsWith('stored, answer lost')) drop = (req) => (isMine(req) ? 'after' : null);
+            if (how === 'stored, no answer (time-out)') {
+                setNamesRequestTimeout(1000, { stateMs: 1000, listPerEntryMs: 0 });
+                hold = (req) => (isMine(req) ? never() : null);
+            }
+            const said: string[] = [];
+            const first = await openNamesList(COMMUNITY, bea, STORE);
+            if (first.ok) said.push(...first.value.notices);
+            expect(first.ok).toBe(how === 'answered (control)');
+            // The node has the statement, or not, as the case means it.
+            expect(node.current()!.id === k1).toBe(how === 'lost before the node');
+            failing = false;
+            drop = null;
+            hold = null;
+            setNamesRequestTimeout(NAMES_REQUEST_TIMEOUT_MS);
+            if (how === 'stored, answer lost; a Save takes it') {
+                // The screen still shows the list as it was; the Save's own look takes the key (said on the next open).
+                const w = await saveNamesEntry(COMMUNITY, bea, STORE, onScreen, { name: PLANTED[2], note: '' }, undefined, newEntryId());
+                expect(w.ok && w.value.keyId).toBe(node.current()!.id);
+            }
+            // Bea's opens run until one is ready; then two more.
+            let landedOn = first.ok ? 0 : -1;
+            let made = first.ok ? first.value.made : null;
+            for (let i = 1; i <= 4 && landedOn < 0; i++) {
+                const o = await open(bea);
+                said.push(...o.notices);
+                if (o.plan.kind === 'ready') { landedOn = i; made = o.made; }
+            }
+            expect(landedOn).toBe(how === 'answered (control)' ? 0 : 1);
+            expect(node.current()!).toMatchObject({ maker: bea.publicKey, parentId: k1, drops: [owen.publicKey] });
+            expect(times(said, word)).toBe(1); // bb0755ec: 0 in every row but the control
+            // The open where it landed says whom the key was made without (a Save that took it keeps its words instead).
+            expect(made).toEqual(how === 'stored, answer lost; a Save takes it' ? null : [owen.publicKey]);
+            for (const o of [await open(bea), await open(bea)]) expect(times(o.notices, word)).toBe(0);
+            void ada;
+        }, 30_000);
+    }
+
+    it('V2 a new key whose POST the node refused (it never stored it) says nothing: no key landed', async () => {
+        const { node, phones: [owen, bea], k1 } = await community(['Owen', 'Bea', 'Ada']);
+        expect(await removeOldKey(STORE, bea, COMMUNITY, owen.publicKey)).toBe(true);
+        let refusing = true;
+        answer = (req) => (refusing && req.method === 'POST' && new URL(req.url).pathname === '/api/names/generations'
+            ? { status: 403, body: { error: 'admins_only', code: 'admins_only' } } : node.answer(req));
+        const first = await openNamesList(COMMUNITY, bea, STORE);
+        expect(first.ok && first.value.made).toBeNull();
+        expect(first.ok && times(first.value.notices, NAMES_COPY.newKeyRemoved(['Owen']))).toBe(0);
+        expect(node.current()!.id).toBe(k1);
+        expect((await pinOf(bea))!.pending).toBeNull(); // the refusal says it was never stored
+        refusing = false;
+        answer = (req) => node.answer(req);
+    });
 });
 
 describe('E. Rollback, forks', () => {

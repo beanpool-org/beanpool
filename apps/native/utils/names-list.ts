@@ -501,7 +501,10 @@ export interface NamesOpened {
     notices: string[];
     /** Admins checked in person on this phone whose phones have sent no header since (round 11): they will send. */
     justChecked?: string[];
-    /** The keys this open made a new generation without, if it made one. */
+    /**
+     * The keys this phone's own new key was made without, when one landed on this open (round 16: made here, or on an
+     * earlier open whose answer never came); null when none landed.
+     */
     made: string[] | null;
     /** Whom this open sent the keys to. */
     sentTo: string[];
@@ -533,6 +536,42 @@ export function noticeWords(notices: NamesNotice[], state: Pick<NamesState, 'cal
 }
 
 interface Synced { state: NamesState; pin: NamesPin; plan: NamesPlan; notices: NamesNotice[]; generations: Map<string, NamesGeneration> }
+
+/** A key this phone made, as it lands: the keys it drops, those carried from a history this phone left, and its number. */
+interface MadeKey { drops: string[]; carried: string[]; n: number }
+
+/**
+ * This phone's own statement, taken onto the chain by a sync (round 16, :690): from `before`, the pin the sync started
+ * from (it held the statement as `pending`), to `after`. Its words are said where it lands, whichever open or action that
+ * is: the one whose request was answered, or a later one after an answer that never came (the statement sent again, or
+ * taken from the node). Never where its request failed: it may never land.
+ */
+function landedKey(before: NamesPin | null, after: NamesPin, generations: Map<string, NamesGeneration>): MadeKey | null {
+    const own = before?.pending;
+    if (!before || !own || after.pending || !after.chain.some((l) => l.id === own.id)) return null;
+    const drops = generations.get(own.id)?.drops ?? [];
+    // Drops this phone stands by whose statement it has left (abandoned): rule (a) keeps them, even where the history it
+    // took drops the same key in a statement of its own, so the key comes from this phone (round 14, :1078).
+    const chainIds = new Set(before.chain.map((x) => x.id));
+    return { drops, carried: drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k])), n: own.n };
+}
+
+/** The words for a key this phone made, once it landed; `sending`: whom it reached, once the open got that far. */
+function madeKeyWords(state: NamesState, made: MadeKey, sending: string): string[] {
+    if (!made.drops.length) return [];
+    // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
+    // sent" only for the admins the key reached; the rest get it on the next open.
+    const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
+    const rest = made.drops.filter((k) => !made.carried.includes(k));
+    const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
+    const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
+    return [
+        made.carried.length ? NAMES_COPY.newKeyCarried(made.carried.map((k) => callsignIn(state, k))) : '',
+        gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
+        // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
+        ...made.carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), made.n)),
+    ].filter((w) => w);
+}
 
 /**
  * The walk's notices are said once (they come from taking a statement, which happens once). An operation that syncs but
@@ -571,8 +610,11 @@ async function forgetSaid(store: NamesPinStore, publicKey: string, anchor: strin
     } catch { /* words only */ }
 }
 
-/** The node's state, the sync, the pin kept. `say`: an open says the notices itself; anything else keeps them for the next open. */
-async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false): Promise<NamesResult<Synced & { kept: boolean }>> {
+/**
+ * The node's state, the sync, the pin kept. `say`: an open says the notices itself; anything else keeps them for the next
+ * open. `landed`: this phone's own statement, if this sync took it and the pin keeping that was saved (round 16, :690).
+ */
+async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false): Promise<NamesResult<Synced & { kept: boolean; landed: MadeKey | null }>> {
     const s = await fetchNamesState(anchor, identity);
     if (!s.ok) return s;
     // The same for an open (round 15): a pin that a store failed to read this time is never synced from empty and saved.
@@ -580,11 +622,13 @@ async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinS
     if (was.kind === 'unreadable') return NOT_READ;
     const r = syncNames({ pin: was.kind === 'pin' ? was.pin : null, state: s.value, me: identity });
     if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {
-        return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true } };
+        return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true, landed: null } };
     }
-    if (!say) await keepUnsaid(store, identity.publicKey, anchor, noticeWords(r.notices, s.value));
     const kept = await writeNamesPinTo(store, identity.publicKey, anchor, r.pin);
-    return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept } };
+    // A pin not saved still holds the statement as pending: the next sync takes it again, and says it there.
+    const landed = kept ? landedKey(was.kind === 'pin' ? was.pin : null, r.pin, r.generations) : null;
+    if (!say) await keepUnsaid(store, identity.publicKey, anchor, [...(landed ? madeKeyWords(s.value, landed, '') : []), ...noticeWords(r.notices, s.value)]);
+    return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept, landed } };
 }
 
 /**
@@ -675,25 +719,16 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
     if (!l.ok) return l;
     const unsaid = await peekUnsaid(store, identity.publicKey, anchor);
     const notices: NamesNotice[] = [...l.value.notices];
-    let made: string[] | null = null;
-    let carried: string[] = [];
-    let madeN = 0;
+    /**
+     * The keys of this phone's that landed on this open (round 16, :690): one it made here and the node answered, or one
+     * made before whose answer never came, sent again here or taken from the node. Their words are said here, once.
+     */
+    const landed: MadeKey[] = l.value.landed ? [l.value.landed] : [];
     let askedFor = '';
-    /** The words for the key this open made, if it made one; `sending`: whom it reached, once the open got that far. */
+    /** The words for the keys that landed; `sending`: whom they reached, once the open got that far (said with the last). */
     const madeWords = (state: NamesState, sending: string): string[] => {
-        if (!made || !made.length) return [];
-        // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
-        // sent" only for the admins the key reached; the rest get it on the next open.
-        const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
-        const rest = made.filter((k) => !carried.includes(k));
-        const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
-        const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
-        return [
-            carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
-            gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
-            // A carried drop of an admin the server lists: if they are an admin again, check each other again (J3).
-            ...carried.filter((k) => listed.has(k)).map((k) => NAMES_COPY.checkAgain(callsignIn(state, k), madeN)),
-        ].filter((w) => w);
+        const last = landed.map((m) => m.drops.length > 0).lastIndexOf(true);
+        return landed.flatMap((m, i) => madeKeyWords(state, m, i === last ? sending : ''));
     };
     let seen = l.value.state;
     /** A failure from here keeps this open's own words for the next open (round 15, :598); the kept ones never left. */
@@ -711,21 +746,17 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
         l = await look(anchor, identity, store, true);
         if (!l.ok) return failed(l);
         notices.push(...l.value.notices);
+        if (l.value.landed) landed.push(l.value.landed);
     } else if (l.value.plan.kind === 'make_first' || l.value.plan.kind === 'make_new') {
         const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
-        // Drops this phone stands by whose statement it has left (abandoned): rule (a) keeps them, even where the history it
-        // took drops the same key in a statement of its own, so the key comes from this phone (round 14, :1078).
-        const before = l.value.pin;
-        madeN = (before.chain[before.chain.length - 1]?.n ?? 0) + 1;
-        const chainIds = new Set(before.chain.map((x) => x.id));
-        carried = drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k]));
+        // Its words come from the look that takes it (round 16, :690): here once the node answered, or on a later open.
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
         if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return failed(sent);
-        if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
         if (!sent.ok && sent.code === 'ask_for_share') askedFor = askForShareWords(l.value.state, identity.publicKey);
         l = await look(anchor, identity, store, true);
         if (!l.ok) return failed(l);
         notices.push(...l.value.notices);
+        if (l.value.landed) landed.push(l.value.landed);
     }
     const { state, pin, plan, generations } = l.value;
     seen = state;
@@ -740,7 +771,7 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
         // open sends any share still due; the list isn't read. A connection that fails at once costs nothing: go on.
         else if (done.code === NAMES_TIMED_OUT) return failed(done);
     }
-    const sending = made && made.length
+    const sending = landed.some((m) => m.drops.length)
         ? NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)))
         : '';
     const words = [...madeWords(state, sending), ...unsaid, ...noticeWords(notices, state)];
@@ -755,7 +786,8 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
     return {
         ok: true,
         value: {
-            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: said, made, sentTo, justChecked,
+            state, plan, pin: kept, ring: namesRingKeys(kept), generations, list: null, notices: said,
+            made: landed.length ? landed.flatMap((m) => m.drops) : null, sentTo, justChecked,
             toCheck: state.admins.filter((a) => a.pubkey !== identity.publicKey && !kept.trusted.includes(a.pubkey)),
             lost: estimate,
         },

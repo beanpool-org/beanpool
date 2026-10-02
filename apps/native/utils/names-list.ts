@@ -291,18 +291,36 @@ function withPin<T>(publicKey: string, anchor: string, fn: () => Promise<T>): Pr
     return run;
 }
 
-/** This phone's pin for the community, or null: none kept, or one that doesn't open (then it starts from an empty pin). */
+/** This phone's pin for the community, or null: none kept, one that doesn't open, or a store that failed this time. */
 export async function readNamesPinFrom(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesPin | null> {
+    const kept = await readKeptPin(store, publicKey, anchor);
+    return kept.kind === 'pin' ? kept.pin : null;
+}
+
+/**
+ * The pin as kept (round 15, :380): `none` (nothing kept), `damaged` (a blob that will never open: no key for it in the
+ * secure store, or it doesn't open or read; a fresh pin follows, as for any damage), or `unreadable` (a store failed this
+ * time: nothing may be written over the pin, which is likely still there).
+ */
+type KeptPin = { kind: 'pin'; pin: NamesPin } | { kind: 'none' | 'damaged' | 'unreadable' };
+async function readKeptPin(store: NamesPinStore, publicKey: string, anchor: string): Promise<KeptPin> {
+    const label = namesTrustStoreKey(publicKey, anchor);
+    let blob: string | null;
+    let secret: string | null;
     try {
-        const label = namesTrustStoreKey(publicKey, anchor);
-        const blob = await store.getItem(label);
-        if (!blob) return null;
-        const secret = await store.getSecret(namesPinSecretName(label));
-        if (!secret || !/^[0-9a-f]{64}$/.test(secret)) return null;
-        const json = openNamesPinBlob(blob, fromHex(secret), label);
-        return json ? readNamesPin(JSON.parse(json), publicKey) : null;
+        blob = await store.getItem(label);
+        if (!blob) return { kind: 'none' };
+        secret = await store.getSecret(namesPinSecretName(label));
     } catch {
-        return null;
+        return { kind: 'unreadable' };
+    }
+    if (!secret || !/^[0-9a-f]{64}$/.test(secret)) return { kind: 'damaged' };
+    try {
+        const json = openNamesPinBlob(blob, fromHex(secret), label);
+        const pin = json ? readNamesPin(JSON.parse(json), publicKey) : null;
+        return pin ? { kind: 'pin', pin } : { kind: 'damaged' };
+    } catch {
+        return { kind: 'damaged' };
     }
 }
 
@@ -328,6 +346,8 @@ const fromHex = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ??
 
 type NamesFailure = Extract<NamesResult<never>, { ok: false }>;
 const NOT_KEPT: NamesFailure = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
+/** The pin is there but couldn't be read this time (round 15): nothing is synced from an empty pin or written over it. */
+const NOT_READ: NamesFailure = { ok: false, status: 0, code: 'not_read', message: 'This phone couldn’t read the names list’s keys just now. Nothing was changed. Try again.' };
 
 // ── Checking each other in person ────────────────────────────────────────────────────────────
 
@@ -348,7 +368,8 @@ export function inPersonResult(scannedOrTyped: string, pubkey: string): 'match' 
 export type EachOtherCheck =
     /** `pinned`: the key this phone now trusts. `mismatch`: it isn't the key the server lists for the admin picked. */
     | { ok: true; pinned: string; mismatch: boolean }
-    | { ok: false; reason: 'unreadable' | 'mismatch' | 'self' | 'no_match' };
+    /** `not_kept`: this phone's pin couldn't be read or saved; nothing changed (round 15). */
+    | { ok: false; reason: 'unreadable' | 'mismatch' | 'self' | 'no_match' | 'not_kept' };
 
 /**
  * "Check each other" (design §3.3): what was scanned (a QR code: the other phone's key) or typed (its 20 digits). A QR
@@ -377,9 +398,13 @@ export async function checkEachOther(
     }
     if (key === identity.publicKey.toLowerCase()) return { ok: false, reason: 'self' };
     return withPin(identity.publicKey, anchor, async (): Promise<EachOtherCheck> => {
-        const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
+        // A pin there but not read this time is never replaced by an empty one (round 15, :380): the check fails, and
+        // everything kept stays. One that will never open is replaced, as the open replaces it.
+        const kept = await readKeptPin(store, identity.publicKey, anchor);
+        if (kept.kind === 'unreadable') return { ok: false, reason: 'not_kept' };
+        const pin = kept.kind === 'pin' ? kept.pin : null;
         const base = pin && pin.communityId === state.communityId ? pin : emptyNamesPin(state.communityId, identity.publicKey);
-        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'unreadable' };
+        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, checkNamesKeyInPerson(base, key)))) return { ok: false, reason: 'not_kept' };
         await rememberChecked(store, identity.publicKey, anchor, key, state.shares);
         return { ok: true, pinned: key, mismatch };
     });
@@ -517,8 +542,10 @@ async function forgetSaid(store: NamesPinStore, publicKey: string, anchor: strin
 async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false): Promise<NamesResult<Synced & { kept: boolean }>> {
     const s = await fetchNamesState(anchor, identity);
     if (!s.ok) return s;
-    const pin = await readNamesPinFrom(store, identity.publicKey, anchor);
-    const r = syncNames({ pin, state: s.value, me: identity });
+    // The same for an open (round 15): a pin that a store failed to read this time is never synced from empty and saved.
+    const was = await readKeptPin(store, identity.publicKey, anchor);
+    if (was.kind === 'unreadable') return NOT_READ;
+    const r = syncNames({ pin: was.kind === 'pin' ? was.pin : null, state: s.value, me: identity });
     if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {
         return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true } };
     }
@@ -1368,6 +1395,8 @@ export const NAMES_COPY = {
     noMatch: 'Those digits aren’t the key of any admin the server lists. Scan their QR code instead.',
     self: 'That is this phone’s own key.',
     matched: (who: string) => `Checked: this phone now trusts ${at(who)}’s phone.`,
+    /** A check whose pin couldn't be read or saved (round 15): nothing was trusted, and nothing kept was changed. */
+    checkNotKept: 'This phone couldn’t read or save its names list keys just now, so nothing was checked and nothing was changed. Try again.',
     exportTitle: 'Export the list as a PDF?',
     export: 'The PDF holds every name you can open here. Once it leaves this phone it’s yours to keep safe, like a paper list. '
         + 'The other admins can see that you exported it, and when.',

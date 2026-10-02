@@ -2113,6 +2113,56 @@ describe('U. Round 15: notices kept until said, one limit for a claim, a pin rea
             void ada;
         }, 30_000);
     }
+
+    const summary = (p: Awaited<ReturnType<typeof pinOf>>) => p && { chain: p.chain.length, ring: Object.keys(p.ring).length, trusted: p.trusted.length, removals: p.manualDrops.length };
+
+    it("U5 (the re-review's :380) a check whose pin read fails once fails with its own words and changes nothing; tried again, it works and keeps everything", async () => {
+        const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+        const cy = await admin('Cy');
+        node.admins.push(role(cy));
+        await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey);
+        const before = summary(await pinOf(owen));
+        expect(before).toEqual({ chain: 1, ring: 1, trusted: 3, removals: 1 });
+        failPinReads = 1;
+        const r = await checkEachOther(FLAKY, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey));
+        expect(summary(await pinOf(owen))).toEqual(before); // f8d11de4: chain 0, ring 0, trusted 2, removals 0
+        expect(r).toEqual({ ok: false, reason: 'not_kept' }); // f8d11de4: ok, over an empty pin
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/r\.reason === 'not_kept' \? COPY\.checkNotKept/);
+        // Tried again with the store working: Cy is trusted, and nothing else moved.
+        expect(await checkEachOther(FLAKY, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey))).toEqual({ ok: true, pinned: cy.publicKey, mismatch: false });
+        const after = (await pinOf(owen))!;
+        expect(summary(after)).toEqual({ ...before, trusted: 4 });
+        expect(after.trusted).toContain(ada.publicKey);
+        expect(after.manualDrops).toEqual([abe.publicKey]);
+    });
+
+    it('U5 (the same cause, in the open) an open whose pin read fails once syncs nothing from an empty pin and saves nothing; the next open is as before', async () => {
+        const { node, phones: [owen, ada, abe] } = await community(['Owen', 'Ada', 'Abe']);
+        await removeOldKey(STORE, owen, COMMUNITY, abe.publicKey);
+        const before = summary(await pinOf(owen));
+        failPinReads = 1;
+        sent = [];
+        const r = await openNamesList(COMMUNITY, owen, FLAKY);
+        expect(summary(await pinOf(owen))).toEqual(before); // f8d11de4: an open from an empty pin, saved
+        expect(r.ok === false && r.code).toBe('not_read');
+        expect(onlyStateRead()).toBe(true);
+        const o = await openNamesList(COMMUNITY, owen, FLAKY);
+        expect(o.ok && o.value.plan.kind).toBe('ready'); // and its key without Abe made
+        expect(node.current()!).toMatchObject({ maker: owen.publicKey, drops: [abe.publicKey] });
+        void ada;
+    });
+
+    it('U5 a pin that will never open (its key gone from the secure store) still gives way to a fresh one, as the design says: the check and the open go on', async () => {
+        const { node, phones: [owen, ada] } = await community(['Owen', 'Ada']);
+        const cy = await admin('Cy');
+        node.admins.push(role(cy));
+        secrets.delete(namesPinSecretName(namesTrustStoreKey(owen.publicKey, COMMUNITY)));
+        expect(await checkEachOther(STORE, owen, COMMUNITY, node.stateFor(owen.publicKey), namesKeyQr(cy.publicKey))).toEqual({ ok: true, pinned: cy.publicKey, mismatch: false });
+        expect(summary(await pinOf(owen))).toEqual({ chain: 0, ring: 0, trusted: 2, removals: 0 });
+        expect((await openNamesList(COMMUNITY, owen, STORE)).ok).toBe(true);
+        void ada;
+    });
 });
 
 describe('E. Rollback, forks', () => {

@@ -1,7 +1,7 @@
 ---
 slug: your-12-words
 title: Your 12 words
-summary: The 12 words are the key to your account. Why they matter, where to find them, and how to keep them safe.
+summary: The 12 words are the key to your account. Why they matter, where to find them, how to keep them safe, and adding a sign-in as a second way back.
 related: recovery, joining, communities, faq
 ---
 
@@ -45,6 +45,30 @@ If this phone has no copy of your 12 words, and you have them written down, you 
 
 Your phone checks that the words belong to your account, the same check as **Check your 12 words** for owners. They are not sent anywhere. If they belong to a different account, nothing changes and the app says so. Once they are added, **View Recovery Phrase** shows them, in every community on this phone.
 
+## If you joined the global community with 12 words
+
+You can join the global community with 12 secret words alone, without a Google, Apple or Facebook account (see "Joining BeanPool"). If that made you a new account, your 12 words are your only way back in. No copy of your account is kept anywhere but on your phone, and nobody can reset them: not BeanPool, and not the community. If you lose them and your phone, the account is gone for good. (If you joined with the account you already had, a sign-in you linked in another community still brings it back there.)
+
+The app says so at **Safety Backup**. After you join, a card at the top of the Market says it again: **Your account has one way back: your 12 words. Check you still have them, or add a sign-in.** It never stops you doing anything.
+
+- **✕** puts the card away. It comes back once after your first post and once after a week, then stays only in **Settings**, under **Account Protection**.
+- **Show my 12 words** opens **Account Protection**, where you can see them again.
+- In **Account Protection**, **I still have my 12 words** puts the card away for good. **Add a sign-in** stays there.
+
+An account made with 12 words also starts slower than one made with a sign-in, for its first week. See "Reporting a problem" for its limits, and why.
+
+### Adding a sign-in later
+
+You can add a sign-in at any time. It becomes a second way back, and it lifts the 12-words limits at once.
+
+- Tap **Add a sign-in**: on the card, or in **Settings** under **Account Protection**. At **Safety Backup** the button says **Add a sign-in as a second way back**.
+- Tap **Continue with Google**, **Continue with Facebook** or, on an iPhone, **Continue with Apple**, and sign in once. The app may ask for your phone's lock first.
+- **Sign-in added** says it worked. Your account now has the usual new-account limits, and that sign-in brings it back if you lose your phone, as for someone who joined with it. See "Getting your account back" for who can open the copy kept for it.
+
+If the copy of your account can't be kept right then, the sign-in is still added and your limits still lift, but your 12 words stay your way back. The app says so. A sign-in account that already has another BeanPool account in the global community, or that belonged to an account the community removed, can't be added, and nothing changes.
+
+**Protect with**, lower down in **Account Protection** under **Sign-In Recovery Providers**, also links a sign-in as a way back, but it leaves the 12-words limits and the card as they are. Use **Add a sign-in** for both.
+
 ## A second way back: a sign-in account
 
 On the phone app you can also link a Google or Facebook account (and Apple on an iPhone). If you lose your phone, that account can restore your account on a new phone, through your community's server, which keeps a locked copy for it. The people who run that server can open that copy. See "Getting your account back".
@@ -53,4 +77,4 @@ A sign-in account you link from a phone that has your 12 words keeps them too, s
 
 ## In a web browser
 
-On the global community you join in a browser with a sign-in, and that sign-in is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see "Using BeanPool in a web browser"). On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app.
+On the global community, a sign-in you join with in a browser is kept as a second way back: Settings shows **Sign-in recovery: connected**. In a cleared or new browser, tap **Already have BeanPool?**, then **Use my sign-in**, and it brings your account back, with its 12 words (see "Using BeanPool in a web browser"). If you join there with 12 words instead, they are your only way back until you add a sign-in: a card called **One way back** says so, with **See my 12 words** and **Add a sign-in**, after you join and in Settings. On other communities the web app has no sign-in recovery, and your 12 words are the way back. Browsers can also clear saved data, so write the words down before you rely on the web app.

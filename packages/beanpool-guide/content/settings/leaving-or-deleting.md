@@ -44,7 +44,7 @@ This cannot be undone, even with your 12 words.
 - The block list your community kept for you goes too.
 - If you keep an enterprise, you stop being its keeper. If you were its lead, the keeper who has been there longest takes over. If you were its only keeper, the enterprise pauses. Its beans stay with the enterprise.
 - It deletes your account only in the community you are using. Your accounts in other communities stay.
-- Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again with your sign-in.
+- Your community can never bring the account back. To come back, join again with a new invite. The global community takes no invites: to come back there, join again, with 12 words or a sign-in, as a new account.
 
 If you run your community's server and you are its only owner, you cannot delete your account until there is another owner.
 

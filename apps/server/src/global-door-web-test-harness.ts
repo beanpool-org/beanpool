@@ -26,9 +26,26 @@ delete process.env.GOOGLE_CLIENT_IDS;
 delete process.env.APPLE_CLIENT_IDS;
 delete process.env.BEANPOOL_VAULT_TICKET_KEYS;
 
+import net from 'node:net';
 import readline from 'node:readline';
 
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '::ffff:127.0.0.1']);
+
+// Below fetch too: no socket to anywhere but this machine (a library with its own HTTP client, DNS-over-TCP, a peer).
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function connect(this: net.Socket, ...args: unknown[]) {
+    const first = args[0] as { host?: unknown; path?: unknown } | number | string | undefined;
+    const host = typeof first === 'object' && first !== null
+        ? (typeof first.path === 'string' ? 'localhost' : first.host ?? 'localhost')
+        : typeof first === 'number' ? (typeof args[1] === 'string' ? args[1] : 'localhost')
+        : 'localhost'; // a string first argument is a local socket path
+    if (typeof host === 'string' && !LOOPBACK.has(host) && !host.startsWith('127.')) {
+        console.error(`BLOCKED-CONNECT ${host}`);
+        process.nextTick(() => this.destroy(new Error(`global-door-web-test-harness: no connections leave this machine (${host})`)));
+        return this;
+    }
+    return (realConnect as (...a: unknown[]) => net.Socket).apply(this, args);
+} as typeof net.Socket.prototype.connect;
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);

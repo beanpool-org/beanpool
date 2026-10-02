@@ -15,13 +15,19 @@
  *      `work_required`, the page does the work and sends the same sign-in again, and the member is in, with no error
  *   4. the busy level (`doorNumbers.networkSteps` set so this address's next join is level 4): the sentence with this
  *      browser's own estimate under the 12-words button, then a join that waits for its work
+ *   5. "Setting up your account…" (the work's answer held back, so Join comes first): ← Choose another way goes back to
+ *      the two doors with the sign-in there, nothing is sent, and the 12 words then join with the same key
+ *   6. a key let go by ← Back (its challenges shortened so renewals come every two seconds): no more work is asked
+ *      for it
+ * Scenario 1 also reads the lobby's Join card (both doors named), and its link goes through the tour first: the node has
+ * the photo chosen at step 2, and the browser was asked once to keep its data.
  * and fails on any horizontal scroll at 320 px, any policy violation, a token left in the address bar, or a request to
  * any host but this machine (the providers are Playwright routes; everything else is refused and reported).
  *
  * Run: pnpm --filter @beanpool/pwa global-door-check
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global Buffer, URL, console, process, document, window, setTimeout, MutationObserver -- Node, and the page's side of evaluate() */
+/* global Buffer, URL, console, process, document, window, setTimeout, MutationObserver, navigator, localStorage -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -99,6 +105,14 @@ async function openPage(browser, origin, seen) {
         document.addEventListener('securitypolicyviolation', (e) => {
             window.__reportCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, at: `${e.sourceFile}:${e.lineNumber}` });
         });
+        // How many times the page asks the browser to keep its data (design G11 §4.2), across the provider's round trip.
+        if (navigator.storage?.persist) {
+            const persist = navigator.storage.persist.bind(navigator.storage);
+            navigator.storage.persist = () => {
+                try { localStorage.setItem('__persistAsked', String(Number(localStorage.getItem('__persistAsked') || 0) + 1)); } catch { /* none */ }
+                return persist();
+            };
+        }
         // Every busy sentence the page shows, as it shows it: on a fast computer the work can be done in a second.
         window.__busySeen = [];
         new MutationObserver(() => {
@@ -151,6 +165,8 @@ async function shot(page, name) {
 async function toTheDoors(page, origin, name, { words = true } = {}) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     await scaleText(page);
+    await page.getByTestId('lobby-join-card').waitFor({ timeout: 30_000 });
+    const lobbyCard = (await page.getByTestId('lobby-join-card').innerText()).replace(/\s+/g, ' ');
     await page.getByTestId('lobby-join').click({ timeout: 30_000 });
     await page.getByTestId('join-new').click();
     await page.getByTestId('join-callsign').fill(name);
@@ -158,6 +174,7 @@ async function toTheDoors(page, origin, name, { words = true } = {}) {
     if (words) await page.getByTestId('door-words').waitFor({ timeout: 20_000 });
     await page.getByTestId('join-provider-google').waitFor({ timeout: 20_000 });
     await scaleText(page);
+    return { lobbyCard };
 }
 
 async function memberRow(node, callsign) {
@@ -175,7 +192,11 @@ async function memberRow(node, callsign) {
 async function wordsJoinThenLink(browser, origin, node, seen) {
     const { context, page } = await openPage(browser, origin, seen);
     try {
-        await toTheDoors(page, origin, 'Wren');
+        const { lobbyCard } = await toTheDoors(page, origin, 'Wren');
+        if (!lobbyCard.includes('It takes a name, and 12 secret words or a sign-in. No invite needed.') || /one sign-in/.test(lobbyCard)) {
+            throw new Failure(`the lobby's Join card says "${lobbyCard}"`);
+        }
+        console.log('  ✓ the lobby\'s Join card names both doors');
         await noSideScroll(page, 'the two doors');
         await shot(page, '1-two-doors');
         const words = await page.getByTestId('door-words').innerText();
@@ -207,9 +228,15 @@ async function wordsJoinThenLink(browser, origin, node, seen) {
         }
         console.log('  ✓ a 12-words join, end to end: the node has Wren as open:words, with a words row; no provider visited');
 
-        // 2. A sign-in added from Safety Backup.
+        // 2. A sign-in added from Safety Backup: chosen there, offered at the end of the tour, and the page leaves only
+        // once the photo is on the node and the browser was asked to keep its data.
         seen.nextSub = 'google-sub-wren';
-        await page.getByTestId('add-sign-in-start').click();
+        await page.getByTestId('backup-add-sign-in').getByRole('button', { name: 'Add a sign-in as a second way back' }).click();
+        await page.getByRole('button', { name: "Let's Begin! 🚀" }).waitFor({ timeout: 20_000 });
+        await page.getByTestId('add-sign-in-google').waitFor({ timeout: 20_000 });
+        await scaleText(page);
+        await noSideScroll(page, 'the tour, with the sign-in to add');
+        await shot(page, '2-tour-add-sign-in');
         await page.getByTestId('add-sign-in-google').click();
         await page.getByTestId('link-result').waitFor({ timeout: 30_000 });
         await scaleText(page);
@@ -223,6 +250,11 @@ async function wordsJoinThenLink(browser, origin, node, seen) {
         const copies = await node.ask({ op: 'sql', all: true, sql: "SELECT count(*) AS n FROM recovery_shares WHERE owner_pubkey = ? AND holder_type = 'sso'", params: [linked.key] }).catch(() => null);
         const stored = copies?.[0]?.n ?? 'unknown';
         console.log(`  ✓ a sign-in added later: Settings says so, the node's row is Google's, sign-in copies stored: ${stored}`);
+        const [{ avatar }] = await node.ask({ op: 'sql', all: true, sql: 'SELECT avatar_url AS avatar FROM members WHERE public_key = ?', params: [linked.key] });
+        if (avatar !== 'bundled://bean-green') throw new Failure(`after adding a sign-in from Safety Backup the node has Wren's photo as ${JSON.stringify(avatar)}`);
+        const persistAsked = await page.evaluate(() => Number(localStorage.getItem('__persistAsked') || 0));
+        if (persistAsked !== 1) throw new Failure(`the browser was asked to keep its data ${persistAsked} times, not once`);
+        console.log('  ✓ the tour came first: the node has the photo chosen at step 2 (bundled://bean-green), and persist() was asked once');
     } finally {
         await context.close();
     }
@@ -300,6 +332,73 @@ async function busyLevel(browser, origin, node, seen) {
     }
 }
 
+async function settingUpWayBack(browser, origin, node, seen) {
+    const { context, page } = await openPage(browser, origin, seen);
+    // The work's answer held back for a few seconds, so Join comes before the work is done.
+    let hold = true;
+    await page.route(`${origin}/api/join/work`, async (route) => {
+        if (hold) await new Promise((r) => setTimeout(r, 6_000));
+        return route.continue();
+    });
+    try {
+        await toTheDoors(page, origin, 'Moss', { words: true });
+        await page.getByTestId('join-words').click();
+        await page.getByText('Setting up your account…').waitFor({ timeout: 5_000 });
+        const back = page.getByRole('button', { name: '← Choose another way' });
+        await back.waitFor({ timeout: 5_000 });
+        await scaleText(page);
+        await noSideScroll(page, 'Setting up your account…');
+        await shot(page, '5-setting-up');
+        await back.click();
+        await page.getByTestId('door-words').waitFor({ timeout: 5_000 });
+        if (!(await page.getByTestId('join-provider-google').isEnabled())) throw new Failure('after ← Choose another way the sign-in is not offered');
+        hold = false;
+        // The work finishes while they look at the doors: nothing goes until they choose.
+        await page.waitForFunction(() => document.querySelector('[data-words-work="ready"]'), null, { timeout: 60_000 });
+        if (seen.door.some((d) => d.path === '/api/join')) throw new Failure('a join went by itself after ← Choose another way');
+        const works = seen.door.filter((d) => d.path === '/api/join/work').length;
+        await page.getByTestId('join-words').click();
+        await page.getByText(/Choose your look/).waitFor({ timeout: 60_000 });
+        const row = await memberRow(node, 'Moss');
+        if (row?.provider !== 'words') throw new Failure(`the node has Moss as ${JSON.stringify(row)}`);
+        console.log(`  ✓ "Setting up your account…" has ← Choose another way: the two doors and the sign-in, no join sent; then in with 12 words (${works} work request(s))`);
+    } finally {
+        await context.close();
+    }
+}
+
+async function keyLetGo(browser, origin, node, seen) {
+    const { context, page } = await openPage(browser, origin, seen);
+    // The challenges' life shortened as the page reads it, so an unused one is renewed two seconds after it is ready.
+    await page.route(`${origin}/api/join/work`, async (route) => {
+        const res = await route.fetch();
+        const body = await res.json();
+        if (body?.work) body.work.expiresInSeconds = 92;
+        return route.fulfill({ response: res, body: JSON.stringify(body) });
+    });
+    try {
+        await toTheDoors(page, origin, 'Fern');
+        await page.waitForFunction(() => document.querySelector('[data-words-work="ready"]'), null, { timeout: 60_000 });
+        // Renewals do come for a key that is kept (so the count below means something).
+        const before = seen.door.filter((d) => d.path === '/api/join/work').length;
+        for (let waited = 0; waited < 20_000 && seen.door.filter((d) => d.path === '/api/join/work').length <= before; waited += 250) {
+            await page.waitForTimeout(250);
+        }
+        await page.getByRole('button', { name: '← Change name' }).click();
+        await page.getByRole('button', { name: '← Back' }).click();
+        await page.getByTestId('join-screen-guard').waitFor({ timeout: 10_000 });
+        const atBack = seen.door.filter((d) => d.path === '/api/join/work').length;
+        const renewedWhileKept = atBack - before;
+        await page.waitForTimeout(10_000);
+        const after = seen.door.filter((d) => d.path === '/api/join/work').length - atBack;
+        if (after !== 0) throw new Failure(`${after} work request(s) for the key let go by ← Back, in the 10 s after it`);
+        if (renewedWhileKept < 1) throw new Failure('no renewal came while the key was kept, so the count after ← Back proves nothing');
+        console.log(`  ✓ a key let go by ← Back: ${renewedWhileKept} renewal(s) while kept, 0 work requests in the 10 s after ← Back`);
+    } finally {
+        await context.close();
+    }
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-global-door-'));
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-global-door-data-'));
@@ -316,6 +415,8 @@ async function main() {
             ['a 12-words join, then a sign-in added later', wordsJoinThenLink],
             ['a sign-in join the node asks for work', signInAskedForWork],
             ['the busy level', busyLevel],
+            ['"Setting up your account…" and the way back', settingUpWayBack],
+            ['a key let go by ← Back', keyLetGo],
         ];
         for (const [name, run] of scenarios) {
             if (process.env.GLOBAL_DOOR_ONLY && !name.includes(process.env.GLOBAL_DOOR_ONLY)) continue;
@@ -332,7 +433,7 @@ async function main() {
                 console.error(`  ✗ ${e instanceof Failure ? e.message : e.stack || e}`);
             }
         }
-        const blocked = node.log.filter((l) => l.startsWith('BLOCKED-FETCH'));
+        const blocked = node.log.filter((l) => l.startsWith('BLOCKED-'));
         if (blocked.length) {
             failed = true;
             console.error(`✗ the node tried to reach outside this machine: ${blocked.join('; ')}`);

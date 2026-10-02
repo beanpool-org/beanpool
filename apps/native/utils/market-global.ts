@@ -132,11 +132,14 @@ export function nearestFirst<T extends Record<string, any>>(posts: readonly T[],
 }
 
 export const NEAREST_FIRST_HEADING = 'Nearest first';
+export const POLLS_HEADING = 'Polls';
 
 /**
  * The list view's sections on a node that sorts by distance, from where the member is: events under their own
- * heading as everywhere (soonest first), then every listing nearest first under one heading, instead of by the day
- * it was posted. Without a point, or on a node that doesn't sort by distance, the feed keeps its day headings.
+ * heading as everywhere (soonest first), then polls under theirs (a poll has no place, so nearest first would sink it
+ * below every listing; the web app shows it near the top), then every other listing nearest first under one heading,
+ * instead of by the day it was posted. Without a point, or on a node that doesn't sort by distance, the feed keeps its
+ * day headings.
  */
 export function marketFeedSections<T extends Record<string, any>>(
     posts: T[], profile: NodeProfile | null | undefined, point: Point | null, nowMs: number = Date.now(),
@@ -144,8 +147,11 @@ export function marketFeedSections<T extends Record<string, any>>(
     const byDay = feedSections(posts, nowMs);
     if (!sortsByDistance(profile) || !point) return byDay;
     const events = byDay.filter(s => s.id === 'header-events');
-    const listings = posts.filter(p => p.type !== 'event');
-    return listings.length > 0
-        ? [...events, { id: 'header-nearest', title: NEAREST_FIRST_HEADING, posts: nearestFirst(listings, point) }]
-        : events;
+    const polls = posts.filter(p => p.type === 'poll');
+    const listings = posts.filter(p => p.type !== 'event' && p.type !== 'poll');
+    return [
+        ...events,
+        ...(polls.length > 0 ? [{ id: 'header-polls', title: POLLS_HEADING, posts: polls }] : []),
+        ...(listings.length > 0 ? [{ id: 'header-nearest', title: NEAREST_FIRST_HEADING, posts: nearestFirst(listings, point) }] : []),
+    ];
 }

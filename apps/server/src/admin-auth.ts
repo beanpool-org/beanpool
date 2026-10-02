@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
 import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
@@ -290,7 +290,9 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
         }
 
         const cleanCode = String(totpHeader).trim();
-        let totpValid = verifyTotpCode(cleanCode, currentConfig.totpSecret);
+        // Once only: a code this server already accepted opens nothing again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, currentConfig.totpSecret);
+        let totpValid = totpUse === 'ok';
 
         // Check backup code SHA-256 hashes using timingSafeEqual if 6-digit TOTP code check didn't match
         const backupHashes = currentConfig.totpBackupCodesHashes || [];
@@ -311,7 +313,7 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
             adminAuthFailures++;
             if (admitted) notePasswordFailure(brakeKey);
             ctx.status = 401;
-            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
             return false;
         }
 
@@ -435,11 +437,14 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
         }
     }
     let ok = false;
+    let reused = false;
     try {
         // Read after the wait: another request may have spent a backup code, or changed the secret, meanwhile.
         const config = getLocalConfig();
         if (config.totpEnabled && config.totpSecret) {
-            ok = verifyTotpCode(clean, config.totpSecret);
+            const use = useTotpCode(clean, config.totpSecret);
+            ok = use === 'ok';
+            reused = use === 'reused';
             if (!ok) {
                 const hashes = config.totpBackupCodesHashes || [];
                 const i = hashes.length > 0 ? verifyAndFindBackupCodeHash(clean, hashes) : -1;
@@ -462,7 +467,7 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
         adminAuthFailures++;
         await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
         ctx.status = 401;
-        ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+        ctx.body = { error: reused ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
         return false;
     }
     return true;

@@ -38,7 +38,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engin
 import { db } from './db/db.js';
 import { ensureGenesis } from './genesis.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { startP2P } from './p2p.js';
@@ -102,6 +102,7 @@ async function runSuite() {
 
     async function hit(method: string, route: string, headers: Record<string, string>) {
         resetAdminAuthTarpit();
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
         const res = await fetch(base + route, { method, headers });
         const body = Buffer.from(await res.arrayBuffer());
         return { status: res.status, body, type: res.headers.get('content-type') || '', headers: res.headers };
@@ -176,6 +177,7 @@ async function runSuite() {
 
     const totpSecret = generateTotpSecret();
     const keySession = (kp: ReturnType<typeof makeKeypair>): string => {
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode); this suite opens two sessions a step.
         const chal = createAdminChallenge();
         const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
         const solved = verifyAndSolveChallenge({

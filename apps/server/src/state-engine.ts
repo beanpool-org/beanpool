@@ -11,19 +11,19 @@ import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing }
 import { expoPushHeaders } from './config/expo-access-token.js';
 import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
-import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
+import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
 import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
@@ -791,24 +791,7 @@ export function initStateEngine(): void {
         try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
-    if (getNodeRole() === 'primary') {
-        // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
-        // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
-        // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
-        // into a pending deal whose escrow was empty.
-
-        // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
-        migrateConsolidateConversations();
-        repairConsolidatedMessagesMetadata();
-
-        // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
-        // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
-        try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
-        try {
-            const made = backfillGroupThreads();
-            if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
-        } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
-    }
+    if (getNodeRole() === 'primary') runMainServerMigrations();
 
     // A convenor who comes back cancels any vote to replace them, with a line in the group's chat.
     setMemberActivityHook((pk) => {
@@ -825,34 +808,8 @@ export function initStateEngine(): void {
     // Sweep zero-balance escrow accounts from settled/cancelled transactions
     sweepSettledEscrowAccounts();
 
-    // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
-    // boot). Primary only — it dispatches real push notifications to members, which a
-    // passive backup replica must never do independently of the primary it mirrors.
-    if (getNodeRole() === 'primary') {
-        setTimeout(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 1000);
-        setInterval(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 60 * 1000);
-
-        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
-        // evaluate passed grants queue, and fire expired grace-period prunes.
-        setTimeout(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-        }, 30 * 1000);
-        setInterval(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-            // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
-            try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
-            // Group convenor votes past their 14-day deadline.
-            try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
-            // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
-            // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
-            // itself is bounded by one indexed range scan over events starting inside the next week.
-            try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
-        }, 60 * 1000);
-    }
+    // The main server's timers (armMainServerTimers): on a main server only.
+    if (getNodeRole() === 'primary') armMainServerTimers();
 
     // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
     // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
@@ -861,6 +818,108 @@ export function initStateEngine(): void {
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
+}
+
+/** The main server's one-time passes at its boot (initStateEngine), and on a promotion in place (becomeMainServerInPlace). */
+function runMainServerMigrations(): void {
+    // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
+    // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
+    // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
+    // into a pending deal whose escrow was empty.
+
+    // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
+    migrateConsolidateConversations();
+    repairConsolidatedMessagesMetadata();
+
+    // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
+    // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
+    try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
+    try {
+        const made = backfillGroupThreads();
+        if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
+    } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+}
+
+/** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
+let mainServerTimersArmed = false;
+
+// Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
+// boot). Primary only — it dispatches real push notifications to members, which a
+// passive backup replica must never do independently of the primary it mirrors.
+//
+// Armed on a main server only, and each tick asks the role again (onMainServer): a process made a standby after its
+// boot (a role set back while it runs) runs none of them, and logs nothing, where each used to throw StandbyLedgerError
+// with a stack trace every minute (the 2026-10-02 review of #1433).
+//
+// Armed once a process, at a main server's boot or when a take-over finished at boot makes this process the main server
+// (becomeMainServerInPlace).
+function armMainServerTimers(): void {
+    if (mainServerTimersArmed) return;
+    mainServerTimersArmed = true;
+    const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
+    setTimeout(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 1000);
+    setInterval(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 60 * 1000);
+
+    // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+    // evaluate passed grants queue, and fire expired grace-period prunes.
+    setTimeout(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+    }), 30 * 1000);
+    setInterval(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
+        try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
+        // Group convenor votes past their 14-day deadline.
+        try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
+        // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
+        // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
+        // itself is bounded by one indexed range scan over events starting inside the next week.
+        try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+    }), 60 * 1000);
+}
+
+/**
+ * A standby a take-over made the main server in this process, after its database booted as a standby's (services/
+ * takeover.ts resumeTakeoverAtBoot: a take-over a crash stopped before its `role` step, finished at the next start). It
+ * runs now what a main server's boot runs and a standby's skipped, so it is the same main server a restart would give,
+ * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
+ * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
+ * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, settled escrows swept, and the main
+ * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
+ * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
+ * Each part idempotent and on its own guard; nothing on a standby. Throws only the node profile's refusals, which stop a
+ * main server's boot and so stop this (config/node-profile.ts isMainServerBootRefusal).
+ */
+export function becomeMainServerInPlace(): void {
+    if (getNodeRole() !== 'primary') return;
+    const step = (what: string, fn: () => void) => {
+        try { fn(); } catch (e) { console.warn(`[Topology] Becoming the main server: ${what} failed:`, e); }
+    };
+    // The node profile first, as a main server's boot has it, with its refusals: a database that is a global node under another
+    // NODE_PROFILE, or the guest view's escape hatches set (ENFORCE_READ_AUTH=false, ENFORCE_WS_AUTH=false), stop every main
+    // server's boot, so they stop this promotion too: thrown, before anything of a main server's runs or serves, and the
+    // start ends as such a boot does (index.ts main().catch exits 1). The take-over is kept, past its restart: the next start
+    // boots as the main server and refuses with the same words until the setting is fixed, then goes on.
+    try {
+        mirrorNodeProfileAtBoot('primary');
+    } catch (e) {
+        if (isMainServerBootRefusal(e)) throw e;
+        console.warn('[Topology] Becoming the main server: the node profile failed:', e);
+    }
+    step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
+    step("the database's main-server passes", () => runMainServerSchemaPasses());
+    step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
+    step('the BeanPool enterprise', () => { seedPulseCurated(); });
+    step('stranded pledges', () => { returnStrandedPledges({ transfer, conservingTransaction }); });
+    step('the one-time migrations', () => runMainServerMigrations());
+    step('settled escrow accounts', () => sweepSettledEscrowAccounts());
+    step("the main server's timers", () => armMainServerTimers());
+    console.log('[Topology] This process is the main server now: it runs what a main server\'s boot runs, with no restart.');
 }
 
 /**
@@ -6110,13 +6169,15 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                p.hidden_by_reports_at as post_hidden_at,
                mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
-               pi.deleted_at as pulse_deleted_at
+               pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
-        LEFT JOIN posts p ON ar.target_post_id = p.id
+        -- A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is joined to it.
+        LEFT JOIN posts p ON ar.target_post_id = p.id AND ar.target_pulse_item_id IS NULL
         LEFT JOIN members mp ON p.author_pubkey = mp.public_key
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
+        LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
         ORDER BY ar.created_at DESC
     `;
@@ -6133,12 +6194,21 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
 
     const rows = db.prepare(querySql).all(...queryParams) as any[];
     const reports = rows.map(r => ({ 
-        id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
-        targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
+        // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
+        // wrote beside it. So every screen that names or freezes the target names the right member.
+        id: r.id, reporterPubkey: r.reporter_pubkey,
+        targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
+            : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
+        targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        targetCallsign: r.target_pulse_item_id && r.pulse_owner_pubkey
+            ? (r.pulse_owner_callsign || `@${r.pulse_owner_pubkey.substring(0, 8)}`)
+            : r.post_row_id
+            ? (r.post_author_callsign || (r.post_author_pubkey ? `@${r.post_author_pubkey.substring(0, 8)}` : 'Unknown Member'))
+            : (r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
         postTitle: r.post_title || null,
         title: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
@@ -6224,7 +6294,8 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
 }
 
 export function dismissReport(reportId: string): boolean {
-    const report = db.prepare("SELECT reporter_pubkey, target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
+    // A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is rechecked or named.
+    const report = db.prepare("SELECT reporter_pubkey, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -6263,6 +6334,28 @@ export function undoBurst(actionId: string): UndoOutcome {
     return undoBurstHide(moderationNoticeCb, actionId);
 }
 
+/**
+ * Who a report is about, as every moderator's action on it must read it. A report on a Pulse item is about the item's
+ * owner, read from the item, whatever post id the row carries: the route sets no post id on one since #1444, but a row
+ * filed before, or copied in, may carry any. A report on a post is about the post's author,
+ * read from the post here, whatever key the reporter wrote beside it: POST /api/reports writes the author since #1431
+ * and refuses a post id that isn't here, but a row filed before, or copied in from another server, may name anyone,
+ * and a post's id is its author's choice, so a post can arrive later under an id a report named first. Otherwise (a
+ * member, a Pulse item, whose owner the route sets, or an enterprise, whose key the phone sends in both fields) the key
+ * the report names. Null when it names nobody.
+ */
+function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    if (report.target_pulse_item_id) {
+        const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
+        return item?.owner_pubkey || report.target_pubkey || null;
+    }
+    const postAuthor = report.target_post_id
+        ? (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(report.target_post_id) as { author_pubkey: string | null } | undefined)
+        : undefined;
+    if (postAuthor) return postAuthor.author_pubkey || null;
+    return report.target_pubkey || null;
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
@@ -6287,7 +6380,8 @@ export function actionReport(
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
-        if (deletePost && report.target_post_id) {
+        // Only a post report takes a post down: a Pulse report is about its item, whatever post id it carries.
+        if (deletePost && report.target_post_id && !report.target_pulse_item_id) {
             const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s), true);
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);
@@ -6302,18 +6396,21 @@ export function actionReport(
             scrubPulseItems({ id: report.target_pulse_item_id });
         }
 
-        // A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended' would give its key back
-        // everything a suspended member may still sign, a way back with no vote. Its report is still actioned.
-        if (suspendUser && report.target_pubkey && !isClosedAccountKey(report.target_pubkey)) {
+        // The member the report is about: a post's author, read from the post, never the key the reporter wrote
+        // (reportSubjectOf). A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended'
+        // would give its key back everything a suspended member may still sign, a way back with no vote. Its report is
+        // still actioned.
+        const subject = reportSubjectOf(report);
+        if (suspendUser && subject && !isClosedAccountKey(subject)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
-            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
-            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
+            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
+            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
-            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
             bumpMembersVersion();
             bumpPostsVersion();
-            suspended = report.target_pubkey;
+            suspended = subject;
         }
         return true;
     })();

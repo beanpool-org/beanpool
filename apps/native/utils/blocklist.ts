@@ -247,8 +247,13 @@ export async function blockUser(
                     try {
                         if (!(await sendReport(report))) await queueReportForRetry(report);
                     } catch (err) {
-                        console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
-                        await queueReportForRetry(report);
+                        if (isFinalReportRefusal(err)) {
+                            // Refused for good (a post no longer there): the block stands, nothing is queued.
+                            console.warn('[blocklist] The community refused the report sent with the block; not retrying:', err);
+                        } else {
+                            console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
+                            await queueReportForRetry(report);
+                        }
                     }
                 }
             }
@@ -358,8 +363,56 @@ async function sendReport(report: PendingReport): Promise<boolean> {
         targetPostId: report.postId,
     };
     const res = await withTimeout(signedPost(report.community, REPORTS_PATH, body, signer), REPORT_TIMEOUT_MS);
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    if (!res.ok) throw new ReportRefused(res.status, await nodeErrorCode(res));
     return true;
+}
+
+/** The error code in the answer's JSON body, or null for anything else (an HTML page, text, nothing, no code). */
+async function nodeErrorCode(res: Response): Promise<string | null> {
+    try {
+        const parsed = JSON.parse(await res.text());
+        return parsed && typeof parsed.error === 'string' ? parsed.error : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The refusals the node's report route (apps/server/src/routes/community.ts, POST /api/reports) gives for a report
+ * itself, which asking again can't change. Anything not listed here is not known to be the node's answer.
+ */
+const FINAL_REPORT_ERRORS: ReadonlySet<string> = new Set([
+    'not_found',
+    'own_item',
+    'pulse_report_names_a_post',
+    'targetPostId must be a string',
+    'targetPulseItemId must be a non-empty string',
+    'reporterPubkey, targetPubkey, and a non-empty string reason are required',
+    'Failed — must be a registered member, cannot report yourself',
+]);
+
+/**
+ * The answer was not a yes: `status` says whether asking again could change that, and `code` is the node's own error
+ * code when its JSON body carried one (null when something else answered).
+ */
+class ReportRefused extends Error {
+    constructor(readonly status: number, readonly code: string | null = null) {
+        super(`Server returned ${status}`);
+    }
+}
+
+/**
+ * Whether the community itself refused this report for good, so asking again changes nothing. Only the node's own
+ * answer counts: a 4xx (not 401, a phone clock that is off, nor 408, 425 or 429, a timeout and the hourly limit) whose
+ * JSON body carries one of the error codes the report route gives. A 404 is what a block on a post meets when the post
+ * is no longer at the community: the block stays, and the report is not kept to be sent again every start for 7 days.
+ * A 4xx from something in front of the node (Cloudflare's HTML 403, a tunnel's bare 404, a stranger's server at an old
+ * address) clears once the name is fixed, so it is retried like a 5xx or no answer, until the 7-day limit.
+ */
+export function isFinalReportRefusal(err: unknown): boolean {
+    if (!(err instanceof ReportRefused)) return false;
+    if (!(err.status >= 400 && err.status < 500) || [401, 408, 425, 429].includes(err.status)) return false;
+    return err.code !== null && FINAL_REPORT_ERRORS.has(err.code);
 }
 
 /**
@@ -434,8 +487,9 @@ export async function retryPendingReports(): Promise<void> {
             try {
                 // False when the account changed while the queue was being sent: the report waits for its account.
                 if (!(await sendReport(item))) remaining.push(item);
-            } catch {
-                remaining.push(item);
+            } catch (err) {
+                // Refused for good (a post no longer there): dropped, not sent again at every start for 7 days.
+                if (!isFinalReportRefusal(err)) remaining.push(item);
             }
         }
 

@@ -44,6 +44,7 @@ import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.j
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
 import { guestPost, isTradeParty, withoutTradeParty, ONE_PASS_MAX_MEASURED, type MarketplacePost } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
+import { memberErrorText } from './member-error-text.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -497,7 +498,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to create post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to create post') };
     }
 });
 
@@ -562,7 +563,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
     } catch (e: any) {
         // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to remove post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to remove post') };
     }
 });
 
@@ -598,7 +599,7 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         if (respondProfileRefusal(ctx, e)) return;
         // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
         ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to update post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update post') };
     }
 });
 
@@ -630,7 +631,7 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record vote' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
     }
 });
 
@@ -660,7 +661,7 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record vote' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
     }
 });
 
@@ -693,7 +694,7 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to close poll' };
+        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
     }
 });
 
@@ -726,7 +727,7 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to close poll' };
+        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
     }
 });
 
@@ -758,7 +759,7 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
         ctx.body = rsvpEvent(id, actor, status, body.signature);
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record RSVP' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record RSVP') };
     }
 });
 
@@ -797,7 +798,7 @@ router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
     try {
         ctx.body = getEventThread(ctx.params.id, actor, limit, offset);
     } catch (e: any) {
-        const msg = e?.message || 'Could not open the event chat';
+        const msg = memberErrorText(e, 'Could not open the event chat');
         ctx.status = eventChatStatus(msg);
         ctx.body = { error: msg };
     }
@@ -839,7 +840,7 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
         ctx.body = { success: true, message };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        const msg = e?.message || 'Could not post the message';
+        const msg = memberErrorText(e, 'Could not post the message');
         if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
             ctx.status = 409;
             ctx.body = { error: msg };
@@ -871,7 +872,7 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
         const message = removeEventThreadMessage(ctx.params.id, messageId, actor);
         ctx.body = { success: true, message };
     } catch (e: any) {
-        const msg = e?.message || 'Could not remove the message';
+        const msg = memberErrorText(e, 'Could not remove the message');
         ctx.status = eventChatStatus(msg);
         ctx.body = { error: msg };
     }
@@ -1010,7 +1011,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ? rawCode
             : 400;
         ctx.status = statusCode;
-        ctx.body = { error: e.message || 'Escrow release failed' };
+        ctx.body = { error: memberErrorText(e, 'Escrow release failed') };
     }
 });
 
@@ -1057,7 +1058,7 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not active, or not owned by author' };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to pause post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to pause post') };
     }
 });
 
@@ -1085,7 +1086,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to resume post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to resume post') };
     }
 });
 

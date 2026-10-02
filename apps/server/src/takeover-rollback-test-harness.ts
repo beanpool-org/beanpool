@@ -20,6 +20,16 @@ export const PW_STANDBY = 'Standby-Own-Pw-618!';
 export const TUNNEL_TOKEN = 'tunnel-' + crypto.randomBytes(12).toString('hex');
 export const STANDBY_OWN_ADDRESS = { name: 'standby-own', mode: 'direct', hostname: 'standby-own.example' };
 
+/**
+ * node_config rows a main server's boot writes and a standby's does not (the 2026-10-02 review of #1433): the listing-photo
+ * URLs' shape and when it changed (engine/photo-keys.ts), the members' schema-rules pass (db.ts), and the recovery seal's
+ * clear and the epoch its main server sent (services/recovery-seal-key.ts).
+ */
+export const MAIN_BOOT_ROWS = [
+    'photoKeysShape', 'photoKeysSince', 'migration_members_schema_rules_v1',
+    'recovery_seal_cleared', 'recovery_seal_main_epoch', 'recovery_seal_reopened',
+];
+
 /** The files a take-over writes and a roll-back puts back, by hash (null: not there). */
 const FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'recovery-seal.key', 'open-join.key'];
 
@@ -90,6 +100,17 @@ export async function rollbackChild(): Promise<void> {
             const { getBackupStatus } = await import('./services/backup-puller.js');
             return getBackupStatus();
         },
+        /** This process's role set while it runs (config/node-role.ts setNodeRole), as a role changed after the boot would be. */
+        'set-role': async (a: { role: 'primary' | 'backup' }) => {
+            const { setNodeRole } = await import('./state-engine.js');
+            setNodeRole(a.role);
+            return true;
+        },
+        /** Rows read, for a suite's own question. */
+        query: async (a: { sql: string }) => {
+            const { db } = await import('./db/db.js');
+            return db.prepare(a.sql).all();
+        },
         state: async () => standbyState(),
         inspect: (a) => inspectNode(a),
     });
@@ -111,6 +132,8 @@ async function standbyState(): Promise<Record<string, any>> {
     const c = getLocalConfig() as Record<string, any>;
     const journalFile = path.join(dataDir, 'takeover-journal.json');
     const progress = getTakeoverProgress() as any;
+    const configRows = db.prepare('SELECT key, value FROM node_config ORDER BY key').all() as { key: string; value: string | null }[];
+    const row = (key: string) => configRows.find((r) => r.key === key)?.value ?? null;
     return {
         role: getNodeRole(),
         files: Object.fromEntries(FILES.map((f) => [f, hash(f)])),
@@ -133,18 +156,28 @@ async function standbyState(): Promise<Record<string, any>> {
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),
         pullerRunning: getBackupStatus().running,
         progress: { state: progress.state, rolledBack: progress.rolledBack ?? null, error: progress.error ?? null, rollBackStopped: progress.rollBackStopped ?? null },
+        /** Every node_config row, by a hash of its value (null: no value): what a boot as the main server would write shows here. */
+        configRows: Object.fromEntries(configRows.map((r) => [r.key, r.value === null ? null
+            : crypto.createHash('sha256').update(String(r.value)).digest('hex').slice(0, 16)])),
+        /** The rows a main server's boot writes and a standby's does not, as they are. */
+        mainBootRows: Object.fromEntries(MAIN_BOOT_ROWS.map((k) => [k, row(k)])),
     };
 }
 
-/** The parts of `state` a roll-back puts back, for comparing with the standby before its take-over. */
+/**
+ * The parts of `state` a roll-back puts back, for comparing with the standby before its take-over: with the rows a main
+ * server's boot writes, which no start that rolls back may leave behind.
+ */
 export function ownParts(s: Record<string, any>): string {
-    return JSON.stringify({ files: s.files, config: s.config, roles: s.roles, publicAddress: s.publicAddress, cursor: s.cursor, ledger: s.ledger });
+    return JSON.stringify({
+        files: s.files, config: s.config, roles: s.roles, publicAddress: s.publicAddress, cursor: s.cursor, ledger: s.ledger, mainBootRows: s.mainBootRows,
+    });
 }
 
 /** What differs between two `ownParts`, in a line, for a failing check. */
 export function differences(before: Record<string, any>, after: Record<string, any>): string {
     const out: string[] = [];
-    for (const k of ['files', 'config', 'roles', 'publicAddress', 'cursor', 'ledger']) {
+    for (const k of ['files', 'config', 'roles', 'publicAddress', 'cursor', 'ledger', 'mainBootRows']) {
         if (JSON.stringify(before[k]) === JSON.stringify(after[k])) continue;
         if (before[k] && typeof before[k] === 'object' && !Array.isArray(before[k])) {
             for (const f of new Set([...Object.keys(before[k]), ...Object.keys(after[k] ?? {})])) {

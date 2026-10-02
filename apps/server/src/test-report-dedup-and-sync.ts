@@ -10,6 +10,8 @@
  *    Reports older than an hour do not count.
  * 5. dismissReport and actionReport bump updated_at, so a delta sync export (which selects on
  *    updated_at) carries the new status to replicas.
+ * 6. A report on a post id no post here has is refused with 404 and no row (a post's id is its author's choice, so
+ *    such a report would wait for a post nobody saw); an enterprise's report, its key in both fields, is still filed.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-report-dedup-and-sync.ts
  */
@@ -18,7 +20,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import * as stateEngine from './state-engine.js';
-import { initStateEngine, exportSyncState, dismissReport, actionReport, submitReport } from './state-engine.js';
+import { initStateEngine, exportSyncState, dismissReport, actionReport, submitReport, createPost } from './state-engine.js';
 import { createCommunityRoutes } from './routes/community.js';
 
 // Read through the namespace so this file still loads against a tree without the limit.
@@ -74,6 +76,13 @@ async function main(): Promise<void> {
     const report = (actor: string, body: Record<string, unknown>) => callRouter(community, 'POST', '/api/reports', actor, body);
 
     const target = makeMember('Target');
+    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(target);
+    // The posts these reports name: a report on a post id no post here has is refused (section 6).
+    const postBy = (author: string, id: string) => createPost('offer', 'other', `Post ${id}`, 'for sale', 0, 'fixed', author,
+        undefined, undefined, undefined, undefined, id);
+    for (const id of ['post_a', 'post_b', 'post_over', ...Array.from({ length: REPORTS_PER_REPORTER_PER_HOUR }, (_, i) => `post_${i}`)]) {
+        if (!postBy(target, id)) throw new Error(`setup: post ${id} not made`);
+    }
 
     // ── 1–3. Duplicates ─────────────────────────────────────────────────────────
     console.log('--- 1. Duplicate while pending ---');
@@ -137,6 +146,24 @@ async function main(): Promise<void> {
     const actioned = payload?.abuseReports?.find((r: any) => r.id === toAction.id);
     assert(dismissed?.status === 'reviewed', 'A dismissed report is in the delta export as reviewed');
     assert(actioned?.status === 'actioned', 'An actioned report is in the delta export as actioned');
+
+    // ── 6. A post id that isn't here ────────────────────────────────────────────
+    console.log('\n--- 6. A report on a post that is not here ---');
+    const early = makeMember('EarlyReporter');
+    const named = makeMember('Named');
+    const nowhere = await report(early, { targetPubkey: named, reason: 'spam', targetPostId: 'post_nobody_made' });
+    assert(nowhere.status === 404 && nowhere.body?.error === 'not_found' && rowsBy(early) === 0,
+        'A report on a post id no post here has is refused with 404, and writes no row');
+    const odd = await report(early, { targetPubkey: named, reason: 'spam', targetPostId: 42 });
+    assert(odd.status === 400 && rowsBy(early) === 0, 'A post id that is not a string is refused with 400');
+    const enterprise = makeMember('Enterprise');
+    db.prepare('UPDATE members SET is_treasury = 1 WHERE public_key = ?').run(enterprise);
+    const onEnterprise = await report(early, { targetPubkey: enterprise, reason: 'scam', targetPostId: enterprise });
+    assert(onEnterprise.status === 200 && onEnterprise.body?.report?.targetPubkey === enterprise && rowsBy(early) === 1,
+        "The phone app's report of an enterprise (its key as both target and post id) is still filed");
+    const onPost = await report(early, { targetPubkey: named, reason: 'spam', targetPostId: 'post_b' });
+    assert(onPost.status === 200 && onPost.body?.report?.targetPubkey === target,
+        "A report on a post that is here is filed about the post's author, whoever it names");
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

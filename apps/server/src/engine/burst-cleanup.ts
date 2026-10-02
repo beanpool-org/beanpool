@@ -59,7 +59,7 @@ import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { provenKeySpelling } from './member-key.js';
 import { bumpActivityVersion, bumpPostsVersion } from './versions.js';
-import { AUTO_HIDE, hideTally, standingParts } from './auto-moderation.js';
+import { hideTally, standingParts } from './auto-moderation.js';
 import { notifyPostsBack, notifyPostsHiddenForReview, type ModerationNoticeCallbacks } from './moderation-notices.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -81,6 +81,8 @@ export const BURST = {
     maxAccountsPerAction: 500,
     /** An action's record (and so a hide's undo) is kept this long. */
     keepActionsDays: 30,
+    /** An undo weighs its posts at most this many rounds (undoBurstHide says why there is a bound, and what then). */
+    undoMaxRounds: 25,
 } as const;
 
 /** Where the door labels joins. Everywhere else every burst route is 404. */
@@ -152,8 +154,8 @@ function openReportsOn(pubkey: string, notBy: string | null = null): number {
         SELECT COUNT(*) AS c FROM abuse_reports ar
          WHERE ${OPEN_REPORT}
            AND ar.reporter_pubkey IS NOT ?
-           AND ((ar.target_post_id IS NULL AND ar.target_pubkey = ?)
-                OR ar.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?))
+           AND (((ar.target_post_id IS NULL OR ar.target_pulse_item_id IS NOT NULL) AND ar.target_pubkey = ?)
+                OR (ar.target_pulse_item_id IS NULL AND ar.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)))
     `).get(notBy, pubkey, pubkey) as { c: number }).c;
 }
 
@@ -346,13 +348,26 @@ export type UndoOutcome =
     | { ok: false; status: number; code: string; error: string };
 
 /**
- * Undo a hide: un-hide each post it hid that still carries its stamp, unless reports from enough independent circles
- * would hide it now, and tell each author once. A post restored, removed or hidden again on its own since is left alone.
+ * Undo a hide: un-hide each post it hid that still carries its stamp, unless reports would hide it now (engine/
+ * auto-moderation.ts hideTally, enough independent circles), and tell each author once. A post restored, removed or
+ * hidden again on its own since is left alone.
  *
- * "Would hide it now" is weighed as if the whole hide were undone: an author's other posts this action hid count as
- * kept in their standing (engine/auto-moderation.ts hideTally), as they did before the hide and will once it is undone.
- * So every one of its posts is un-hidden first, each is weighed, and only those reports would hide go back, with the
- * action's stamp, as they were: all in one transaction, so nobody ever reads them in between.
+ * "Would hide it now" is weighed first as if the whole hide were undone: every post of the action is un-hidden, so an
+ * author's other posts count as kept in their standing, as they did before the hide. Then rounds: each round weighs
+ * EVERY post of the action that has an open report against the posts as the last round left them, all against the same
+ * state, so the order they are weighed in changes nothing; a post reports would hide goes back, with the action's stamp,
+ * and one they no longer would comes up again. It ends at the first round that changes nothing, where every post is as
+ * hideTally weighs it right after. Both directions matter: a post going back lowers its author's standing, which lowers
+ * the bar for their other posts (one more may go back), and also makes that author's own reports count for less, or
+ * not at all once it puts them back on probation (one they reported may come up again).
+ *
+ * Does it end? Not of itself: because of that second effect, a ring of members who reported each other's posts, all
+ * in the action, could flip back and forth for ever. So it stops after BURST.undoMaxRounds rounds; then a post hidden in
+ * either of the last two rounds stays hidden, with its reports open in the moderators' queue as the hide left it, for a
+ * moderator to restore or remove. Everything else settles in two or three rounds.
+ *
+ * All in one transaction, so nobody ever reads the posts in between, and a post that goes back gets its own
+ * `updated_at` back too: it ends exactly as it was before the undo.
  */
 export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, now: number = Date.now()): UndoOutcome {
     pruneOldActions(now);
@@ -368,20 +383,46 @@ export function undoBurstHide(cb: ModerationNoticeCallbacks, actionId: string, n
     const done = db.transaction((): boolean => {
         // Claimed first, so two undos at once can't both run.
         if (db.prepare('UPDATE burst_actions SET undone_at = ? WHERE id = ? AND undone_at IS NULL').run(at, actionId).changes === 0) return false;
-        const posts = db.prepare(`SELECT p.id, p.author_pubkey, p.active, p.status, m.status AS author_status
+        const posts = db.prepare(`SELECT p.id, p.author_pubkey, p.active, p.status, p.updated_at, m.status AS author_status
                                     FROM burst_action_posts bp JOIN posts p ON p.id = bp.post_id
                                     LEFT JOIN members m ON m.public_key = p.author_pubkey
                                    WHERE bp.action_id = ? AND p.hidden_by_reports_at = ?`)
-            .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; author_status: string | null }[];
-        // Every post of the action un-hidden first (updated_at untouched: one that goes back below is as it was)...
+            .all(actionId, action.at) as { id: string; author_pubkey: string | null; active: number; status: string; updated_at: string | null; author_status: string | null }[];
+        // Every post of the action un-hidden first. This write moves updated_at (schema.sql posts_touch_updated_at): the
+        // posts that come back keep a new one below, the ones that go back get their old one back.
         const unhide = db.prepare('UPDATE posts SET hidden_by_reports_at = NULL WHERE id = ? AND hidden_by_reports_at = ?');
         const mine = posts.filter(p => unhide.run(p.id, action.at).changes > 0);
-        // ...then each weighed with all of them back, before any goes back: the order they are weighed in changes nothing.
-        const stays = new Set(reportsHide ? mine.filter(p => hideTally(p.id, now).circles.length >= AUTO_HIDE.circles).map(p => p.id) : []);
-        const rehide = db.prepare('UPDATE posts SET hidden_by_reports_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        // A post going back has the action's stamp and its own updated_at again, as it was before the undo: nothing about
+        // it changed, so no phone, standby or board is sent it again or sees it lifted to the top of a feed sorted by
+        // updated_at. Written explicitly, so the touch trigger (which fires only when updated_at is not written) leaves it.
+        const rehide = db.prepare('UPDATE posts SET hidden_by_reports_at = ?, updated_at = ? WHERE id = ? AND hidden_by_reports_at IS NULL');
+        // Only a post with an open report on it can be hidden by reports: the rest are never weighed.
+        const reported = db.prepare(`SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL
+                                        AND (status = 'pending' OR status IS NULL) LIMIT 1`);
+        const weighed = reportsHide ? mine.filter(p => !!reported.get(p.id)) : [];
+        const reportsWouldHide = (postId: string) => { const t = hideTally(postId, now); return t.circles.length >= t.circlesNeeded; };
+        let stays = new Set<string>();
+        const settle = (next: Set<string>) => {
+            for (const p of weighed) {
+                if (next.has(p.id) && !stays.has(p.id)) rehide.run(action.at, p.updated_at, p.id);
+                else if (!next.has(p.id) && stays.has(p.id)) unhide.run(p.id, action.at);
+            }
+            stays = next;
+        };
+        for (let round = 1; ; round++) {
+            const next = new Set(weighed.filter(p => reportsWouldHide(p.id)).map(p => p.id));
+            if (next.size === stays.size && [...next].every(id => stays.has(id))) break;
+            if (round > BURST.undoMaxRounds) {
+                settle(new Set([...stays, ...next]));
+                console.warn(`[Burst] Undo of ${actionId} did not settle in ${BURST.undoMaxRounds} rounds: ${stays.size} post(s) stay hidden for a moderator.`);
+                break;
+            }
+            settle(next);
+        }
+        keptHidden = stays.size;
         const touched = db.prepare('UPDATE posts SET updated_at = ? WHERE id = ?');
         for (const p of mine) {
-            if (stays.has(p.id)) { rehide.run(action.at, p.id); keptHidden++; continue; }
+            if (stays.has(p.id)) continue;
             touched.run(at, p.id);
             back.push({ id: p.id, author: p.author_status === 'pruned' ? null : p.author_pubkey, live: p.active === 1 && p.status !== 'cancelled' });
         }

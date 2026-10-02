@@ -617,9 +617,43 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
     sybilFunnelWindowDays: 30,
 };
 
+/**
+ * What each threshold may be: a finite number in its range, a whole number where it counts days, hours or trades. The
+ * days are written into SQL date modifiers (state-engine.ts countHealth), where a negative, NaN or Infinity — which a
+ * JSON `1e999` parses to, and the config file then keeps as `null` — made the check silently count nothing
+ * (FABLE-sec-input LOW F3, 2026-10-01).
+ */
+export const THRESHOLD_LIMITS: Record<Exclude<keyof Thresholds, 'demurrageRate' | 'demurrageEpochDays'>, { min: number; max: number; whole: boolean }> = {
+    circulationRate: { min: 0, max: 1, whole: false },
+    circulationEpochDays: { min: 1, max: 3650, whole: true },
+    washTradingWindowHours: { min: 1, max: 8760, whole: true },
+    washTradingMinTxns: { min: 1, max: 100_000, whole: true },
+    inactiveMemberDays: { min: 1, max: 3650, whole: true },
+    isolatedBranchMinTxns: { min: 1, max: 100_000, whole: true },
+    maxProjectExpiryDays: { min: 1, max: 3650, whole: true },
+    sybilFunnelMinInvitees: { min: 1, max: 100_000, whole: true },
+    sybilFunnelMinAmount: { min: 0, max: 1_000_000_000, whole: false },
+    sybilFunnelWindowDays: { min: 1, max: 3650, whole: true },
+};
+
+/** Why `value` can't be threshold `key`, in words for the admin; null when it can. */
+export function thresholdProblem(key: string, value: unknown): string | null {
+    const limit = (THRESHOLD_LIMITS as Record<string, { min: number; max: number; whole: boolean }>)[key];
+    if (!limit) return `${key} is not a threshold`;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return `${key} must be a number`;
+    if (limit.whole && !Number.isInteger(value)) return `${key} must be a whole number`;
+    if (value < limit.min || value > limit.max) return `${key} must be between ${limit.min} and ${limit.max}`;
+    return null;
+}
+
 export function getThresholds(): Thresholds {
     const config = getLocalConfig();
-    return { ...DEFAULT_THRESHOLDS, ...(config.thresholds || {}) };
+    const merged: Thresholds = { ...DEFAULT_THRESHOLDS, ...(config.thresholds || {}) };
+    // A value saved before the limits (a negative, or the `null` an Infinity is written as) reads as its default.
+    for (const key of Object.keys(THRESHOLD_LIMITS) as (keyof typeof THRESHOLD_LIMITS)[]) {
+        if (thresholdProblem(key, merged[key]) !== null) merged[key] = DEFAULT_THRESHOLDS[key];
+    }
+    return merged;
 }
 
 export function updateThresholds(updates: Partial<Thresholds>): Thresholds {

@@ -101,7 +101,7 @@ export class VaultWatcher {
         if (!r || typeof r.text !== 'string' || typeof r.signature !== 'string') return { why: 'it gives no signed report' };
         let ok = false;
         try {
-            ok = ed25519.verify(Buffer.from(r.signature, 'base64url'), Buffer.from(`${REPORT_TAG}${r.text}`, 'utf8'), Buffer.from(this.opts.ticketKey, 'hex'));
+            ok = ed25519.verify(Buffer.from(r.signature, 'base64url'), Buffer.from(`${REPORT_TAG}${r.text}`, 'utf8'), Buffer.from(this.opts.ticketKey, 'hex'), { zip215: false });
         } catch {
             ok = false;
         }

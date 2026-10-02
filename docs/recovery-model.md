@@ -239,7 +239,13 @@ attempts and the real member finds a locked door on the day they need it. A capp
 
 ## Notifications & Security Alert Banner
 
-The account owner is alerted via `RecoveryAlertBanner` on both Native and PWA clients if an active recovery session is opened on the community node (`/api/recovery/collect/mine`). The owner can cancel an unauthorized recovery session directly from the banner via `/api/recovery/collect/cancel`.
+The account owner is alerted via `RecoveryAlertBanner` on both Native and PWA clients if an active recovery session is opened on the community node (`/api/recovery/collect/mine`). The owner can cancel an unauthorized recovery session directly from the banner via `/api/recovery/collect/cancel`, after which the node hands nothing more to that session, not even a copy it already released.
+
+The owner gets a push when a sign-in releases their copy (`account.restored`). Opening a session sends none: anybody with a callsign can open one, so that push (`account.recovery-started`) was a way to ping a member at will (defence review FABLE-sec-sso finding 5, 2026-10-02). Phones still understand it from a community that hasn't updated.
+
+Sessions are never evicted while a sign-in may be under way (their first 30 minutes) or once they have released a copy; the per-account cap of 10 applies to idle ones only.
+
+A released copy is sealed to the recovering device's throwaway key on its way out of `/api/recovery/collect/fragments` when the device asks (both apps do; core `sealReleaseToDevice`), so the bytes in transit or in a log open nothing without that key, even with the member's Google id, which is not a secret (finding 2). An app from before the seal gets the copy as stored.
 
 Friends and keepers are not notified because keeper/social recovery has been scrapped.
 

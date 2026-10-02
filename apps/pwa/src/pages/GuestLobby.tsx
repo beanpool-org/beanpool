@@ -20,7 +20,7 @@ import { browserCanHoldKey } from '../lib/web-join';
 import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { WelcomePage } from './WelcomePage';
-import { TOO_OLD } from '../components/WebJoin';
+import { TOO_OLD, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
@@ -105,7 +105,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             <h2 className="m-0 mb-1 text-lg font-extrabold text-nature-950 dark:text-white">Join BeanPool</h2>
             <p className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200 leading-snug">
                 {doorOpen
-                    ? 'Post what you can offer and what you need, and talk with the people here. It takes a name and one sign-in. No invite needed.'
+                    ? `Post what you can offer and what you need, and talk with the people here. ${joinTakes(info.features?.wordsDoor === true)}`
                     : 'This community takes new members with an invite from one of them.'}
             </p>
             {canHoldKey === false ? (

@@ -6,6 +6,16 @@
  *
  * Self-contained on purpose: WelcomePage and App.tsx change again for the visitor lobby (G9), and these screens should
  * not have to move with them.
+ *
+ * ## Two doors (two-doors design §2, §3; slice S5)
+ *
+ * On a node whose door takes 12 words alone (`wordsDoor`, the node's `features.wordsDoor`), the sign-in screen offers
+ * two ways in, side by side: 12 words first, then the sign-ins. The key is made as the name screen opens, and the door
+ * work for the 12 words (lib/words-work.ts) starts at once and runs while the name is typed, so at ordinary levels the
+ * join never waits for it. Joining by 12 words sends one signed `POST /api/join { door: 'words' }` from this page; no
+ * provider is visited. A sign-in carries work only when the node asks for it, solved on the way back from the provider.
+ * A refused piece of work is replaced and the join sent again once, unseen; said only the second time. A node without
+ * the 12-words door sees exactly today's screens.
  */
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -33,10 +43,12 @@ import {
 } from '../lib/identity';
 import {
     browserCanHoldKey,
+    NONCE_FRESH_MS,
     captureAuthReturn,
     checkCallsign,
     checkSentJoin,
     consumeCapturedAuthReturn,
+    doorOutcome,
     doorRefusalMessage,
     DoorUnreachableError,
     joinBody,
@@ -47,9 +59,12 @@ import {
     providerAuthUrl,
     providerLabel,
     refusalMessage,
+    requestDoorWork,
     requestJoinNonce,
     submitJoin,
+    wordsJoinBody,
     MAX_JOIN_CALLSIGN,
+    NAME_CHECK_DEBOUNCE_MS,
     type AuthReturn,
     type CallsignCheck,
     type DoorOutcome,
@@ -57,6 +72,18 @@ import {
     type SignInProof,
 } from '../lib/web-join';
 import { recoveryStored, sealJoinRecovery, type SealedJoinRecovery } from '../lib/join-recovery';
+import {
+    busySentence,
+    signInBusySentence,
+    secondsLeft,
+    solveInWorker,
+    BUSY_LEVEL,
+    type DoorWorkProgress,
+    type DoorWorkSolution,
+    type DoorWorkSolver,
+} from '../lib/door-work';
+import { WordsWork, type WordsWorkState } from '../lib/words-work';
+import { DOOR_WORK_PARTS } from '@beanpool/core/door-work';
 
 /** The node's word on the sign-in recovery copy a join carried (lib/join-recovery.ts). */
 export interface JoinRecoveryResult {
@@ -83,6 +110,8 @@ export interface JoinedResult {
      * had landed: this identity is that join's, and the key brought here was not added.
      */
     earlierJoinKept: boolean;
+    /** The door the join went through: `words` when it went with the 12 words alone, so the account has one way back. */
+    door: 'words' | 'sign-in';
 }
 
 interface Props {
@@ -120,6 +149,10 @@ interface Props {
     start?: 'guard' | 'restore';
     /** Back to the listings, from the screen this opened on (and from this lobby's own screen, with a notice). */
     onLobby?: () => void;
+    /** The node takes a join with 12 words alone, beside the sign-in (its `features.wordsDoor`). */
+    wordsDoor?: boolean;
+    /** Solves the door work. A Web Worker on this origin (lib/door-work.ts); swappable in tests. */
+    solveWork?: DoorWorkSolver;
 }
 
 type Screen =
@@ -129,8 +162,11 @@ type Screen =
     | { name: 'restore' }
     | { name: 'name' }
     | { name: 'providers' }
-    /** `securing`: the sign-in recovery copy is being made (lib/join-recovery.ts), before the join goes. */
-    | { name: 'joining'; securing?: boolean }
+    /**
+     * `securing`: the sign-in recovery copy is being made (lib/join-recovery.ts), before the join goes. `setting`: the
+     * door work is not done yet, and the join waits for it ("Setting up your account…").
+     */
+    | { name: 'joining'; securing?: boolean; setting?: boolean }
     | { name: 'unknown'; checking: boolean }
     | { name: 'checking'; checking: boolean }
     /**
@@ -157,8 +193,13 @@ export type Notice = { tone: 'error' | 'info'; text: string } | null;
 export const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
 const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
-/** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
-const NONCE_FRESH_MS = 5 * 60 * 1000;
+/**
+ * What joining takes, said on the door's first screen (here, and the global lobby's Join card): both doors where the
+ * node takes 12 words alone (two-doors design §2.6), one sign-in where it does not.
+ */
+export function joinTakes(wordsDoor: boolean): string {
+    return wordsDoor ? 'It takes a name, and 12 secret words or a sign-in. No invite needed.' : 'It takes a name and one sign-in. No invite needed.';
+}
 export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
 /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
 const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
@@ -229,7 +270,49 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     );
 }
 
-export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn, start, onLobby }: Props) {
+/** The door work's progress: 8 steps, one a part (design §3.3), as a bar and as words. */
+export function WorkBar({ done, of = DOOR_WORK_PARTS }: { done: number; of?: number }) {
+    return (
+        <div role="progressbar" aria-label="Setting up your account" aria-valuemin={0} aria-valuemax={of} aria-valuenow={done}
+            aria-valuetext={`${done} of ${of}`} data-testid="join-work-bar"
+            style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.25rem' }}>
+            {Array.from({ length: of }, (_, i) => (
+                <span key={i} style={{
+                    flex: 1, minWidth: 0, height: '0.5rem', borderRadius: '0.25rem',
+                    background: i < done ? '#2563eb' : 'var(--border-primary, #334155)',
+                }} />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * Under the 12-words button: nothing while the work is ordinary (nobody waits for it), the busy-level sentence with
+ * this browser's own estimate from level 3, and the node's sentence when the 12 words can't be used right now. The
+ * sign-ins below are always the other way in.
+ */
+export function WordsWorkLine({ work }: { work: WordsWorkState }) {
+    if (work.status === 'solving' && work.level >= BUSY_LEVEL) {
+        return (
+            <p role="status" data-testid="join-busy" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
+                {busySentence(secondsLeft(work.level, work.progress))}
+            </p>
+        );
+    }
+    if (work.status === 'busy' || work.status === 'closed' || work.status === 'failed') {
+        return (
+            <p role="alert" data-testid="join-words-problem" style={{ color: 'var(--text-primary)', fontSize: '0.8rem', lineHeight: 1.5, marginTop: '0.5rem', marginBottom: 0 }}>
+                {work.message}
+            </p>
+        );
+    }
+    return null;
+}
+
+export function WebJoin({
+    onJoined, onRestore, restored = null, settleOnly = false, onSettled, onExisting, reload, navigate, origin, authReturn, start, onLobby,
+    wordsDoor = false, solveWork,
+}: Props) {
     const [screen, setScreen] = useState<Screen>({ name: 'loading' });
     const [showWords, setShowWords] = useState(false);
     const wordsId = useId();
@@ -243,7 +326,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     const nonce = nonceHeld?.value ?? null;
     const [nonceProblem, setNonceProblem] = useState<string | null>(null);
     // The last join sent, kept in memory only: a 503 is retried with the same sign-in (the node did not spend it).
-    const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof } | null>(null);
+    // `proof` null: a 12-words join, which carries no sign-in.
+    const lastJoin = useRef<{ pending: PendingJoin; proof: SignInProof | null } | null>(null);
     // The sign-in recovery copy made for that sign-in and key, so a retry sends the same join without sealing again.
     const lastSealed = useRef<{ proof: SignInProof; publicKey: string; recovery: SealedJoinRecovery | null } | null>(null);
     const mounted = useRef(true);
@@ -262,6 +346,31 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     onSettledRef.current = onSettled;
     // A join with this page's key has gone (from here or before this page opened): what a failure says depends on it.
     const joinWent = useRef(false);
+
+    // ---------- the 12-words door and its work (two-doors design §2, §3) ----------
+    // Shut here by the node (`sign_in_required`, or a work route that takes none): the sign-in is the way in from then on.
+    const [wordsShut, setWordsShut] = useState(false);
+    const wordsOpen = wordsDoor && !wordsShut && !settleOnly;
+    const solver = solveWork ?? solveInWorker;
+    const solverRef = useRef(solver);
+    solverRef.current = solver;
+    // The 12-words door's work for the pending key: asked for as the key is made, and kept ready (lib/words-work.ts).
+    const keeper = useRef<WordsWork | null>(null);
+    const [work, setWork] = useState<WordsWorkState>({ status: 'idle' });
+    // A sign-in's work, when the node asks for some: how far it has got, for the joining screen.
+    const [signInWork, setSignInWork] = useState<{ level: number; progress: DoorWorkProgress | null } | null>(null);
+    // A refused piece of work is replaced and the join sent again once by itself; the second refusal is said.
+    const workRetried = useRef(false);
+    // A 12-words join waiting for its work ("Setting up your account…"): stopped by ← Choose another way, which takes
+    // the member back to the two doors with the same key and its work still being made.
+    const waitingForWork = useRef<AbortController | null>(null);
+    // The node has asked this page's sign-in joins for work: every one from now on brings it (a busy network stays busy).
+    const signInWorkWanted = useRef(false);
+    // The names the node has answered for, so going back and forth over one name asks once.
+    const nameChecks = useRef(new Map<string, CallsignCheck>());
+    // Declared before use through refs: a refused piece of work sends the join again through the same path a tap takes.
+    const joinByWordsRef = useRef<(p: PendingJoin, auto?: boolean) => Promise<void>>(async () => {});
+    const submitRef = useRef<(p: PendingJoin, proof: SignInProof, auto?: boolean) => Promise<void>>(async () => {});
 
     const go = navigate ?? ((url: string) => window.location.assign(url));
     const here = origin ?? window.location.origin;
@@ -343,6 +452,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             restored: p.restored,
             recovery,
             earlierJoinKept,
+            door: p.door === 'words' ? 'words' : 'sign-in',
         });
     }, [showTaken]);
 
@@ -371,7 +481,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
      * only when the node has confirmed it (settleAnswer), and otherwise still sent. Nothing here can change that:
      * `keep` keeps a stored mark, and clearUnsentPendingJoin never deletes a sent pending join.
      */
-    const showOutcome = useCallback(async (outcome: DoorOutcome, p: PendingJoin, proof: SignInProof) => {
+    const showOutcome = useCallback(async (outcome: DoorOutcome, p: PendingJoin, proof: SignInProof | null) => {
         switch (outcome.kind) {
             case 'joined':
             case 'already_member':
@@ -381,12 +491,31 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             case 'already_joined': {
                 // One sign-in account, one identity: this key is not needed, and must not linger as a second one. The
                 // node answers this only for a key that is not a member (a member's gets already_member).
+                if (!proof) break;
                 const kept = await clearUnsentPendingJoin(p.identity.publicKey);
                 setPending(kept);
                 setScreen({ name: 'already_joined', message: outcome.message, provider: proof.provider });
                 return;
             }
+            case 'work': {
+                // The work was refused (it ran out, the node restarted, it was spent): new work, and the same join once
+                // more, unseen (design §3.3). Nothing was spent on the node: it checks the work before the sign-in.
+                if (proof) signInWorkWanted.current = true;
+                if (!workRetried.current) {
+                    workRetried.current = true;
+                    return proof ? submitRef.current(p, proof, true) : joinByWordsRef.current(p, true);
+                }
+                const next = await keep({ ...p, nonce: null });
+                return toProviders(next, { tone: 'error', text: outcome.message });
+            }
+            case 'sign_in_required': {
+                // The node's operator has turned the 12-words door off: the sign-in is the way in.
+                setWordsShut(true);
+                const next = await keep({ ...p, nonce: null });
+                return toProviders(next, { tone: 'error', text: `${outcome.message} Choose a sign-in below.` });
+            }
             case 'expired': {
+                if (!proof) break;
                 if (!p.retriedExpired) {
                     // Once, by itself, with a fresh nonce: most often somebody took longer than ten minutes.
                     const next = await keep({ ...p, retriedExpired: true });
@@ -417,6 +546,9 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 return toProviders(next, { tone: 'error', text: outcome.message });
             }
         }
+        // A sign-in's answer to a 12-words join (never sent so): said as it is, back at the two ways in.
+        const next = await keep({ ...p, nonce: null });
+        return toProviders(next, { tone: 'error', text: 'message' in outcome ? outcome.message : WENT_WRONG });
     }, [keep, toProviders]);
 
     /**
@@ -425,7 +557,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
      * member is in. Otherwise the key keeps its sent mark unless the door refused this join definitely (`refusal`) and
      * the node now says the key is not a member: releaseSentPendingJoin checks both against what is stored.
      */
-    const settleAnswer = useCallback(async (p: PendingJoin, proof: SignInProof, refusal: NodeRefusedJoin | null, outcome: DoorOutcome | null) => {
+    const settleAnswer = useCallback(async (p: PendingJoin, proof: SignInProof | null, refusal: NodeRefusedJoin | null, outcome: DoorOutcome | null) => {
         lastJoin.current = { pending: p, proof };
         setScreen(refusal ? { name: 'joining' } : { name: 'unknown', checking: true });
         const probe = await probeMembership(p.identity);
@@ -445,7 +577,49 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         return showOutcome(outcome, now, proof);
     }, [finish, showOutcome]);
 
-    const submit = useCallback(async (p: PendingJoin, proof: SignInProof) => {
+    /**
+     * The work a sign-in join carries: none at ordinary rates (and from a node from before the work), else the node's
+     * challenge solved here while the joining screen says "Setting up your account…". A network's ceiling is said now,
+     * before anything is sent, so the sign-in is not spent; anything else unexpected, the join itself answers.
+     */
+    const signInWorkFor = useCallback(async (p: PendingJoin, proof: SignInProof): Promise<
+        { kind: 'work'; work: DoorWorkSolution | null } | { kind: 'refused'; outcome: DoorOutcome }
+    > => {
+        let asked;
+        try {
+            asked = await requestDoorWork(p.identity, 'sign-in');
+        } catch (e) {
+            if (!(e instanceof DoorUnreachableError)) console.error('[WebJoin] could not ask for work:', e);
+            return { kind: 'work', work: null };
+        }
+        if (asked.kind === 'none') return { kind: 'work', work: null };
+        if (asked.kind === 'refused') {
+            const outcome = doorOutcome(asked.answer, proof.provider);
+            return outcome.kind === 'rate_limited' ? { kind: 'refused', outcome } : { kind: 'work', work: null };
+        }
+        const w = asked.work;
+        if (mounted.current) {
+            setSignInWork({ level: w.level, progress: null });
+            setScreen({ name: 'joining', setting: true });
+        }
+        try {
+            const run = solverRef.current(w.challenge, {
+                onProgress: (progress) => { if (mounted.current) setSignInWork({ level: w.level, progress }); },
+            });
+            const counters = await run.done;
+            return { kind: 'work', work: counters ? { challenge: w.challenge, counters } : null };
+        } catch (e) {
+            // Sent without it: the node says `work_required`, and the join is tried once more with new work.
+            console.warn('[WebJoin] the sign-in\'s work could not be done here:', (e as Error)?.message || e);
+            return { kind: 'work', work: null };
+        } finally {
+            if (mounted.current) setSignInWork(null);
+        }
+    }, []);
+
+    /** `auto`: sent again by itself after the node refused the work; anything else is the member's own try. */
+    const submit = useCallback(async (p: PendingJoin, proof: SignInProof, auto = false) => {
+        if (!auto) workRetried.current = false;
         setNotice(null);
         // The sign-in also becomes this account's way back (G11-c, lib/join-recovery.ts): the key and its words sealed
         // to it, in the join. Made before anything is written or sent, from the key and words `p` already holds, so
@@ -463,6 +637,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             if (mounted.current) setScreen({ name: 'joining' });
         }
 
+        // The work the join carries, when the node asked for some (below).
+        let carried: DoorWorkSolution | null = null;
         /** Send the join once, with the copy or without it. */
         const send = async (from: PendingJoin, recovery: SealedJoinRecovery | null): Promise<void> => {
             // Another tab saved an account here while this one was at the sign-in: nothing is sent (one browser, one account).
@@ -474,7 +650,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             // unsettled (another tab's): that one may be a member's, and is settled first (4112075367).
             let sent: PendingJoin;
             try {
-                sent = await markPendingJoinSent({ ...from, nonce: null }, Date.now(), { refuseWhileInviteKept: true });
+                sent = await markPendingJoinSent({ ...from, nonce: null, door: 'sign-in' }, Date.now(), { refuseWhileInviteKept: true });
             } catch (e) {
                 console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
                 return toProviders(from, {
@@ -489,7 +665,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             joinWent.current = true;
             setPending(sent);
             lastJoin.current = { pending: sent, proof };
-            const body = joinBody(sent.identity.callsign, proof, recovery ? { shares: recovery.shares } : undefined);
+            const body = joinBody(sent.identity.callsign, proof, recovery ? { shares: recovery.shares } : undefined, carried);
             let answer;
             try {
                 answer = await submitJoin(sent.identity, body);
@@ -518,8 +694,20 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 case 'unknown': return settleAnswer(sent, proof, null, verdict.outcome);
             }
         };
+        // Work, once the node has asked this browser for some (`work_required`: from the 30th join an hour from one
+        // network), after the copy and before anything is marked sent, so a refusal here spends nothing. At ordinary
+        // rates none is asked, and the join goes exactly as before. A copy the node can't read is sent again without
+        // it, with the same work (the node reads the copy before the work, so that work is not spent).
+        if (auto || signInWorkWanted.current) {
+            const asked = await signInWorkFor(p, proof);
+            if (!mounted.current) return;
+            if (asked.kind === 'refused') return showOutcome(asked.outcome, p, proof);
+            carried = asked.work;
+            setScreen({ name: 'joining' });
+        }
         return send(p, sealed);
-    }, [finish, settleAnswer, toProviders, showTaken]);
+    }, [finish, settleAnswer, toProviders, showTaken, signInWorkFor, showOutcome]);
+    submitRef.current = submit;
 
     /** Carry on with this pending join's key and name: the sign-in, or the name first when it has none. */
     const resume = useCallback((p: PendingJoin, n: Notice = null) => {
@@ -567,9 +755,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                 }
                 return resume(p, {
                     tone: 'info',
-                    text: check.kind === 'may_still_land'
-                        ? "Your join hasn't reached the community yet. Sign in again to finish."
-                        : "Your join didn't reach the community. Sign in again to finish.",
+                    text: `${check.kind === 'may_still_land' ? "Your join hasn't reached the community yet." : "Your join didn't reach the community."} ${
+                        p.door === 'words' ? 'Join again to finish.' : 'Sign in again to finish.'}`,
                 });
             case 'unknown':
                 setScreen({ name: 'checking', checking: false });
@@ -661,6 +848,143 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     }, [nonceHeld, fetchNonce, toProviders, go, here, showTaken, settleSent]);
     signInRef.current = signIn;
 
+    // ---------- the 12-words door ----------
+
+    /**
+     * Join with 12 words alone (two-doors design §2.1): the pending key, its name and the door work, in one signed
+     * request. Sent like a sign-in join (marked sent first, every answer but a yes asked about), with no provider.
+     * `auto`: sent again by itself after the node refused the work.
+     */
+    const joinByWords = useCallback(async (p: PendingJoin, auto = false) => {
+        if (!auto) workRetried.current = false;
+        setBusy(true);
+        setNotice(null);
+        try {
+            const held = await accountHeldElsewhere(p);
+            if (held) return await showTaken(held, p, false);
+            let k = keeper.current;
+            if (!k || k.identity.publicKey !== p.identity.publicKey) {
+                k?.dispose();
+                k = new WordsWork(p.identity, { solver: solverRef.current, onChange: (s) => { if (mounted.current) setWork(s); } });
+                keeper.current = k;
+            }
+            // Ready by now at ordinary levels; otherwise the joining screen waits for it, saying so, with the way back to
+            // the two doors beside it (design §3.5: always the faster door beside it).
+            waitingForWork.current?.abort();
+            const wait = new AbortController();
+            waitingForWork.current = wait;
+            if (k.current.status !== 'ready') setScreen({ name: 'joining', setting: true });
+            const got = await k.take(wait.signal);
+            if (waitingForWork.current === wait) waitingForWork.current = null;
+            // Stopped waiting: the member chose another way, and nothing goes until they choose again.
+            if (!mounted.current || !got) return;
+            if (!got.ok) {
+                // Busy or failed: said under the 12-words button (WordsWorkLine), beside the sign-ins. Shut here: the
+                // 12-words choice goes, so it is said at the top.
+                if (got.state.status !== 'closed') return toProviders(p, null);
+                setWordsShut(true);
+                return toProviders(p, { tone: 'error', text: got.state.message });
+            }
+            setScreen({ name: 'joining' });
+            // Another tab saved an account here meanwhile: nothing is sent (one browser, one account).
+            const heldNow = await accountHeldElsewhere(p);
+            if (heldNow) return await showTaken(heldNow, p, false);
+            let sent: PendingJoin;
+            try {
+                sent = await markPendingJoinSent({ ...p, provider: null, nonce: null, door: 'words' }, Date.now(), { refuseWhileInviteKept: true });
+            } catch (e) {
+                if (e instanceof PendingJoinHeldError) return await settleSent(e.held);
+                console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
+                return toProviders(p, {
+                    tone: 'error',
+                    text: e instanceof InviteSentHeldError
+                        ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
+                        : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
+                });
+            }
+            joinWent.current = true;
+            setPending(sent);
+            lastJoin.current = { pending: sent, proof: null };
+            let answer;
+            try {
+                answer = await submitJoin(sent.identity, wordsJoinBody(sent.identity.callsign, got.work));
+            } catch (e) {
+                if (e instanceof DoorUnreachableError) return await settleAnswer(sent, null, null, null);
+                throw e;
+            }
+            const verdict = joinVerdict(answer, sent, null);
+            switch (verdict.kind) {
+                case 'joined': return await finish(sent, verdict.callsign, null);
+                case 'already_member': return await finish(sent, null, null);
+                case 'refused': return await settleAnswer(sent, null, verdict.refusal, verdict.outcome);
+                case 'unknown': return await settleAnswer(sent, null, null, verdict.outcome);
+            }
+        } catch (e) {
+            if (e instanceof PendingJoinHeldError) return settleSent(e.held);
+            failed(e);
+        } finally {
+            if (mounted.current) setBusy(false);
+        }
+    }, [finish, settleAnswer, toProviders, showTaken, failed, settleSent]);
+    joinByWordsRef.current = joinByWords;
+
+    /**
+     * The key for a 12-words join is made as the name screen opens, so its door work can run while the name is typed
+     * (two-doors design §3.4). Kept as the pending join, as the sign-in's key is: a reload carries on with it, and going
+     * back past the name lets it go (startOver). Only where the 12-words door is open; elsewhere the key is made at Next.
+     */
+    // The key being made, so a Next tapped meanwhile carries on with it rather than making a second (chooseName).
+    const makingKey = useRef<Promise<PendingJoin | null> | null>(null);
+    useEffect(() => {
+        if (!wordsOpen || screen.name !== 'name' || pending || makingKey.current) return;
+        const making = (async (): Promise<PendingJoin | null> => {
+            try {
+                const held = await accountHeldElsewhere(null);
+                if (held) {
+                    await showTaken(held, null, false);
+                    return null;
+                }
+                const identity = await generateIdentity('');
+                const now = Date.now();
+                return await keep({ identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false });
+            } catch (e) {
+                if (e instanceof PendingJoinHeldError) await settleSent(e.held);
+                // Otherwise made at Next instead (chooseName), as on a node without the 12-words door.
+                else console.error('[WebJoin] could not make a key for the 12 words yet:', e);
+                return null;
+            } finally {
+                makingKey.current = null;
+            }
+        })();
+        makingKey.current = making;
+    }, [wordsOpen, screen.name, pending, keep, showTaken, settleSent]);
+
+    // The pending key's 12-words work: started on the name and sign-in screens, kept for that key, let go with it.
+    const pendingKey = pending?.identity.publicKey ?? null;
+    // Let go with it: a key that is no longer this page's pending join (← Back past the name, another tab's account, a
+    // shut door) has its renewals and any solve under way stopped, so no signed work request goes for a key that is gone.
+    useEffect(() => {
+        if (keeper.current && keeper.current.identity.publicKey !== pendingKey) {
+            keeper.current.dispose();
+            keeper.current = null;
+            setWork({ status: 'idle' });
+        }
+    }, [pendingKey]);
+    useEffect(() => {
+        if (!wordsOpen || !pending || (screen.name !== 'name' && screen.name !== 'providers')) return;
+        if (keeper.current?.identity.publicKey !== pending.identity.publicKey) {
+            keeper.current?.dispose();
+            keeper.current = new WordsWork(pending.identity, { solver: solverRef.current, onChange: (s) => { if (mounted.current) setWork(s); } });
+            setWork(keeper.current.current);
+        }
+        keeper.current.start();
+        // `pending` is read for its key alone, which pendingKey stands for: a new name on the same key keeps its work.
+    }, [wordsOpen, pendingKey, screen.name]);
+    useEffect(() => () => {
+        keeper.current?.dispose();
+        keeper.current = null;
+    }, []);
+
     // ---------- where the page starts ----------
 
     useEffect(() => {
@@ -748,14 +1072,17 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         setBusy(true);
         setNotice(null);
         try {
+            // The 12-words door's key, still being made as the name screen opened: this name goes with that key.
+            const base = pending ?? (makingKey.current ? await makingKey.current : null);
             // Another tab saved an account here since this page opened: no key is made for a second one.
-            const held = await accountHeldElsewhere(pending);
-            if (held) return await showTaken(held, pending, false);
+            const held = await accountHeldElsewhere(base);
+            if (held) return await showTaken(held, base, false);
             const now = Date.now();
             // Going back to change the name keeps the key already made: one person, one key.
-            const identity = pending ? { ...pending.identity, callsign: trimmed } : await generateIdentity(trimmed);
-            const next: PendingJoin = pending
-                ? { ...pending, identity }
+            const identity = base ? { ...base.identity, callsign: trimmed } : await generateIdentity(trimmed);
+            // A key made as the name screen opened (the 12-words door) gets its clock from now, as a key made here would.
+            const next: PendingJoin = base
+                ? { ...base, identity, expiresAt: Math.max(base.expiresAt, now + PENDING_JOIN_TTL_MS) }
                 : { identity, provider: null, nonce: null, startedAt: now, expiresAt: now + PENDING_JOIN_TTL_MS, restored: false };
             await keep(next);
             setScreen({ name: 'providers' });
@@ -772,18 +1099,39 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         }
     }
 
-    // Live "is this name free?" on the name screen. Never blocks: the node lands a taken name on a free variant.
+    // Live "is this name free?" on the name screen. Never blocks: the node lands a taken name on a free variant. Signed
+    // by the joining key when there is one, so the node counts it against the door's limiter for that key (two-doors
+    // design §4.4) rather than the 15 a minute every check from one network shares; asked once the field rests, and
+    // once per name.
+    const joiningKey = pending?.identity ?? null;
     useEffect(() => {
         if (screen.name !== 'name') return;
         const trimmed = name.trim();
         setNameCheck(null);
         if (trimmed.length < 2) return;
+        const known = nameChecks.current.get(trimmed.toLowerCase());
+        if (known) {
+            setNameCheck(known);
+            return;
+        }
         let cancelled = false;
         const t = setTimeout(() => {
-            checkCallsign(trimmed).then((r) => { if (!cancelled) setNameCheck(r); });
-        }, 400);
+            checkCallsign(trimmed, undefined, joiningKey).then((r) => {
+                if (r !== 'unknown') nameChecks.current.set(trimmed.toLowerCase(), r);
+                if (!cancelled) setNameCheck(r);
+            });
+        }, NAME_CHECK_DEBOUNCE_MS);
         return () => { cancelled = true; clearTimeout(t); };
-    }, [name, screen.name]);
+    }, [name, screen.name, joiningKey]);
+
+    /** From "Setting up your account…": the two doors again, the same key, its work carrying on; nothing is sent. */
+    function chooseAnotherWay() {
+        waitingForWork.current?.abort();
+        waitingForWork.current = null;
+        setBusy(false);
+        if (pending) toProviders(pending, null);
+        else setScreen({ name: 'lobby' });
+    }
 
     async function startOver() {
         const p = pending;
@@ -862,7 +1210,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             setScreen({ name: 'unknown', checking: false });
             return;
         }
-        return submit(last.pending, last.proof);
+        return last.proof ? submit(last.pending, last.proof) : joinByWords(last.pending);
     }
 
     // ---------- drawing ----------
@@ -889,7 +1237,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     <h3 style={heading}>Join BeanPool</h3>
                     <p style={lede}>
                         Post what you can offer and what you need, and talk with the people here.
-                        It takes a name and one sign-in. No invite needed.
+                        {' '}{joinTakes(wordsOpen)}
                     </p>
                     <NoticeLine notice={notice} />
                     {canHoldKey === false ? (
@@ -1015,7 +1363,61 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
         }
 
         case 'providers':
-            body = (
+            body = wordsOpen ? (
+                // Two ways in, side by side (two-doors design §2.6): 12 words first, the sign-ins below. Neither is the
+                // lesser one: each is a full-width choice with one plain line about what it means for getting back in.
+                <>
+                    <h3 style={heading}>How would you like to join?</h3>
+                    <p style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+                        Joining as <strong data-testid="join-as">{callsign}</strong>
+                    </p>
+                    <NoticeLine notice={notice} />
+                    <section data-testid="door-words" aria-labelledby="door-words-title" style={{ marginBottom: '1.25rem' }}>
+                        <h4 id="door-words-title" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+                            With 12 secret words
+                        </h4>
+                        <button type="button" data-testid="join-words" style={{ ...primaryButton, marginBottom: '0.5rem' }}
+                            disabled={busy || !pending || work.status === 'closed'} onClick={() => pending && void joinByWords(pending)}>
+                            Create an account with 12 secret words
+                        </button>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
+                            No Google, Apple or Facebook needed. Your 12 words are the only way back in.
+                        </p>
+                        <WordsWorkLine work={work} />
+                    </section>
+                    <section data-testid="door-sign-in" aria-labelledby="door-sign-in-title">
+                        <h4 id="door-sign-in-title" style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.5rem' }}>Or sign in</h4>
+                        {nonceProblem ? (
+                            <>
+                                <p role="alert" data-testid="join-nonce-problem" style={{ ...lede, color: 'var(--text-primary)' }}>{nonceProblem}</p>
+                                <button type="button" style={secondaryButton} onClick={() => pending && void fetchNonce(pending)}>Try again</button>
+                            </>
+                        ) : !nonce ? (
+                            <p role="status" style={lede}>Getting the sign-ins ready…</p>
+                        ) : offered.length === 0 ? (
+                            <p role="alert" style={lede}>This community has no sign-in a browser can use yet.</p>
+                        ) : (
+                            offered.map((provider) => (
+                                <button key={provider} type="button" data-testid={`join-provider-${provider}`} style={secondaryButton}
+                                    disabled={busy || !pending} onClick={() => pending && void signIn(pending, provider)}>
+                                    {providerLabel(provider)}
+                                </button>
+                            ))
+                        )}
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
+                            Also a way back if you lose this device.
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.5, marginTop: '0.5rem' }}>
+                            We keep only a scrambled reference to your sign-in, never your email or name from there. It also
+                            locks a copy of your account, so the sign-in can bring it back. The people who run this
+                            community's server can open that copy.
+                        </p>
+                    </section>
+                    <button type="button" style={quietButton} onClick={() => { setNotice(null); setScreen({ name: 'name' }); }}>
+                        ← Change name
+                    </button>
+                </>
+            ) : (
                 <>
                     <h3 style={heading}>Prove you're a person</h3>
                     <p style={lede}>One sign-in, once. After this your 12 words are your account everywhere.</p>
@@ -1055,13 +1457,38 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
             );
             break;
 
-        case 'joining':
-            body = (
+        case 'joining': {
+            // The work the join is waiting for: a sign-in's own, or the 12 words' (design §3.4: the 8-step bar).
+            const setting = !screen.setting ? null
+                : signInWork ?? (work.status === 'solving' ? { level: work.level, progress: work.progress } : null);
+            // A 12-words join waiting for its work, rather than a sign-in's own: the other door is offered beside it.
+            const forWords = !!screen.setting && !signInWork;
+            body = screen.setting ? (
+                <div data-testid="join-setting-up">
+                    <p role="status" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600, marginBottom: '0.75rem' }}>
+                        Setting up your account…
+                    </p>
+                    <WorkBar done={setting?.progress?.done ?? 0} />
+                    {setting && setting.level >= BUSY_LEVEL && (
+                        <p data-testid="join-busy" style={{ ...lede, marginTop: '0.75rem' }}>
+                            {forWords
+                                ? busySentence(secondsLeft(setting.level, setting.progress))
+                                : signInBusySentence(secondsLeft(setting.level, setting.progress))}
+                        </p>
+                    )}
+                    {forWords && (
+                        <button type="button" data-testid="join-setting-back" style={quietButton} onClick={chooseAnotherWay}>
+                            ← Choose another way
+                        </button>
+                    )}
+                </div>
+            ) : (
                 <p role="status" data-testid="join-joining" style={{ ...lede, color: 'var(--text-primary)', fontWeight: 600 }}>
                     {screen.securing ? 'Securing your account…' : <>Joining as {callsign}…</>}
                 </p>
             );
             break;
+        }
 
         case 'unknown':
             body = screen.checking ? (
@@ -1258,7 +1685,9 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     }
 
     return (
-        <div data-testid={`join-screen-${screen.name}`} style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+        // `data-words-work`: where the 12-words door's work stands, for the browser checks (e2e/app-csp-check.mjs).
+        <div data-testid={`join-screen-${screen.name}`} data-words-work={wordsOpen ? work.status : undefined}
+            style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {body}
         </div>
     );

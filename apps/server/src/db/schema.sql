@@ -276,6 +276,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     option_id TEXT NOT NULL,
     signature TEXT NOT NULL,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
+    -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
+    voter_new_or_words INTEGER,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);

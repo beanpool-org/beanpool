@@ -11,6 +11,10 @@ A **Poll** asks what people think: "Market on Sunday or Saturday?". It changes n
 
 On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it with a sign-in, so one person with several accounts could tip the count, and there are no Decisions there.
 
+When an anonymous poll there has closed, it also says how many of its votes came from **new or 12-word accounts**, for example "5 of 12 votes came from new or 12-word accounts". Each vote counts as the account was when it voted: a new account is one that still had the new-account limits, and a 12-word account is one made with 12 words that had not added a sign-in. When at least 3 votes came from each kind, each answer also says how many of its own did. Every vote still counts, and nothing shows who voted.
+
+While a poll is open it says nothing about this. If it did, someone checking the poll after each vote could tell what kind of account each vote came from, and how it chose. An open vote never says it, open or closed: it shows who voted, so the count would say which kind of account each voter has. A group's poll doesn't say it either, and nor does a poll on a local community.
+
 ## Starting a poll
 
 - Tap **+ ADD POST** on the Market tab or the Map.

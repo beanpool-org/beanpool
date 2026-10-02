@@ -293,7 +293,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',

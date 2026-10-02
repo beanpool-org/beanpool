@@ -39,7 +39,7 @@ vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => 
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import {
     isPushNoticeKind, PUSH_NOTICE_LIFETIME_SECONDS, PUSH_NOTICE_TITLE, pushCommunityTag, pushNoticeBytes, pushNoticeWords,
     type PushNoticeKind,
@@ -71,6 +71,21 @@ type Account = { publicKey: string; privateKey: string };
 function account(): Account {
     const seed = nodeCrypto.randomBytes(32);
     return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: seed.toString('hex') };
+}
+
+// A signature only ZIP-215 takes (as test-storm-smalls.ts builds it): R is the identity point in a non-canonical
+// encoding (y = p + 1), which RFC 8032 refuses and noble's default accepts.
+const ED_L = 2n ** 252n + 27742317777372353535851937790883648493n;
+const leBig = (b: Uint8Array) => { let n = 0n; for (let i = b.length - 1; i >= 0; i--) n = (n << 8n) | BigInt(b[i]); return n; };
+function zip215OnlySignature(message: Uint8Array, seed: Uint8Array): string {
+    const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(seed);
+    const canonical = new Uint8Array(32); canonical[0] = 1;
+    const nonCanonical = new Uint8Array(32).fill(0xff); nonCanonical[0] = 0xee; nonCanonical[31] = 0x7f;
+    const k = leBig(nodeCrypto.createHash('sha512').update(Buffer.concat([canonical, pointBytes, message])).digest()) % ED_L;
+    let n = (k * scalar) % ED_L;
+    const sBytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) { sBytes[i] = Number(n & 0xffn); n >>= 8n; }
+    return bytesToHex(new Uint8Array([...nonCanonical, ...sBytes]));
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -629,6 +644,18 @@ describe('a genuine notice of a kind (or format) this build doesn\'t know is nev
 
     it('the kind really is outside this build\'s table', () => {
         expect(isPushNoticeKind(NEW_KIND)).toBe(false);
+    });
+
+    it('strict RFC 8032: a ZIP-215-only signature on an unknown kind is dropped, a real one still shown; the known kind agrees', async () => {
+        for (const kind of [NEW_KIND, 'trade.update' as PushNoticeKind]) {
+            const real = mullum.notice(kind, kim.publicKey);
+            const fields = { c: real.c, k: kind, i: real.i, t: real.t };
+            const lax = { ...real, s: zip215OnlySignature(pushNoticeBytes(fields, kim.publicKey), mullum.seed) };
+            // control: noble's default check takes the crafted signature, so only strictness refuses it
+            expect(ed25519.verify(hexToBytes(lax.s), pushNoticeBytes(fields, kim.publicKey), hexToBytes(mullum.pushKey))).toBe(true);
+            expect(await open(push(lax))).toEqual({ kind: 'drop', reason: 'bad-signature' });
+            expect((await open(push(real))).kind).toBe(kind === NEW_KIND ? 'replace' : 'show');
+        }
     });
 
     it('signed by its community for this account: shown while open with general words, once', async () => {

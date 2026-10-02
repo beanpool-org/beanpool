@@ -427,7 +427,7 @@ function bringMembersToSchemaRules(schemaSql: string): void {
  * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
  * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
  * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
- * persistCommonsBalance); it relies on every primitive that moves the pot refusing a non-finite amount, not on this.
+ * persistCommonsBalance), so that write refuses a pot that is not a finite number itself, before it binds anything.
  *
  * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
  * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its
@@ -882,6 +882,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.

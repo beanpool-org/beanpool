@@ -33,6 +33,7 @@
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
  * member wrote, so a restore, a standby or a take-over carries it with them, and there is nothing to keep in step.
  */
+import { configurePollVoteOrigins } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { nodeRoleOf } from './node-roles.js';
@@ -133,6 +134,59 @@ export function keptPostCount(pubkey: string): number {
             AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL`
     ).get(pubkey) as { c: number };
     return row.c;
+}
+
+/**
+ * Where the votes on the public board's polls came from (FABLE-sec-global-abuse LOW-7: many cheap accounts voting). Each
+ * vote is stamped when it is cast (`poll_votes.voter_new_or_words`, pollVoterNewOrWords): whether the voter was then new
+ * or a 12-word account. New is on probation (`probationState`): the first 72 hours, or fewer than 3 kept posts. 12 words is
+ * an `open_joins` row of provider `words` (no sign-in added), however long ago, because such an account cost nothing to
+ * make and a patient person can age a thousand of them. A node role (owner, admin, moderator) is neither, as for probation.
+ *
+ * At the vote, never at the read: a voter whose standing changes later at a moment anyone can see (their third post, the
+ * end of their first 72 hours by the join date the People list shows) would otherwise move the poll's count at that
+ * moment, and say that they voted, and with the split which way. A changed vote keeps the stamp of the first.
+ *
+ * Every vote still counts in the poll's totals: this only says how many came from such accounts, never whose. A new
+ * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing). Only an
+ * anonymous poll says it, and only once it has closed (@beanpool/engine pollOriginsMayShow): an open vote keeps no kind.
+ */
+export function pollVoterNewOrWords(pubkey: string, now: number = Date.now()): 0 | 1 | null {
+    if (!getProfileSwitches().probation) return null;
+    if (nodeRoleOf(pubkey)) return 0;
+    return probationState(pubkey, now).onProbation || probationRuleSet(pubkey) === 'words' ? 1 : 0;
+}
+
+/**
+ * For the public board's polls: per poll and option, the votes stamped as from a new or 12-word account. One query per
+ * 500 polls, by the votes' primary key. Null where the node's probation switch is off (every local community): it says
+ * nothing about where votes came from there. A vote cast before the stamp (NULL) is not counted as one.
+ */
+export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[]): Map<string, Map<string, number>> | null {
+    if (!getProfileSwitches().probation) return null;
+    const out = new Map<string, Map<string, number>>();
+    for (let i = 0; i < pollIds.length; i += 500) {
+        const chunk = pollIds.slice(i, i + 500);
+        const rows = conn.prepare(pollVoteOriginsSql(chunk.length)).all(...chunk) as { post_id: string; option_id: string; c: number }[];
+        for (const r of rows) {
+            let byOption = out.get(r.post_id);
+            if (!byOption) out.set(r.post_id, byOption = new Map());
+            byOption.set(r.option_id, r.c);
+        }
+    }
+    return out;
+}
+
+/** The query pollVotesFromNewOrWords runs for `polls` poll ids (its parameters): exported for the suite's look at its plan. */
+export function pollVoteOriginsSql(polls: number): string {
+    return `SELECT post_id, option_id, COUNT(*) AS c FROM poll_votes
+             WHERE post_id IN (${Array.from({ length: polls }, () => '?').join(',')}) AND voter_new_or_words = 1
+             GROUP BY post_id, option_id`;
+}
+
+/** Each public poll says where its votes came from, where the node's probation switch is on (pollVotesFromNewOrWords). */
+export function installPollVoteOriginsAtBoot(): void {
+    configurePollVoteOrigins((conn, pollIds) => pollVotesFromNewOrWords(conn, pollIds));
 }
 
 export function probationState(pubkey: string, now: number = Date.now()): ProbationState {

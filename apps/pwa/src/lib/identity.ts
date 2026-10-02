@@ -312,6 +312,11 @@ export interface PendingJoin {
      * a refusal of the later join settles nothing until the earlier one can no longer land (releaseSentPendingJoin).
      */
     earlierSentAt?: number;
+    /**
+     * The door the last join with this key went through: `words` for 12 words alone (two-doors design §2), else a
+     * sign-in. Only what the screens say about it depends on this.
+     */
+    door?: 'words' | 'sign-in';
 }
 
 /** A join with this pending key has gone to the node, and the node has not said it did not land. */
@@ -417,6 +422,14 @@ export const DEFINITE_JOIN_REFUSALS = {
     removed: 403,
     already_joined: 409,
     rate_limited: 429,
+    // The two doors (#1425): a network's ceiling, checked again inside the transaction that would write the member; the
+    // door work, checked before anything is written; the 12-words door shut here, before anything is read.
+    network_busy: 429,
+    work_required: 400,
+    work_invalid: 400,
+    work_expired: 400,
+    work_spent: 400,
+    sign_in_required: 403,
 } as const;
 export type DefiniteJoinRefusalCode = keyof typeof DEFINITE_JOIN_REFUSALS;
 

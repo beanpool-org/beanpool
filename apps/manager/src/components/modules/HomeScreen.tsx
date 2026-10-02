@@ -18,7 +18,7 @@ interface HomeScreenProps {
     onCreateEnterprise: () => void;
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
-    auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number } | null };
+    auditState: { running: boolean; result: { ok: boolean; drift: number | null; sumBalances?: number | null } | null };
     onStartColdStartWizard?: () => void;
     onAcknowledgeShutdown?: () => Promise<void>;
     /** An owner's "this standby is gone for good": the node stops watching it (its next report watches it again). */
@@ -140,7 +140,7 @@ export function HomeScreen({
     }
 
     const driftText = auditState.result
-        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${auditState.result.drift} drift)`
+        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${Number.isFinite(auditState.result.drift) ? auditState.result.drift : 'not a number'} drift)`
         : 'Ledger balanced (0 drift)';
 
     return (
@@ -400,7 +400,7 @@ export function HomeScreen({
                         <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
-                        {auditState.result?.sumBalances !== undefined
+                        {typeof auditState.result?.sumBalances === 'number' && Number.isFinite(auditState.result.sumBalances)
                             ? Math.abs(auditState.result.sumBalances).toFixed(1)
                             : (typeof nodeData?.commonsBalance === 'number'
                                 ? nodeData.commonsBalance.toFixed(1)

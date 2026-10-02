@@ -256,7 +256,7 @@ export interface CommunityInfo {
      * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
      * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean };
+    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean };
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**
@@ -347,6 +347,11 @@ export interface CommunityStanding {
         limits: { posts: NewAccountLimit; photos: NewAccountLimit; new_dm_recipients: NewAccountLimit };
         /** The rule as data: the limits end once the first `hours` are over AND `keptPosts` posts have stayed up. */
         endsWhen?: { hours: number; keptPosts: number };
+        /**
+         * Which rules: `words` for a member who came in with 12 words and has added no sign-in (they have one way back,
+         * and a sign-in can be added), else `ordinary`. Absent on a node from before the 12-words door.
+         */
+        rules?: 'words' | 'ordinary';
     };
     mute: { muted: boolean; until: string | null };
 }
@@ -968,11 +973,13 @@ export interface MarketplacePost {
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
     /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
     pollOpenVote?: boolean;
     totalVotes?: number;
+    /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)

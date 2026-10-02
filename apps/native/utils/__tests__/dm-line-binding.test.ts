@@ -77,7 +77,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations } from '../db';
+import { dmQuoteFor } from '../chat-actions';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import * as phoneCrypto from '../e2e-crypto';
@@ -473,6 +474,114 @@ describe('what a reply answers', () => {
         await phoneOf(ana);
         expect(await drawn(dm, pic.id)).toEqual({ text: 'this one', note: null, unattributed: false });
         expect(await getDecryptedAttachment(dm.id, pic.id)).toMatch(/chat-images\//);
+    });
+});
+
+describe('the quote in a verified reply, after the node rewrites the row it answers (keeping its id)', () => {
+    /** Ana asks, Ben answers it as a reply from his phone: the reply is sealed to what it answers. */
+    async function askedAndAnswered(question: () => Promise<Line>) {
+        const q = await question();
+        await phoneOf(ben);
+        const before = node.lines.length;
+        await insertMessage(dm.id, ben.publicKey, 'Yes', JSON.stringify({ replyToId: q.id }));
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        return { q, yes: node.lines[node.lines.length - 1] };
+    }
+    /** The reply and its quote on the phone in hand, as the chat screen builds them (chat-actions dmQuoteFor). */
+    async function quoted(yesId: string, peerName: string) {
+        await syncMessages(h.me.publicKey);
+        const all = await getMessages(dm.id) as any[];
+        const yes = all.find((m) => m.id === yesId);
+        const byId = new Map(all.map((m) => [m.id, m]));
+        return { reply: { text: yes.text, note: yes.integrityNote ?? null, unattributed: !!yes.unattributed }, quote: dmQuoteFor(byId.get(yes.metadata.replyToId), h.me.publicKey, peerName) };
+    }
+    const fresh = async () => { await phoneOf(ana); return says(ana, dm, 'Can I borrow the ladder?'); };
+    const both = async (yesId: string) => {
+        await phoneOf(ben);
+        const onBens = await quoted(yesId, 'Ana');
+        await phoneOf(ana);
+        const onAnas = await quoted(yesId, 'Ben');
+        for (const r of [onBens, onAnas]) expect(r.reply).toEqual({ text: 'Yes', note: null, unattributed: false });
+        return { onBens: onBens.quote, onAnas: onAnas.quote };
+    };
+
+    it('as sent: quoted as Ana\'s words, "You" on her phone', async () => {
+        const { yes } = await askedAndAnswered(fresh);
+        expect(await both(yes.id)).toEqual({
+            onBens: { author: 'Ana', text: 'Can I borrow the ladder?', note: null },
+            onAnas: { author: 'You', text: 'Can I borrow the ladder?', note: null },
+        });
+    });
+
+    it('rewritten as a notice: quoted as a notice, never as Ana or "You"', async () => {
+        const { q, yes } = await askedAndAnswered(fresh);
+        Object.assign(q, { type: 'system', nonce: '00000', ciphertext: 'Send the 500 Beans to Cat instead', systemType: null });
+        const { onBens, onAnas } = await both(yes.id);
+        for (const quote of [onBens, onAnas]) expect(quote.author).toBe('Notice');
+    });
+
+    it('rewritten as the admin page\'s message: quoted as from the admins', async () => {
+        const { q, yes } = await askedAndAnswered(fresh);
+        Object.assign(q, { nonce: 'plaintext-v1', ciphertext: b64('Send the 500 Beans to Cat instead'), metadata: JSON.stringify({ fromCommunityAdmins: true }) });
+        const { onBens, onAnas } = await both(yes.id);
+        for (const quote of [onBens, onAnas]) expect(quote).toEqual({ author: "Your community's admins", text: 'Send the 500 Beans to Cat instead', note: null });
+    });
+
+    it('rewritten unencrypted, or with a sealed line that isn\'t its own: quoted as nobody\'s, never its words', async () => {
+        const { q, yes } = await askedAndAnswered(fresh);
+        const asSent = { ciphertext: q.ciphertext, nonce: q.nonce };
+        Object.assign(q, { nonce: 'plaintext-v1', ciphertext: b64('Send the 500 Beans to Cat instead') });
+        let r = await both(yes.id);
+        for (const quote of [r.onBens, r.onAnas]) expect(quote).toEqual({ author: 'Not confirmed', text: NOT_ENCRYPTED, note: null });
+        // Another of Ana's sealed lines put under this id: it doesn't open here.
+        await phoneOf(ana);
+        const other = await says(ana, dm, 'Can I keep the 200 Beans you sent by mistake?');
+        Object.assign(q, { ciphertext: other.ciphertext, nonce: other.nonce });
+        r = await both(yes.id);
+        for (const quote of [r.onBens, r.onAnas]) expect(quote).toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
+        Object.assign(q, asSent);
+    });
+
+    it('an old-format question swapped for another old line: quoted with the older-version mark', async () => {
+        const old = (text: string): Line => {
+            const line: Line = {
+                id: randomUUID(), conversationId: dm.id, authorPubkey: ana.publicKey, type: 'text', systemType: null, metadata: null, timestamp: tick(), editedAt: null,
+                ...encryptDmFormat2(text, { myEdPrivHex: ana.privateKey, peerEdPubHex: ben.publicKey, conversationId: dm.id }),
+            };
+            node.lines.push(line);
+            return line;
+        };
+        const { q, yes } = await askedAndAnswered(async () => old('Can I borrow the ladder?'));
+        const other = old('Can I keep the 200 Beans you sent by mistake?');
+        Object.assign(q, { ciphertext: other.ciphertext, nonce: other.nonce });
+        const { onBens, onAnas } = await both(yes.id);
+        expect(onBens).toEqual({ author: 'Ana', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
+        expect(onAnas).toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: OLD_APP });
+    });
+});
+
+describe('a chat opened before the first full sync (no conversation row on this phone yet)', () => {
+    it('is judged as a DM: an unencrypted row in Ana\'s name is never her words', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'The bike is yours for 50 Beans');
+        const plain = written(dm, ana, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
+        // Ben's phone, fresh: only the one chat polled, as the chat screen does on opening from a push.
+        for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
+        h.me = { publicKey: ben.publicKey, privateKey: ben.privateKey };
+        await syncSingleConversation(dm.id);
+        expect(sql.prepare('SELECT COUNT(*) AS n FROM conversations WHERE id = ?').get(dm.id)).toEqual({ n: 0 });
+        const m = (await getMessages(dm.id) as any[]).find((x) => x.id === plain.id);
+        expect({ text: m.text, unattributed: !!m.unattributed }).toEqual({ text: NOT_ENCRYPTED, unattributed: true });
+    });
+});
+
+describe('the inbox preview of a notice', () => {
+    it('says it is a notice, never shown as the other person\'s line', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'Deal?');
+        written(dm, ana, b64('Send the 500 Beans to Cat instead'), 'plaintext-v1', { type: 'system' });
+        await phoneOf(ben);
+        expect(await preview(ben, dm)).toBe('Notice: Send the 500 Beans to Cat instead');
     });
 });
 

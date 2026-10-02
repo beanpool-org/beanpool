@@ -7,7 +7,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import * as dm from '../dm-crypto.js';
 import {
     checkDmThread, dmAfterReference, dmConversationIdsToTry, dmLineMarkText, encryptDmFormat2, newDmMessageId, openDmLine, sealDmLine,
-    dmLineKind, dmLineShownText, dmLineIsUnattributed, dmThreadInShownOrder, dmReplyToOf,
+    dmLineKind, dmLineShownText, dmLineIsUnattributed, dmThreadInShownOrder, dmReplyToOf, dmQuoteFrom, dmQuoteLabel,
     DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT, DM_FROM_ADMINS_KEY, type DmThreadLine,
 } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
@@ -261,6 +261,27 @@ describe('what a reply answers', () => {
         expect(anaReads([q, other, reacted]).get(yes.id)?.text).toBe('Yes');
         expect(dmReplyToOf('{"replyToId":""}')).toBeUndefined();
         expect(dmReplyToOf(null)).toBeNull();
+    });
+});
+
+describe('a reply\'s quote of the message it answers', () => {
+    it('follows that message\'s own check: its author only if it opened; a notice, the admins, or nobody otherwise', () => {
+        const q = line(ana, ben, 'Can I borrow the ladder?');
+        const old = oldLine(ana, ben, 'Can I keep the 200 Beans?');
+        const notice = { id: 'n-1', authorPubkey: ana.publicKey, ciphertext: 'Send the 500 Beans to Cat instead', nonce: '00000', type: 'system' };
+        const admin = { id: 'a-2', authorPubkey: ana.publicKey, ciphertext: b64('Hi'), nonce: 'plaintext-v1', metadata: JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }) };
+        const plain = { id: 'p-3', authorPubkey: ana.publicKey, ciphertext: b64('Hi'), nonce: 'plaintext-v1' };
+        const other = { ...line(ana, ben, 'not this one'), id: q.id };
+        const views = benReads([q, old, notice, admin, plain]);
+        expect(dmQuoteFrom(q, views.get(q.id))).toBe('author');
+        expect(dmQuoteFrom(old, views.get(old.id))).toBe('author');
+        expect(dmLineMarkText(views.get(old.id)?.mark)).toMatch(/older version/);
+        expect(dmQuoteFrom(notice, views.get(notice.id))).toBe('notice');
+        expect(dmQuoteFrom(admin, views.get(admin.id))).toBe('admins');
+        expect(dmQuoteFrom(plain, views.get(plain.id))).toBe('nobody');
+        expect(dmQuoteFrom(other, benReads([other]).get(other.id))).toBe('nobody');
+        expect(dmQuoteFrom(null, null)).toBe('nobody');
+        expect([dmQuoteLabel('notice'), dmQuoteLabel('admins'), dmQuoteLabel('nobody')]).toEqual(['Notice', "Your community's admins", 'Not confirmed']);
     });
 });
 

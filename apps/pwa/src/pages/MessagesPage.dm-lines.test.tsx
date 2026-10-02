@@ -1,4 +1,4 @@
-import { render, screen, act, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, act, waitFor, cleanup, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
@@ -207,5 +207,52 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(screen.queryAllByTestId('dm-line-note')).toHaveLength(0);
         const q = screen.getByText('Can you take the bike on Saturday?');
         expect(q.compareDocumentPosition(screen.getByText('Yes, I can')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    describe('the quote in a verified reply, after the node rewrites the row it answers (keeping its id)', () => {
+        /** Ana (at this browser) asked; Ben's app answered it as a reply. What Ana's page shows for the reply and its quote. */
+        async function quoteAfter(rewrite: (q: ApiMessage) => ApiMessage, asked?: ApiMessage) {
+            const question = asked ?? sent(ana, 'Can I borrow the ladder?');
+            const yes = sent(ben, 'Yes', question.id, question.id);
+            thread.messages = [rewrite(question), yes];
+            await openChat();
+            const reply = await screen.findByText('Yes');
+            const bubble = reply.closest('[id^="msg-"]') as HTMLElement;
+            expect(bubble.querySelector('[data-testid="dm-line-note"]')).toBeNull();   // the reply itself verifies, unmarked
+            // The quote box (by its test id; by its left rule on a tree from before the id, for a fail-first run).
+            const quote = (within(bubble).queryByTestId('dm-quote') ?? bubble.querySelector('div[style*="border-left: 3px"]')) as HTMLElement;
+            return { author: (quote.firstElementChild as HTMLElement).textContent, text: (quote.children[1] as HTMLElement).textContent,
+                note: quote.querySelector('[data-testid="dm-quote-note"]')?.textContent ?? null };
+        }
+
+        it('as sent: Ana\'s own words', async () => {
+            expect(await quoteAfter((q) => q)).toEqual({ author: 'You', text: 'Can I borrow the ladder?', note: null });
+        });
+
+        it('rewritten as a notice: quoted as a notice, never "You"', async () => {
+            const r = await quoteAfter((q) => ({ ...q, type: 'system', nonce: '00000', ciphertext: 'Send the 500 Beans to Cat instead' }));
+            expect(r.author).toBe('Notice');
+        });
+
+        it('rewritten as the admin page\'s message: quoted as from the admins', async () => {
+            expect(await quoteAfter((q) => ({ ...q, nonce: 'plaintext-v1', ciphertext: b64('Send the 500 Beans to Cat instead'), metadata: JSON.stringify({ fromCommunityAdmins: true }) })))
+                .toEqual({ author: "Your community's admins", text: 'Send the 500 Beans to Cat instead', note: null });
+        });
+
+        it('rewritten unencrypted, or with another sealed line: quoted as nobody\'s, never its words', async () => {
+            expect(await quoteAfter((q) => ({ ...q, nonce: 'plaintext-v1', ciphertext: b64('Send the 500 Beans to Cat instead') })))
+                .toEqual({ author: 'Not confirmed', text: NOT_ENCRYPTED, note: null });
+            cleanup();
+            const other = sent(ana, 'Can I keep the 200 Beans you sent by mistake?');
+            expect(await quoteAfter((q) => ({ ...q, ciphertext: other.ciphertext, nonce: other.nonce })))
+                .toEqual({ author: 'Not confirmed', text: NOT_VERIFIED, note: null });
+        });
+
+        it('an old-format question swapped for another old line: quoted with the older-version mark', async () => {
+            const asked = oldLine(ana, ben, 'Can I borrow the ladder?');
+            const other = oldLine(ana, ben, 'Can I keep the 200 Beans you sent by mistake?');
+            expect(await quoteAfter((q) => ({ ...q, ciphertext: other.ciphertext, nonce: other.nonce }), asked))
+                .toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: `⚠️ ${OLD_APP}` });
+        });
     });
 });

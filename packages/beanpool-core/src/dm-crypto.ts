@@ -514,6 +514,33 @@ export function dmLineIsUnattributed(view: DmLineView | undefined | null): boole
     return view?.mark === 'not-verified' || view?.mark === 'not-encrypted' || view?.mark === 'from-admins';
 }
 
+/**
+ * Who a quoted line (the message a reply answers) is shown as from. A quote follows the quoted line's own check, never its
+ * row's raw words and named author: the node can rewrite the row a verified reply answers while keeping its id.
+ *   'author':  a line whose words opened (or a tombstone): its named author, with its mark (dmLineMarkText) if it has one;
+ *   'admins':  the admin page's message: from the community's admins;
+ *   'notice':  the node's own notice: a notice, never either person;
+ *   'nobody':  a line that didn't open or wasn't encrypted, or one that isn't there: nobody's, with dmLineShownText.
+ */
+export type DmQuoteFrom = 'author' | 'admins' | 'notice' | 'nobody';
+
+export function dmQuoteFrom(row: DmRowShape | null | undefined, view: DmLineView | null | undefined): DmQuoteFrom {
+    if (!row) return 'nobody';
+    if (dmLineKind(row) === 'node-notice') return 'notice';
+    if (view?.mark === 'from-admins') return 'admins';
+    if (dmLineIsUnattributed(view)) return 'nobody';
+    return 'author';
+}
+
+/** The name a quote shows for a line that isn't quoted as its named author's (dmQuoteFrom), in both apps' words. */
+export function dmQuoteLabel(from: Exclude<DmQuoteFrom, 'author'>): string {
+    switch (from) {
+        case 'admins': return "Your community's admins";
+        case 'notice': return 'Notice';
+        default: return 'Not confirmed';
+    }
+}
+
 /** The one line under a marked message, in both apps' words. */
 export function dmLineMarkText(mark: DmLineMark | undefined): string | null {
     switch (mark) {

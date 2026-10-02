@@ -8,6 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
+import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -73,8 +74,34 @@ export interface ChatMessage {
     timestamp?: string;
     /** Who said it, when the chat shows names (group, enterprise, event). */
     authorName?: string | null;
-    /** A DM line the node moved, reordered or sent again in the old format: the one line shown under it. */
+    /** A DM line the node moved or reordered, or an old-format line: the one line shown under it. */
     integrityNote?: string | null;
+    /** A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed). */
+    unattributed?: boolean;
+    /** Who a reply quoting this DM line shows it as from (e2e-crypto dmQuoteFrom); absent: its named author. */
+    quoteFrom?: DmQuoteFrom;
+}
+
+/** A quoted message, as a reply's bubble and the "Replying to" box show it. */
+export interface DmQuoteView {
+    author: string;
+    text: string;
+    /** The quoted line's own mark (an old-format line, a moved or reordered one), carried with the quote. */
+    note: string | null;
+}
+
+/**
+ * The quote of the message a DM reply answers, from that message as the thread judged it: its words only if they opened,
+ * its named author only if the line is theirs, with its mark. The node can rewrite the row a verified reply answers while
+ * keeping its id (as a notice, as the admin page's message, or as another old-format line): the quote then says what
+ * the row is, never "You" or the other person's name over words it can't confirm.
+ */
+export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
+    if (!parent) return { author: 'Someone', text: 'Message not found', note: null };
+    const from = parent.quoteFrom ?? ((parent.type === 'system' || parent.senderId === 'SYSTEM') ? 'notice' : parent.unattributed ? 'nobody' : 'author');
+    if (from !== 'author') return { author: dmQuoteLabel(from), text: parent.text, note: null };
+    const text = isTombstone(parent) ? tombstoneText(parent, 'dm') : parent.type === 'image' ? '🔒 Photo' : parent.text;
+    return { author: parent.senderId === myPubkey ? 'You' : (peerName || 'Someone'), text, note: parent.integrityNote ?? null };
 }
 
 /** Who the viewer is in this chat, for the action rules below. */

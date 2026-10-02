@@ -31,7 +31,7 @@ import { ChatComposer, type ChatComposerHandle } from '../../components/chat/Cha
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
 import { isDmNotLocked, dmNotLockedLine, restoredDraft } from '../../utils/dm-lock';
 import {
-    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
@@ -1042,16 +1042,12 @@ function ChatScreen() {
         };
 
         const quote = item.metadata?.replyToId ? (() => {
-            const parentMsg = messagesById.get(item.metadata.replyToId);
-            const parentText = !parentMsg
-                ? 'Message not found'
-                : isTombstone(parentMsg)
-                    ? tombstoneText(parentMsg, 'dm')
-                    : parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text;
-            const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
+            // The answered message as the thread judged it (dmQuoteFor), never its row's raw words and named author.
+            const q = dmQuoteFor(messagesById.get(item.metadata.replyToId), identity?.publicKey, peerName);
             return {
-                author: parentAuthor,
-                text: parentText,
+                author: q.author,
+                text: q.text,
+                note: q.note,
                 onPress: () => {
                     const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
                     if (index > -1) {
@@ -1347,14 +1343,11 @@ function ChatScreen() {
                     />
                 )}
 
-                {replyToMessage && !editingMessage && (
-                    <ChatReplyBanner
-                        styles={chat}
-                        author={replyToMessage.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')}
-                        text={replyToMessage.type === 'image' ? '🔒 Photo' : replyToMessage.text}
-                        onCancel={() => setReplyToMessage(null)}
-                    />
-                )}
+                {replyToMessage && !editingMessage && (() => {
+                    // What is being answered, as the thread judged it (dmQuoteFor).
+                    const q = dmQuoteFor(replyToMessage, identity?.publicKey, peerName);
+                    return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
+                })()}
 
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>

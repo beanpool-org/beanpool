@@ -7,7 +7,7 @@ import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_M
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
     sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
-    isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
+    dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
@@ -1075,6 +1075,9 @@ export async function getConversations(myPubkey: string) {
             ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
                 previewIdentity?.privateKey && row.otherPubkey ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: row.otherPubkey } : null, row.id).get(row.lastId)
             : undefined;
+        // The node's own notice in a DM: said to be one, never shown as the other person's line (formatted below).
+        const lastIsDmNotice = !!row.lastId && !isNodeReadableChatType(row.convType)
+            && dmLineKind({ authorPubkey: row.lastAuthor, nonce: row.lastNonce, type: row.lastMsgType }) === 'node-notice';
         if (lastView) {
             if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
             else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
@@ -1098,6 +1101,7 @@ export async function getConversations(myPubkey: string) {
                 defaultText: row.lastMessage
             });
         }
+        if (lastIsDmNotice) displayMsg = `${dmQuoteLabel('notice')}: ${displayMsg}`;
 
         const isPayer = row.txBuyerPubkey === myPubkey;
         const isPayee = row.txSellerPubkey === myPubkey;
@@ -3886,11 +3890,14 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     let dmCtx: DMKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }
     // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
-    // the thread check below, whether or not this phone has the other person's key yet.
-    let isDm = !!dmCtx;
+    // the thread check below, whether or not this phone has the other person's key yet. Fails closed: a conversation
+    // this phone has no row for yet (a chat opened from a push or a link, before the first full sync has written it) is
+    // judged as a DM, so no row of it is shown as anyone's words unchecked. Only the DM screen reads this (a group's,
+    // an event's and an enterprise's chats have their own views).
+    let isDm = true;
     try {
         const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        isDm = isDm || (!!convRow && !isNodeReadableChatType(convRow.type));
+        isDm = !!dmCtx || !convRow || !isNodeReadableChatType(convRow.type);
     } catch {}
     // Read receipts: my pubkey (to flag outgoing) + the peer's read cursor.
     let myPubkey: string | null = null;
@@ -3998,6 +4005,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
+            // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
+            quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,
             timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };

@@ -43,6 +43,8 @@ vi.mock('../lib/avatar', () => ({
 vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
     // The thread's order is the real one: by the node's timestamps (core dmThreadInShownOrder).
     dmThreadInShownOrder: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmThreadInShownOrder,
+    dmQuoteFrom: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmQuoteFrom,
+    dmQuoteLabel: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmQuoteLabel,
     dmLineShownText: vi.fn((v: { text: string | null } | undefined) => v?.text ?? ''),
     dmLineIsUnattributed: vi.fn(() => false),
     dmReplyToOf: vi.fn(() => null),

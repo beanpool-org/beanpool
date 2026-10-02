@@ -16,7 +16,7 @@ import {
 } from '../lib/api';
 import {
     decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
-    dmThreadInShownOrder, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
+    dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -828,6 +828,29 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
     }
 
+    /**
+     * The quote of the message a reply answers, from that message as the thread judged it (core dmQuoteFrom): its words
+     * only if they opened, its named author only if the line is theirs, with its mark. In a DM the node can rewrite the
+     * row a verified reply answers while keeping its id (as a notice, the admin page's message, or another old-format
+     * line): the quote then says what the row is, never "You" or the other person's name over words it can't confirm.
+     */
+    function quoteOf(parent: ApiMessage | undefined): { author: string; text: string; note: string | null; named: boolean } {
+        if (!parent) return { author: 'Someone', text: 'Message not found', note: null, named: false };
+        const view = lineViews?.get(parent.id);
+        if (lineViews) {
+            const from = dmQuoteFrom({ authorPubkey: parent.authorPubkey, nonce: parent.nonce, type: parent.type, metadata: parent.metadata }, view);
+            if (from === 'notice') return { author: dmQuoteLabel(from), text: formatSystemMessage(parent, identity.publicKey, userTransactionsByPostId), note: null, named: false };
+            if (from !== 'author') return { author: dmQuoteLabel(from), text: dmLineShownText(view), note: null, named: false };
+        }
+        return {
+            author: membersByPublicKey.get(parent.authorPubkey)?.callsign
+                || (parent.authorPubkey === identity.publicKey ? 'You' : parent.authorPubkey.substring(0, 8)),
+            text: parent.type === 'image' ? '🔒 Photo' : decryptMessage(parent),
+            note: dmLineMarkText(view?.mark),
+            named: true,
+        };
+    }
+
     function getConversationTitle(conv: Conversation): string {
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || 'Event chat';
@@ -1433,14 +1456,13 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     wordBreak: 'break-word',
                                 }}>
                                     {metaObj && metaObj.replyToId && (() => {
-                                        const parentMsg = messagesById.get(metaObj.replyToId);
-                                        const parentText = parentMsg ? (parentMsg.type === 'image' ? '🔒 Photo' : decryptMessage(parentMsg)) : 'Message not found';
-                                        const parentAuthor = parentMsg 
-                                            ? (membersByPublicKey.get(parentMsg.authorPubkey)?.callsign
-                                               || (parentMsg.authorPubkey === identity.publicKey ? 'You' : parentMsg.authorPubkey.substring(0, 8))) 
-                                            : 'Someone';
+                                        // The answered message as the thread judged it (quoteOf), never its row's raw words and name.
+                                        const quoted = quoteOf(messagesById.get(metaObj.replyToId));
+                                        const parentText = quoted.text;
+                                        const parentAuthor = quoted.author;
                                         return (
                                             <div 
+                                                data-testid="dm-quote"
                                                 style={{
                                                     background: isMe ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0.04)',
                                                     borderLeft: `3px solid ${isMe ? '#fff' : 'var(--accent)'}`,
@@ -1468,6 +1490,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                 <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '280px' }}>
                                                     {parentText}
                                                 </div>
+                                                {quoted.note && (
+                                                    <div data-testid="dm-quote-note" style={{ fontStyle: 'italic', fontSize: '0.7rem', whiteSpace: 'normal' }}>⚠️ {quoted.note}</div>
+                                                )}
                                             </div>
                                         );
                                     })()}
@@ -1688,12 +1713,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         gap: '8px',
                     }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderLeft: '3px solid var(--accent)', paddingLeft: '8px', minWidth: 0, flex: 1 }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
-                                Replying to {replyToMessage.authorPubkey === identity.publicKey ? 'You' : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || 'Someone')}
-                            </div>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                                {replyToMessage.type === 'image' ? '🔒 Photo' : decryptMessage(replyToMessage)}
-                            </div>
+                            {(() => {
+                                // What is being answered, as the thread judged it (quoteOf).
+                                const q = quoteOf(replyToMessage);
+                                return (
+                                    <>
+                                        <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                                            Replying to {!q.named ? q.author : replyToMessage.authorPubkey === identity.publicKey ? 'You' : (membersByPublicKey.get(replyToMessage.authorPubkey)?.callsign || 'Someone')}
+                                        </div>
+                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                                            {q.text}
+                                        </div>
+                                        {q.note && <div style={{ fontStyle: 'italic', fontSize: '0.75rem', whiteSpace: 'normal' }}>⚠️ {q.note}</div>}
+                                    </>
+                                );
+                            })()}
                         </div>
                         <button
                             type="button"

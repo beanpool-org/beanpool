@@ -27,7 +27,6 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
 import { sealDmLine, checkDmThread, dmThreadInShownOrder, type DmThreadLine } from '@beanpool/core';
 import { db } from './db/db.js';
 import {
@@ -55,11 +54,11 @@ globalThis.fetch = (async (input: any, init?: any) => {
 interface Person { seedHex: string; publicKey: string }
 function member(callsign: string): Person {
     const seed = ed25519.utils.randomSecretKey();
-    const publicKey = bytesToHex(ed25519.getPublicKey(seed));
+    const publicKey = Buffer.from(ed25519.getPublicKey(seed)).toString('hex');
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
                 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(publicKey, callsign);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(publicKey);
-    return { seedHex: bytesToHex(seed), publicKey };
+    return { seedHex: Buffer.from(seed).toString('hex'), publicKey };
 }
 
 /** A line as either app sends it: a new id, sealed to it, written after the newest line it had. */

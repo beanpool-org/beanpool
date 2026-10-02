@@ -80,6 +80,9 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/push-tokens(\/leave\/[^/]+)?\/?$/,
     /^\/api\/messages\/mute\/?$/,
     /^\/api\/pricing-guide\/(report|reports\/[^/]+\/status|admin\/(item(\/[^/]+)?|pin|reset|aggregate))\/?$/,
+    // The names list (engine/names-list.ts): an entry, the list's key, a confirmation, the owner's settings. Its reads are
+    // refused on a standby too, by its own routes (routes/names-list.ts): a read writes the access log.
+    /^\/api\/names(\/|$)/,
 ];
 
 /** What a standby answers this request here: a write to a route above, refused with its message; null when it goes on. */

@@ -137,6 +137,7 @@ import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
+import { createNamesListRoutes } from './routes/names-list.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
@@ -1736,6 +1737,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
+        createNamesListRoutes(deps),
         createSettingsSigninRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),

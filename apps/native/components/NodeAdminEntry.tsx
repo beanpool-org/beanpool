@@ -8,6 +8,9 @@
  * (Custom Tabs / SFSafariViewController). /settings is not an app link, so the tab keeps it. The press itself
  * is useManageNode, shared with the header's 🛡️ icon.
  *
+ * For an owner or admin (not a moderator), "Names list" (app/names-list.tsx): the admins' list of members' real names,
+ * sealed on admins' phones (community modes slice 2). Its routes refuse anyone else; the row only decides whether to offer.
+ *
  * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
  * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
  */
@@ -19,6 +22,8 @@ import { useTheme } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSubtitle, computerSigninLabel, type ManageRole } from '../utils/node-admin';
 import { useManageNode } from './useManageNode';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { offersNamesList } from '../utils/names-list';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -32,6 +37,7 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
     const [role, setRole] = useState<ManageRole | null>(null);
     const [communityName, setCommunityName] = useState<string | null>(null);
     const { busy, start, dialog } = useManageNode();
+    const profile = useNodeProfile();
 
     useFocusEffect(
         React.useCallback(() => {
@@ -78,6 +84,23 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                     </View>
                     {busy ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                 </Pressable>
+                {offersNamesList(role, profile?.profile) ? (
+                    <Pressable
+                        style={[styles.menuBtn, { minHeight: 48 }]}
+                        onPress={() => router.push({ pathname: '/names-list', params: { community: name } })}
+                        disabled={busy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Names list"
+                        accessibilityHint="Opens the admins' list of members' real names, on this phone. Only owners and admins can read it"
+                    >
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>📇</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Names list</Text>
+                            <Text style={styles.menuSub}>Who your members are, by name · sealed on admins' phones</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                ) : null}
                 <Pressable
                     style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
                     onPress={() => router.push({ pathname: '/settings-signin', params: { community: name } })}

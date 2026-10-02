@@ -1469,6 +1469,124 @@ CREATE TABLE IF NOT EXISTS suspended_node_roles (
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- 22e. The names list (community modes slice 2; scratch/global-node/DESIGN-community-modes-fable.md §4.1, §4.3; the trust
+-- model is scratch/global-node/DESIGN-names-list-trust-fable.md; Marty's answers 2026-10-01): the community's admins' list
+-- of who its members are, by real name, kept here ENCRYPTED on the admins' phones (engine/names-list.ts, @beanpool/core
+-- names-list-crypto.ts and names-list-trust.ts). This server, BeanPool, a backup, a standby's copy and a thief hold
+-- sealed text, signed statements and sealed boxes; the names open only on an admin's phone. Every table here is a plain
+-- table (engine/replication-manifest.ts): a standby copies them as they are, and a take-over needs nothing more.
+--
+-- One entry: a name and a note, sealed under the key of generation `key_id` (a statement's id below), bound to the
+-- entry's id (which the admin's phone chooses, because it seals the entry before this server sees it) and that key id.
+-- Sealed when written or edited, and never again: a new key carries nothing over.
+CREATE TABLE IF NOT EXISTS names_entries (
+    id              TEXT PRIMARY KEY,
+    ciphertext      TEXT NOT NULL,
+    key_id          TEXT NOT NULL,
+    created_by      TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Who last wrote it: an edit.
+    updated_by      TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_entries_key ON names_entries(key_id);
+
+-- The list's key history: one signed statement per generation (maker, parent, drops), chained by parent. `statement` is
+-- the exact text its maker signed (`signature`, Ed25519) and `id` its SHA-256; the other columns are read from it, for
+-- this server's own checks. The phones never take this server's word for any of it: each recomputes the id and checks
+-- the signature, and appends a statement only off its own head and from a maker it trusts. The key itself never
+-- reaches this server. One statement per number: a new one lands only off the current one (the highest `n`).
+CREATE TABLE IF NOT EXISTS names_generations (
+    id          TEXT PRIMARY KEY,
+    n           INTEGER NOT NULL UNIQUE CHECK (n >= 1),
+    parent_id   TEXT,
+    maker       TEXT NOT NULL,
+    drops       TEXT NOT NULL DEFAULT '',
+    statement   TEXT NOT NULL,
+    signature   TEXT NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at  DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A share: every key one admin's phone holds, sealed in one box to another admin's account key, under a header the
+-- giver signs (`header`, the exact text; `signature`): its head, the key ids in the box, every key it trusts (its vouch),
+-- and the box's digest. The newest per pair. The header is public to every admin (keys and ids only); the box goes only
+-- to its recipient. A share is never cleared when someone stops being an admin: the box is useless to them (they
+-- can't sign requests here any more) and its keys are ones they already had.
+CREATE TABLE IF NOT EXISTS names_shares (
+    from_pubkey       TEXT NOT NULL,
+    to_pubkey         TEXT NOT NULL,
+    head_id           TEXT NOT NULL,
+    key_ids           TEXT NOT NULL,
+    trusts            TEXT NOT NULL,
+    sealed_ring       TEXT NOT NULL,
+    ring_iv           TEXT NOT NULL,
+    ring_tag          TEXT NOT NULL,
+    ephemeral_pubkey  TEXT NOT NULL,
+    kdf_params        TEXT NOT NULL,
+    box_digest        TEXT NOT NULL,
+    header            TEXT NOT NULL,
+    signature         TEXT NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (from_pubkey, to_pubkey)
+);
+
+-- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
+-- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
+-- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).
+CREATE TABLE IF NOT EXISTS names_dropped_holders (
+    holder_pubkey  TEXT NOT NULL,
+    key_id         TEXT NOT NULL,
+    dropped_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (holder_pubkey, key_id)
+);
+
+-- A confirmation (design §4.1): this key is the person on that entry, confirmed by that admin on that date. It carries no
+-- name. Where a community asks two admins to confirm (node_config `names_two_admins`), one made while it has two or more
+-- admins waits for a second (`needs_second`). Never deleted: a revoked one stays as history. One live confirmation per
+-- member and per entry (the two partial indexes).
+CREATE TABLE IF NOT EXISTS confirmations (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    entry_id       TEXT NOT NULL,
+    confirmed_by   TEXT NOT NULL,
+    confirmed_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    needs_second   INTEGER NOT NULL DEFAULT 0 CHECK (needs_second IN (0, 1)),
+    seconded_by    TEXT,
+    seconded_at    DATETIME,
+    revoked_by     TEXT,
+    revoked_at     DATETIME,
+    -- `admin`: an admin revoked it; `removed`: the community or an admin removed the member; `account_deleted`: the member
+    -- deleted their account.
+    revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_member ON confirmations(member_pubkey) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(entry_id) WHERE revoked_at IS NULL;
+
+-- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
+-- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
+-- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`).
+CREATE TABLE IF NOT EXISTS names_access_log (
+    id              TEXT PRIMARY KEY,
+    actor_pubkey    TEXT NOT NULL,
+    action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
+                                                    'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings')),
+    entry_id        TEXT,
+    subject_pubkey  TEXT,
+    at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_access_log_at ON names_access_log(at);
+
 -- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
 -- A keeper payment refused by Rule 5 (in deficit) or Rule 6 (capped by earned surplus)
 -- is recorded here and paid automatically the moment the enterprise can legitimately pay

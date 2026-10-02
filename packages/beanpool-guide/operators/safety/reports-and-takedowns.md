@@ -97,6 +97,8 @@ Anyone can join the global community with a sign-in, so one person can make seve
 
 What removal can't do: someone determined can come back with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that a few reports hide. Removing it again is one more action.
 
+Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, each poll on the global community says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the poll itself, to everyone.
+
 If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 
 ## Be fair

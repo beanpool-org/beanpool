@@ -83,6 +83,7 @@ export const SUITES = [
     'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',
+    'test-home',
     'test-knock',
     'test-commons-conservation',
     'test-commons-pot-edges',

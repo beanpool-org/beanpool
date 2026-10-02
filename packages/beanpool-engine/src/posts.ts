@@ -231,6 +231,14 @@ export interface PostFilter {
      * still open for those reads.
      */
     measureAtMost?: number;
+    /**
+     * "Coming up" (apps/server routes/home-answer.ts, the Home screen's events card): events that haven't ended and
+     * start by this moment (an ISO time), a cancelled one left out, in START order, soonest first, so `limit` keeps the
+     * soonest few. Without it a read of events is the most recently updated first, and an event posted weeks ahead
+     * falls behind a hundred newer ones. Searched on idx_posts_event_start (type = 'event' is in the SQL as a literal,
+     * so the planner may use that partial index), which walks the events in start order and stops at the limit.
+     */
+    upcomingUntil?: string;
 }
 
 /**
@@ -737,8 +745,11 @@ const DELTA_ORDER = " ORDER BY +p.updated_at DESC, p.created_at DESC";
 
 /** The newest-first order: DELTA_ORDER for a delta read, RECENT_ORDER for every other. */
 function recentOrder(filter: PostFilter | undefined): string {
+    if (filter?.upcomingUntil) return START_ORDER;
     return filter?.updatedAfter ? DELTA_ORDER : RECENT_ORDER;
 }
+/** Soonest start first (PostFilter.upcomingUntil), ending on p.id so the order is total. */
+const START_ORDER = " ORDER BY p.event_start_at ASC, p.id ASC";
 // Nearest first ends on p.id, so the order is total and limit/offset pages it without repeats or gaps.
 const NEAREST_ORDER = " ORDER BY distance_km ASC NULLS LAST, p.updated_at DESC, p.created_at DESC, p.id ASC";
 
@@ -805,6 +816,7 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
+    upcomingUntil: null,
     id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
     includeInactive: null, includeAllScopes: null, audienceScope: null, targetGroupId: null, assignedTo: null,
 };
@@ -890,7 +902,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
         const params: unknown[] = [near.lat, near.lng];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
@@ -900,11 +912,12 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             inner += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
             params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
         }
-        inner += where + ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?';
+        // "Coming up" keeps the soonest `cap` (PostFilter.upcomingUntil), every other read the newest.
+        inner += where + (filter.upcomingUntil ? START_ORDER : ' ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC') + ' LIMIT ?';
         params.push(...whereParams, cap);
         let sql = `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, ${km('q')} AS distance_km FROM (${inner}
+            SELECT q.id, q.updated_at, q.created_at, q.event_start_at, ${km('q')} AS distance_km FROM (${inner}
             ) q
         )
         SELECT p.id, p.distance_km FROM measured p`;
@@ -1074,6 +1087,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         params.push(...filter.types);
     }
     if (filter?.excludeEvents) { where += " AND p.type != 'event'"; }
+    if (filter?.upcomingUntil) {
+        // Not ended (an event with no end is over once it starts), starting by then, not cancelled (PostFilter.upcomingUntil).
+        where += " AND p.type = 'event' AND p.event_start_at IS NOT NULL AND p.event_start_at <= ?"
+            + " AND COALESCE(p.event_end_at, p.event_start_at) > ? AND COALESCE(p.event_state, '') != 'cancelled'";
+        params.push(filter.upcomingUntil, new Date().toISOString());
+    }
     if (filter?.category && filter.category !== 'all') { where += " AND p.category = ?"; params.push(filter.category); }
     if (filter?.status) { where += " AND p.status = ?"; params.push(filter.status); }
     if (filter?.authorPubkey) { where += " AND p.author_pubkey = ?"; params.push(filter.authorPubkey); }

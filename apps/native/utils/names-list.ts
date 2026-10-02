@@ -35,7 +35,7 @@ import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, normaliseNamesEntryText, namesKeyCheckMatches,
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, takeNamesHistory, namesRingKeys, namesKeyLabel, readNamesGeneration,
-    sealNamesPinBlob, openNamesPinBlob, namesStatementId,
+    sealNamesPinBlob, openNamesPinBlob, namesStatementId, startNamesAgain, namesListKeyCode,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -365,23 +365,35 @@ async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinS
 }
 
 /**
- * Sends a generation this phone made, written ahead (`pending`, with its key) before the request: on 201 the next sync
- * takes it from the node and moves its key into the ring; when the node moved on (409 `stale`), the sync drops it and
- * takes the winner; when the node can't be reached, it stays for the next open.
+ * The node's answers that say it did NOT store a statement: its own refusals, made before anything is written (the
+ * shape or signature, who may make the next key, a standby, no names list here). Anything else (a 5xx from a proxy in
+ * front of the node, an answer with no code, no answer at all) may come after the node stored it.
+ */
+function neverLanded(r: { status: number; code: string | null }): boolean {
+    if (r.status === 400) return r.code === 'bad_statement' || r.code === 'bad_signature' || r.code === 'bad_key';
+    if (r.status === 401) return r.code === 'unsigned';
+    if (r.status === 403) return r.code !== null;
+    if (r.status === 404) return r.code === 'feature_off';
+    if (r.status === 409) return r.code === 'ask_for_share' || r.code === 'standby';
+    return false;
+}
+
+/**
+ * Sends a generation this phone made, written ahead (`pending`, with its key) before the request (design §8, D1: never a
+ * statement of this phone's on the node whose key it lacks). On 201 the next sync takes it from the node and moves its key
+ * into the ring. The key is dropped only on an answer that says the node did not store it. On anything else (a 5xx, no
+ * answer) it stays: the next sync takes it if the node has it, sends it again while the node is where it was, and drops
+ * it once the node moved on (409 `stale` included: the sync then takes the winner).
  */
 async function sendGeneration(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, g: Pick<NamesGeneration, 'statement' | 'signature'>): Promise<NamesResult<true>> {
     const sent = await postGeneration(anchor, identity, g);
     if (sent.ok) return { ok: true, value: true };
-    if (sent.status === 0) return sent;
-    if (sent.code !== 'stale') {
-        // Refused for good (asked to wait for a holder, say): it never lands, so it isn't kept to send again.
-        await writeNamesPinTo(store, identity.publicKey, anchor, { ...pin, pending: null });
-    }
+    if (neverLanded(sent)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...pin, pending: null });
     return sent;
 }
 
-async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Synced, drops: string[], startAgain = false): Promise<NamesResult<true>> {
-    const made = makeNamesGenerationFor(synced.pin, synced.state, identity, drops, { startAgain });
+async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Pick<Synced, 'pin'>, drops: string[]): Promise<NamesResult<true>> {
+    const made = makeNamesGenerationFor(synced.pin, identity, drops);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, made.pin))) return NOT_KEPT;
     return sendGeneration(anchor, identity, store, made.pin, made.generation);
 }
@@ -420,8 +432,10 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     const sentTo: string[] = [];
     let list: NamesListBody | null = null;
     let kept = pin;
+    const due: string[] = [];
     if (plan.kind === 'ready') {
         for (const share of namesSharesToSend(pin, state, identity)) {
+            due.push(share.to);
             const done = await postShare(anchor, identity, share);
             if (done.ok) sentTo.push(share.to);
         }
@@ -432,7 +446,15 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         await writeNamesPinTo(store, identity.publicKey, anchor, kept);
     }
     const words = noticeWords(notices, state);
-    if (made && made.length) words.unshift(NAMES_COPY.newKeyMade(made.map((k) => callsignIn(state, k))));
+    if (made && made.length) {
+        // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
+        // sent" only for the admins the key reached; the rest get it on the next open.
+        const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
+        const gone = made.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
+        const byHand = made.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
+        const sending = NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)));
+        words.unshift(...[gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending].filter((w) => w));
+    }
     if (plan.kind === 'refused' && plan.reason === 'rolled_back') {
         const lost = Math.max(0, pin.lastCount - (state.counts?.entries ?? 0));
         if (lost) words.push(NAMES_COPY.lostSinceCopy(lost));
@@ -450,18 +472,25 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
 // ── The asked actions ────────────────────────────────────────────────────────────────────────
 
 /**
- * A new key on this phone, asked first: "Start again" on an empty history when nobody holds the current key (chained onto
- * the node's history, design §4.3.1), or a new key off this phone's head when nobody who is an admin holds the head's
- * key (what was sealed under it stays locked). Then the list opens again.
+ * A new key on this phone, asked first: "Start again" on an empty history when nobody holds the current key, or a new key
+ * off this phone's head when nobody who is an admin holds the head's key (what was sealed under it stays locked). Starting
+ * again (design addendum (c)) first takes the node's whole key history onto this phone's, for its drops and its place only
+ * (no trust, no key), and saves it; then it is the same new key off the head. Then the list opens again.
  */
 export async function makeKeyOnThisPhone(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
-    const l = await look(anchor, identity, store);
+    let l = await look(anchor, identity, store);
     if (!l.ok) return l;
+    const first = l.value.plan;
+    if (first.kind === 'refused' && first.reason === 'untrusted_maker' && first.canStartAgain && l.value.pin.chain.length === 0) {
+        const taken = startNamesAgain(l.value.pin, l.value.state);
+        if (taken.chain.length === 0) return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.missingRecord };
+        if (!(await writeNamesPinTo(store, identity.publicKey, anchor, taken))) return NOT_KEPT;
+        l = await look(anchor, identity, store);
+        if (!l.ok) return l;
+    }
     const { plan } = l.value;
-    const startAgain = plan.kind === 'refused' && plan.reason === 'untrusted_maker' && !!plan.canStartAgain && l.value.pin.chain.length === 0;
-    const offKey = plan.kind === 'wait' && plan.canMakeNew;
-    if (!startAgain && !offKey) return { ok: false, status: 0, code: 'no_plan', message: 'There is no new key to make here.' };
-    const sent = await makeAndSend(anchor, identity, store, l.value, plan.kind === 'wait' ? plan.drops : [], startAgain);
+    if (!(plan.kind === 'wait' && plan.canMakeNew)) return { ok: false, status: 0, code: 'no_plan', message: 'There is no new key to make here.' };
+    const sent = await makeAndSend(anchor, identity, store, l.value, plan.drops);
     if (!sent.ok) return sent;
     return openNamesList(anchor, identity, store);
 }
@@ -573,16 +602,21 @@ export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId
     return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyId });
 }
 
+/** A new entry's id, chosen when the Add form opens and kept until the add is confirmed (design §8: add is idempotent by id). */
+export const newEntryId = (): string => newNamesEntryId();
+
 /**
- * Writes an entry (rule 4): only when the plan is ready, sealed under this phone's head key. When the node's current
- * moved on (409 `stale_key`) the list is opened again and, if ready, sealed under the new head and sent once more; an
- * add that already landed (409 `entry_exists`, a retry) is done.
+ * Writes an entry (rule 4): only when the plan is ready, sealed under this phone's head key. `entryId` is an edit's;
+ * `addId` a new entry's, chosen when its form opened ({@link newEntryId}), so a Save after a lost answer sends the same
+ * id and the node answers `entry_exists`, which is done: never a second entry. When the node's current moved on (409
+ * `stale_key`) the list is opened again and, if ready, sealed under the new head and sent once more.
  */
 export async function saveNamesEntry(
-    anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>, text: { name: string; note: string }, entryId?: string,
+    anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, opened: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>, text: { name: string; note: string },
+    entryId?: string, addId?: string,
 ): Promise<NamesResult<{ id: string; keyId: string; ciphertext: string; opened: NamesOpened | null }>> {
-    // One id for both tries: an add that landed but whose answer was lost comes back `entry_exists`.
-    const id = entryId ?? newNamesEntryId();
+    // One id for every try: an add that landed but whose answer was lost comes back `entry_exists`.
+    const id = entryId ?? addId ?? newNamesEntryId();
     const attempt = async (o: Pick<NamesOpened, 'plan' | 'pin' | 'ring'>) => {
         const head = o.pin.chain[o.pin.chain.length - 1];
         if (o.plan.kind !== 'ready' || !head || !o.ring[head.id]) return { ok: false as const, status: 0, code: 'not_ready', message: NAMES_COPY.notReady };
@@ -708,6 +742,17 @@ ${rows}
 </body></html>`;
 }
 
+/**
+ * The list key this phone adds names under, to compare with another admin's phone in person: its number and 20 digits
+ * from its id. Only when the plan is ready (the only time this phone writes); null otherwise. Two phones that open the
+ * list one after the other on an honest server show the same; a phone the server keeps from a removal shows an older one.
+ */
+export function listKeyOf(o: Pick<NamesOpened, 'plan' | 'pin'>): { n: number; code: string } | null {
+    const head = o.pin.chain[o.pin.chain.length - 1];
+    if (o.plan.kind !== 'ready' || !head) return null;
+    return { n: head.n, code: namesListKeyCode(head.id) };
+}
+
 // ── Words ────────────────────────────────────────────────────────────────────────────────────
 
 /** "@A", "@A or @B", "@A, @B or @C". */
@@ -731,17 +776,37 @@ export const NAMES_COPY = {
     who: 'Only this community’s owners and admins can read these names, on their own phones. The server keeps them scrambled: '
         + 'a backup, a copy or a stolen database holds nothing readable. This phone gives the list’s keys only to admins whose phones '
         + 'were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can’t protect: '
-        + 'a check made with the wrong person, a phone someone else gets into, and a lost phone until an admin removes its key.',
+        + 'a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an '
+        + 'admin’s phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin’s '
+        + 'keys can read. Each admin’s phone learns of a removal when it opens the list, unless the server hides it. To be sure, '
+        + 'meet another admin and compare the list key your phones show.',
+    // The design addendum's (e) (the fifth deciding review's BLOCKING finding): what the new key protects is this phone's writes.
     newKeyMade: (who: string[]) => `The list has a new key because ${both(who)} ${who.length > 1 ? 'are' : 'is'} no longer ${who.length > 1 ? 'admins' : 'an admin'}. `
-        + `Nothing written from now on can be read with the keys ${both(who)} had. This phone has sent the new key to the admins it trusts.`,
+        + `Nothing this phone writes from now on can be read with the keys ${both(who)} had.`,
+    /** A key removed by hand ("Remove @X's old key"): the node still lists the admin, so not "no longer an admin". */
+    newKeyRemoved: (who: string[]) => (who.length > 1
+        ? `The list has a new key that the old phones of ${both(who)} can’t read. If they get new phones, check them in person and this phone will send the keys.`
+        : `The list has a new key that ${at(who[0] ?? '')}’s old phone can’t read. If ${at(who[0] ?? '')} gets a new phone, check it in person and this phone will send the keys.`),
+    /** Whom the new key reached, and whom it will reach on the next open; nothing when there is nobody to send it to. */
+    newKeySent: (sent: string[], unsent: string[]) => {
+        if (!unsent.length) return sent.length ? 'This phone has sent the new key to the admins it trusts.' : '';
+        const later = `the next time the list opens on it.`;
+        return sent.length
+            ? `This phone has sent the new key to ${both(sent)}. It will send it to ${both(unsent)} ${later}`
+            : `This phone will send the new key to ${both(unsent)} ${later}`;
+    },
+    listKey: (n: number, code: string) => `This phone adds names under list key ${n}, code ${code}.`,
+    compareListKey: 'When you check each other, compare this line too. If it differs, open the list again on both phones. '
+        + 'If it still differs, the server is showing your phones different things: add no names until it matches, and tell your admins.',
     removeKey: (who: string) => `Remove ${at(who)}’s old key? The list gets a new key that ${at(who)}’s old phone can’t read. `
         + `If ${at(who)} gets a new phone, check it in person and this phone will send the keys.`,
     checkIntro: (who: string) => `Meet ${at(who)}. Open the names list on both phones, and scan each other’s code (or compare and type the `
         + `20 digits). Only do this with ${at(who)} in front of you: your phone will trust this key, send it the names, and take new keys it makes.`,
     mismatch: (who: string) => `The key you scanned isn’t the one the server lists for ${at(who)}. Your phone trusts the key you scanned and `
         + `nothing is sent to the server’s key. Either the server has put ${at(who)}’s name on another key, or this isn’t ${at(who)}’s phone. Tell your other admins.`,
+    // The design addendum's (e): rule 1b gives a way forward through any admin whose phone opens the list.
     refusedUntrusted: (n: number, who: string) => `The list’s key number ${n} was made by ${at(who)}, and no admin this phone trusts has `
-        + `checked them. Nothing was read or written. Meet ${at(who)}, or an admin who trusts them, and check each other’s phones.`,
+        + `checked them. Nothing was read or written. Meet ${at(who)}, or an admin whose phone already opens the list, and check each other’s phones.`,
     refusedRolledBack: (n: number, m: number) => `The server offers an older key history (up to key ${n}) than this phone has (key ${m}). `
         + 'A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; '
         + 'entries written since the copy are gone and must be typed again from your paper copy.',

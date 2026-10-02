@@ -34,7 +34,7 @@ vi.mock('expo-secure-store', () => ({
 import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, makeNamesGeneration, makeNamesShare, readNamesGeneration,
-    readNamesShare, namesKeyQr, namesKeyCode, namesBoxDigest, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
+    readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
     type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
@@ -44,7 +44,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, putHistoryBack, makeKeyOnThisPhone, takeHistoryOf, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, NAMES_COPY, DEVICE_NAMES_STORE,
+    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -93,7 +93,8 @@ const sentAs = (method: string, p: string) => sent.filter((s) => s.method === me
 const onlyStateRead = () => sent.every((s) => s.method === 'GET' && new URL(s.url).pathname === '/api/names/state');
 
 type Admin = { pubkey: string; callsign: string; role: 'owner' | 'admin' };
-type View = Partial<{ admins: Admin[]; hide: string[]; current: string | null; communityId: string; extraShares: NamesShare[] }>;
+/** What the node shows one phone instead; `quiet` hides that a holder of the current key was marked as no admin. */
+type View = Partial<{ admins: Admin[]; hide: string[]; current: string | null; communityId: string; extraShares: NamesShare[]; quiet: boolean }>;
 
 /**
  * A community's node as the phones see it: the key history, the shares, the entries, the admins, by the same rules as
@@ -154,9 +155,9 @@ class FakeNode {
             shares: [...this.shares.values(), ...(v.extraShares ?? [])].map((s) => ({ header: s.header, signature: s.signature, from: s.from, to: s.to, headId: s.headId, keyIds: s.keyIds, trusts: s.trusts, ...(s.to === me && s.box ? { box: s.box } : {}) })),
             admins: admins.map((a) => ({ ...a, keyIds: this.keyIdsOf(a.pubkey), holdsCurrent: holders.has(a.pubkey) })),
             holdersOfCurrent,
-            droppedHolders: cur ? [...this.marks].filter((m) => m.endsWith(`|${cur.id}`)).map((m) => m.split('|')[0]) : [],
+            droppedHolders: cur && !v.quiet ? [...this.marks].filter((m) => m.endsWith(`|${cur.id}`)).map((m) => m.split('|')[0]) : [],
             nobodyHoldsKey: !!cur && holdersOfCurrent.length === 0,
-            newKeyNeeded: !!cur && [...this.marks].some((m) => m.endsWith(`|${cur.id}`)),
+            newKeyNeeded: !!cur && !v.quiet && [...this.marks].some((m) => m.endsWith(`|${cur.id}`)),
             callsigns: { ...this.former, ...Object.fromEntries(this.admins.map((a) => [a.pubkey, a.callsign])) },
             settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
             counts: { entries: this.entries.length, confirmed: 0, awaitingSecond: 0, byKey, locked: 0 },
@@ -573,6 +574,35 @@ describe('C. Drops and removal', () => {
         expect(onlyStateRead()).toBe(true);
     });
 
+    it("C4 the server hides a removal from Bea: her phone stays ready at key 1, which Abe holds (the stated limit); the list key the two phones show differs, so meeting in person shows it; once shown, both match", async () => {
+        const { node, phones: [owen, abe, bea], k1 } = await community(['Owen', 'Abe', 'Bea']);
+        node.admins = [role(owen, 'owner'), role(bea)];
+        const o = await open(owen); // 2 drops Abe
+        const two = node.current()!.id;
+        expect(o.plan.kind).toBe('ready');
+        node.views.set(bea.publicKey, { current: k1, hide: [two], admins: [role(owen, 'owner'), role(abe), role(bea)], quiet: true });
+        const b = await open(bea);
+        expect(b.plan.kind).toBe('ready');
+        expect(Object.keys(b.pin.ring)).toEqual([k1]);
+        // What Bea's phone writes now is under key 1, which Abe holds: the limit the words now state.
+        expect(NAMES_COPY.who).toMatch(/an admin’s phone that the server keeps from learning of a removal/);
+        expect(listKeyOf(o)).toEqual({ n: 2, code: namesListKeyCode(two) });
+        expect(listKeyOf(b)).toEqual({ n: 1, code: namesListKeyCode(k1) });
+        expect(listKeyOf(b)!.code).not.toBe(listKeyOf(o)!.code);
+        // Shown the removal, Bea's phone takes key 2, and the two lines match.
+        node.views.delete(bea.publicKey);
+        await open(owen);
+        const b2 = await open(bea);
+        expect(b2.plan.kind).toBe('ready');
+        expect(listKeyOf(b2)).toEqual(listKeyOf(await open(owen)));
+        // Only a phone that can write shows a list key.
+        expect(listKeyOf({ plan: { kind: 'wait', keyId: two, n: 2, holders: [], newKeyNeeded: false, canMakeNew: false, drops: [] }, pin: b2.pin })).toBeNull();
+        // The screen shows it on this phone's key card, where two admins checking each other see both.
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/COPY\.listKey\(/);
+        expect(screen).toMatch(/COPY\.compareListKey/);
+    });
+
     it('C5 the server leaves Cy off Owen\'s admin list: Owen drops Cy; Cy waits on Owen and is told; after a check the keys come back', async () => {
         const { node, phones: [owen, cy] } = await community(['Owen', 'Cy']);
         node.views.set(owen.publicKey, { admins: [role(owen, 'owner')] });
@@ -619,6 +649,33 @@ describe('C. Drops and removal', () => {
         expect((await open(ada)).pin.ring[node.current()!.id]).toBeUndefined();
     });
 
+    it('the new-key notice: a key removed by hand gets the Remove words, never "no longer an admin"; "has sent" names only the admins the key reached, and the rest are told it will come on the next open', async () => {
+        const { node, phones: [owen, ada, bea, abe] } = await community(['Owen', 'Ada', 'Bea', 'Abe']);
+        await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
+        const o = await open(owen);
+        expect(o.made).toEqual([ada.publicKey]);
+        expect(node.admins.map((a) => a.pubkey)).toContain(ada.publicKey);
+        expect(o.notices.join('\n')).not.toMatch(/no longer an admin/);
+        expect(o.notices[0]).toBe(NAMES_COPY.newKeyRemoved(['Ada']));
+        expect(o.sentTo.sort()).toEqual([bea.publicKey, abe.publicKey].sort());
+        expect(o.notices[1]).toBe(NAMES_COPY.newKeySent(['Bea', 'Abe'], []));
+        // The server stops listing Abe, and the shares never reach the node: nothing is said to have been sent.
+        node.admins = node.admins.filter((a) => a.pubkey !== abe.publicKey);
+        node.former[abe.publicKey] = 'Abe'; // the node names every key its history and shares name (a member's callsign)
+        drop = (req) => (new URL(req.url).pathname === '/api/names/shares' ? 'before' : null);
+        const o2 = await open(owen);
+        drop = null;
+        expect(o2.made).toEqual([abe.publicKey]);
+        expect(o2.sentTo).toEqual([]);
+        expect(o2.notices[0]).toBe(NAMES_COPY.newKeyMade(['Abe']));
+        expect(o2.notices[1]).toBe(NAMES_COPY.newKeySent([], ['Bea']));
+        expect(o2.notices.join('\n')).not.toMatch(/has sent/);
+        // And it does, on the next open.
+        sent = [];
+        await open(owen);
+        expect(sentAs('POST', '/api/names/shares').map((s) => readNamesShare(JSON.parse(s.body), CID)!.to)).toEqual([bea.publicKey]);
+    });
+
     it("C9 a drop is due but this phone lacks the current key: it waits on the holder, makes nothing, and its own removals ride into the next key it makes", async () => {
         const { node, phones: [owen, ada, cy, abe] } = await community(['Owen', 'Ada', 'Cy', 'Abe']);
         // Ada makes key 2 (removing nobody) but her answer to Cy hasn't come yet.
@@ -662,6 +719,44 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         expect(o.pin.ring[landed.id]).toBeDefined();
         for (const g of node.gens.values()) if (g.maker === owen.publicKey) expect(o.pin.ring[g.id]).toBeDefined();
         expect(sentAs('POST', '/api/names/generations').length).toBe(1);
+    });
+
+    it('D1 the node stores the generation but a proxy answers 502: the key written ahead is kept, and the same open takes the statement with it; a 502 before it was stored sends the same statement and key again; only a refusal that says it never landed drops it', async () => {
+        const { node, phones: [owen, ada] } = await community();
+        await removeOldKey(STORE, owen, COMMUNITY, ada.publicKey);
+        const isGen = (req: Sent) => req.method === 'POST' && new URL(req.url).pathname === '/api/names/generations';
+        answer = (req) => {
+            const a = node.answer(req);
+            return isGen(req) && a.status === 201 ? { status: 502 } : a;
+        };
+        const o = await open(owen);
+        answer = (req) => node.answer(req);
+        const landed = node.current()!;
+        expect(landed.maker).toBe(owen.publicKey);
+        expect(o.pin.ring[landed.id]).toBeDefined();
+        expect(o.pin.pending).toBeNull();
+        expect(o.plan.kind).toBe('ready');
+        for (const g of node.gens.values()) if (g.maker === owen.publicKey) expect(o.pin.ring[g.id]).toBeDefined();
+        // A 502 from the proxy before the node stored it: kept, and the next open sends the same statement with the same key.
+        const { phones: [bo, cy] } = await community(['Bo', 'Cy']);
+        await removeOldKey(STORE, bo, COMMUNITY, cy.publicKey);
+        const before = answer;
+        answer = (req) => (isGen(req) ? { status: 502 } : before(req));
+        await openNamesList(COMMUNITY, bo, STORE);
+        answer = before;
+        const kept = (await pinOf(bo))!.pending!;
+        expect(kept).not.toBeNull();
+        const b = await open(bo);
+        expect(b.plan.kind).toBe('ready');
+        expect(b.pin.ring[kept.id]).toBe(kept.key);
+        // A refusal that says it never landed (asked to wait for a holder): dropped.
+        const { phones: [di, ed] } = await community(['Di', 'Ed']);
+        await removeOldKey(STORE, di, COMMUNITY, ed.publicKey);
+        const before2 = answer;
+        answer = (req) => (isGen(req) ? { status: 409, body: { error: 'Ask an admin who holds the key.', code: 'ask_for_share' } } : before2(req));
+        await openNamesList(COMMUNITY, di, STORE);
+        answer = before2;
+        expect((await pinOf(di))!.pending).toBeNull();
     });
 
     it("D2 the generation never lands: the same statement is sent again while the node is where it was; dropped once another lands, whose maker's key is then taken", async () => {
@@ -787,6 +882,33 @@ describe('D. Lost phones, re-keys, dead ends', () => {
         expect(openEntries(m.ok ? m.value.list! : { current: null, entries: [], confirmations: [] }, m.ok ? m.value : ({} as NamesOpened)).every((e) => !e.text)).toBe(true);
     });
 
+    for (const copy of ['the old history without the start again', 'no key history at all'] as const) {
+        it(`G5 (the review's :702) a start again, then a standby takes over from a copy with ${copy}: rolled back; "Put the key history back" sends the history the start again chained onto, then its own key; it reads again (one admin)`, async () => {
+            const { node, phones: [owen] } = await community(['Owen']);
+            const owenNew = await rekey(node, owen);
+            await open(owenNew);
+            expect((await makeKeyOnThisPhone(COMMUNITY, owenNew, STORE)).ok).toBe(true);
+            const started = node.current()!;
+            const all = new Map(node.gens);
+            node.gens = copy === 'no key history at all' ? new Map() : new Map([...all].filter(([id]) => id !== started.id));
+            node.shares.clear();
+            sent = [];
+            const r = await open(owenNew);
+            expect(r.plan).toMatchObject({ kind: 'refused', reason: 'rolled_back', newest: { id: started.id, n: started.n } });
+            expect(onlyStateRead()).toBe(true);
+            expect(planWords(r)).toBe(NAMES_COPY.refusedRolledBack(copy === 'no key history at all' ? 0 : started.n - 1, started.n));
+            const p = await putHistoryBack(COMMUNITY, owenNew, STORE);
+            expect(p.ok && p.value.plan.kind).toBe('ready');
+            expect(node.current()!.id).toBe(started.id);
+            expect([...node.gens.keys()].sort()).toEqual([...all.keys()].sort());
+            expect(sentAs('POST', '/api/names/generations').map((s) => JSON.parse(s.body).replay)).toEqual([...all.keys()].filter((id) => copy === 'no key history at all' || id === started.id).map(() => true));
+            // Nothing from the history it chained onto is trusted or taken.
+            const pin = (await pinOf(owenNew))!;
+            expect(pin.trusted).toEqual([owenNew.publicKey]);
+            expect(Object.keys(pin.ring)).toEqual([started.id]);
+        });
+    }
+
     it('D7 a reinstall, same key: an empty pin opens nothing other admins sent until it meets one; then that admin\'s box opens and the rest follows', async () => {
         const { node, phones: [owen, ada, bea] } = await community(['Owen', 'Ada', 'Bea']);
         await removeOldKey(STORE, ada, COMMUNITY, bea.publicKey);
@@ -889,7 +1011,7 @@ describe('F. Writes, reads, words', () => {
         expect((await open(ada)).plan.kind).toBe('ready');
     });
 
-    it("F5 a locked entry names its key, its maker and who holds it; once that admin opens, it opens (the start-again's old keys, a holder found)", async () => {
+    it("F5 / G2 a locked entry names its key, its maker and who holds it; once that admin opens, it opens (the start-again's old keys, a holder found), on the phone that started again too", async () => {
         const { node, phones: [owen] } = await community(['Owen']);
         const one = node.current()!.id;
         // Owen's phone lost; the new phone starts again; Cy, checked by the new phone, joins.
@@ -918,23 +1040,41 @@ describe('F. Writes, reads, words', () => {
         // Its box to Cy carries key 1: the old entries open.
         expect(locked).toEqual([]);
         expect(c2.pin.ring[one]).toBeDefined();
+        // G2: the phone that started again took the old history onto its chain, so the old phone's box opens them there too.
+        const on = await open(owenNew);
+        expect(on.pin.chain[0].id).toBe(one);
+        expect(on.pin.ring[one]).toBeDefined();
+        expect(openEntries(on.list!, on).every((e) => e.text)).toBe(true);
         expect(NAMES_COPY.lockedEntry(1, 'Owen', ['Owen'])).toBe('Sealed with key 1 (made by @Owen). This phone doesn’t hold it. @Owen holds it and will send it on their next open.');
     });
 
-    it('add and edit send sealed text only, signed, under the head key; an add whose answer was lost comes back entry_exists and is done', async () => {
+    it('add and edit send sealed text only, signed, under the head key; an add keeps the id chosen when its form opened, so a lost answer and Save again is one entry (entry_exists = done)', async () => {
         const { node, phones: [owen] } = await community();
         const o = await open(owen);
+        const before = node.entries.length;
+        // The screen chooses the id when the Add form opens and keeps it until the add is confirmed.
+        const addId = newEntryId();
         sent = [];
         drop = (req) => (req.method === 'POST' && new URL(req.url).pathname === '/api/names/entries' ? 'after' : null);
-        const first = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: PLANTED[1] });
+        const first = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: PLANTED[1] }, undefined, addId);
         expect(first.ok).toBe(false);
         drop = null;
-        const id = node.entries[node.entries.length - 1].id;
         for (const s of sent) { expect(nothingReadable(s)).toBe(true); expect(boundSignatureValid(s, owen.publicKey)).toBe(true); }
-        const edit = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: 'changed' }, id);
+        // Save again, from the same form: the node already has it, and that is done. One entry, never two.
+        const again = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: PLANTED[1] }, undefined, addId);
+        expect(again.ok && again.value.id).toBe(addId);
+        expect(node.entries.length).toBe(before + 1);
+        expect(sentAs('POST', '/api/names/entries').map((s) => JSON.parse(s.body).id)).toEqual([addId, addId]);
+        // A second Add form is a second entry.
+        expect(newEntryId()).not.toBe(addId);
+        const edit = await saveNamesEntry(COMMUNITY, owen, STORE, o, { name: PLANTED[2], note: 'changed' }, addId);
         expect(edit.ok).toBe(true);
-        const e = node.entries.find((x) => x.id === id)!;
-        expect(openNamesEntry(await keyOf(owen, e.keyId), id, e.keyId, e.ciphertext).note).toBe('changed');
+        const e = node.entries.find((x) => x.id === addId)!;
+        expect(openNamesEntry(await keyOf(owen, e.keyId), addId, e.keyId, e.ciphertext).note).toBe('changed');
+        // The screen: the id is chosen when the Add form opens, kept in the form, and sent with every Save of it.
+        const screen = fs.readFileSync(path.join(__dirname, '../../app/names-list.tsx'), 'utf8');
+        expect(screen).toMatch(/kind: 'edit', entry, addId: entry \? undefined : newEntryId\(\)/);
+        expect(screen).toMatch(/saveNamesEntry\(anchor, identity, STORE, opened, \{ name, note \}, mode\.entry\?\.id, mode\.addId\)/);
     });
 
     it('opens each entry with its own key; one it can\'t is locked, never guessed; search covers the open ones', async () => {
@@ -971,12 +1111,20 @@ describe('F. Writes, reads, words', () => {
 describe('F6 the words are the design\'s (§9), and the old ones are gone', () => {
     const plain = (s: string) => s.replace(/’/g, "'");
     it('each sentence exactly', () => {
-        expect(plain(NAMES_COPY.who)).toBe("Only this community's owners and admins can read these names, on their own phones. The server keeps them scrambled: a backup, a copy or a stolen database holds nothing readable. This phone gives the list's keys only to admins whose phones were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can't protect: a check made with the wrong person, a phone someone else gets into, and a lost phone until an admin removes its key.");
-        expect(plain(NAMES_COPY.newKeyMade(['X']))).toBe('The list has a new key because @X is no longer an admin. Nothing written from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');
+        // The design addendum's (e), exact, then what an admin can do about it (the fifth deciding review's BLOCKING finding, 52e1a759).
+        expect(plain(NAMES_COPY.who)).toBe("Only this community's owners and admins can read these names, on their own phones. The server keeps them scrambled: a backup, a copy or a stolen database holds nothing readable. This phone gives the list's keys only to admins whose phones were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can't protect: a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an admin's phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin's keys can read. Each admin's phone learns of a removal when it opens the list, unless the server hides it. To be sure, meet another admin and compare the list key your phones show.");
+        expect(plain(`${NAMES_COPY.newKeyMade(['X'])} ${NAMES_COPY.newKeySent(['A'], [])}`)).toBe('The list has a new key because @X is no longer an admin. Nothing this phone writes from now on can be read with the keys @X had. This phone has sent the new key to the admins it trusts.');
+        expect(plain(NAMES_COPY.newKeyRemoved(['X']))).toBe("The list has a new key that @X's old phone can't read. If @X gets a new phone, check it in person and this phone will send the keys.");
+        expect(plain(NAMES_COPY.newKeySent([], ['C']))).toBe('This phone will send the new key to @C the next time the list opens on it.');
+        expect(plain(NAMES_COPY.newKeySent(['A'], ['C', 'D']))).toBe('This phone has sent the new key to @A. It will send it to @C and @D the next time the list opens on it.');
+        expect(NAMES_COPY.newKeySent([], [])).toBe('');
+        expect(plain(NAMES_COPY.listKey(3, '1234 5678 9012 3456 7890'))).toBe('This phone adds names under list key 3, code 1234 5678 9012 3456 7890.');
+        expect(plain(NAMES_COPY.compareListKey)).toBe('When you check each other, compare this line too. If it differs, open the list again on both phones. If it still differs, the server is showing your phones different things: add no names until it matches, and tell your admins.');
         expect(plain(NAMES_COPY.removeKey('X'))).toBe("Remove @X's old key? The list gets a new key that @X's old phone can't read. If @X gets a new phone, check it in person and this phone will send the keys.");
         expect(plain(NAMES_COPY.checkIntro('X'))).toBe("Meet @X. Open the names list on both phones, and scan each other's code (or compare and type the 20 digits). Only do this with @X in front of you: your phone will trust this key, send it the names, and take new keys it makes.");
         expect(plain(NAMES_COPY.mismatch('X'))).toBe("The key you scanned isn't the one the server lists for @X. Your phone trusts the key you scanned and nothing is sent to the server's key. Either the server has put @X's name on another key, or this isn't @X's phone. Tell your other admins.");
-        expect(plain(NAMES_COPY.refusedUntrusted(4, 'X'))).toBe("The list's key number 4 was made by @X, and no admin this phone trusts has checked them. Nothing was read or written. Meet @X, or an admin who trusts them, and check each other's phones.");
+        // The design addendum's (e): the vouched history gives a way forward through any admin whose phone opens the list.
+        expect(plain(NAMES_COPY.refusedUntrusted(4, 'X'))).toBe("The list's key number 4 was made by @X, and no admin this phone trusts has checked them. Nothing was read or written. Meet @X, or an admin whose phone already opens the list, and check each other's phones.");
         expect(plain(NAMES_COPY.refusedRolledBack(2, 5))).toBe('The server offers an older key history (up to key 2) than this phone has (key 5). A server put back to an older copy does that. Nothing was read or written. You can put the key history back from this phone; entries written since the copy are gone and must be typed again from your paper copy.');
         expect(plain(NAMES_COPY.refusedDifferent)).toBe("The server shows a key history this phone didn't take. Whoever runs the server changed it. Nothing was read or written. Ask your admins; an admin whose phone has the server's history can check yours and send the keys.");
         expect(plain(NAMES_COPY.wait(['A', 'B']))).toBe("You don't hold the list's keys yet. @A or @B will send them the next time they open the names list.");

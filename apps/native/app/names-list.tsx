@@ -36,7 +36,7 @@ import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKey,
     putHistoryBack, makeKeyOnThisPhone, takeHistoryOf, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
-    logLineText, namesListHtml, setNamesSettings, planWords,
+    logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 
@@ -44,7 +44,8 @@ export { ErrorBoundary };
 
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked };
+/** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -230,13 +231,13 @@ export default function NamesListScreen() {
         setName(entry?.text?.name ?? '');
         setNote(entry?.text?.note ?? '');
         setFormError(null);
-        setMode({ kind: 'edit', entry });
+        setMode({ kind: 'edit', entry, addId: entry ? undefined : newEntryId() });
     };
 
     const save = async () => {
         if (mode.kind !== 'edit' || !anchor || !identity || !opened || !list) return;
         setBusy(true);
-        const sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id);
+        const sent = await saveNamesEntry(anchor, identity, STORE, opened, { name, note }, mode.entry?.id, mode.addId);
         setBusy(false);
         if (!sent.ok) { setFormError(sent.message); return; }
         const base = sent.value.opened ?? opened;
@@ -410,6 +411,8 @@ export default function NamesListScreen() {
 
     /** This phone's own key, for another admin to check in person: a QR code and the same key as a code. */
     const mine = identity ? myKeyCheck(identity) : null;
+    /** The list key this phone adds names under, when it can: two admins checking each other compare it too. */
+    const listKey = opened ? listKeyOf(opened) : null;
     const myKeyCard = mine ? (
         <View style={styles.keyCard}>
             <Text style={styles.keyCardTitle} accessibilityRole="header">{COPY.myKeyTitle}</Text>
@@ -418,6 +421,12 @@ export default function NamesListScreen() {
                 <QRCode value={mine.qr} size={200} quietZone={8} backgroundColor="#ffffff" color="#000000" />
             </View>
             <Text style={styles.codeText} selectable accessibilityLabel={COPY.myCode(mine.code.split('').join(' '))}>{COPY.myCode(mine.code)}</Text>
+            {listKey ? (
+                <>
+                    <Text style={styles.codeText} selectable>{COPY.listKey(listKey.n, listKey.code)}</Text>
+                    <Text style={styles.keyCardText}>{COPY.compareListKey}</Text>
+                </>
+            ) : null}
         </View>
     ) : null;
     const checkSomeone = btn(COPY.checkSomeone, () => startCheck(null), 'secondary');

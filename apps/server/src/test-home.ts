@@ -389,6 +389,25 @@ async function main(): Promise<void> {
             + ` a 304: 0 B body + ~${respHeaders} B response headers, ~${headerBytes(headers)} B signed request headers;`
             + ` median ${times[10].toFixed(1)} ms, worst ${times[19].toFixed(1)} ms a request on localhost (assembly included)`);
         assert(notModified.status === 200 && n304.status === 304, 'a stale tag gets the answer, the current one a 304');
+
+        // Against today's landing (§5.4): the Market's first page and the header's "needs you" reads, which the phone
+        // makes on opening (apps/native index.tsx, NeedsYouIcons.tsx); /api/community/info is read by both, so it is left
+        // out of both. Measured on this fixture, signed as Alice.
+        const today = [
+            '/api/marketplace/posts?types=offer,need,poll,event&limit=50', `/api/marketplace/transactions?publicKey=${alice.pk}`,
+            '/api/commons/decisions?status=open', '/api/your-groups', `/api/messages/conversations/${alice.pk}`, '/api/node-admin/me',
+        ];
+        let todayBytes = 0, todayGz = 0, todayOk = 0;
+        for (const p of today) {
+            const r = await get(p, alice);
+            if (r.status === 200) todayOk++;
+            todayBytes += Buffer.byteLength(r.text);
+            todayGz += gz(r.text);
+        }
+        console.log(`  today's landing: ${today.length} signed requests, ${todayBytes} B (${todayGz} B gz) of bodies; Home: 1 signed request, `
+            + `${Buffer.byteLength(plain.text)} B (${gz(plain.text)} B gz)`);
+        assert(todayOk === today.length && Buffer.byteLength(plain.text) < todayBytes,
+            `one Home read is fewer requests (1 against ${today.length}) and fewer bytes (${Buffer.byteLength(plain.text)} against ${todayBytes}) than today's landing reads`);
     }
 
     // ── 7. H0b: the money cards on a local node ─────────────────────────────────────────────────────────────────

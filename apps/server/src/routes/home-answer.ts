@@ -8,8 +8,8 @@
  * HOME_CARD_IDS is the catalogue (§3.1), in the default order. A card with nothing to say is left out of the answer
  * rather than sent empty ("cards with nothing to say take no space"), so the shown-when rules that need the node's data
  * are applied here; the ones that need only the member's own layout (a dismissal, a hidden card) are the app's. Two
- * cards carry no data of their own: `interests` is drawn from `me.interests`, and `invite` from `steps.firstOffer` and
- * `features.invites`.
+ * cards carry no data of their own: `interests` is drawn from `me.interests`, and `invite` from `features.invites` and
+ * `steps.firstOffer` (no `steps` card on a local node means every step is done, the first Offer among them).
  *
  * ## Who gets what
  *
@@ -668,7 +668,15 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     for (const id of cardsToBuild(c, reader.asked, layout, row?.joinedAt ?? null)) {
         const build = BUILDERS[id];
         if (!build || !mayHave(c, id)) continue;
-        const card = build(c);
+        // One card that can't be read is left out, never the whole screen (nothing on Home blocks the app): the next
+        // read tries again, and the tag of an answer without it is a different tag.
+        let card: unknown;
+        try {
+            card = build(c);
+        } catch (e) {
+            console.warn(`[Home] the ${id} card could not be read:`, (e as Error)?.message || e);
+            continue;
+        }
         if (card !== undefined) (cards as Record<string, unknown>)[id] = card;
     }
 

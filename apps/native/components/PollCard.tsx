@@ -12,7 +12,8 @@
  * - Author "Close Poll" action for early closure.
  * - On the worldwide community (`informal`), "An informal poll; it decides nothing": anyone may join there with a sign-in,
  *   so a count can be tipped by one person with several accounts (utils/node-profile.ts pollsInformal).
- * - Where the node says (the worldwide community's public polls), how many votes came from new or 12-word accounts, and
+ * - Once an anonymous poll has closed, where the node says (the worldwide community's public polls), how many votes came
+ *   from new or 12-word accounts (never while it is open, never on an open vote), and
  *   under each answer how many of its own when the node gives that split (@beanpool/core poll-vote-origins; the count is
  *   `poll_new_or_words_votes` in the phone's cache). Every vote still counts; the lines say where votes came from, never
  *   whose they are.
@@ -31,7 +32,7 @@ import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { votePoll, closePoll } from '../utils/db';
 import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
-import { pollVoteOriginsLine, pollOptionOriginsLine } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 export interface PollOption {
     id: string;
@@ -93,13 +94,16 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
     }
 
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
-    const originsLine = pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes);
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
     // Only a poll its creator made an open vote names its voters. A node before the choice sends no flag, and its polls
     // showed voters to members, so a list that comes with such a poll is shown as before.
     const openFlag = livePost.pollOpenVote ?? livePost.poll_open_vote;
     const openVote = openFlag === true || openFlag === 1 || (openFlag === undefined && votesList.length > 0);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes) : null;
 
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
@@ -227,7 +231,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                     const isVotingThis = votingOptionId === opt.id;
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
-                    const optionOrigins = pollOptionOriginsLine(count, opt.newOrWordsVotes);
+                    const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
                     return (
                         <Pressable
@@ -291,7 +295,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false 
                 </Text>
             )}
 
-            {/* Where its votes came from, where the node says: all of them still count. */}
+            {/* Where its votes came from, once it has closed, where the node says: all of them still count. */}
             {originsLine && (
                 <Text style={styles.originsNote} testID="poll-vote-origins">
                     🌱 {originsLine}

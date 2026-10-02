@@ -1121,6 +1121,20 @@ export function rsvpEvent(
     return { success: true, post: updatedPost };
 }
 
+/**
+ * Closes, for good, every poll past its closing time (status `completed`, with a new updated_at), so a phone's delta sync
+ * and a cached board read (the posts version in the ETag) get its closed result: an anonymous poll says where its votes
+ * came from only once it has closed (@beanpool/engine pollOriginsMayShow), and a read before this ran was answered open.
+ * Run each minute on a main server (state-engine armMainServerTimers). One pass over the open posts' index.
+ */
+export function closeExpiredPolls(nowIso: string = new Date().toISOString()): number {
+    const res = db.prepare(
+        "UPDATE posts SET status = 'completed', updated_at = ? WHERE status = 'active' AND type = 'poll' AND poll_closes_at IS NOT NULL AND poll_closes_at <= ?"
+    ).run(nowIso, nowIso);
+    if (res.changes > 0) bumpPostsVersion();
+    return res.changes;
+}
+
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
     // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
@@ -1240,6 +1254,8 @@ export function votePoll(
 
         // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
         // A changed vote keeps the first one's: nothing the voter does later moves where the poll says its votes came from.
+        // Not on an open vote: it names its voters, so it never says where its votes came from, and keeps no kind to say it
+        // with (whether a poll is an open vote can't change once a vote is in).
         db.prepare(`
             INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -1248,7 +1264,7 @@ export function votePoll(
                 signature = excluded.signature,
                 created_at = excluded.created_at,
                 voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words)
-        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, pollVoterNewOrWords(voterPublicKey));
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, post.pollOpenVote === true ? null : pollVoterNewOrWords(voterPublicKey));
     })();
 
     bumpPostsVersion();

@@ -326,6 +326,7 @@ import {
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
     closePoll as closePollEngine,
+    closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
@@ -632,8 +633,9 @@ export function initStateEngine(): void {
     // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
     // here, once, as the faces are.
     installPhotoKeysAtBoot(READ_AUTH_ON);
-    // Each poll on the public board says how many of its votes came from new or 12-word accounts, where the node has
-    // probation (the global profile; engine/probation.ts pollVotesFromNewOrWords). Read with the poll, never stored.
+    // Each anonymous poll on the public board says, once it has closed, how many of its votes came from new or 12-word
+    // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
+    // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
     installPollVoteOriginsAtBoot();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
@@ -883,6 +885,9 @@ function armMainServerTimers(): void {
         // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
         // itself is bounded by one indexed range scan over events starting inside the next week.
         try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+        // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
+        // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
+        try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
     }), 60 * 1000);
 }
 
@@ -5426,6 +5431,8 @@ export function getEnterpriseLedger(
 export function closePoll(postId: string, authorPublicKey: string): MarketplacePost | null {
     return closePollEngine(broadcast, postId, authorPublicKey);
 }
+
+export { closeExpiredPolls };
 
 export function votePoll(
     postId: string,

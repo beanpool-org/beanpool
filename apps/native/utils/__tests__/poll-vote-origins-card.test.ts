@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The phone's poll card says where the votes came from (FABLE-sec-global-abuse LOW-7): how many came from new or 12-word
- * accounts, and under each answer how many of its own when the node gives the split (@beanpool/core poll-vote-origins).
+ * accounts, and under each answer how many of its own when the node gives the split (@beanpool/core poll-vote-origins),
+ * once an anonymous poll has closed: never while it is open, never on an open vote, whatever the node or the cache holds.
  * Every vote still counts and shows; nothing is said where the node says nothing.
  *
  * Rendered with react-dom and React Native stood in for (as words-on-screen-render.test.ts does): what is checked is what
@@ -47,7 +48,8 @@ import { votePoll } from '../db';
 function poll(extra: Record<string, unknown> = {}, options?: unknown[]) {
     return {
         id: 'poll-1', type: 'poll', title: 'Should the lobby have a weekly swap day?', author_pubkey: 'a'.repeat(64), author_callsign: 'Ann',
-        status: 'active', poll_closes_at: new Date(Date.now() + 7 * 86_400_000).toISOString(), poll_open_vote: 0, totalVotes: 12,
+        // Closed: its time has passed. The node says where the votes came from only then.
+        status: 'completed', poll_closes_at: new Date(Date.now() - 86_400_000).toISOString(), poll_open_vote: 0, totalVotes: 12,
         // As the Market hands it over from the phone's cache (utils/db.ts getPosts).
         pollNewOrWordsVotes: 5,
         pollOptions: options ?? [
@@ -58,6 +60,9 @@ function poll(extra: Record<string, unknown> = {}, options?: unknown[]) {
         ...extra,
     };
 }
+
+/** The same poll still open, as it reads before its time is up. */
+const OPEN = { status: 'active', poll_closes_at: new Date(Date.now() + 7 * 86_400_000).toISOString() };
 
 let container: HTMLDivElement;
 let root: Root;
@@ -80,7 +85,7 @@ afterEach(async () => {
 });
 
 describe('the phone\'s poll card: where the votes came from', () => {
-    it('the count, and each answer\'s own share under it; every vote still shows', async () => {
+    it('once closed: the count, and each answer\'s own share under it; every vote still shows', async () => {
         await draw(poll());
         expect(byId('poll-vote-origins').map(e => e.textContent)).toEqual(['🌱 5 of 12 votes came from new or 12-word accounts']);
         expect(answer('Yes').querySelector('[data-testid="poll-option-origins"]')?.textContent).toBe('4 of these 7 from new or 12-word accounts');
@@ -110,22 +115,44 @@ describe('the phone\'s poll card: where the votes came from', () => {
         expect(byId('poll-vote-origins')).toHaveLength(0);
     });
 
+    it('while the poll is open, nothing about where the votes came from, whatever the cache holds: no line, no placeholder', async () => {
+        for (const extra of [OPEN, { status: 'active', poll_closes_at: null }, { ...OPEN, pollNewOrWordsVotes: undefined, poll_new_or_words_votes: 5 }]) {
+            await draw(poll(extra));
+            expect(byId('poll-vote-origins')).toHaveLength(0);
+            expect(byId('poll-option-origins')).toHaveLength(0);
+            expect(container.textContent).not.toMatch(/12-word|new account|came from/);
+            expect(answer('Yes').getAttribute('aria-label')).toBe('Yes, 58 percent, 7 votes');
+            expect(answer('Yes').textContent).toContain('(7 votes)');
+        }
+    });
+
+    it('never on an open vote, open or closed: it names its voters, so a count of kinds would say which each is', async () => {
+        const voters = [{ voterPubkey: 'v1', voterCallsign: 'Quill', optionId: 'opt_yes', createdAt: new Date().toISOString() }];
+        for (const extra of [{ poll_open_vote: 1, pollVotes: voters }, { ...OPEN, pollOpenVote: true, pollVotes: voters }]) {
+            await draw(poll(extra));
+            expect(byId('poll-vote-origins')).toHaveLength(0);
+            expect(byId('poll-option-origins')).toHaveLength(0);
+            expect(container.textContent).not.toMatch(/12-word|came from/);
+        }
+    });
+
     it('reads the cache column\'s name too (a row read straight from the phone\'s posts table)', async () => {
         const { pollNewOrWordsVotes: _n, ...row } = poll({ poll_new_or_words_votes: 5 });
         await draw(row);
         expect(byId('poll-vote-origins').map(e => e.textContent)).toEqual(['🌱 5 of 12 votes came from new or 12-word accounts']);
     });
 
-    it('a vote shows the node\'s answer', async () => {
-        vi.mocked(votePoll).mockResolvedValue({ success: true, post: poll({ totalVotes: 13, pollNewOrWordsVotes: 6, userVotedOptionId: 'opt_maybe' }, [
+    it('a vote on an open poll says nothing about them, even if the answer carried some', async () => {
+        vi.mocked(votePoll).mockResolvedValue({ success: true, post: poll({ ...OPEN, totalVotes: 13, pollNewOrWordsVotes: 6, userVotedOptionId: 'opt_maybe' }, [
             { id: 'opt_yes', text: 'Yes', votes: 7, percentage: 54, newOrWordsVotes: 4 },
             { id: 'opt_no', text: 'No', votes: 3, percentage: 23, newOrWordsVotes: 1 },
             { id: 'opt_maybe', text: 'Maybe', votes: 3, percentage: 23, newOrWordsVotes: 1 },
         ]) });
-        await draw(poll());
+        await draw(poll(OPEN));
         await act(async () => { answer('Maybe').click(); });
-        expect(byId('poll-vote-origins').map(e => e.textContent)).toEqual(['🌱 6 of 13 votes came from new or 12-word accounts']);
-        expect(answer('Maybe').querySelector('[data-testid="poll-option-origins"]')?.textContent).toBe('1 of these 3 from a new or 12-word account');
+        expect(container.textContent).toContain('13 total votes cast');
+        expect(byId('poll-vote-origins')).toHaveLength(0);
+        expect(byId('poll-option-origins')).toHaveLength(0);
     });
 
     it('fits a 320dp phone at 1.3x text: the lines wrap, each on its own line, and their longest word fits', async () => {

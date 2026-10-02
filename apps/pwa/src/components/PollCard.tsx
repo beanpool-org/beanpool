@@ -11,7 +11,8 @@
  * - Author "Close Poll" action for early closure.
  * - On the global community (`informal`), "An informal poll; it decides nothing", for members and visitors alike: anyone
  *   may join there with a sign-in, so a count can be tipped by one person with several accounts (lib/informal-polls.ts).
- * - Where the node says (the global community's public polls), how many votes came from new or 12-word accounts, and
+ * - Once an anonymous poll has closed, where the node says (the global community's public polls), how many votes came
+ *   from new or 12-word accounts (never while it is open, never on an open vote), and
  *   under each answer how many of its own when the node gives that split (@beanpool/core poll-vote-origins). Every vote
  *   still counts; the lines say where votes came from, never whose they are.
  */
@@ -22,7 +23,7 @@ import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
-import { pollVoteOriginsLine, pollOptionOriginsLine } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 interface PollCardProps {
     post: MarketplacePost;
@@ -76,7 +77,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     }
 
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
-    const originsLine = pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes) : null;
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
 
@@ -221,7 +225,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     const isVotingThis = votingOptionId === opt.id;
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
-                    const optionOrigins = pollOptionOriginsLine(count, opt.newOrWordsVotes);
+                    const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
                     const row = (
                         <>
@@ -268,7 +272,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                 </div>
                             </div>
                             {optionOrigins && (
-                            <span className="relative z-10 mt-1 pl-6 block text-[10px] font-semibold text-nature-500 dark:text-nature-400 break-words" data-testid="poll-option-origins">
+                            <span className="relative z-10 mt-1 pl-6 block text-[0.625rem] font-semibold text-nature-500 dark:text-nature-400 break-words" data-testid="poll-option-origins">
                                 {optionOrigins}
                             </span>
                             )}
@@ -309,9 +313,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </p>
             )}
 
-            {/* Where its votes came from, where the node says: all of them still count. */}
+            {/* Where its votes came from, once it has closed, where the node says: all of them still count. In rem, so a
+                larger text setting makes it larger too. */}
             {originsLine && (
-            <p className="mb-1 text-[11px] font-semibold text-nature-600 dark:text-nature-300 break-words" data-testid="poll-vote-origins">
+            <p className="mb-1 text-[0.6875rem] font-semibold text-nature-600 dark:text-nature-300 break-words" data-testid="poll-vote-origins">
                 <span aria-hidden="true">🌱 </span>{originsLine}
             </p>
             )}

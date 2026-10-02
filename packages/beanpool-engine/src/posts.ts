@@ -98,9 +98,10 @@ export interface MarketplacePost {
     /**
      * How many of `totalVotes` came from new or 12-word accounts, each vote as its voter was when they voted
      * (configurePollVoteOrigins): on a poll on the public board of a node that says (the global profile, where anyone may
-     * join, so one person with many cheap accounts could tip a count). Every vote still counts in `totalVotes` and each
-     * option's `votes`; this only says where they came from, as a count, never who. Absent where the node doesn't say: a
-     * local community, a group's poll, a poll for one person.
+     * join, so one person with many cheap accounts could tip a count), once the poll has closed (pollOriginsMayShow).
+     * Every vote still counts in `totalVotes` and each option's `votes`; this only says where they came from, as a count,
+     * never who. Absent where the node doesn't say: a local community, a group's poll, a poll for one person, an open vote,
+     * and every poll still open.
      */
     pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
@@ -307,12 +308,31 @@ export function configurePollVoteOrigins(counter: PollVoteOriginCounter | null):
 }
 
 /**
- * The fewest votes on each side, from new or 12-word accounts and from the rest, for a poll to show each option's split
- * (PollOption.newOrWordsVotes). Below it a poll shows only how many of its votes came from them: split per option, one or
- * two votes on a side would say how those one or two people chose, and an anonymous poll says nobody's choice. A side
- * with no votes says nothing about anyone, so 0 is fine on the other side.
+ * The fewest votes on each side, from new or 12-word accounts and from the rest, for a closed poll to show each option's
+ * split (PollOption.newOrWordsVotes). Below it a poll shows only how many of its votes came from them: split per option,
+ * one or two votes on a side would say how those one or two people chose, and an anonymous poll says nobody's choice. A
+ * side with no votes says nothing about anyone, so 0 is fine on the other side.
  */
 export const POLL_ORIGINS_SPLIT_MIN = 3;
+
+/**
+ * Whether a poll may say where its votes came from (MarketplacePost.pollNewOrWordsVotes and each option's split): only an
+ * anonymous poll, and only once it has closed for good (Marty's privacy defaults, 2026-09-28, decided for #1458).
+ *
+ * - Never on an open vote. It names its voters to members, so a count of kinds beside the names says which kind each
+ *   named voter is: which members are new, and which have no sign-in and only their 12 words to get back in.
+ * - Never while a poll is open, the floor above notwithstanding. A reader who re-reads after each vote sees the count of
+ *   kinds move beside the option counts, and so learns each vote's kind with its choice: with few settled voters, whose
+ *   vote it was. Closed, nothing moves any more, and the result is what the count is for.
+ *
+ * Closed is for good: closed by its author (`completed`, which nothing reopens) or past its closing time. A poll its
+ * author paused is not closed: it can be put back up and voted on again.
+ */
+export function pollOriginsMayShow(row: { poll_open_vote?: unknown; status?: unknown; poll_closes_at?: unknown }, nowIso: string): boolean {
+    if (row.poll_open_vote === 1 || row.poll_open_vote === true) return false;
+    if (row.status === 'completed') return true;
+    return typeof row.poll_closes_at === 'string' && row.poll_closes_at !== '' && row.poll_closes_at <= nowIso;
+}
 
 function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placeholders: string) => string, chunkSize = 500): T[] {
     if (ids.length === 0) return [];
@@ -1179,10 +1199,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // Safe fallback if poll_votes table does not exist in testing handle
         }
     }
-    // Where the votes on the public board's polls came from, where the node says (configurePollVoteOrigins). A failure
-    // reads as a node that doesn't say: the counts themselves never depend on it.
+    // Where the votes on the public board's closed anonymous polls came from, where the node says
+    // (configurePollVoteOrigins, pollOriginsMayShow). A failure reads as a node that doesn't say: the counts themselves
+    // never depend on it.
+    const originsNowIso = new Date().toISOString();
+    const mayShowOrigins = (r: any) => onPublicBoard(r.audience_scope) && pollOriginsMayShow(r, originsNowIso);
     let originsByPost: Map<string, Map<string, number>> | null = null;
-    const publicPollIds = pollRows.filter(r => onPublicBoard(r.audience_scope)).map(r => r.id as string);
+    const publicPollIds = pollRows.filter(mayShowOrigins).map(r => r.id as string);
     if (pollVoteOrigins && publicPollIds.length > 0) {
         try { originsByPost = pollVoteOrigins(db, publicPollIds); } catch { originsByPost = null; }
     }
@@ -1313,10 +1336,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 }
             }
             post.userVotedOptionId = userVotedOptionId;
-            // Where its votes came from: the total, and each option's share only when both sides are big enough to say
-            // nobody's choice (POLL_ORIGINS_SPLIT_MIN). A vote for an option since edited away counts in the total, as it
-            // does in `totalVotes`.
-            const origins = originsByPost && onPublicBoard(r.audience_scope) ? (originsByPost.get(post.id) ?? new Map<string, number>()) : null;
+            // Where its votes came from, once an anonymous poll has closed (pollOriginsMayShow): the total, and each
+            // option's share only when both sides are big enough to say nobody's choice (POLL_ORIGINS_SPLIT_MIN). A vote
+            // for an option since edited away counts in the total, as it does in `totalVotes`. Read from the row as stored,
+            // before anything below shows it paused for its author's sake.
+            const origins = originsByPost && mayShowOrigins(r) ? (originsByPost.get(post.id) ?? new Map<string, number>()) : null;
             let split = false;
             if (origins) {
                 let fromNew = 0;

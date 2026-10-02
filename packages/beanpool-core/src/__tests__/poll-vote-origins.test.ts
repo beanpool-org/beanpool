@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pollVoteOriginsLine, pollOptionOriginsLine } from '../poll-vote-origins.js';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '../poll-vote-origins.js';
 
 describe("a poll's line: how many of its votes came from new or 12-word accounts", () => {
     it('says the count out of the total', () => {
@@ -34,5 +34,18 @@ describe("an option's line", () => {
         expect(pollOptionOriginsLine(7, undefined)).toBeNull();
         expect(pollOptionOriginsLine(7, 0)).toBeNull();
         expect(pollOptionOriginsLine(0, 0)).toBeNull();
+    });
+});
+
+describe('when a card may say where the votes came from', () => {
+    it('only once the poll has closed', () => {
+        expect(pollOriginsShown(true, false)).toBe(true);
+        expect(pollOriginsShown(true, undefined)).toBe(true);
+        expect(pollOriginsShown(false, false)).toBe(false);
+        expect(pollOriginsShown(false, undefined)).toBe(false);
+    });
+    it('never on an open vote, open or closed: its voters are named', () => {
+        expect(pollOriginsShown(true, true)).toBe(false);
+        expect(pollOriginsShown(false, true)).toBe(false);
     });
 });

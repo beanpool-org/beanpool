@@ -1,8 +1,9 @@
 /**
  * Where a poll's votes came from (FABLE-sec-global-abuse LOW-7): on the global community the node says how many of a
  * public poll's votes came from new or 12-word accounts, and, with enough on each side, how many of each answer's
- * (apps/server engine/probation.ts pollVotesFromNewOrWords). The card says so in @beanpool/core's words. Every vote still
- * counts and shows; nobody is named; nothing is said where the node says nothing.
+ * (apps/server engine/probation.ts pollVotesFromNewOrWords), once an anonymous poll has closed. The card says so in
+ * @beanpool/core's words, and only then: never while the poll is open, never on an open vote, whatever arrives. Every vote
+ * still counts and shows; nobody is named; nothing is said where the node says nothing.
  */
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -19,9 +20,10 @@ const identity: any = { publicKey: 'voter_me', privateKey: 'priv_me', callsign: 
 function poll(extra: Record<string, unknown> = {}, options?: any[]): any {
     return {
         id: 'post_poll_origins', type: 'poll', category: 'community', title: 'Should the lobby have a weekly swap day?',
-        authorPublicKey: 'author_pk', authorCallsign: 'Pia', createdAt: new Date().toISOString(), status: 'active', active: true,
+        authorPublicKey: 'author_pk', authorCallsign: 'Pia', createdAt: new Date().toISOString(), status: 'completed', active: true,
         credits: 0, priceType: 'fixed', repeatable: false, pollOpenVote: false,
-        pollClosesAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+        // Closed: its time has passed. The node says where the votes came from only then.
+        pollClosesAt: new Date(Date.now() - 86_400_000).toISOString(),
         pollOptions: options ?? [
             { id: 'opt_yes', text: 'Yes', votes: 7, percentage: 58, newOrWordsVotes: 4 },
             { id: 'opt_no', text: 'No', votes: 3, percentage: 25, newOrWordsVotes: 1 },
@@ -33,11 +35,13 @@ function poll(extra: Record<string, unknown> = {}, options?: any[]): any {
     };
 }
 const optionButton = (text: string) => screen.getByText(text).closest('button') as HTMLElement;
+/** The same poll still open, as it reads before its time is up. */
+const OPEN = { status: 'active', pollClosesAt: new Date(Date.now() + 7 * 86_400_000).toISOString() };
 
 describe('PollCard: where the votes came from', () => {
     afterEach(() => { document.documentElement.style.fontSize = ''; });
 
-    it('the poll says how many of its votes came from new or 12-word accounts, and each answer its own share', () => {
+    it('once closed, the poll says how many of its votes came from new or 12-word accounts, and each answer its own share', () => {
         render(<PollCard post={poll()} identity={identity} informal />);
         expect(screen.getByTestId('poll-vote-origins')).toHaveTextContent('5 of 12 votes came from new or 12-word accounts');
         expect(within(optionButton('Yes')).getByTestId('poll-option-origins')).toHaveTextContent('4 of these 7 from new or 12-word accounts');
@@ -74,6 +78,33 @@ describe('PollCard: where the votes came from', () => {
         expect(screen.queryByText(/12-word/)).toBeNull();
     });
 
+    it('while the poll is open, nothing about where the votes came from, whatever arrives: no line, no placeholder', () => {
+        // Its own close button, or its time: either way the card is open now. Even a count that came with it (an older node,
+        // an old cached copy) says nothing, so re-reading after each vote can't say each vote's kind.
+        for (const extra of [OPEN, { status: 'active', pollClosesAt: undefined }]) {
+            const view = render(<PollCard post={poll(extra)} identity={identity} informal />);
+            expect(screen.queryByTestId('poll-vote-origins')).toBeNull();
+            expect(screen.queryAllByTestId('poll-option-origins')).toHaveLength(0);
+            expect(document.body.textContent).not.toMatch(/12-word|new account|came from/);
+            // Every vote still shows.
+            expect(screen.getByText('(7)')).toBeInTheDocument();
+            view.unmount();
+        }
+        render(<PollCard post={poll(OPEN)} visitor informal />);
+        expect(document.body.textContent).not.toMatch(/12-word|new account|came from/);
+    });
+
+    it('never on an open vote, open or closed: it names its voters, so a count of kinds would say which each is', () => {
+        const voters = [{ voterPubkey: 'v1', voterCallsign: 'Quill', optionId: 'opt_yes', createdAt: new Date().toISOString() }];
+        for (const extra of [{ pollOpenVote: true, pollVotes: voters }, { ...OPEN, pollOpenVote: true, pollVotes: voters }]) {
+            const view = render(<PollCard post={poll(extra)} identity={identity} informal />);
+            expect(screen.queryByTestId('poll-vote-origins')).toBeNull();
+            expect(screen.queryAllByTestId('poll-option-origins')).toHaveLength(0);
+            expect(document.body.textContent).not.toMatch(/12-word|came from/);
+            view.unmount();
+        }
+    });
+
     it('a visitor reads the same lines', () => {
         render(<PollCard post={poll()} visitor informal />);
         expect(screen.getByTestId('poll-vote-origins')).toHaveTextContent('5 of 12 votes came from new or 12-word accounts');
@@ -82,17 +113,18 @@ describe('PollCard: where the votes came from', () => {
         ]);
     });
 
-    it('a vote updates them from the node\'s answer', async () => {
-        const after = poll({ totalVotes: 13, pollNewOrWordsVotes: 6, userVotedOptionId: 'opt_maybe' }, [
+    it('a vote on an open poll says nothing about them, even if the answer carried some', async () => {
+        const after = poll({ ...OPEN, totalVotes: 13, pollNewOrWordsVotes: 6, userVotedOptionId: 'opt_maybe' }, [
             { id: 'opt_yes', text: 'Yes', votes: 7, percentage: 54, newOrWordsVotes: 4 },
             { id: 'opt_no', text: 'No', votes: 3, percentage: 23, newOrWordsVotes: 1 },
             { id: 'opt_maybe', text: 'Maybe', votes: 3, percentage: 23, newOrWordsVotes: 1 },
         ]);
         vi.mocked(api.votePoll).mockResolvedValue({ success: true, post: after } as any);
-        render(<PollCard post={poll()} identity={identity} informal />);
+        render(<PollCard post={poll(OPEN)} identity={identity} informal />);
         fireEvent.click(optionButton('Maybe'));
-        await waitFor(() => expect(screen.getByTestId('poll-vote-origins')).toHaveTextContent('6 of 13 votes came from new or 12-word accounts'));
-        expect(within(optionButton('Maybe')).getByTestId('poll-option-origins')).toHaveTextContent('1 of these 3 from a new or 12-word account');
+        await waitFor(() => expect(screen.getByText(/13 votes cast/)).toBeInTheDocument());
+        expect(screen.queryByTestId('poll-vote-origins')).toBeNull();
+        expect(screen.queryAllByTestId('poll-option-origins')).toHaveLength(0);
     });
 
     it('fits a 320px screen at 1.3x text: the lines wrap, in the list and in the grid', () => {
@@ -101,8 +133,12 @@ describe('PollCard: where the votes came from', () => {
         for (const viewMode of ['list', 'grid'] as const) {
             const view = render(<div style={{ width: 320 }}><PollCard post={poll()} identity={identity} informal viewMode={viewMode} /></div>);
             const lines = [screen.getByTestId('poll-vote-origins'), ...screen.getAllByTestId('poll-option-origins')];
+            expect(lines.length).toBeGreaterThan(1);
             for (const line of lines) {
                 expect(line).toHaveClass('break-words');
+                // Sized in rem, so the 130% text setting scales it: a size in px would stay put.
+                expect(line.className).toMatch(/\btext-\[[\d.]+rem\]/);
+                expect(line.className).not.toMatch(/\btext-\[\d+px\]/);
                 expect(line.className).not.toMatch(/\b(truncate|whitespace-nowrap|w-\[\d+px\]|min-w-\[\d+px\])\b/);
             }
             // An answer's line sits under the answer, on a line of its own, not squeezed beside the counts.

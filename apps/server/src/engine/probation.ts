@@ -148,7 +148,8 @@ export function keptPostCount(pubkey: string): number {
  * moment, and say that they voted, and with the split which way. A changed vote keeps the stamp of the first.
  *
  * Every vote still counts in the poll's totals: this only says how many came from such accounts, never whose. A new
- * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing).
+ * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing). Only an
+ * anonymous poll says it, and only once it has closed (@beanpool/engine pollOriginsMayShow): an open vote keeps no kind.
  */
 export function pollVoterNewOrWords(pubkey: string, now: number = Date.now()): 0 | 1 | null {
     if (!getProfileSwitches().probation) return null;

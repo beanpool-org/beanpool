@@ -100,6 +100,33 @@ describe('a card at 320dp × 1.3', () => {
         }
     });
 
+    it('Find your community\'s actions on Home (H4) keep their words: whole on a row, or (the long one) wrapping inside its button, never cut', () => {
+        const pad = 2 * num(s.button.paddingHorizontal) + 2 * num(s.button.borderWidth);
+        for (const label of ['Communities near you', 'Start a community']) {
+            expect(textWidth(label, num(s.buttonText.fontSize)) + pad, label).toBeLessThanOrEqual(CARD_INNER);
+        }
+        // Wider than a card at 1.3x: it takes two lines inside its button (the button's text has no line limit, and the
+        // button is never wider than the card), each word whole. The on-device check at the floor is in the PR.
+        const tell = 'Tell me when one starts here';
+        expect(textWidth(tell, num(s.buttonText.fontSize)) + pad).toBeGreaterThan(CARD_INNER);
+        expect(longestWord(tell, num(s.buttonText.fontSize)) + pad).toBeLessThanOrEqual(CARD_INNER);
+        expect(read('components/home/HomeParts.tsx')).toMatch(/<Text style=\{\[s\.buttonText, primary && s\.buttonTextPrimary\]\}>\{text\}<\/Text>/);
+        const body = read('components/home/FindCommunityBody.tsx');
+        expect(body).toMatch(/<FabAware id="find:actions" style=\{s\.buttonRow\}>/);
+        expect(body.match(/<HomeButton /g)).toHaveLength(3);
+        // No touchable of its own below Home's floor: every action is a HomeButton (48dp).
+        expect(body).not.toMatch(/<Pressable|minHeight: 44/);
+    });
+
+    it('First steps\' global lines (H4) fit their two lines beside the box; the limits sentence wraps with no limit', () => {
+        const box = textWidth('☐', 18);
+        const room = CARD_INNER - box - num(s.row.gap);
+        for (const line of ['Post something free or for swap', 'Ask a community to let you in']) {
+            expect(textWidth(line, num(s.rowLine.fontSize)), line).toBeLessThanOrEqual(2 * room);
+        }
+        expect(read('components/home/HomeCardBodies.tsx')).toMatch(/\{!!note && <Text style=\{\[s\.note, \{ marginTop: 4 \}\]\} testID="home-steps-limits">\{note\}<\/Text>\}/);
+    });
+
     it('every target is at least 48dp (§8)', () => {
         expect(HOME_TARGET_DP).toBe(48);
         expect(num(s.row.minHeight)).toBeGreaterThanOrEqual(48);

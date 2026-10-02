@@ -620,7 +620,7 @@ runSchemaSuite('a fresh install and the upgrades checked against it', '⭐️ Sc
             const { db } = await import(${JSON.stringify(path.join(__dirname, 'db', 'db.ts'))});
             se.initStateEngine();
             // The planted members' photos only: the boot also makes the community's own enterprise, with its shipped picture.
-            console.log('COMMITTED=' + db.prepare("SELECT COUNT(*) AS n FROM member_photos mp JOIN members m USING (public_key) WHERE m.callsign LIKE 'Photo%'").get().n);
+            console.log('COMMITTED=' + db.prepare("SELECT COUNT(*) AS n FROM member_photos mp JOIN members m USING (public_key) WHERE m.callsign LIKE \\'Photo%\\'").get().n);
             db.exec('DROP TRIGGER injected_failure');
             se.updateProfile(${JSON.stringify(x.pk)}, { avatar: ${JSON.stringify(NEW_PHOTO)} });
             se.updateProfile(${JSON.stringify(y.pk)}, { avatar: null });

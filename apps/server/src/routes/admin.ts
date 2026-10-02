@@ -1046,7 +1046,7 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): the post needs an open
     // report. A dismissed ('reviewed') or actioned one no longer counts.
     if ((ctx.state as any)?.adminRole === 'moderator'
-        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
+        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
         ctx.status = 403;
         ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
         return;
@@ -1513,7 +1513,8 @@ router.get('/api/local/admin/reports', async (ctx) => {
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const reported = db.prepare('SELECT target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        // A Pulse report is about its item, whatever post id it carries (state-engine reportSubjectOf).
+        const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
         if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
@@ -1538,7 +1539,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
-        const report = db.prepare('SELECT status, target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+        const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
         // is a dismissal by another name (G3): a closed report no longer counts towards the 3 that hide it, and its

@@ -41,21 +41,21 @@
  * Rule 1 alone leaves a new admin's phone stuck for good once any earlier maker has left: the admin it checks no longer
  * trusts that maker, so nothing vouches for them, and the first statement can never be taken. So a statement whose
  * parent is this phone's head may also be accepted when a trusted admin's signed share header names a head whose
- * history (by parent links, through the statements the server shows) includes it, and its maker was never dropped on
- * this phone, or was dropped by a statement on this chain (an ancestor of it: Addendum 2, ruling 5). Every statement on that path is on that admin's chain, taken under rule 1, this rule, or the start-again
- * rule; its maker was checked by the phone that took it under rule 1, or by nobody. Taking a statement adds no key and no
+ * history (by parent links, through the statements the server shows) includes it, whatever this phone's drops (Addendum
+ * 4, ruling 1, which struck Addendum 2 ruling 5's clause): a maker this phone had removed on a history it left is taken
+ * for place and drops only, the drop stands, and this phone makes its own key without them before it writes. Every
+ * statement on that path is on that admin's chain, taken under rule 1, this rule, or the start-again rule; its maker was checked by the phone that took it under rule 1, or by nobody. Taking a statement adds no key and no
  * trust (rules 2, 3 and 5 are untouched): it applies the statement's drops and moves this phone's place in the history,
  * nothing else. So this rule rests on what the proof (design §6, addendum) already rests on: a key in `trusted` is an
  * honest admin's phone, and that phone's signed head is its history as it stood when it signed. It never takes a
- * statement off another parent, so a phone that saw a drop still refuses whatever a dropped key makes after it.
+ * statement off another parent, and a statement a dropped key makes after its drop is taken only for place and drops,
+ * never as trust or a key.
  *
  * ## A phone writes nothing on a branch that hasn't made every drop it stands by (Addendum 2, ruling 2)
  *
  * After "Follow the server's history" the drops of the abandoned statements are not on the new chain. They go into the next
  * generation this phone makes, before it writes, as a removal by hand does: `toDrop` includes every key in `dropped`
  * whose dropping statement is not on the chain.
- *
- * ## Starting again (design addendum (c), signed off 2026-10-02)
  *
  * ## Following the server's history (design Addendum 3)
  *
@@ -66,7 +66,8 @@
  * A drop this phone stands by is replaced only by a later drop on the same chain or by this phone's own statement (a),
  * and a removal by hand is done only when this phone's own statement dropping the key lands (b).
  *
- * A phone with no history, when nobody holds the current key, may start again (the same follow, asked first): it
+ * Starting again (Addendum 1 (c), signed off 2026-10-02): a phone with no history, when nobody holds the current key, may
+ * start again (the same follow, asked first): it
  * takes the server's whole path from the first statement to the current one onto its chain, for its drops and its place
  * only (each signature checked; no trust, no key, no notice), then makes an ordinary new key off it. So every chain is a
  * path from a first statement: an old key's holder, checked later, can send the old keys (the locked entries open), a
@@ -902,6 +903,26 @@ export function namesSharesToSend(pin: NamesPin, state: NamesServerState, me: Na
         out.push(makeNamesShare({ communityId: pin.communityId, from: me, to, headId: head.id, ring: keys, trusts }));
     }
     return out;
+}
+
+/**
+ * A claim to oneself (design Addendum 5, director ruling): a header this phone signs and addresses to itself, naming the
+ * keys its ring holds (of statements the server stores), so the node counts it a holder on its own word when the only
+ * other holder it could tell is the key its statement is dropping. Its box is sealed to this phone alone: it sends
+ * nothing to anyone. Its `trusts` leaves out every key in `exclude` and every removal by hand, as any header does. Null
+ * when this phone holds no key the server stores, or not its head's.
+ */
+export function namesSelfClaim(pin: NamesPin, state: NamesServerState, me: NamesSigner, exclude: string[] = []): NamesShare | null {
+    const head = headOf(pin);
+    if (!head || !pin.ring[head.id]) return null;
+    const stored = new Set((Array.isArray(state.generations) ? state.generations : []).map((g) => {
+        const text = (g as { statement?: unknown })?.statement;
+        return typeof text === 'string' ? namesStatementId(text) : '';
+    }));
+    const keys = Object.fromEntries(Object.entries(namesRingKeys(pin)).filter(([id]) => stored.has(id)));
+    if (!stored.has(head.id)) return null;
+    const removing = new Set([...exclude.map(lower), ...pin.manualDrops]);
+    return makeNamesShare({ communityId: pin.communityId, from: me, to: pin.me, headId: head.id, ring: keys, trusts: pin.trusted.filter((k) => !removing.has(k)) });
 }
 
 /** The statements to put back on a server rolled back to an older copy (§4.3.6): this chain's, after the server's current. */

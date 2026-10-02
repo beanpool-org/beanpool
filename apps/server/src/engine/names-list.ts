@@ -318,7 +318,8 @@ export function addShare(actor: string, body: { header?: unknown; signature?: un
     const s = readNamesShare({ header: body.header, signature: body.signature, box: body.box }, communityId);
     if (!s || s.from !== actor) refuse('bad_signature', 'Every share is signed by the admin who sends it, for this community. This one isn’t.');
     if (!s.box) refuse('bad_box', 'A share carries the box its header names.');
-    if (s.to === actor) refuse('bad_share', 'A share goes to another admin.');
+    // A header addressed to its own sender is that admin's claim to hold the keys it names (design Addendum 5): its box is
+    // sealed to the sender alone, and it counts in `holdsOf` like any header the sender signs.
     if (!isNamesAdmin(s.to)) throw new NamesListError(400, 'not_admin', 'The keys are only for the community’s owners and admins.');
     if (!generationRow(s.headId) || s.keyIds.some((id) => !generationRow(id))) refuse('unknown_key', 'A share names only keys this server has a statement for.');
     const box = s.box;

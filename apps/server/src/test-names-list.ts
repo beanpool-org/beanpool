@@ -51,7 +51,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-    newNamesListKey, newNamesEntryId, sealNamesEntry, openNamesEntry, makeNamesGeneration, makeNamesShare, makeNamesGenerationFor,
+    newNamesListKey, newNamesEntryId, sealNamesEntry, openNamesEntry, makeNamesGeneration, makeNamesShare, makeNamesGenerationFor, namesSelfClaim,
     syncNames, namesSharesToSend, checkNamesKeyInPerson, emptyNamesPin, namesReplay, namesRingKeys, readNamesGeneration, sealNamesRing,
     namesKeyCheckMatches, namesKeyQr, namesKeyCode,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesShare,
@@ -677,6 +677,35 @@ async function main(): Promise<void> {
     let abeReads = false;
     try { openNamesEntry(abeKey1, after.entryId, afterRow.key_id, afterRow.ciphertext); abeReads = true; } catch { /* the point */ }
     assert(afterRow.key_id === head11 && !abeReads, "11. E1 it is sealed under that key, which Abe's key 1 doesn't open");
+
+    // ── 12. A claim to oneself (design Addendum 5) ──────────────────────────────────────────────────
+    // Ada's phone makes key N2 and sends Owen its box. Owen's phone takes the key without sending anything yet: it holds
+    // N2, but on no word of its own, so the node refuses his next statement (ask_for_share). A header Owen addresses to
+    // himself is his claim: the node counts it, and his statement lands.
+    const st12 = (await state(adaReal)).body;
+    const mN2 = makeNamesGenerationFor(adaRealP.pin!, adaRealP.signer, []);
+    adaRealP.pin = mN2.pin;
+    require_((await adaRealP.postMine(mN2.generation, st12, [])).status === 201, '12. Ada makes key N2');
+    await adaRealP.open();
+    await owenP.sync();
+    require_(owenP.head() === mN2.generation.id && !!owenP.key(), "12. Owen's phone takes N2 from Ada's box, and sends nothing");
+    const st12o = (await state(owen)).body;
+    assert(!st12o.admins.find((a: any) => a.pubkey === owen.pk).keyIds.includes(mN2.generation.id), '12. on no word of his own, Owen is no holder of N2');
+    const mN3 = makeNamesGenerationFor(owenP.pin!, owenP.signer, []);
+    const refused12 = await postGen(owen, mN3.generation);
+    assert(refused12.status === 409 && refused12.body?.code === 'ask_for_share', `12. his statement is refused: 409 ask_for_share (${show(refused12)})`);
+    const selfClaim = namesSelfClaim(owenP.pin!, st12o, owenP.signer, []);
+    require_(!!selfClaim && selfClaim.to === owen.pk && selfClaim.from === owen.pk && selfClaim.keyIds.includes(mN2.generation.id), '12. Owen\'s phone signs a header to itself naming the keys it holds');
+    const selfPosted = await postShare(owen, selfClaim!);
+    assert(selfPosted.status === 200, `12. Addendum 5 the node takes a header addressed to its own sender (${show(selfPosted)})`);
+    const st12b = (await state(owen)).body;
+    assert(st12b.admins.find((a: any) => a.pubkey === owen.pk).keyIds.includes(mN2.generation.id) && st12b.holdersOfCurrent.includes(owen.pk),
+        '12. Addendum 5 and counts it as his claim: Owen holds N2 on his own word');
+    const adaSees12 = (await state(adaReal)).body.shares.find((x: any) => x.from === owen.pk && x.to === owen.pk);
+    assert(!!adaSees12 && adaSees12.box === undefined, '12. Addendum 5 every admin sees the header; its box goes to nobody but Owen');
+    owenP.pin = mN3.pin;
+    const landed12 = await postGen(owen, mN3.generation);
+    assert(landed12.status === 201, `12. Addendum 5 his statement lands now (${show(landed12)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

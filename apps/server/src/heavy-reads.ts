@@ -39,6 +39,7 @@
  * The design measured four in flight at most 177 MB of heap on a 256 MB heap, 255 MB on a 512 MB heap, and 481 MB RSS:
  * inside the 1 GB droplet. A server with more memory can raise it; a smaller one should lower it.
  */
+import { createHash } from 'node:crypto';
 import type Koa from 'koa';
 import { logger } from './logger.js';
 
@@ -91,6 +92,11 @@ let resolved: HeavyReadSettings | null = null;
 let inFlightBytes = 0;
 const line: Waiter[] = [];
 const lastSize = new Map<string, number>();
+/**
+ * The map keeps a fixed-size digest of each key, never the key: a key carries the request's inputs in full (a delta's
+ * cursor, a search), so one long URL would keep kilobytes per entry, and MAX_SIZES_KEPT of them hundreds of MB.
+ */
+const slot = (key: string): string => createHash('sha256').update(key).digest('base64url');
 let admittedCount = 0;
 let refusedCount = 0;
 let cutOffCount = 0;
@@ -123,9 +129,16 @@ export function heavyReadStats(): { inFlightBytes: number; waiting: number; admi
     return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount };
 }
 
+/** Tests only: how many characters the kept keys hold, all together. */
+export function heavyReadKeptKeyCharsForTests(): number {
+    let chars = 0;
+    for (const k of lastSize.keys()) chars += k.length;
+    return chars;
+}
+
 /** The size of the last answer a route gave, as a heavy read counts it; undefined before its first. */
 export function heavyReadWeight(key: string): number | undefined {
-    return lastSize.get(key);
+    return lastSize.get(slot(key));
 }
 
 /**
@@ -156,8 +169,9 @@ function drain(): void {
 }
 
 function remember(key: string, bytes: number): void {
-    lastSize.delete(key);
-    lastSize.set(key, bytes);
+    const k = slot(key);
+    lastSize.delete(k);
+    lastSize.set(k, bytes);
     if (lastSize.size > MAX_SIZES_KEPT) lastSize.delete(lastSize.keys().next().value!);
 }
 
@@ -228,7 +242,7 @@ export function heavyReadKey(route: string, inputs: Record<string, unknown>): st
  */
 export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>): Promise<void> {
     const res = ctx.res;
-    const known = lastSize.get(key);
+    const known = lastSize.get(slot(key));
     const light = known !== undefined && known < LIGHT_BYTES;
     const weight = light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
     // A route called with no response to watch (a suite dispatching a handler directly): its weight is given back as

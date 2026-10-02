@@ -366,7 +366,7 @@ async function main(): Promise<void> {
 }
 
 async function theCapItself(): Promise<void> {
-    const { heavyRead, heavyReadSettings, heavyReadStats, heavyReadWeight, setHeavyReadsForTests } = await import('./heavy-reads.js');
+    const { heavyRead, heavyReadSettings, heavyReadStats, heavyReadWeight, heavyReadKeptKeyCharsForTests, setHeavyReadsForTests } = await import('./heavy-reads.js');
     const { db } = await import('./db/db.js');
     const { initStateEngine } = await import('./state-engine.js');
     const { default: Koa } = await import('koa');
@@ -427,6 +427,18 @@ async function theCapItself(): Promise<void> {
         big.hangUp();
         assert(await free(), `a reader who hangs up mid-answer gives all of it back ('close': ${inFlight()} in flight)`);
         assert(heavyReadWeight('big') === 24 * MB, 'and the size it was is still learned');
+
+        // A key holds its request's inputs in full; what is kept for it must not (r4170590800: 10,000 keys of 42,454
+        // characters each held 406 MB). 200 answers under 8,000-character keys keep a digest each, not the key.
+        const before = heavyReadKeptKeyCharsForTests();
+        for (let i = 0; i < 200; i++) {
+            const long = `${i}-${'c'.repeat(8000)}`;
+            const r = await get(`key=${long}&size=1000&tag=long`).done;
+            if (r.status !== 200) { assert(false, `a long key's answer is served (${r.status})`); break; }
+        }
+        const kept = heavyReadKeptKeyCharsForTests() - before;
+        assert(kept <= 200 * 64 && heavyReadWeight(`7-${'c'.repeat(8000)}`) === 1000,
+            `200 answers under 8,000-character keys keep ${kept} characters of keys (a digest each, at most ${200 * 64}), and each key's size is still found`);
 
         const boom = await get('key=boom&size=1000&throw=1&tag=boom').done;
         assert(boom.status === 500 && built.includes('boom') && await free(), `a build that throws gives its weight back (${boom.status}, ${inFlight()} in flight)`);

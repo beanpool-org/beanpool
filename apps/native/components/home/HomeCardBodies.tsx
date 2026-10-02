@@ -11,7 +11,7 @@ import { formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
     RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
-    groupLine, joinedLine, needsLineA11y, pulseTitle, sentence,
+    groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type StepLine,
 } from '../../utils/home-cards';
 import { FabAware, HomeButton, HomeLink, HomeRow, homeStyles } from './HomeParts';
@@ -50,7 +50,13 @@ export function NeedsBody({ entries, colors, onOpen }: { entries: NeedsYouEntry[
     );
 }
 
-export function StepsBody({ lines, colors, onStep }: { lines: StepLine[]; colors: AppColors; onStep: (id: StepLine['id']) => void }) {
+export function StepsBody({ lines, note, colors, onStep }: {
+    lines: StepLine[];
+    /** The global node's new-account limits in a sentence (utils/home-cards.ts `probationSentence`), under the lines. */
+    note?: string | null;
+    colors: AppColors;
+    onStep: (id: StepLine['id']) => void;
+}) {
     const s = homeStyles(colors);
     const offerUndone = lines.some(l => l.id === 'offer' && !l.done);
     return (
@@ -66,6 +72,7 @@ export function StepsBody({ lines, colors, onStep }: { lines: StepLine[]; colors
                     left={<Text style={[s.trailing, { fontSize: 18, color: l.done ? colors.brand.primary : colors.text.secondary }]} importantForAccessibility="no">{l.done ? '☑' : '☐'}</Text>}
                 />
             ))}
+            {!!note && <Text style={[s.note, { marginTop: 4 }]} testID="home-steps-limits">{note}</Text>}
             {offerUndone && (
                 <FabAware id="steps:offer" style={s.buttonRow}>
                     <HomeButton primary colors={colors} text="Post an Offer" onPress={() => onStep('offer')} testID="home-step-post-offer" />
@@ -242,10 +249,11 @@ export function GroupsBody({ card, colors }: { card: NonNullable<HomeCards['grou
     );
 }
 
-export function JoinedBody({ card, colors }: { card: NonNullable<HomeCards['joined']>; colors: AppColors }) {
+/** Faces and names on a local community; on the global node a count by area and nothing to open (utils/home-cards.ts `joinedNames`). */
+export function JoinedBody({ card, profile, colors }: { card: NonNullable<HomeCards['joined']>; profile: string; colors: AppColors }) {
     const s = homeStyles(colors);
-    const line = joinedLine(card);
-    const names = card.names ?? [];
+    const line = joinedLine(card, profile);
+    const names = joinedNames(card, profile);
     return (
         <>
             <HomeRow

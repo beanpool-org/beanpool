@@ -4,6 +4,7 @@ import {
     Alert, ActivityIndicator, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import * as Location from 'expo-location';
 import { normalizeCategory } from '@beanpool/core';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
@@ -17,20 +18,24 @@ import { useManageNode } from '../../components/useManageNode';
 import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
 import { HomeCardMenu } from '../../components/home/HomeCardMenu';
 import { EditHomeSheet } from '../../components/home/EditHomeSheet';
+import { FindCommunityBody } from '../../components/home/FindCommunityBody';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
     MarketBody, NeedsBody, NoticesBody, PulseBody, StepsBody,
 } from '../../components/home/HomeCardBodies';
 import {
-    HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk, cardsToDraw,
-    createDoorbellDebounce, dismissSafety, effectiveInterests, hideCard, invitesForReader, isHidden, localNeeds, marketForward, mergeNeeds,
-    moveCard, pickLayout, safetyWord, starredFirst, stepLines,
+    HOME_DOORBELL_SETTLE_MS, HOME_SAFETY_POLL_MS, askPinned, canHideCard, canMoveCard, canTailor, cardCaption, cardOrder, cardsToAsk,
+    cardsToDraw, createDoorbellDebounce, dismissSafety, effectiveInterests, firstSteps, hideCard, invitesForReader, isHidden, localNeeds,
+    marketForward, marketInOrder, mergeNeeds, moveCard, pickLayout, pinnedCards, safetyWord, starredFirst,
     type HomeCardId, type HomeLayout, type HomeRole, type LocalNeeds, type StepLine,
 } from '../../utils/home-cards';
 import {
     SAVE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readStoredHome, reconcileInterests,
-    saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, yieldPhoneLayout, type StoredHome,
+    saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, yieldPhoneLayout, type HomePoint, type StoredHome,
 } from '../../utils/home-store';
+import { readGlobalHome } from '../../utils/community-directory';
+import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
+import { getCachedNodeProfile } from '../../utils/node-profile';
 import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
 import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
 import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
@@ -60,11 +65,39 @@ import type { NeedsYouEntry } from '../../utils/needs-you';
  *   takes the account as it begins (utils/home-account.ts), and what it keeps (the answer, the layout, the stars, the
  *   reveal and hint) is kept only while that account is still the one on the phone.
  * - **"+ ADD POST"** floats as on the Market, and steps aside while a card's buttons, chips or links rest under it.
+ * - **The global node** (slice H4): Find your community is a card here (the Market no longer draws it), pinned at the top
+ *   and with no "…" for the member's first 30 days; First steps says the global words and the new-account limits; Who
+ *   joined is a count; "Near you" lists the nearest first. Only there, the read carries the phone's last known place to
+ *   about a kilometre, read only where location is already allowed (Home never asks for it), as the Market's card did;
+ *   and only there, the knocks this phone sent are read, for the card's answers and First steps' ask.
  */
 
 type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community';
 
 const REVEAL_MS = 300;
+
+/** The phone's last known place, only where location is already allowed: Home never asks for it. Null otherwise. */
+async function lastKnownPlace(): Promise<HomePoint | null> {
+    try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return null;
+        const last = await Location.getLastKnownPositionAsync();
+        return last ? { lat: last.coords.latitude, lng: last.coords.longitude } : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Whether the community Home reads is the global node, by what the phone already knows (no request): the answer it kept,
+ * or its copy of the node's profile (utils/node-profile.ts, which the tab strip keeps current). A local community is never
+ * sent a point: it would change what it answers (a distance on each listing).
+ */
+async function readsGlobal(url: string, kept: StoredHome | null): Promise<boolean> {
+    if (kept?.answer.profile === 'global') return true;
+    if (kept) return false;
+    return (await getCachedNodeProfile(url).catch(() => null))?.profile === 'global';
+}
 
 export default function HomeScreen() {
     const { colors } = useTheme();
@@ -102,6 +135,9 @@ export default function HomeScreen() {
     const [hint, setHint] = useState(false);
     /** The member's role here, asked only where only admins invite (undefined: not heard, so no invite asked of them). */
     const [role, setRole] = useState<HomeRole>(undefined);
+    /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
+    const [place, setPlace] = useState<HomePoint | null>(null);
+    const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
 
     const identityRef = useRef(identity);
     identityRef.current = identity;
@@ -214,13 +250,20 @@ export default function HomeScreen() {
             phoneLayout.current = mine;
             setUrl(u);
             setRole(undefined);
+            setPlace(null);
+            setKnocks([]);
             setStored(copy);
             setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine).layout : null);
             setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
             setStatus(copy ? 'ok' : 'loading');
         }
-        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout);
-        const read = await loadHome(u, id, asked, cached, { whose });
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current).layout, askPinned(cached?.answer, Date.now()));
+        // The global node only: "near you" from where the phone is (where location is already allowed).
+        const global = await readsGlobal(u, cached);
+        const point = global ? await lastKnownPlace() : null;
+        if (identityRef.current?.publicKey !== id.publicKey || !stillOnPhone(whose)) return;
+        setPlace(was => (was?.lat === point?.lat && was?.lng === point?.lng ? was : point));
+        const read = await loadHome(u, id, asked, cached, { whose, point });
         // Another account on the screen, or this one gone from the phone while the read was out (Sign Out, Replace).
         if (identityRef.current?.publicKey !== id.publicKey || read.kind === 'left' || !stillOnPhone(whose)) return;
         if (read.kind === 'answer') {
@@ -246,6 +289,12 @@ export default function HomeScreen() {
             if (member) void maybeReveal(whose);
             if (member && read.stored.answer.features.door === 'admins') {
                 void cachedNodeRole(u, id).then(r => { if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setRole(r.role); });
+            }
+            // The knocks this phone sent, on the global node (where a member asks a local community to let them in).
+            if (member && read.stored.answer.profile === 'global') {
+                void rememberedKnocks(id.publicKey).catch(() => [] as RememberedKnock[]).then(list => {
+                    if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setKnocks(list);
+                });
             }
             if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
         } else if (read.kind === 'members_only') {
@@ -289,6 +338,8 @@ export default function HomeScreen() {
         setStored(null);
         setLayout(null);
         setRole(undefined);
+        setPlace(null);
+        setKnocks([]);
         setStatus('loading');
         if (focused.current) void refreshRef.current('focus');
     }, [identity?.publicKey]);
@@ -309,7 +360,8 @@ export default function HomeScreen() {
         void writePhoneLayout(id.publicKey, url, next, whose);
         void pushLayout(next, whose);
         // A card that comes back was never asked for: read Home again for it.
-        const shownAgain = cardsToAsk(next).some(c => !cardsToAsk(before).includes(c));
+        const pins = askPinned(storedRef.current?.answer, Date.now());
+        const shownAgain = cardsToAsk(next, pins).some(c => !cardsToAsk(before, pins).includes(c));
         if (shownAgain) void refreshRef.current('layout');
     }, [url, pushLayout]);
 
@@ -333,9 +385,11 @@ export default function HomeScreen() {
     }, []);
 
     const onStep = useCallback((step: StepLine['id']) => {
-        if (step === 'offer') router.push({ pathname: '/map', params: { newPost: 'offer' } });
+        // The global node's first post is an Offer too: something free or for swap (Beans are off there).
+        if (step === 'offer' || step === 'post') router.push({ pathname: '/map', params: { newPost: 'offer' } });
         else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
         else if (step === 'interests') openTune();
+        else if (step === 'ask') router.push('/find-community');
         else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     }, [openTune]);
 
@@ -367,7 +421,10 @@ export default function HomeScreen() {
     const answer = stored?.answer ?? null;
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
-    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role }) : [];
+    const knocked = knocks.length > 0;
+    const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now }) : [];
+    // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
+    const pins = pinnedCards(answer, now);
     const interestsUp = drawn.includes('interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
@@ -375,7 +432,7 @@ export default function HomeScreen() {
     const profile = answer?.profile ?? 'local';
     const showsBeans = answer?.features.beans !== false;
     const invitesOn = !!answer && invitesForReader(answer.features, role);
-    const ordered = cardOrder(layout);
+    const ordered = cardOrder(layout, pins);
     const tailor = canTailor(answer);
     const menuCard = tailor ? menuFor : null;
     const menuAt = menuCard ? drawn.indexOf(menuCard) : -1;
@@ -384,7 +441,7 @@ export default function HomeScreen() {
         if (!answer) return null;
         const c = answer.cards;
         const caption = cardCaption(id, answer);
-        const menu = tailor && canHideCard(id) ? () => setMenuFor(id) : undefined;
+        const menu = tailor && canHideCard(id, pins) ? () => setMenuFor(id) : undefined;
         const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
             <HomeCard id={id} caption={caption} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
                 {body}
@@ -405,14 +462,25 @@ export default function HomeScreen() {
                         onActionsAt={at => band.report('safety:actions', at)}
                     />
                 );
-            case 'steps': return c.steps ? frame(<StepsBody lines={stepLines(c.steps, interests.length > 0, invitesOn)} colors={colors} onStep={onStep} />) : null;
+            case 'find': {
+                // The directory's rows are other people's publications: each is checked before it is drawn.
+                const home = readGlobalHome(c.find);
+                return home ? frame(
+                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} />,
+                ) : null;
+            }
+            case 'steps': {
+                if (!c.steps) return null;
+                const steps = firstSteps(answer, { interests, role, knocked });
+                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+            }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
             case 'deals': return c.deals ? frame(<DealsBody card={c.deals} colors={colors} />) : null;
             case 'enterprise': return c.enterprise ? frame(<EnterpriseBody card={c.enterprise} colors={colors} />) : null;
             case 'events': return c.events ? frame(<EventsBody card={c.events} colors={colors} />) : null;
             case 'market': return c.market ? frame(
                 <MarketBody
-                    items={starredFirst(c.market.items, i => i.category, interests, normalizeCategory)}
+                    items={marketInOrder(c.market.items, interests, profile, normalizeCategory)}
                     examples={!!c.market.examples}
                     nodeUrl={url}
                     showsBeans={showsBeans}
@@ -431,7 +499,7 @@ export default function HomeScreen() {
             ) : null;
             case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
             case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
-            case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} colors={colors} />) : null;
+            case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;
             case 'pulse': return c.pulse ? frame(<PulseBody card={{ items: starredFirst(c.pulse.items, i => i.category, interests, normalizeCategory) }} nodeUrl={url} colors={colors} />) : null;
             case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
             case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
@@ -539,12 +607,12 @@ export default function HomeScreen() {
                     visible={!!menuCard}
                     name={menuName}
                     colors={colors}
-                    canHide={!!menuCard && canHideCard(menuCard)}
-                    canUp={!!menuCard && canMoveCard(menuCard) && menuAt > 0 && canMoveCard(drawn[menuAt - 1])}
-                    canDown={!!menuCard && canMoveCard(menuCard) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1])}
-                    onHide={() => { if (menuCard) { setHint(false); changeLayout(hideCard(layoutRef.current, menuCard, Date.now())); } }}
-                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'up', drawn, Date.now())); }}
-                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'down', drawn, Date.now())); }}
+                    canHide={!!menuCard && canHideCard(menuCard, pins)}
+                    canUp={!!menuCard && canMoveCard(menuCard, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1], pins)}
+                    canDown={!!menuCard && canMoveCard(menuCard, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1], pins)}
+                    onHide={() => { if (menuCard) { setHint(false); changeLayout(hideCard(layoutRef.current, menuCard, Date.now(), pins)); } }}
+                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'up', drawn, Date.now(), pins)); }}
+                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard, 'down', drawn, Date.now(), pins)); }}
                     onClose={() => setMenuFor(null)}
                     returnTo={menuCard ? menuRef(menuCard) : undefined}
                 />
@@ -553,6 +621,7 @@ export default function HomeScreen() {
                     layout={layout}
                     node={answer ?? { profile, features: {} }}
                     role={role}
+                    pinned={pins}
                     drawnNow={drawn}
                     colors={colors}
                     onChange={changeLayout}

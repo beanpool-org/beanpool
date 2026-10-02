@@ -112,12 +112,21 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ callsign }: {
 vi.mock('../../components/ExampleListings', () => ({ ExampleListings: () => createElement('div', { 'data-testid': 'example-listings' }, 'Examples of what people post') }));
 vi.mock('../db', () => ({ getMarketplaceTransactions: vi.fn(async () => []), getUnreadByConversation: vi.fn(async () => []) }));
 vi.mock('../pulse', () => ({ resolvePulseThumbnailUrl: (u: string | null, i: { id: string }) => (u ? `${u}/api/pulse/items/${i.id}/thumbnail` : null) }));
+// The phone's place (H4: the global node's "near you"): allowed or not, and the last one known. Home must never ask.
+const loc = vi.hoisted(() => ({ status: 'denied', last: null as null | { coords: { latitude: number; longitude: number } }, asked: 0 }));
+vi.mock('expo-location', () => ({
+    getForegroundPermissionsAsync: vi.fn(async () => ({ status: loc.status })),
+    getLastKnownPositionAsync: vi.fn(async () => loc.last),
+    requestForegroundPermissionsAsync: vi.fn(async () => { loc.asked += 1; return { status: 'denied' }; }),
+    getCurrentPositionAsync: vi.fn(async () => { loc.asked += 1; return null; }),
+}));
 
 import HomeScreen from '../../app/(tabs)/index';
 import { goToNeedsTarget } from '../../components/NeedsYouIcons';
 import * as db from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { draftIdentity, wipeIdentityScopedStorage } from '../identity';
+import { rememberKnock } from '../knock';
 import { announceAccountOnPhone } from '../account-on-phone';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey } from '../storage-keys';
@@ -166,6 +175,8 @@ const node = {
     role: null as string | null,
     /** While set, a save of the interests is kept in the member's row, and Home's answer says what the row holds. */
     keepsRow: false,
+    /** What a community this phone knocked on says of the knock (GET /api/join/knock/status, routes/knocks.ts). */
+    knockStatus: 'pending' as string,
 };
 const etagOf = (pk: string, a: HomeAnswer) => {
     const { generatedAt: _g, ...rest } = a;
@@ -189,6 +200,10 @@ beforeEach(async () => {
     node.homeGate = null;
     node.role = null;
     node.keepsRow = false;
+    node.knockStatus = 'pending';
+    loc.status = 'denied';
+    loc.last = null;
+    loc.asked = 0;
     manage.start.mockClear();
     vi.mocked(goToNeedsTarget).mockClear();
     vi.mocked(db.getMarketplaceTransactions).mockImplementation(async () => []);
@@ -212,6 +227,15 @@ beforeEach(async () => {
             if (headers['If-None-Match'] === tag) { record(304); return new Response(null, { status: 304 }); }
             record(200);
             return new Response(body, { status: 200, headers: { ETag: tag } });
+        }
+        if (u.pathname === '/api/global/watches' && req.method === 'POST') {
+            const { lat, lng } = JSON.parse(req.body);
+            record(200);
+            return new Response(JSON.stringify({ watch: { id: 'w1', lat, lng, radiusKm: 10, createdAt: new Date().toISOString() } }), { status: 200 });
+        }
+        if (u.pathname === '/api/join/knock/status') {
+            record(200);
+            return new Response(JSON.stringify({ status: node.knockStatus }), { status: 200 });
         }
         if (u.pathname === '/api/node-admin/me') {
             record(200);
@@ -494,6 +518,8 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
         layout: null,
         cards: {
             needs: { items: needs },
+            // Sent to both: a local community draws none (only the global node has the directory).
+            find: findBody(),
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: variant === 1, firstPost: variant === 1, photo: false, interests: false, invited: false, area: false, knocked: null },
             deals: { open: 2, waiting: 1, waitingOnMe: variant === 1 ? { txId: 't1', postId: 'p1', title: 'Sourdough' } : null },
             enterprise: { id: 'ent1', name: 'Tool Library', requests: 1, others: 0 },
@@ -513,6 +539,16 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
             notices: { unseen: 1, first: { id: 'n1', title: 'Market day moved', line: 'Saturday, not Sunday.' } },
             community: local ? { name: 'Mullumbimby', members: 81, tradesThisMonth: 23 } : { name: 'BeanPool', members: 2310, communities: 38 },
         },
+    };
+}
+
+/** Find your community's body as the global node sends it (routes/global-directory.ts landingCardFor): a community 12 km away. */
+function findBody(over: Partial<NonNullable<HomeAnswer['cards']['find']>> = {}): NonNullable<HomeAnswer['cards']['find']> {
+    return {
+        point: 'request',
+        communities: [{ key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', lat: -28.6, lng: 153.6, radiusKm: 20, memberCount: 40, contactEmail: null, contactPhone: null, distanceKm: 12 }],
+        communityCount: 38, nearbyPosts: { radiusKm: 25, count: 9, more: false }, watches: [], knock: null, directoryFetchedAt: iso(Date.now() - H),
+        ...over,
     };
 }
 
@@ -609,12 +645,18 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-beans-line → /(tabs)/ledger',
         ],
     },
-    // No First steps (its global words are H4's), no money cards and no invite whatever the answer holds, no Decisions
-    // and no vote in Needs you (Commons is hidden there): the Decide card is polls only, and they open the Market's Polls.
+    // Find your community (H4) right under Needs you, its three actions each opening a screen the global node shows (no
+    // place known here, so "Tell me" opens Communities near you to ask for one); First steps' global words only while the
+    // first post isn't made (case 2; no limits sent here); no money cards and no invite whatever the answer holds, no
+    // Decisions and no vote in Needs you (Commons is hidden there): the Decide card is polls only, opening the Market's
+    // Polls. Who joined is a count there, with nothing to open.
     global: {
         1: [
             'home-needs-message → /chat/[id] id=dm1',
             'home-needs-group → /chat/[id] id=g1&group=1',
+            'home-find-near → /find-community',
+            'home-find-start → /start-community',
+            'home-find-watch → /find-community',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
@@ -630,6 +672,11 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
         2: [
             'home-needs-message → /(tabs)/chats view=messages&filter=unread',
             'home-needs-group → /(tabs)/chats view=groups',
+            'home-find-near → /find-community',
+            'home-find-start → /start-community',
+            'home-find-watch → /find-community',
+            'home-step-post → /map newPost=offer',
+            'home-step-ask → /find-community',
             'home-event-e1 → /post/[id] id=e1',
             'home-events-all → /(tabs)/market filter=events',
             'home-market-p1 → /post/[id] id=p1',
@@ -796,15 +843,26 @@ const editRows = () => Array.from(document.querySelectorAll('[data-testid^="edit
     .filter(id => !/-(up|down|switch)$/.test(id) && id !== 'done' && id !== 'reset');
 
 describe('Edit home offers only the cards this node can show', () => {
-    it('the global node: no Your deals, Your enterprise, Your Beans, Grow your community, or First steps (H4)', async () => {
+    it('the global node: no Your deals, Your enterprise, Your Beans or Grow your community; First steps since H4; Find your community not while pinned', async () => {
         node.answer = everyCard('global', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        expect(editRows()).toEqual(['safety', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
+        expect(document.querySelector('[data-modal]')?.textContent).toContain('Find your community stays near the top for your first 30 days.');
     });
 
-    it('a local community with Beans, escrow, enterprises and invites: every card but Find your community (H4) and "Your way back in" (no 12-words door)', async () => {
+    it('the global node after a member\'s first 30 days: Find your community is offered, in its place, with its switch', async () => {
+        const a = everyCard('global', 1);
+        node.answer = { ...a, me: { ...a.me!, joinedAt: iso(Date.now() - 31 * 24 * H) } };
+        await render();
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(editRows()).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices']);
+        expect(document.querySelector('[data-testid="edit-home-find-switch"]')?.getAttribute('aria-checked')).toBe('true');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
+    });
+
+    it('a local community with Beans, escrow, enterprises and invites: every card but Find your community and "Your way back in" (no 12-words door)', async () => {
         node.answer = everyCard('local', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
@@ -985,5 +1043,202 @@ describe('where only a community\'s admins invite, Home asks only them to', () =
             'home-step-invite → /(tabs)/people view=invites',
             'home-invite → /(tabs)/people view=invites',
         ]);
+    });
+});
+
+// ── The global node's Home (slice H4) ──────────────────────────────────────────────────────────────────────────────────
+
+/** The phone's copy of the node's profile (utils/node-profile.ts, which the tab strip keeps): what Home goes by before an answer. */
+function rememberProfile(profile: 'local' | 'global') {
+    mem.store.set('beanpool_node_profiles', JSON.stringify({ [NODE]: { profile, features: {}, checkedAt: new Date().toISOString() } }));
+}
+
+/** A new member of the global node by 12 words, `days` after joining: limits on, a community 12 km away, listings near. */
+function globalMember(days = 3): HomeAnswer {
+    const now = Date.now();
+    const joinedAt = iso(now - days * 24 * H);
+    return {
+        generatedAt: iso(now), profile: 'global', features: GLOBAL_FEATURES,
+        me: {
+            joinedAt, isKeeper: false, interests: [], area: null, firstOffer: false, standing: 'member',
+            probation: { onProbation: true, rules: 'words', limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } },
+        },
+        layout: null,
+        cards: {
+            find: findBody(),
+            steps: { joinedAt, firstOffer: false, firstPost: false, photo: false, interests: false, invited: null, area: false, knocked: null },
+            events: { items: [{ id: 'e1', title: 'Beach clean', startsAt: iso(now + 24 * H), endsAt: null, place: 'Brunswick', rsvp: null, distanceKm: 8 }], radiusKm: 50 },
+            // Newest first as a node with no point would send them: the phone puts the nearest first.
+            market: { items: [
+                { id: 'p1', type: 'offer', title: 'Lemons to give away', category: 'food', photoUrl: null, distanceKm: 18 },
+                { id: 'p2', type: 'need', title: 'Borrow a drill', category: 'tools', photoUrl: null, distanceKm: 3 },
+                { id: 'p3', type: 'offer', title: 'Old bikes', category: 'goods', photoUrl: null, distanceKm: null },
+                { id: 'p4', type: 'offer', title: 'Seedlings', category: 'garden', photoUrl: null, distanceKm: 0.5 },
+            ], total14d: 4, more: false },
+            // Names the global node never sends (§13 Q4): the phone draws none whatever an answer holds.
+            joined: { count7d: 14, radiusKm: 50, names: [{ callsign: 'Ana', avatarUrl: null }, { callsign: 'Kofi', avatarUrl: null }] },
+            community: { name: 'BeanPool', members: 2310, communities: 38 },
+        },
+    };
+}
+
+const homeCards = () => homeReads().map(r => new URL(r.url).searchParams.get('cards')!.split(','));
+
+describe('the global node\'s Home (H4): Find your community on top, the global First steps, a count of who joined, Near you by distance', () => {
+    it('one request; Find your community first, with no "…" for the first 30 days; the cards in the design\'s order', async () => {
+        node.answer = globalMember(3);
+        await render();
+        expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
+        expect(cards()).toEqual(['find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
+        expect(byLabel('Card options for Find your community')).toBeNull();
+        expect(byLabel('Card options for First steps')).not.toBeNull();
+        const card = document.querySelector('[data-testid="home-card-find"]')!;
+        expect(card.querySelector('[role="heading"]')?.textContent).toBe('Find your community');
+        expect(card.textContent).toContain('Byron Shire BeanPool is 12 km away. Ask to join, and trade with your neighbours there.');
+        expect(card.textContent).toContain('9 listings within 25 km of you');
+        // Its three actions, each a 48dp Home button that reports where it rests to "+ ADD POST".
+        expect(['home-find-near', 'home-find-start', 'home-find-watch'].map(t => document.querySelector(`[data-testid="${t}"]`)?.textContent))
+            .toEqual(['Communities near you', 'Start a community', 'Tell me when one starts here']);
+    });
+
+    it('a layout that hides it or moves it down (another phone, the web app) is overruled while it is pinned: drawn first, asked for, nothing to hide it with', async () => {
+        node.answer = { ...globalMember(3), layout: { v: 1, order: ['market', 'events', 'find'], hidden: ['find'], dismissed: {}, updatedAt: new Date().toISOString() } };
+        await render();
+        expect(cards()[0]).toBe('find');
+        expect(cards().slice(0, 4)).toEqual(['find', 'market', 'events', 'steps']);
+        expect(homeCards().at(-1)).toContain('find');
+        // Nothing moves above it: the card under it can't move up.
+        await act(async () => { byLabel('Card options for Near you')!.click(); });
+        expect(byLabel('Move Near you up')!.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('after 30 days: its "…" hides it, the layout is saved, and the next read no longer asks for it', async () => {
+        node.answer = globalMember(31);
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(cards()[0]).toBe('find');
+        await act(async () => { byLabel('Card options for Find your community')!.click(); });
+        await act(async () => { byLabel('Hide Find your community')!.click(); });
+        await settle();
+        expect(cards()).not.toContain('find');
+        const post = node.requests.find(r => r.method === 'POST')!;
+        expect(JSON.parse(post.body).preferences['home.layout'].hidden).toEqual(['find']);
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(homeCards().at(-1)).not.toContain('find');
+    });
+
+    it('Who joined: a count by area, no names or faces, nothing to open', async () => {
+        node.answer = globalMember(3);
+        await render();
+        const line = document.querySelector('[data-testid="home-joined-line"]')!;
+        expect(line.getAttribute('aria-label')).toBe('14 people within 50 km joined this week.');
+        expect(line.tagName).not.toBe('BUTTON');
+        expect(document.querySelectorAll('[data-avatar]')).toHaveLength(0);
+        expect(document.querySelector('[data-testid="home-card-joined"]')!.textContent).not.toMatch(/Ana|Kofi/);
+    });
+
+    it('"Near you": nearest first by distance; a star puts its category first, each part nearest first, in place', async () => {
+        node.answer = globalMember(3);
+        await render();
+        expect(document.querySelector('[data-testid="home-card-market"] [role="heading"]')?.textContent).toBe('Near you');
+        expect(marketOrder()).toEqual(['p4', 'p2', 'p1', 'p3']);
+        expect(byLabel('Need: Borrow a drill. 3.0 km. Tools. Opens the listing.')).not.toBeNull();
+        expect(byLabel('Offer: Seedlings. 500 m. Garden. Opens the listing.')).not.toBeNull();
+        node.hang = true;
+        await act(async () => { (document.querySelector('[data-testid="home-interest-food"]') as HTMLElement).click(); });
+        await settle(3);
+        expect(marketOrder()).toEqual(['p1', 'p4', 'p2', 'p3']);
+    });
+
+    it('First steps\' global words and the new-account limits; each line opens a screen the global node shows', async () => {
+        node.answer = globalMember(3);
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        const steps = document.querySelector('[data-testid="home-card-steps"]')!;
+        expect(Array.from(steps.querySelectorAll('[data-testid^="home-step-"]')).map(e => e.getAttribute('aria-label')))
+            .toEqual(['Post something free or for swap, not done yet', 'Ask a community to let you in, not done yet']);
+        expect(steps.querySelector('[data-testid="home-steps-limits"]')?.textContent).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
+        expect(steps.textContent).not.toMatch(/Post your first Offer|Add a photo|Invite someone|Set your area/);
+        await act(async () => { (steps.querySelector('[data-testid="home-step-post"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith({ pathname: '/map', params: { newPost: 'offer' } });
+        await act(async () => { (steps.querySelector('[data-testid="home-step-ask"]') as HTMLElement).click(); });
+        expect(nav.router.push).toHaveBeenCalledWith('/find-community');
+    });
+
+    it('a knock this phone sent: the ask goes from First steps, and Find your community says the answer', async () => {
+        node.answer = globalMember(3);
+        await rememberKnock(who.identity.publicKey, { url: 'https://byron.example.org', name: 'Byron Shire BeanPool' });
+        await render();
+        expect(document.querySelector('[data-testid="home-step-ask"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-step-post"]')).not.toBeNull();
+        expect(document.querySelector('[data-testid="home-card-find"]')!.textContent).toContain('Waiting for Byron Shire BeanPool: usually a few days.');
+        // Only the community it asked, signed for there.
+        const asks = node.requests.filter(r => new URL(r.url).pathname === '/api/join/knock/status');
+        expect(asks.map(r => new URL(r.url).origin)).toEqual(['https://byron.example.org']);
+    });
+
+    it('the place: on the global node the phone\'s last known one (only where already allowed), to two decimals; never asked for', async () => {
+        node.answer = globalMember(3);
+        rememberProfile('global');
+        loc.status = 'granted';
+        loc.last = { coords: { latitude: -28.643_21, longitude: 153.612_34 } };
+        await render();
+        const q = new URL(homeReads()[0].url).searchParams;
+        expect([q.get('lat'), q.get('lng')]).toEqual(['-28.64', '153.61']);
+        expect(boundSignatureValid(homeReads()[0], who.identity.publicKey)).toBe(true);
+        expect(loc.asked).toBe(0);
+        // "Tell me when one starts here" keeps a watch there, on the community Home is read from.
+        await act(async () => { (document.querySelector('[data-testid="home-find-watch"]') as HTMLElement).click(); });
+        await settle();
+        const watch = node.requests.find(r => new URL(r.url).pathname === '/api/global/watches')!;
+        expect(new URL(watch.url).origin).toBe(NODE);
+        expect(document.querySelector('[data-testid="home-find-watch-note"]')?.textContent).toBe("Done. You'll be told when a community starts near here.");
+        expect(document.querySelector('[data-testid="home-find-watch"]')).toBeNull();
+    });
+
+    it('location not allowed: no place sent and none asked for; the first read with no profile known sends none, the next (the answer said global) does', async () => {
+        node.answer = globalMember(3);
+        await render();
+        expect(new URL(homeReads()[0].url).searchParams.has('lat')).toBe(false);
+        loc.status = 'granted';
+        loc.last = { coords: { latitude: -28.643_21, longitude: 153.612_34 } };
+        await act(async () => { nav.focus?.(); });
+        await settle();
+        expect(new URL(homeReads()[1].url).searchParams.get('lat')).toBe('-28.64');
+        expect(loc.asked).toBe(0);
+    });
+});
+
+describe('a local community\'s Home is H2\'s, whatever the answer or the phone holds (H4 changes nothing there)', () => {
+    it('no Find your community, names and faces in Who joined, what\'s new first, no limits sentence, and no place sent', async () => {
+        const a = localMember();
+        node.answer = {
+            ...a,
+            me: { ...a.me!, probation: globalMember().me!.probation },
+            cards: {
+                ...a.cards,
+                // What a local node never sends: the phone draws none of it.
+                find: findBody(),
+                market: { ...a.cards.market!, items: a.cards.market!.items.map((p, i) => ({ ...p, distanceKm: [9, 1, 4][i] })) },
+            },
+        };
+        rememberProfile('local');
+        loc.status = 'granted';
+        loc.last = { coords: { latitude: -28.643_21, longitude: 153.612_34 } };
+        await render();
+        expect(cards()).toEqual(['steps', 'interests', 'events', 'market', 'joined', 'pulse', 'beans', 'community']);
+        expect(document.querySelector('[data-testid="home-card-find"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-joined-line"]')?.getAttribute('aria-label')).toBe('Ana, Kofi and 3 more joined this week. Opens People.');
+        expect(Array.from(document.querySelectorAll('[data-avatar]')).map(e => e.getAttribute('data-avatar'))).toEqual(['Ana', 'Kofi']);
+        expect(marketOrder()).toEqual(['p1', 'p2', 'p3']);
+        expect(document.querySelector('[data-testid="home-steps-limits"]')).toBeNull();
+        expect(byLabel('Post your first Offer, not done yet')).not.toBeNull();
+        expect(new URL(homeReads()[0].url).searchParams.has('lat')).toBe(false);
+        expect(node.requests.map(r => `${r.method} ${new URL(r.url).pathname}`)).toEqual(['GET /api/home']);
+        // Edit home offers no Find your community, and says nothing of a pin.
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(editRows()).not.toContain('find');
+        expect(document.querySelector('[data-modal]')?.textContent).not.toContain('first 30 days');
     });
 });

@@ -96,7 +96,13 @@ vi.mock('../../components/OneWayBackCard', () => ({
 vi.mock('../../components/NewPostTypeSheet', () => ({ NewPostTypeSheet: ({ visible }: { visible: boolean }) => (visible ? createElement('div', { 'data-testid': 'post-type-sheet' }) : null) }));
 vi.mock('../../components/NewPollModal', () => ({ NewPollModal: () => null }));
 vi.mock('../../components/NewEventModal', () => ({ NewEventModal: () => null }));
-vi.mock('../../components/NeedsYouIcons', () => ({ goToNeedsTarget: vi.fn() }));
+// The header's own landing for a Needs you line runs as it is, through to the router, so every line on Home is pressed
+// to the screen it opens; only the header's component is never drawn here (nor the phone lock its admin work asks for).
+vi.mock('expo-local-authentication', () => ({}));
+vi.mock('../../components/NeedsYouIcons', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../../components/NeedsYouIcons')>();
+    return { goToNeedsTarget: vi.fn(real.goToNeedsTarget) };
+});
 const manage = vi.hoisted(() => ({ start: vi.fn() }));
 vi.mock('../../components/useManageNode', () => ({ useManageNode: () => ({ start: manage.start, dialog: null }) }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: ({ callsign }: { callsign: string }) => createElement('span', { 'data-avatar': callsign }) }));
@@ -111,7 +117,6 @@ import { draftIdentity } from '../identity';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey } from '../storage-keys';
 import { decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
-import { needsTargetHref } from '../needs-you';
 import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
@@ -490,7 +495,8 @@ type Link = { card: string; control: string; href: { pathname: string; params?: 
 
 /**
  * Press every control on Home, top to bottom, and note where each one went: a screen (`router.push`/`navigate`, Needs
- * you through its own landing), or nowhere (it acts in place: "…", Edit home, Tune, a chip, a notice, the admin work).
+ * you through the header's own landing), or nowhere (it acts in place: "…", Edit home, Tune, a chip, a notice, the
+ * admin work).
  */
 async function pressEverything(): Promise<{ links: Link[]; inPlace: string[] }> {
     const controls = Array.from(document.querySelectorAll('[data-testid="home-scroll"] button')).map(b => ({
@@ -504,13 +510,9 @@ async function pressEverything(): Promise<{ links: Link[]; inPlace: string[] }> 
             .find(b => (b.getAttribute('data-testid') ?? b.getAttribute('aria-label')) === c.key) as HTMLElement | undefined;
         if (!el) continue;
         Object.values(nav.router).forEach(f => f.mockClear());
-        vi.mocked(goToNeedsTarget).mockClear();
         await act(async () => { el.click(); });
         await settle(2);
-        const went = [
-            ...[nav.router.push, nav.router.navigate, nav.router.replace].flatMap(f => f.mock.calls.map(([to]) => (typeof to === 'string' ? { pathname: to } : to))),
-            ...vi.mocked(goToNeedsTarget).mock.calls.map(([t]) => needsTargetHref(t)),
-        ];
+        const went = [nav.router.push, nav.router.navigate, nav.router.replace].flatMap(f => f.mock.calls.map(([to]) => (typeof to === 'string' ? { pathname: to } : to)));
         if (went.length) went.forEach(href => links.push({ card: c.card, control: c.key, href }));
         else inPlace.push(c.key);
         await act(async () => { byLabel('Cancel')?.click(); });

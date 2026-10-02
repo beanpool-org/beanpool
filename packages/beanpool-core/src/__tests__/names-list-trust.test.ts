@@ -45,11 +45,21 @@ class World {
     entries: { id: string; keyId: string; ciphertext: string }[] = [];
     /** Entry ids an admin deleted (the log's `delete` lines). */
     deleted: string[] = [];
+    /** When set, the route's `ask_for_share` too: while an admin holds the current key on its own word, only such a holder makes the next. */
+    strictAsk = false;
+    lastRefusal: string | null = null;
+    /** When set, the next retry after a claim is lost (a dropped connection). */
+    loseNextRetry = false;
     /** What the route does: the parent is the current one, the number the next. */
     post(g: NamesGeneration): 201 | 200 | 409 {
+        this.lastRefusal = null;
         if (this.gens.has(g.id)) return 200;
         const cur = this.current ? this.gens.get(this.current)! : null;
         if ((g.parentId ?? null) !== (cur?.id ?? null) || g.n !== (cur ? cur.n + 1 : 1)) return 409;
+        if (this.strictAsk && cur) {
+            const holders = this.admins.map((a) => a.publicKey).filter((k) => this.keyIdsOf(k).includes(cur.id));
+            if (holders.length && !holders.includes(g.maker)) { this.lastRefusal = 'ask_for_share'; return 409; }
+        }
         this.gens.set(g.id, g);
         this.current = g.id;
         return 201;
@@ -105,9 +115,19 @@ class Phone {
     open(world: World, view: Parameters<World['stateFor']>[1] = {}): NamesSyncResult {
         let r = this.sync(world.stateFor(this.pk, view));
         if (r.plan.kind === 'make_first' || r.plan.kind === 'make_new') {
-            const made = makeNamesGenerationFor(this.pin!, this.who, r.plan.kind === 'make_new' ? r.plan.drops : []);
+            const drops = r.plan.kind === 'make_new' ? r.plan.drops : [];
+            const made = makeNamesGenerationFor(this.pin!, this.who, drops);
             this.pin = made.pin;
-            world.post(made.generation);
+            if (world.post(made.generation) === 409 && world.lastRefusal === 'ask_for_share') {
+                claimsMade++;
+                if (this.pin!.manualDrops.length) claimsWithRemoval++;
+                // As the app does: say in a signed header that this phone holds the key (never vouching or sending to a key
+                // its statement drops), then send the statement once more (unless that is lost).
+                const st = world.stateFor(this.pk, view);
+                for (const a of st.admins) for (const sh of namesSharesToSend(this.pin!, st, this.who, a.pubkey, drops)) world.putShare(sh);
+                if (world.loseNextRetry) world.loseNextRetry = false;
+                else world.post(made.generation);
+            }
             r = this.sync(world.stateFor(this.pk, view));
         }
         if (r.plan.kind === 'ready') for (const s of namesSharesToSend(this.pin!, world.stateFor(this.pk, view), this.who)) world.putShare(s);
@@ -1271,6 +1291,9 @@ describe('I. Following the server back to a history this phone left (round 7, un
  * After a phone's tap: it never sends Abe anything, and when ready it neither trusts Abe nor writes under any key Abe
  * holds or was sent. Always: every ring id is on the chain or abandoned, and a ready phone has no standing drop.
  */
+let claimsSeen = 0;
+let claimsMade = 0;
+let claimsWithRemoval = 0;
 function propertyRun(seed: number): { readies: number; follows: number; taps: number; made: number; losses: number } {
     let x = seed * 2654435761 >>> 0;
     const rnd = () => { x = (x + 0x6d2b79f5) >>> 0; let t = x; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -1284,8 +1307,12 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
     owen.meet(abe);
     settle(world, honest);
     const toAbe: NamesShare[] = [];
+    const allShares: NamesShare[] = [];
     const put = world.putShare.bind(world);
-    world.putShare = (sh: NamesShare) => { if (sh.to === abe.pk) toAbe.push(sh); put(sh); };
+    world.putShare = (sh: NamesShare) => { allShares.push(sh); if (sh.to === abe.pk) toAbe.push(sh); put(sh); };
+    // The node's ask_for_share, and the claim a phone then sends (round 11): a removal by hand can be in flight with it.
+    world.strictAsk = true;
+    const tappedAll = new Map<string, number>(); // phone → index into allShares when it tapped
     const lossAt = 3 + Math.floor(rnd() * 10);
     // Addendum 4's K1 shape: Mia makes a key whose boxes never land, then her phone is lost and her role removed. Nobody
     // trusted ever vouches her statement: the phones follow, or make a new key when nobody holds hers.
@@ -1311,13 +1338,15 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
             const p = pick(honest);
             p.pin = removeNamesKey(p.pin!, abe.pk);
             tappedAt.set(p.pk, toAbe.length);
+            tappedAll.set(p.pk, allShares.length);
             continue;
         }
         if (step > lossAt && rnd() < 0.08) {
             const p = pick(honest);
-            if (!tappedAt.has(p.pk)) { p.pin = removeNamesKey(p.pin!, abe.pk); tappedAt.set(p.pk, toAbe.length); }
+            if (!tappedAt.has(p.pk)) { p.pin = removeNamesKey(p.pin!, abe.pk); tappedAt.set(p.pk, toAbe.length); tappedAll.set(p.pk, allShares.length); }
             continue;
         }
+        if (rnd() < 0.15) world.loseNextRetry = true;
         const r = rnd();
         if (r < 0.1) { copies.push(copyOf(world)); continue; }
         if (r < 0.2) { const c = pick(copies); copies.push(copyOf(world)); restore(world, c); continue; }
@@ -1350,6 +1379,9 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
         for (const id of Object.keys(pin.ring)) expect(chainIds.has(id) || pin.abandoned.includes(id)).toBe(true);
         const tap = tappedAt.get(p.pk);
         if (tap !== undefined) expect(toAbe.slice(tap).filter((sh) => sh.from === p.pk)).toEqual([]);
+        // Round 11: no header this phone signs after its tap vouches for the key it removed (a claim in flight included).
+        const tapAll = tappedAll.get(p.pk);
+        if (tapAll !== undefined) for (const sh of allShares.slice(tapAll)) if (sh.from === p.pk) expect(sh.trusts).not.toContain(abe.pk);
         if (res.plan.kind === 'ready') {
             readies++;
             expect(Object.entries(pin.dropped).filter(([, id]) => !chainIds.has(id))).toEqual([]);
@@ -1372,6 +1404,7 @@ function propertyRun(seed: number): { readies: number; follows: number; taps: nu
             if (rnd() < 0.3) world.entries.push({ id: newNamesEntryId(), keyId: p.head()!, ciphertext: 'sealed' }); // a name added
         }
     }
+    claimsSeen += allShares.length;
     return { readies, follows, taps: tappedAt.size, made, losses };
 }
 
@@ -1386,6 +1419,9 @@ describe('the property check, in parts (each well under a minute on CI)', () => 
         }, 60_000);
     }
     it('the parts exercised what they check: ready opens, follows, taps, new keys and losses counted', () => {
+        // Round 11: the node's ask_for_share was met, and some claims went out with a removal by hand in flight.
+        expect(claimsMade).toBeGreaterThan(0);
+        expect(claimsWithRemoval).toBeGreaterThan(0);
         expect(totals.readies).toBeGreaterThan(100);
         expect(totals.follows).toBeGreaterThan(0);
         expect(totals.taps).toBeGreaterThanOrEqual(24);

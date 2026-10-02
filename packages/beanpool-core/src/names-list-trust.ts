@@ -866,9 +866,15 @@ export function namesRingKeys(pin: Pick<NamesPin, 'ring'>): Record<string, Uint8
 /**
  * The shares this phone sends on this open (design §4.3.3, rule 5): to every admin the server lists whose key it trusts,
  * but itself, where the key ids the server says they hold lack one in this ring, or this phone trusts someone its last
- * header to them didn't name. Each carries the whole ring and every key this phone trusts.
+ * header to them didn't name, or no header of this phone's names every key it holds (round 11: so a phone that took a
+ * key from a box says so, and the node counts it a holder on its own word, design Addendum 4). Each carries the whole ring
+ * and the keys this phone vouches for.
+ *
+ * Never to, and never vouching for, a key this phone is removing: `exclude` (the drops its next statement makes) and its
+ * removals by hand. Recipients are always trusted, listed admins (rule 5); the `due` terms only change when a share is
+ * sent to such a recipient, never who gets one.
  */
-export function namesSharesToSend(pin: NamesPin, state: NamesServerState, me: NamesSigner, only?: string): NamesShare[] {
+export function namesSharesToSend(pin: NamesPin, state: NamesServerState, me: NamesSigner, only?: string, exclude: string[] = []): NamesShare[] {
     const head = headOf(pin);
     if (!head || Object.keys(pin.ring).length === 0) return [];
     const mine = (Array.isArray(state.shares) ? state.shares : []).map((r) => readNamesShare(r, pin.communityId)).filter((s): s is NamesShare => !!s && s.from === pin.me);
@@ -879,16 +885,21 @@ export function namesSharesToSend(pin: NamesPin, state: NamesServerState, me: Na
     }));
     const keys = Object.fromEntries(Object.entries(namesRingKeys(pin)).filter(([id]) => stored.has(id)));
     if (!stored.has(head.id) || Object.keys(keys).length === 0) return [];
+    const removing = new Set([...exclude.map(lower), ...pin.manualDrops]);
+    const trusts = pin.trusted.filter((k) => !removing.has(k));
+    // No header of this phone's names a key it holds: it isn't a holder on its own word yet.
+    const unclaimed = Object.keys(keys).some((id) => !mine.some((s) => s.keyIds.includes(id)));
     const out: NamesShare[] = [];
     for (const a of state.admins ?? []) {
         const to = lower(a.pubkey);
-        if (to === pin.me || !pin.trusted.includes(to) || (only && to !== lower(only))) continue;
+        if (to === pin.me || !pin.trusted.includes(to) || removing.has(to) || (only && to !== lower(only))) continue;
         const held = new Set(a.keyIds ?? []);
         const last = mine.find((s) => s.to === to);
-        // They lack a key this phone holds, or this phone trusts someone its last header to them didn't name (or it sent none).
-        const due = Object.keys(keys).some((id) => !held.has(id)) || !last || pin.trusted.some((k) => !last.trusts.includes(k));
+        // They lack a key this phone holds, or this phone trusts someone its last header to them didn't name (or it sent
+        // none), or this phone has said in no header that it holds every key in its ring.
+        const due = Object.keys(keys).some((id) => !held.has(id)) || !last || trusts.some((k) => !last.trusts.includes(k)) || unclaimed;
         if (!only && !due) continue;
-        out.push(makeNamesShare({ communityId: pin.communityId, from: me, to, headId: head.id, ring: keys, trusts: pin.trusted }));
+        out.push(makeNamesShare({ communityId: pin.communityId, from: me, to, headId: head.id, ring: keys, trusts }));
     }
     return out;
 }

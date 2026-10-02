@@ -2,7 +2,7 @@
 slug: finding-a-community
 title: Finding a community near you
 summary: From the global community, find a community near you and ask to join it, be told when one starts near you, or start one yourself.
-related: joining, communities, near-you, recovery
+related: joining, home, communities, near-you, recovery
 ---
 
 ## Why a local community
@@ -11,7 +11,7 @@ The global community is where people from everywhere meet. A local community is 
 
 ## Communities near you
 
-On the global community, the top of the **Market** shows **Find your community**, with the communities nearest you.
+On the global community, the top of **Home** shows **Find your community**, with the communities nearest you.
 
 - Tap **Communities near you** to see the whole list.
 - Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name.

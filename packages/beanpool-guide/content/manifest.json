@@ -9,8 +9,8 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
-      "pages": ["joining", "finding-a-community", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
+      "summary": "Home, joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "pages": ["home", "joining", "finding-a-community", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
     },
     {
       "id": "market",

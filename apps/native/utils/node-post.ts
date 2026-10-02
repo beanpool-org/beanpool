@@ -49,17 +49,17 @@ export async function signedPost(
 
 /**
  * A signed GET: a read the node answers only for a member (read auth), signed by the key it is about.
- * Empty body, as for {@link signedDelete}.
+ * Empty body, as for {@link signedDelete}. `extra` headers ride along unsigned (an `If-None-Match`).
  */
 export async function signedGet(
-    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal,
+    url: string, path: string, identity: BeanPoolIdentity, signal?: AbortSignal, extra?: Record<string, string>,
 ): Promise<Response> {
     const target = `${url.replace(/\/+$/, '')}${path}`;
     const headers = await buildSignedHeaders(
         'GET', target, '', identity.privateKey, identity.publicKey,
     );
     return fetch(target, {
-        method: 'GET', headers, ...(signal ? { signal } : {}),
+        method: 'GET', headers: extra ? { ...extra, ...headers } : headers, ...(signal ? { signal } : {}),
     });
 }
 

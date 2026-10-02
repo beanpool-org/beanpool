@@ -146,16 +146,17 @@ describe('the screens go through the helpers (source check)', () => {
         expect(src).toContain('<PageTitle title={heading.title}');
     });
 
-    it("the header's vote icon asks for Decisions only where the node has them", () => {
+    it("the header's vote icon asks for Decisions only where the node has them and shows Commons → Decide (PR #1483 review 4166559525)", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        expect(src).toContain('settle(votesHere().then(votes => (votes ? getDecisions(\'open\') : null))),');
+        expect(src).toContain("decideOnNode({ ...features }) ? settle(getDecisions('open')) : null,");
         expect(src.split('getDecisions(').length - 1).toBe(1);
-        expect(src).toContain('return decisionsOn(profile?.features);');
+        // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on, and Beans on.
+        expect(read('utils/home-cards.ts')).toContain("export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;");
     });
 
     it("the header's 🛡️ words are told whether the node has Decisions, so an emergency suspension isn't called a vote where there is none", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,');
+        expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,');
         expect(read('utils/needs-you.ts')).toContain('label: adminLabel(adminItems, { decisions: i.admin?.decisions }),');
     });
 });

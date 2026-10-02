@@ -16,6 +16,10 @@
  * - **Read through the same checks.** A stored value is parsed and checked again on every read: the setter once stored any
  *   key it was given, a standby holds whatever its main server held, and the catalogue may shrink. A value that isn't a
  *   layout or a list is served as nothing.
+ * - **Interests carry the node's own stamp** (`interestsUpdatedAt`, a third row beside them, never taken from a body): when
+ *   the list last changed here. An app compares it with the stamp its own unsaved change was made on, so an older list
+ *   kept in one browser never overwrites a newer one set on another device (PR #1479's review). A save of the same list
+ *   leaves it; interests stored before the stamp read as stamped at 1970-01-01.
  *
  * Privacy: a layout says what someone cares about. It is never on the members list, a profile, or any read but its owner's.
  * The rows travel to a standby inside the member's row, as every preference does (replication-manifest.ts).
@@ -25,6 +29,8 @@ import { db } from '../db/db.js';
 
 export const HOME_LAYOUT_PREF_KEY = 'home.layout';
 export const INTERESTS_PREF_KEY = 'interests';
+/** When the interests last changed, stamped by the node beside them. Not a key an app may send. */
+export const INTERESTS_STAMP_PREF_KEY = 'interests.updatedAt';
 /** The preference keys this module owns, as the apps send and read them (and as they are stored). */
 export const HOME_PREFERENCE_KEYS: readonly string[] = [HOME_LAYOUT_PREF_KEY, INTERESTS_PREF_KEY];
 
@@ -193,6 +199,15 @@ export function getInterests(publicKey: string): string[] | null {
 }
 
 /**
+ * When this member's interests last changed here, or null when they have none kept. Interests stored before the node
+ * stamped them read as 1970-01-01, a stamp like any other until their next change. For their own reads only.
+ */
+export function getInterestsUpdatedAt(publicKey: string): string | null {
+    if (getInterests(publicKey) === null) return null;
+    return isoDate(storedValue(publicKey, INTERESTS_STAMP_PREF_KEY)) ?? new Date(0).toISOString();
+}
+
+/**
  * The Home keys of a preferences body, checked and made what is kept, ready for setMemberPreferences to write inside its
  * transaction: `[key, stored value]` for each, the layout left out when the one kept is newer (last write wins). THROWS a
  * sentence for the member on a body it refuses, before anything is written.
@@ -205,13 +220,22 @@ export function homePreferenceWrites(publicKey: string, preferences: Record<stri
         if (!kept || Date.parse(layout.updatedAt) >= Date.parse(kept.updatedAt)) writes.push([HOME_LAYOUT_PREF_KEY, JSON.stringify(layout)]);
     }
     if (Object.prototype.hasOwnProperty.call(preferences, INTERESTS_PREF_KEY)) {
-        writes.push([INTERESTS_PREF_KEY, JSON.stringify(parseInterests(preferences[INTERESTS_PREF_KEY]))]);
+        const list = parseInterests(preferences[INTERESTS_PREF_KEY]);
+        writes.push([INTERESTS_PREF_KEY, JSON.stringify(list)]);
+        // Stamped when the list changes, or was never stamped: always later than the stamp before it, so two changes in
+        // the same millisecond still differ.
+        const kept = getInterests(publicKey);
+        const keptAt = isoDate(storedValue(publicKey, INTERESTS_STAMP_PREF_KEY));
+        if (!keptAt || !kept || JSON.stringify(kept) !== JSON.stringify(list)) {
+            const after = keptAt ? Date.parse(keptAt) + 1 : -Infinity;
+            writes.push([INTERESTS_STAMP_PREF_KEY, new Date(Math.max(now.getTime(), after)).toISOString()]);
+        }
     }
     return writes;
 }
 
-/** A member's Home keys as served: each one saved, through the checks. */
-export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[] };
+/** A member's Home keys as served: each one saved, through the checks; the interests with the node's stamp for them. */
+export type OwnHomePreferences = { 'home.layout'?: HomeLayout; interests?: string[]; interestsUpdatedAt?: string };
 
 /** The Home keys this member has, through the checks, for their own read: a key never saved (or unreadable) is absent. */
 export function ownHomePreferences(publicKey: string): OwnHomePreferences {
@@ -219,7 +243,10 @@ export function ownHomePreferences(publicKey: string): OwnHomePreferences {
     const layout = getHomeLayout(publicKey);
     if (layout) out[HOME_LAYOUT_PREF_KEY] = layout;
     const interests = getInterests(publicKey);
-    if (interests) out[INTERESTS_PREF_KEY] = interests;
+    if (interests) {
+        out[INTERESTS_PREF_KEY] = interests;
+        out.interestsUpdatedAt = getInterestsUpdatedAt(publicKey) ?? undefined;
+    }
     return out;
 }
 
@@ -232,6 +259,9 @@ export function homePreferencesNamed(publicKey: string, preferences: unknown): O
     const own = ownHomePreferences(publicKey);
     const out: OwnHomePreferences = {};
     if (Object.prototype.hasOwnProperty.call(preferences, HOME_LAYOUT_PREF_KEY) && own['home.layout']) out['home.layout'] = own['home.layout'];
-    if (Object.prototype.hasOwnProperty.call(preferences, INTERESTS_PREF_KEY) && own.interests) out.interests = own.interests;
+    if (Object.prototype.hasOwnProperty.call(preferences, INTERESTS_PREF_KEY) && own.interests) {
+        out.interests = own.interests;
+        out.interestsUpdatedAt = own.interestsUpdatedAt;
+    }
     return out;
 }

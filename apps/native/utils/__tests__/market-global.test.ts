@@ -209,7 +209,7 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
     it('the Market: every Beans figure, the "Beans only" chip and the first-offer quest are gated', () => {
-        const src = read('../../app/(tabs)/index.tsx');
+        const src = read('../../app/(tabs)/market.tsx');
         const lines = src.split('\n');
         const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(3);
@@ -220,7 +220,18 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(src).toContain("{rowExtras.includes('beans') && (");
         expect(src).not.toContain("secondRow.extras.includes('beans')");
         expect(src).toContain('{showFirstOfferQuest && showsBeans && !categoryPanel.open && (');
-        expect(src).toContain('{isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}');
+    });
+
+    it('the Market no longer draws Find your community: it is a Home card since H4 (components/home/FindCommunityBody.tsx)', () => {
+        const src = read('../../app/(tabs)/market.tsx');
+        expect(src).not.toMatch(/FindCommunity/);
+        expect(src).not.toMatch(/fabStepsAside|onCardActionsAt/);
+        expect(fs.existsSync(path.resolve(__dirname, '../../components/FindCommunityCard.tsx'))).toBe(false);
+        // Home draws it, from its own answer (no request of its own), in its `find` card only.
+        const home = read('../../app/(tabs)/index.tsx');
+        expect(home.match(/<FindCommunityBody /g)).toHaveLength(1);
+        expect(home).toMatch(/case 'find': \{[\s\S]*?readGlobalHome\(c\.find\)[\s\S]*?<FindCommunityBody /);
+        expect(read('../../components/home/FindCommunityBody.tsx')).not.toMatch(/fetchGlobalHome/);
     });
 
     it('a post’s page: the price card and the edit form’s price field are gated, and there is no escrow accept', () => {

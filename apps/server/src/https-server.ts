@@ -137,6 +137,7 @@ import { startForgettingJoinAddresses } from './engine/open-join.js';
 import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
+import { createNamesListRoutes } from './routes/names-list.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
@@ -357,6 +358,7 @@ export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
+    /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
 ];
 
 // Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
@@ -1735,6 +1737,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
+        createNamesListRoutes(deps),
         createSettingsSigninRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),

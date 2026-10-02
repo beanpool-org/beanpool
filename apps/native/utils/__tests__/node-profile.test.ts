@@ -235,7 +235,7 @@ describe('polls on the worldwide community are informal', () => {
     const source = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
     it('the Market tab tells each poll card which community it is on', () => {
-        const src = source('../../app/(tabs)/index.tsx');
+        const src = source('../../app/(tabs)/market.tsx');
         const card = src.slice(src.indexOf('<PollCard'), src.indexOf('/>', src.indexOf('<PollCard')));
         expect(card).toMatch(/informal=\{pollsInformal\(nodeProfile\)\}/);
     });

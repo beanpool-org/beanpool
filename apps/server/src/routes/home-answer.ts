@@ -63,6 +63,7 @@ import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '.
 import { listKeptNotices } from '../engine/kept-notices.js';
 import { probationRuleSet, probationSummary, type ProbationSummary } from '../engine/probation.js';
 import { readMemberArea } from '../engine/member-area.js';
+import { getInterestsUpdatedAt } from '../engine/home-preferences.js';
 import { chatHiddenFrom } from '../engine/event-thread.js';
 import { getPulseFeed } from '../engine/pulse-resolver.js';
 import { listedCommunityCount } from '../engine/directory-cache.js';
@@ -148,6 +149,11 @@ export interface HomeMe {
     /** Their own new-account limits while they last (engine/probation.ts), else null. */
     probation: ProbationSummary | null;
     interests: string[];
+    /**
+     * When `interests` last changed on this node (engine/home-preferences.ts), null when none are kept: an app sends its
+     * own unsaved change only while this is still the stamp that change was made on.
+     */
+    interestsUpdatedAt: string | null;
     area: { lat: number; lng: number } | null;
     /**
      * Whether they have posted an Offer here, which decides the `invite` card (§3.1 "after the first Offer"), whatever
@@ -736,6 +742,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
             isKeeper: keeperOf(me!).length > 0,
             probation: probation?.onProbation ? probation : null,
             interests,
+            interestsUpdatedAt: getInterestsUpdatedAt(me!),
             area: area ? { lat: area.lat, lng: area.lng } : null,
             firstOffer: firstOfferOf(c),
             standing: member ? 'member' : 'suspended',

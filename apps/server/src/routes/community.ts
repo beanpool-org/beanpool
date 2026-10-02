@@ -61,11 +61,11 @@ import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE,
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
-import { respondIfMuted, respondProfileRefusal, isNote } from './profile-feature-gate.js';
+import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
@@ -1279,6 +1279,11 @@ router.post('/api/profile/update', async (ctx) => {
             ctx.body = { error: 'callsign_too_short', message: 'Your name needs at least 2 characters.' };
             return;
         }
+        if (e?.message === 'CONTACT_TOO_LONG') {
+            ctx.status = 400;
+            ctx.body = { error: 'contact_too_long', message: textTooLongMessage('How to reach you', CONTACT_VALUE_LIMIT) };
+            return;
+        }
         throw e;
     }
     if (!profile) {
@@ -1596,6 +1601,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
     }
     // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A
     // muted member still pays what they owe, without one.
+    if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, from)) return;
 
     // A visitor's beans live on their home node's ledger, so this node cannot settle

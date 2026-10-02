@@ -10,7 +10,7 @@ import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js'
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
 
 /**
@@ -470,6 +470,11 @@ export function updateProfile(
     if (update.contact !== undefined) {
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
+        // Both lists of members send it for every member who shares it (#1493): a new one is held to its limit; the one
+        // already stored, sent back by a save of something else, is kept.
+        if (typeof contact_value === 'string' && contact_value !== existing.contact_value && !fitsTextLimit(contact_value, CONTACT_VALUE_LIMIT)) {
+            throw new Error('CONTACT_TOO_LONG');
+        }
     }
     let archetype = existing.archetype || null;
     if (update.archetype === null) {

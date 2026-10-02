@@ -1425,7 +1425,7 @@ export default function PostDetailModal() {
                                             }
                                             
                                             // Fallback if chat fails
-                                            router.replace({ pathname: '/(tabs)', params: { tab: 'deals', dealsTab: 'pending' } });
+                                            router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
                                         } catch (e: any) {
                                             if (e.message?.includes('not found') || e.message?.includes('not active')) {
                                                 Alert.alert('Already Updated', 'This post was already accepted or modified elsewhere. Refreshing your screen...');

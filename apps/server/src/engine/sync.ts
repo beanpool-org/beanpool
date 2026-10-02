@@ -35,6 +35,8 @@ import {
 import {
     exportSyncState as exportSyncStateEngine,
     clearEnterpriseFloorCache,
+    groupDescriptionAsCopied,
+    setGroupPicture,
     setMemberPhoto,
     isWellFormedKey,
     summariseLedger,
@@ -1347,6 +1349,22 @@ function importMemberPhoto(publicKey: string, stored: unknown): boolean {
 }
 
 /**
+ * A group's own picture as the main server holds it: `avatarUrl` in its row, where a main server of any version puts it
+ * (@beanpool/engine sync.ts groupsWithPictures, or the old `avatar_url` column itself). Written by its one writer
+ * (@beanpool/engine groups.ts setGroupPicture), so group_pictures and the row's avatar_ref and avatar_bytes say the same as
+ * the main server's, worked out here by the same rule; and the row keeps the main server's stamp, which the touch trigger
+ * would otherwise move. Called only for a row the copy just wrote. A value that is not text or null is left out, and the
+ * group keeps what it has here.
+ */
+function importGroupPicture(groupId: string, stored: unknown): void {
+    if (stored !== null && typeof stored !== 'string') return;
+    const row = db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(groupId) as { updated_at: string | null } | undefined;
+    if (!row) return;
+    if (!setGroupPicture(db, groupId, stored)) return;
+    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(row.updated_at, groupId);
+}
+
+/**
  * A member's preferences as the main server holds them (design G2b): the copy names every one the member has, so this
  * member's rows here are replaced by them when they differ. A malformed entry is left out. Only for a member this database
  * has (the members import above wrote each one the copy names).
@@ -2578,14 +2596,17 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // lead_pubkey travels with the group (2026-09-23). A snapshot from a node older than the lead
                 // convenor sends null for it; COALESCE keeps whatever this node already knows rather than
                 // erasing it, so a replica that has run the backfill is not un-backfilled by an old primary.
+                // The picture is not a column here (#1486): a row written takes the picture the copy carries in it
+                // (@beanpool/engine sync.ts groupsWithPictures) by its one writer (importGroupPicture).
+                // The description as the main node holds it (#1493, groupDescriptionAsCopied): the limit is on a member's
+                // new words, so one stored before it, longer, is copied unchanged and its row is never dropped.
                 const importGroup = db.prepare(`INSERT INTO groups
-                    (id, name, slug, description, avatar_url, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         name = excluded.name,
                         slug = excluded.slug,
                         description = excluded.description,
-                        avatar_url = excluded.avatar_url,
                         category = excluded.category,
                         lead_pubkey = COALESCE(excluded.lead_pubkey, groups.lead_pubkey),
                         join_policy = excluded.join_policy,
@@ -2595,10 +2616,13 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 for (const g of remote.groups) {
                     if (!g?.id || !g.name || !g.slug || !g.createdBy) { conflictsSkipped++; continue; }
                     const res = importGroup.run(
-                        g.id, g.name, g.slug, g.description ?? null, g.avatarUrl ?? null, g.category || 'general',
+                        g.id, g.name, g.slug, groupDescriptionAsCopied(g.description), g.category || 'general',
                         g.createdBy, g.leadPubkey ?? null, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
                     );
-                    if (res.changes > 0) groupChanges++;
+                    if (res.changes > 0) {
+                        importGroupPicture(g.id, g.avatarUrl ?? null);
+                        groupChanges++;
+                    }
                 }
             }
 

@@ -6,12 +6,13 @@ import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
 import { swapStagedCopyAtBoot } from './swap-at-boot.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -653,6 +654,129 @@ export function moveMemberPhotosOutOfRows(batch = Number(process.env.MEMBER_PHOT
     return moved;
 }
 
+/** Image bytes of group pictures moved in one transaction, at most (moveGroupPicturesOutOfRows); GROUP_PICTURE_MOVE_BYTES. */
+export const GROUP_PICTURE_MOVE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Before schema.sql runs, on a database from before group_pictures (#1486): each group's own picture (`groups.avatar_url`,
+ * stored inline and sent with every list of groups) moved into group_pictures, with its reference and size in the row
+ * (avatar_ref, avatar_bytes: @beanpool/engine groups.ts groupPictureColumnsOf, the one rule its writer uses), then the
+ * column dropped and the table written again in fresh pages. The members move's rules (moveMemberPhotosOutOfRows), to the
+ * letter:
+ *  - A value the node does not serve (empty, a member's avatar URL) is not moved: that group has no picture.
+ *  - No row is stamped: groups_touch_updated_at is dropped until schema.sql makes it again. A standby moves its own the
+ *    same way at its own boot.
+ *  - In batches by rowid, each its own transaction, of at most `batchBytes` of pictures (never fewer than one row), each
+ *    picture read on its own: a group's picture may be up to 2 MB, so a batch of rows read at once could hold more than
+ *    a small heap has. Killed part way, the batches done stay done and the next boot carries on.
+ *  - While `groups.avatar_url` exists, a value in it means "not moved yet, and nobody has set or removed this group's
+ *    picture since the move began": setGroupPicture clears it on every call, and a standby's copy never writes it. The
+ *    move never writes over a group_pictures row that is already there (the newer).
+ *  - A batch that throws stops the move, loudly, and the boot carries on; the groups not reached show no picture until
+ *    a later boot finishes it.
+ *
+ * Then, once every picture is out, one transaction drops the column and writes the table again (repackGroups), rather
+ * than DROP COLUMN alone: SQLite merges pages on a DELETE, never on an UPDATE that shrinks a row, and DROP COLUMN rewrites
+ * each row in place, so every group that had a picture would keep a page of its own (measured on members in #1475: 117.5
+ * MB of pages, 110.8 of them empty, at 30,000). Written again, `groups` is dense; the old pages go to the free list for
+ * SQLite to reuse. Returns how many moved: only batches that committed count.
+ */
+export function moveGroupPicturesOutOfRows(batchBytes = Number(process.env.GROUP_PICTURE_MOVE_BYTES) || GROUP_PICTURE_MOVE_BYTES): number {
+    const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('groups') as { name: string }[]).map((c) => c.name));
+    if (!columns.has('avatar_url')) return 0;
+    const started = Date.now();
+    let moved = 0, dropped = 0, kept = 0, after = 0;
+    try {
+        db.exec(`CREATE TABLE IF NOT EXISTS group_pictures (group_id TEXT PRIMARY KEY, picture TEXT NOT NULL)`);
+        // The rows still holding a picture, and each one's size, without reading a picture.
+        const next = db.prepare(`SELECT rowid AS rid, octet_length(avatar_url) AS size FROM groups
+                                 WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT 500`);
+        const read = db.prepare('SELECT id, avatar_url FROM groups WHERE rowid = ?');
+        const hasPicture = db.prepare('SELECT 1 FROM group_pictures WHERE group_id = ?');
+        const putPicture = db.prepare('INSERT INTO group_pictures (group_id, picture) VALUES (?, ?)');
+        const setRow = db.prepare('UPDATE groups SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
+        const clearRow = db.prepare('UPDATE groups SET avatar_url = NULL WHERE rowid = ?');
+        for (;;) {
+            const waiting = next.all(after) as { rid: number; size: number }[];
+            if (waiting.length === 0) break;
+            const batch: number[] = [];
+            let bytes = 0;
+            for (const w of waiting) {
+                if (batch.length > 0 && bytes + w.size > batchBytes) break;
+                batch.push(w.rid);
+                bytes += w.size;
+            }
+            const done = db.transaction(() => {
+                const n = { moved: 0, dropped: 0, kept: 0 };
+                for (const rid of batch) {
+                    const r = read.get(rid) as { id: string; avatar_url: string | null } | undefined;
+                    if (!r || r.avatar_url === null) continue;
+                    if (hasPicture.get(r.id)) {
+                        clearRow.run(rid); // its picture is already in group_pictures: set since, and newer
+                        n.kept++;
+                        continue;
+                    }
+                    const picture = groupPictureColumnsOf(r.avatar_url);
+                    if (picture) {
+                        putPicture.run(r.id, picture.photo);
+                        setRow.run(picture.ref, picture.bytes, rid);
+                        n.moved++;
+                    } else {
+                        clearRow.run(rid);
+                        n.dropped++;
+                    }
+                }
+                return n;
+            })();
+            // Counted once the batch has committed: a batch that throws counts none of its rows.
+            moved += done.moved;
+            dropped += done.dropped;
+            kept += done.kept;
+            after = batch[batch.length - 1];
+        }
+    } catch (e) {
+        console.error(`[DB] ❌ Groups' pictures: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
+        return moved;
+    }
+    try {
+        repackGroups();
+        console.log(`[DB] Groups' pictures are in group_pictures now: ${moved} moved, ${dropped} that were no picture left out${kept ? `, ${kept} already there kept` : ''}, in ${Date.now() - started} ms.`);
+    } catch (e) {
+        // Every picture is out; the column stays, empty and read by nothing, until a boot can drop it.
+        console.error(`[DB] ❌ Groups' pictures are in group_pictures (${moved} moved), but groups.avatar_url could not be dropped; the next boot tries again:`, e);
+    }
+    return moved;
+}
+
+/**
+ * `groups` without its `avatar_url` column, written again in fresh pages (moveGroupPicturesOutOfRows): in one transaction,
+ * the column dropped, a table made from the definition SQLite then holds, every row copied into it with its rowid, the old
+ * table dropped and the new one given its name. Its indexes and triggers went with the old table; schema.sql, which runs
+ * next, makes them again. Foreign keys are off on this database (above), so dropping the old table deletes no
+ * group_members or posts row. `legacy_alter_table` for the rename: no other table's trigger or view is read again while
+ * `groups` is briefly missing.
+ */
+function repackGroups(): void {
+    db.pragma('legacy_alter_table = ON');
+    try {
+        db.transaction(() => {
+            db.exec('ALTER TABLE groups DROP COLUMN avatar_url');
+            const ddl = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'groups'`).get() as { sql: string }).sql;
+            const fresh = ddl.replace(/^CREATE TABLE\s+(?:"groups"|groups)\s*\(/i, 'CREATE TABLE groups_repacked (');
+            if (fresh === ddl) throw new Error(`groups has a definition this does not know: ${ddl.slice(0, 60)}`);
+            const cols = (db.prepare('SELECT name FROM pragma_table_info(?)').all('groups') as { name: string }[])
+                .map((c) => `"${c.name.replace(/"/g, '""')}"`).join(', ');
+            db.exec('DROP TABLE IF EXISTS groups_repacked');
+            db.exec(fresh);
+            db.exec(`INSERT INTO groups_repacked (rowid, ${cols}) SELECT rowid, ${cols} FROM groups ORDER BY rowid`);
+            db.exec('DROP TABLE groups');
+            db.exec('ALTER TABLE groups_repacked RENAME TO groups');
+        })();
+    } finally {
+        db.pragma('legacy_alter_table = OFF');
+    }
+}
+
 // Function to initialize schema
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
@@ -1219,6 +1343,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_ref TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
     moveMemberPhotosOutOfRows();
+
+    // Groups' own pictures out of their rows (schema.sql group_pictures, #1486), the same way: the reference first, then
+    // each picture moved with groups_touch_updated_at dropped (schema.sql makes it again), so no group is stamped.
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_ref TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
+    try { db.prepare(`DROP TRIGGER IF EXISTS groups_touch_updated_at`).run(); } catch { }
+    moveGroupPicturesOutOfRows();
 
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
     db.exec(schemaSql);
@@ -2121,9 +2252,19 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
 }
 
 /**
- * Every project, newest first. An enterprise's photo, where it stands as the project's (no photos of its own), is its URL
- * (avatarUrlOf, from the row's avatar_ref), never the photo: a list reads no member's photo (#1478, as the member list
- * since #1475). The one project's read (getCrowdfundProject) still hands it out as it is stored.
+ * A project's row as the list reads it: every column rowToProjectRow takes but `photos`, which the list never reads.
+ */
+const PROJECT_LIST_COLUMNS = 'id, creator_pubkey, description, goal_amount, current_amount, deadline_at, status, created_at, enterprise_pubkey';
+
+/**
+ * Every project, newest first (200 at most), its `photos` the enterprise's photo as its URL (avatarUrlOf, from the row's
+ * avatar_ref) or none, never a photo: a list reads no photo (#1486, as the member list since #1475 and the rosters since
+ * #1478). Every crowdfund the apps make has a projects row whose `photos` holds the photo itself (a bounded
+ * POST /api/enterprise copies it there; POST /api/crowdfund/projects keeps up to ten), and the list sent those as stored.
+ * The first is the enterprise's photo, so its URL stands for it. The others have no URL and no app draws them (the phone
+ * stores the list's `photos` and never shows them; the web app and the manager don't read them), so the list leaves them
+ * out. Only the listed enterprises' projects rows are read, and never their photos. The one project's read
+ * (getCrowdfundProject) still hands every photo out as stored: a read of one.
  */
 export function getCrowdfundProjects(): ProjectRow[] {
     const enterprises = (db.prepare(`
@@ -2139,10 +2280,13 @@ export function getCrowdfundProjects(): ProjectRow[] {
 
     const projectMap = new Map<string, any>();
     try {
-        const pRows = db.prepare("SELECT * FROM projects WHERE status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").all() as any[];
+        const pRows = db.prepare(`SELECT ${PROJECT_LIST_COLUMNS} FROM projects
+            WHERE id IN (SELECT value FROM json_each(?)) AND status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')`)
+            .all(JSON.stringify(enterprises.map(e => e.public_key))) as any[];
         for (const p of pRows) projectMap.set(p.id, p);
     } catch { }
 
+    // No `photos` in the projects row read: rowToProjectRow takes the enterprise's photo, its URL here, or none.
     return enterprises.map(e => rowToProjectRow(e, projectMap.get(e.public_key)));
 }
 
@@ -2286,6 +2430,8 @@ export function createCrowdfundProject(
 ) {
     if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
+    // The title is the enterprise's name and the description its purpose: each held to its limit (#1493).
+    assertEnterpriseText(title, description);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
@@ -2331,6 +2477,24 @@ export function createCrowdfundProject(
     })();
 }
 
+/**
+ * A project's photos as an edit sends them, with this node's own avatar URL read as the photo it stands for, never stored
+ * as itself (#1475's rule for a member's photo). The crowdfund list sends each project's photo as that URL (#1486), and
+ * an older phone's edit screen (before #792) sends back the photos it read from the list. Sent back alone, the photos are
+ * unchanged: every one kept as stored, the ones the list leaves out included. Beside new ones, the URL is the
+ * enterprise's photo, the one it opens.
+ */
+function ownAvatarUrlsAsStored(enterpriseId: string, storedJson: string | undefined, sent: string[]): string[] {
+    if (!Array.isArray(sent) || !sent.some((p) => isSelfAvatarUrl(p))) return sent;
+    if (sent.every((p) => isSelfAvatarUrl(p))) {
+        let stored: unknown = [];
+        try { stored = JSON.parse(storedJson || '[]'); } catch { /* none */ }
+        return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+    }
+    const own = (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(enterpriseId) as { photo: string } | undefined)?.photo;
+    return sent.flatMap((p) => (isSelfAvatarUrl(p) ? (own ? [own] : []) : [p]));
+}
+
 export function updateCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -2346,6 +2510,8 @@ export function updateCrowdfundProject(
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
+    // As on a create (#1493); the title and description it already holds, sent back unchanged, are kept.
+    assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
         throw new Error("Cannot change funding goal after receiving pledges");
@@ -2358,6 +2524,7 @@ export function updateCrowdfundProject(
     // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
+    photos = ownAvatarUrlsAsStored(id, project.photos, photos);
 
     db.transaction(() => {
         if (deadline_at !== undefined) {

@@ -6,7 +6,7 @@ import { useIdentity } from '../app/IdentityContext';
 import { LinkSignInSheet } from './LinkSignInSheet';
 import {
     ONE_WAY_BACK_TEXT,
-    askOneWayBackStanding,
+    askOneWayBackStandingShared,
     dismissOneWayBack,
     finishOneWayBack,
     isGlobalInUse,
@@ -18,14 +18,18 @@ import {
     readOneWayBack,
     readOneWayBackAsked,
     standingFromAsked,
+    withAccountDismissal,
     type OneWayBack,
     type OneWayBackAsked,
     type OneWayBackPlace,
+    type OneWayBackStanding,
 } from '../utils/one-way-back';
 import { anchorUrl } from '../utils/node-post';
 import { vaultCopyKnown } from '../utils/vault';
 
-/** Where the landing card's actions are on screen (window coordinates, dp), for the Market's floating button. */
+const sameCommunity = (a: string, b: string) => a.trim().replace(/\/+$/, '').toLowerCase() === b.trim().replace(/\/+$/, '').toLowerCase();
+
+/** Where the landing card's actions are on screen (window coordinates, dp), for the floating "+ ADD POST" button. */
 export interface OneWayBackActionsAt {
     top: number;
     bottom: number;
@@ -50,13 +54,24 @@ export interface OneWayBackActionsAt {
  * Where the key vault keeps a copy of the key, that copy is a way back in every community: the card never says "one
  * way back", and Settings only offers a sign-in quietly, as after "I still have my 12 words" (re-review, finding 2).
  *
- * `onActionsAt` (landing): where the actions rest on screen, so the Market's "+ ADD POST" can step aside while it would
+ * `onActionsAt` (landing): where the actions rest on screen, so the "+ ADD POST" button can step aside while it would
  * float over them (re-review, finding 4); null when the card isn't up.
+ *
+ * On Home (the landing screen since H2, design §3.1 `safety`):
+ * - `homeWord`: the community's word on this account from Home's own answer (`cards.safety`), used in place of asking
+ *   `GET /api/community/me` when it is about the community the card is about, so a landing costs Home's one request.
+ * - `accountDismissedAt`: the account's dismissal (`home.layout` `dismissed.safety`), from another phone or the web app.
+ * - `onDismiss(at)`: the card was put away at `at` (the same moment the phone's record keeps), for Home to keep on the
+ *   account. `onUp`: whether the card is drawn now, so Home's "…" moves count only the cards on screen.
  */
-export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
+export function OneWayBackCard({ place, colors = lightColors, onActionsAt, homeWord, accountDismissedAt, onDismiss, onUp }: {
     place: 'landing' | 'settings';
     colors?: AppColors;
     onActionsAt?: (at: OneWayBackActionsAt | null) => void;
+    homeWord?: { url: string; standing: OneWayBackStanding } | null;
+    accountDismissedAt?: string | null;
+    onDismiss?: (at: number) => void;
+    onUp?: (up: boolean) => void;
 }): React.JSX.Element | null {
     const { identity } = useIdentity();
     const [record, setRecord] = useState<OneWayBack | null>(null);
@@ -70,6 +85,10 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
     const actionsRef = useRef<View>(null);
     const reportAt = useRef(onActionsAt);
     reportAt.current = onActionsAt;
+    const homeWordRef = useRef(homeWord);
+    homeWordRef.current = homeWord;
+    const accountDismissedRef = useRef(accountDismissedAt);
+    accountDismissedRef.current = accountDismissedAt;
     // Where the landing card's actions rest on screen, for the floating button. Measured again shortly after layout,
     // as the feed's top inset settles.
     const measureActions = useCallback(() => {
@@ -105,10 +124,12 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
                 }
             }
             if (call !== latest.current) return;
-            setRecord(found);
+            // A dismissal on the account (another phone, the web app) counts as this phone's own.
+            const kept = withAccountDismissal(found, accountDismissedRef.current, posted);
+            setRecord(kept);
             setVaultCopy(vault);
             setHasPosted(posted);
-            setShown(oneWayBackPlace(found, Date.now(), posted));
+            setShown(oneWayBackPlace(kept, Date.now(), posted));
         };
         await show(stored);
         if (!identity || !key) return;
@@ -120,8 +141,13 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
         const decision = oneWayBackAskNow(stored, isGlobalInUse(inUse), asked, now, askNode === 'now');
         if (decision === 'never') return;
         let word: OneWayBackAsked | null = asked;
-        if (decision === 'ask') {
-            const answer = await askOneWayBackStanding(where, identity);
+        const fromHome = homeWordRef.current;
+        if (askNode !== 'now' && fromHome && sameCommunity(fromHome.url, where)) {
+            // Home's answer already holds the community's word on this account: no second request.
+            word = { at: now, answer: fromHome.standing.words ? 'words' : 'ordinary', joinedAt: fromHome.standing.joinedAt };
+            await noteOneWayBackAsked(key, word);
+        } else if (decision === 'ask') {
+            const answer = await askOneWayBackStandingShared(where, identity);
             word = answer === null ? { at: now, answer: 'none' }
                 : answer === 'not_member' ? { at: now, answer: 'not_member' }
                     : { at: now, answer: answer.words ? 'words' : 'ordinary', joinedAt: answer.joinedAt };
@@ -133,6 +159,13 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
     }, [identity]);
 
     useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
+    // Home's answer arrived with the community's word, or the account's dismissal changed: read again.
+    const wordKey = homeWord ? `${homeWord.url}|${homeWord.standing.words}` : '';
+    const mounted = useRef(false);
+    useEffect(() => {
+        if (!mounted.current) { mounted.current = true; return; }
+        void refresh();
+    }, [wordKey, accountDismissedAt, refresh]);
 
     const quiet = record?.done === 'checked' || vaultCopy;
     const up = !!identity && !!record && record.done !== 'linked' && (place === 'settings' || (shown === 'card' && !quiet));
@@ -140,6 +173,9 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
     useEffect(() => {
         if (place === 'landing' && !up) reportAt.current?.(null);
     }, [place, up]);
+    const reportUp = useRef(onUp);
+    reportUp.current = onUp;
+    useEffect(() => { reportUp.current?.(up && !(quiet && place !== 'settings')); }, [up, quiet, place]);
     useEffect(() => () => { if (place === 'landing') reportAt.current?.(null); }, [place]);
 
     if (!identity || !record || !up) return null;
@@ -177,7 +213,13 @@ export function OneWayBackCard({ place, colors = lightColors, onActionsAt }: {
                 <Text style={s.title}>🔑 {ONE_WAY_BACK_TEXT.body}</Text>
                 {place === 'landing' && (
                     <Pressable
-                        onPress={async () => { await dismissOneWayBack(identity.publicKey, hasPosted); void refresh(); }}
+                        onPress={async () => {
+                            // One moment for the phone's record and the account's (Home keeps it in `home.layout`).
+                            const at = Date.now();
+                            await dismissOneWayBack(identity.publicKey, hasPosted, at);
+                            onDismiss?.(at);
+                            void refresh();
+                        }}
                         hitSlop={12}
                         accessibilityRole="button"
                         accessibilityLabel={ONE_WAY_BACK_TEXT.notNow}

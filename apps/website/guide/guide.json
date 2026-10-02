@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 99,
-  "hash": "7dab0a7a09656ef8b964e61c2a9abfe699b9a2bdc6b1c1633a1a964523b7efae",
+  "version": 102,
+  "hash": "7fa7670a939031ee01dc755beaa07609a54394bffce8ecaef2cd53ba98b10b4d",
   "sections": [
     {
       "id": "about",
@@ -108,6 +108,7 @@
       "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
       "slugs": [
         "privacy",
+        "what-the-admins-can-see",
         "blocking",
         "reporting",
         "notifications",
@@ -1398,7 +1399,7 @@
         },
         {
           "type": "p",
-          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to."
+          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number, up to 200 characters. You do not have to."
         },
         {
           "type": "p",
@@ -2975,7 +2976,7 @@
           "type": "ul",
           "items": [
             "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.",
-            "Give it a **Group Name** and, if you like, a **Purpose / Description**.",
+            "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
             "Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat."
@@ -3066,7 +3067,7 @@
         },
         {
           "type": "p",
-          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Open a group, then:"
+          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:"
         },
         {
           "type": "ul",
@@ -4814,6 +4815,84 @@
       ]
     },
     {
+      "slug": "what-the-admins-can-see",
+      "title": "What the admins can see",
+      "summary": "In a community whose admins keep a names list: what it holds about you, who can read it, what your community's server keeps, and what being confirmed means.",
+      "section": "settings",
+      "related": [
+        "privacy",
+        "joining",
+        "leaving-or-deleting"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "The names list"
+        },
+        {
+          "type": "p",
+          "text": "Some communities' admins keep a **names list**: who the members are, by real name, the way a LETS committee keeps a membership list. Not every community keeps one. Ask your admins whether yours does."
+        },
+        {
+          "type": "p",
+          "text": "An entry holds your name and, sometimes, a short note an admin writes, like how the community knows you. Nothing else: no address, no date of birth, no ID number."
+        },
+        {
+          "type": "h2",
+          "text": "Who can read it"
+        },
+        {
+          "type": "p",
+          "text": "**Only your community's owners and admins, on their own phones.** Your name is sealed on an admin's phone before it is sent to your community's server. The server keeps scrambled text: a backup, a copy, BeanPool, or anyone who steals the database holds nothing readable."
+        },
+        {
+          "type": "p",
+          "text": "Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked, on a call or in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. An admin whose phone still shows the removed admin removes their key by hand, and that phone then makes a new key without them or writes nothing."
+        },
+        {
+          "type": "p",
+          "text": "**Other members don't see the names.** They see your BeanPool name, as always."
+        },
+        {
+          "type": "p",
+          "text": "An admin can make a PDF copy of the list on their phone, for safekeeping. Once made, it's theirs to keep safe, like a paper list. Every time the list is opened or copied, the other admins can see who did it and when."
+        },
+        {
+          "type": "h2",
+          "text": "Being confirmed"
+        },
+        {
+          "type": "p",
+          "text": "An admin may **confirm** you: they say your account is the person on your entry. Only someone who knows you should do that, and in some communities two admins must agree."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A confirmation carries no name. The server records which account, which entry and which admin, never who you are.",
+            "It is not a trust badge, and for now it changes nothing else in the app.",
+            "If you replace a lost phone and your account moves to a new key, your confirmation moves with it.",
+            "If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "What the names list doesn't show the admins"
+        },
+        {
+          "type": "p",
+          "text": "The list holds names and notes, and which account is whose. It doesn't show anyone your balance or your trades. See \"Your privacy\" for what members and admins can see otherwise."
+        },
+        {
+          "type": "h2",
+          "text": "Asking about your entry"
+        },
+        {
+          "type": "p",
+          "text": "You can ask your admins what your entry says, to correct it, or to delete it when you no longer belong to the community. They keep the list, not BeanPool."
+        }
+      ]
+    },
+    {
       "slug": "blocking",
       "title": "Blocking someone",
       "summary": "Hide someone's posts and messages from you, and undo it later.",
@@ -5295,7 +5374,7 @@
         },
         {
           "type": "p",
-          "text": "Your account and every community you saved are removed from this phone. So are the links to Instagram or TikTok you made for your channels. In the phone app, your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first."
+          "text": "Your account and every community you saved are removed from this phone. So are the links to Instagram or TikTok you made for your channels, and the categories you starred under **For You**. In the phone app, your community keeps those categories with your account, so they come back when you do. Your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first."
         },
         {
           "type": "p",

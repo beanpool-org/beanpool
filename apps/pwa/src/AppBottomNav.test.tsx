@@ -110,6 +110,13 @@ vi.mock('./components/ProfileSetup', () => ({
     ProfileSetup: () => <div>Profile setup</div>,
 }));
 
+// Members land on Home (DESIGN-home-dashboard-fable.md §8); these tests drive the Market's stand-in, one tap away.
+async function openMarket() {
+    const nav = await screen.findByTestId('mobile-bottom-nav');
+    fireEvent.click(within(nav).getByText('Market'));
+    await screen.findByTestId('marketplace-page');
+}
+
 describe('App mobile bottom nav dynamic visibility & CSS variable regression (#791 / #792)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -127,9 +134,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         render(<App />);
 
         // Wait for identity to load and marketplace to mount
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         expect(bottomNav).toBeInTheDocument();
@@ -172,9 +177,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
     it('hides bottom nav when opening a treasury and restores it when closed', async () => {
         render(<App />);
 
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         expect(bottomNav.classList.contains('flex')).toBe(true);
@@ -221,21 +224,34 @@ describe('App mobile bottom nav labels on a 320px phone at 1.3x text', () => {
         expect(navTabWeight('Pulse')).toBe(5);
         expect(navTabWeight('Market')).toBe(6);
         expect(navTabWeight('Commons')).toBe(7);
+        // Wider than its four letters (measured, e2e/home-check.mjs): the fifth share the Pulse had.
+        expect(navTabWeight('Home')).toBe(5);
     });
 
     it('caps the label size by viewport width so whole labels fit, full 0.6rem on wider screens', () => {
         expect(NAV_LABEL_FONT_SIZE).toBe('min(0.6rem, 3.3vw)');
     });
 
+    it('lands a member on Home, the first tab, with the Market one tap away and no Pulse tab', async () => {
+        render(<App />);
+        expect(await screen.findByTestId('home-page')).toBeInTheDocument();
+        const nav = screen.getByTestId('mobile-bottom-nav');
+        const home = within(nav).getByText('Home').closest('button')!;
+        expect(home.querySelector('[data-nav-label]')!.className).toMatch(/text-rainbow/);
+        expect(within(nav).queryByText('Pulse')).toBeNull();
+        expect(screen.queryByTestId('marketplace-page')).toBeNull();
+        await openMarket();
+        expect(screen.queryByTestId('home-page')).toBeNull();
+    });
+
     it('renders every tab with its full label and a weighted width', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         const labels = Array.from(bottomNav.querySelectorAll<HTMLElement>('[data-nav-label]'));
-        expect(labels.map(l => l.textContent?.trim())).toEqual(['Market', 'Pulse', 'Map', 'Commons', 'Chat', 'People', 'Ledger']);
+        // Home first, the Pulse folded into a card on Home (design §8, §13 Q1): seven tabs, as before.
+        expect(labels.map(l => l.textContent?.trim())).toEqual(['Home', 'Market', 'Map', 'Commons', 'Chat', 'People', 'Ledger']);
 
         for (const label of labels) {
             const button = label.closest('button') as HTMLButtonElement;
@@ -253,9 +269,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws the profile and enterprise pages above the header', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         expect(mobileHeader().style.zIndex).toBe('100');
 
         // `fixed inset-0` became `.page-overlay`: the same fixed layer, full bleed on a phone, but
@@ -277,9 +291,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws Settings over the header but under the bottom nav, which stays usable', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         const header = mobileHeader();
         fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
 
@@ -298,9 +310,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws profile setup above both the header and the bottom nav, so its last step\'s Back is tappable', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         const header = mobileHeader();
         fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Re-run setup' }));
@@ -325,9 +335,7 @@ describe('Full-page views clear the desktop sidebar', () => {
 
     it('mounts Settings as .page-overlay, outside the sidebar, whose tabs still close it', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         fireEvent.click(within(sidebar()).getByRole('button', { name: 'Settings' }));
         const overlay = await screen.findByTestId('settings-overlay');
@@ -346,9 +354,7 @@ describe('Full-page views clear the desktop sidebar', () => {
 
     it('mounts a profile as .page-overlay, outside the sidebar', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         fireEvent.click(screen.getByText('Open Peer Profile'));
         const profile = await screen.findByTestId('page-overlay');

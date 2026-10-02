@@ -310,10 +310,19 @@ export const TABLES: Record<string, TableEntry> = {
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_url category created_by join_policy created_at updated_at'),
+        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at'),
         except: {
             lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
         },
+    },
+    // A group's own picture, out of its row so no read of groups reads it (schema.sql group_pictures, #1486), in each
+    // group's row as `avatarUrl`, where a standby of any version reads it (@beanpool/engine sync.ts groupsWithPictures,
+    // engine/sync.ts importGroupPicture). Its one writer (@beanpool/engine groups.ts setGroupPicture) writes the row's
+    // avatar_ref and avatar_bytes with it, which groups_touch_updated_at stamps, so a change moves the group's updated_at;
+    // the standby makes those two from the picture by the same rule.
+    group_pictures: {
+        kind: 'replicated', payload: 'groups', watermark: 'updated_at', inRowOf: { table: 'groups', field: 'avatarUrl' },
+        columns: cols('group_id picture'),
     },
     group_members: {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
@@ -398,6 +407,20 @@ export const TABLES: Record<string, TableEntry> = {
     // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
     // its treasury again, never a member's enterprise of the same name.
     federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
+
+    // ── The names list (community modes slice 2, engine/names-list.ts), on the generic path ──
+    // Sealed entries, the signed key history, the sealed shares: a standby holds what the main server holds, text it can't
+    // open, and a server that takes over serves it to the same admins' phones, whose pins carry on unchanged (the
+    // statements carry the community's id, so they check out anywhere). A delete writes a tombstone.
+    names_entries: plain('id ciphertext key_id created_by created_at updated_by updated_at'),
+    names_generations: plain('id n parent_id maker drops statement signature created_at updated_at'),
+    names_shares: plain('from_pubkey to_pubkey head_id key_ids trusts sealed_ring ring_iv ring_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
+    names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
+    // A confirmation names a key, an entry and the admins, never a name.
+    confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
+    // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
+    names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
 
     // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
     // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
@@ -616,6 +639,7 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     pricing_show_seasonality: { kind: 'community-settings', reason: "the pricing guide's seasonality display" },
     autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
     door: { kind: 'community-settings', reason: 'who may invite: any member, or only admins (config/door.ts)' },
+    names_two_admins: { kind: 'community-settings', reason: 'whether a confirmation against the names list needs a second admin (engine/names-list.ts)' },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

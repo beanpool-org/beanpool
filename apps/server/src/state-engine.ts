@@ -54,6 +54,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
+import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
 import { blankMessagesOf } from './engine/message-tombstone.js';
@@ -309,6 +310,7 @@ import {
     approveGroupMember as approveGroupMemberEngine,
     inviteGroupMember as inviteGroupMemberEngine,
     deleteGroupPost as deleteGroupPostEngine,
+    groupAsListed,
     type Group,
     type GroupMember,
     type GroupRole,
@@ -338,7 +340,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
-import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
+import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -4758,9 +4760,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
-    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
-    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
-    assertPostFields(updates as PostFieldsIn, 'edit');
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
+    // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
+    // sent back unchanged, is not held to a length limit it was stored before (#1493).
+    const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -7457,6 +7461,8 @@ export function adminPruneUser(publicKey: string, actor: string) {
         dropWithheldOf(publicKey);
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
+        dropNamesListHoldOf(publicKey, 'removed');
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7699,6 +7705,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
+        // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
+        dropNamesListHoldOf(publicKey, 'account_deleted');
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
         // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
         // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.
@@ -9126,11 +9135,12 @@ export function createGroup(params: CreateGroupParams): Group {
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
+    // As a list sends it (#1493): a description stored before its limit goes to every socket as its preview, never whole.
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_created', group: res });
+        broadcast({ type: 'group_created', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
-        broadcast({ type: 'group_created', group: res }, recipients);
+        broadcast({ type: 'group_created', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9200,7 +9210,7 @@ export function handOverGroupLead(groupId: string, leadPubkey: string, targetPub
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     const group = getGroupEngine(db, groupId);
-    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
     return res;
 }
 
@@ -9287,10 +9297,10 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9303,10 +9313,10 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }

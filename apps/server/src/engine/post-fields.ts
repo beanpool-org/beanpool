@@ -10,9 +10,18 @@
 // routes, the enterprise's own routes, events, the Daily Pulse), and both ask this before anything else. A refusal is
 // a plain Error, which each route answers as 400, and nothing is written.
 
-// NO LENGTH CAPS ON THE TEXT, deliberately (2026-10-01): the create path has none (the request body limit is the only
-// one), the apps set no maxLength a member would see before a refusal, and test-posts-fts-same-ms needs titles of
-// hundreds of words. A cap is a product decision for its own change; this one only refuses what is not text.
+// LENGTH LIMITS ON THE TEXT (#1493, global launch). Until then the request body (2 MB) was the only bound, and every list
+// of listings sends a listing's title, description and category whole for each row, so one member's 2 MB descriptions
+// could make a page of 200 listings 400 MB. Each is held to its limit (@beanpool/core text-limits.ts) here, on a create
+// and on an edit. An edit that sends back the text a listing already holds is not a new one: a listing stored before its
+// limit, longer, can still be edited (the phone's edit screen sends every field back), and keeps that text until its
+// author changes it. The node never cuts what is stored: lists send it as it is (the apps keep their copy of every
+// listing from them and edit from that copy, so a list's preview would be shown and saved as the text).
+// test-posts-fts-same-ms makes its oversized titles through the engine's own writer, past this check, on purpose.
+
+import {
+    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT, fitsTextLimit, textTooLongMessage, type TextLimit,
+} from '@beanpool/core';
 
 /** The most Beans one listing may ask, per unit: far above any real price, and far below where arithmetic misbehaves. */
 export const POST_CREDITS_MAX = 1_000_000;
@@ -67,9 +76,16 @@ export function isListingPrice(v: unknown): v is number {
     return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= POST_CREDITS_MAX;
 }
 
-function text(v: unknown, label: string, required: boolean): void {
+/** A listing's text the rule refuses for its length, in the words both apps show. */
+export const LISTING_TITLE_TOO_LONG = textTooLongMessage("A listing's title", LISTING_TITLE_LIMIT);
+export const LISTING_DESCRIPTION_TOO_LONG = textTooLongMessage("A listing's description", LISTING_DESCRIPTION_LIMIT);
+export const LISTING_CATEGORY_TOO_LONG = textTooLongMessage("A listing's category", LISTING_CATEGORY_LIMIT);
+
+function text(v: unknown, label: string, required: boolean, limit: TextLimit, tooLong: string, stored: unknown): void {
     if (typeof v !== 'string') throw new Error(`${label} must be text`);
     if (required && v.trim().length === 0) throw new Error(`${label} is required`);
+    // The text the listing already holds, sent back by an edit, is not new: kept, however long it was stored.
+    if (v !== stored && !fitsTextLimit(v, limit)) throw new Error(tooLong);
 }
 
 function coordinate(v: unknown, label: string, bound: number, mode: 'create' | 'edit'): void {
@@ -80,15 +96,23 @@ function coordinate(v: unknown, label: string, bound: number, mode: 'create' | '
     }
 }
 
+/** What a listing holds now, for an edit: its text sent back unchanged is not held to a limit it was stored before. */
+export interface PostTextStored {
+    title?: unknown;
+    description?: unknown;
+    category?: unknown;
+}
+
 /**
  * Refuses a post's fields that no listing may hold. `create`: every field the post will be stored with (the title
- * required). `edit`: only the fields the edit names (not undefined), each held to the same rule.
+ * required). `edit`: only the fields the edit names (not undefined), each held to the same rule; `stored` is the listing
+ * as it is, whose own text sent back is not held to the length limits.
  */
-export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit'): void {
+export function assertPostFields(fields: PostFieldsIn, mode: 'create' | 'edit', stored: PostTextStored = {}): void {
     const has = (k: keyof PostFieldsIn) => fields[k] !== undefined;
-    if (mode === 'create' || has('title')) text(fields.title, 'Title', true);
-    if (has('description')) text(fields.description, 'Description', false);
-    if (has('category')) text(fields.category, 'Category', true);
+    if (mode === 'create' || has('title')) text(fields.title, 'Title', true, LISTING_TITLE_LIMIT, LISTING_TITLE_TOO_LONG, stored.title);
+    if (has('description')) text(fields.description, 'Description', false, LISTING_DESCRIPTION_LIMIT, LISTING_DESCRIPTION_TOO_LONG, stored.description);
+    if (has('category')) text(fields.category, 'Category', true, LISTING_CATEGORY_LIMIT, LISTING_CATEGORY_TOO_LONG, stored.category);
     if (has('credits') && !isListingPrice(fields.credits)) {
         throw new Error(`The price must be a number of Beans from 0 to ${POST_CREDITS_MAX}`);
     }

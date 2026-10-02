@@ -861,7 +861,10 @@ async function partTwo(): Promise<void> {
     }, member);
     assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
     listed = await projectPhotos();
-    assert(listed[0] === `/api/avatar/${projectId}`, 'the avatar address is kept as sent');
+    // The address stands for the photo it opens and is never stored as itself (#1486, #1475's rule): photos[0] is the
+    // enterprise's photo, which the edit left as it was.
+    assert(typeof listed[0] === 'string' && !String(listed[0]).includes('/api/avatar/'), 'the avatar address is stored as the photo it opens, not as itself');
+    await served('crowdfund photo sent back as the avatar address', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED);
     await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
 
@@ -872,20 +875,26 @@ async function partTwo(): Promise<void> {
     const groupId = group.json?.id as string | undefined;
     assert(group.status === 201 && !!groupId, `the group is created (${group.status} ${group.json?.error ?? ''})`);
     if (groupId) {
+        // A group's read carries its picture's URL, never the picture (#1486): the bytes are what that URL serves.
+        const groupPicture = async (value: unknown): Promise<Buffer | null> => {
+            if (typeof value !== 'string' || !value.startsWith(`/api/groups/${groupId}/picture?`)) return null;
+            const got = await fetchBytes(value);
+            return got.status === 200 ? got.bytes : null;
+        };
         let read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture', decodeDataUrl(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
+        await served('group picture', await groupPicture(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
         const patch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/png', CAMERA_PNG) }, member);
         assert(patch.status === 200, `the group picture is changed (${patch.status} ${patch.json?.error ?? ''})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
         const heicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/heic', CAMERA_HEIC) }, member);
         assert(heicPatch.status === 400, `a group picture the node cannot strip (a HEIC, GPS inside) is refused (${heicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the refused edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
         const bareHeicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: CAMERA_HEIC.toString('base64') }, member);
         assert(bareHeicPatch.status === 400, `a group picture sent as bare base64 of a HEIC is refused (${bareHeicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused bare edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the refused bare edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
     }
     const heicGroup = await signed('POST', '/api/groups', {
         name: 'Bike Kitchen', description: 'We fix bikes', joinPolicy: 'open', avatarUrl: dataUrl('image/heic', CAMERA_HEIC),

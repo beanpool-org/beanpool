@@ -58,6 +58,7 @@ export const SUITES = [
     'test-keeper-routes',
     'test-keeper-release',
     'test-recovery-collect',
+    'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     'test-recovery-seal',
     'test-recovery-seal-rollback',
@@ -79,10 +80,13 @@ export const SUITES = [
     'test-distance-search',
     'test-distance-query-parsing',
     'test-guest-view',
+    'test-guest-board-cost',
     'test-distance-search-perf',
     'test-global-directory',
     'test-knock',
     'test-commons-conservation',
+    'test-commons-pot-edges',
+    'test-commons-pot-unknown',
     'test-ledger-rollback',
     'test-treasury-keepership',
     'test-treasury-eggs',
@@ -98,6 +102,7 @@ export const SUITES = [
     'test-gateway-real-client',
     'test-dos-hardening',
     'test-global-server-limits',
+    'test-profile-fanout',
     'test-limiter-ipv6-and-password-brake',
     'test-password-brake-no-lockout',
     'test-password-brake-fairness',
@@ -147,6 +152,7 @@ export const SUITES = [
     'test-offbox-backups',
     'test-takeover-envelope',
     'test-owner-words-check',
+    'test-owner-lock-open-check',
     'test-backup-topology',
     'test-standby-token-only',
     'test-standby-envelopes',
@@ -356,6 +362,8 @@ export const SUITES = [
     'test-groups-chat',
     'test-chat-parity',
     'test-dm-never-plaintext',
+    'test-dm-line-relay',
+    'test-dm-standby-order',
     'test-keeper-read-cursor',
     'test-groups-chat-sync',
     'test-groups-succession',
@@ -440,6 +448,9 @@ export const VARIANTS = [
  * ms) stay in the pool.
  */
 export const SERIAL = {
+    // Compares a visitor's board read with a member's by CPU time, alternating rounds in one process (generous bound, ~2x
+    // the head's ratio): a neighbour's burst of CPU can still skew one round.
+    'test-guest-board-cost': 'relative CPU-time ratio inside one process',
     // Times each read against the version before it in the same process and fails past 2x: a neighbour's burst of CPU
     // during one of the pair and not the other is a failure that says nothing about the code.
     'test-distance-search-perf': 'relative timings, 2x slack',

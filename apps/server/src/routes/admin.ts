@@ -33,7 +33,7 @@ import {
     hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
-import { listBrokenBalances, BROKEN_BALANCE_REPAIR } from '../engine/audit.js';
+import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -1101,6 +1101,8 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
             : { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
+        // A Commons pot that isn't a number pauses every Bean move (engine/audit.ts COMMONS_POT_PAUSED): plain words, 503.
+        if (answerPotPaused(ctx, e)) return;
         ctx.status = 500;
         ctx.body = { error: e.message };
     }
@@ -1613,6 +1615,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             }
             : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
+        if (answerPotPaused(ctx, e)) return;
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };
     }
@@ -1634,6 +1637,7 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
             : { success: true, deleted, deletedCount: deleted };
     } catch (e: any) {
         console.error('Error bulk deleting posts:', e);
+        if (answerPotPaused(ctx, e)) return;
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to bulk delete posts' };
     }

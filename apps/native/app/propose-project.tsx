@@ -332,7 +332,8 @@ export default function ProposeProjectModal() {
                             onPress={handleSubmit}
                             disabled={submitting}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Starting enterprise..." : "Start Enterprise"}
+                            accessibilityLabel={submitting ? "Starting initiative..." : "Start initiative"}
+                            accessibilityHint="Creates enterprise or project and opens it for community backing"
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? (

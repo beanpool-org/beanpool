@@ -226,6 +226,73 @@ describe.each(CASES)('$label id_token', ({ provider, label, iss, aud }) => {
         expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
     });
 
+    // FABLE-sec-sso finding 3: the kid is read before the signature, so a made-up one is free to send. "Refetch once"
+    // was once per call: every such token cost the provider a request.
+    it('refetches for unknown kids at most once a minute, however many tokens name them', async () => {
+        const nonce = issueNonce(SUBJECT);
+        await verify(mint(claims(nonce)), nonce);
+        fetchCalls = [];
+        for (let i = 0; i < 10; i++) {
+            const next = issueNonce(SUBJECT);
+            expectRefused(await refusal(verify(mint(claims(next), { header: { kid: `made-up-${i}` } }), next)),
+                `${label} token signed by unknown key (kid=made-up-${i})`);
+            now += 5_000;
+        }
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+        now = T0 + 60_000;
+        const later = issueNonce(SUBJECT);
+        expectRefused(await refusal(verify(mint(claims(later), { header: { kid: 'made-up-later' } }), later)),
+            `${label} token signed by unknown key (kid=made-up-later)`);
+        expect(fetchCalls).toEqual([JWKS_URLS[provider], JWKS_URLS[provider]]);
+        // A token with the key it holds is never held up by any of it.
+        const real = issueNonce(SUBJECT);
+        await verify(mint(claims(real)), real);
+        expect(fetchCalls.length).toBe(2);
+    });
+
+    it('unknown kids arriving together share one refetch', async () => {
+        const nonce = issueNonce(SUBJECT);
+        await verify(mint(claims(nonce)), nonce);
+        fetchCalls = [];
+        const together = Array.from({ length: 5 }, (_, i) => {
+            const n = issueNonce(SUBJECT);
+            return refusal(verify(mint(claims(n), { header: { kid: `burst-${i}` } }), n));
+        });
+        for (const e of await Promise.all(together)) expect(e).toBeInstanceOf(SsoVerificationError);
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+    });
+
+    it('within the minute after a refetch that failed, an unknown kid is still "try again", and asks nobody', async () => {
+        const nonce = issueNonce(SUBJECT);
+        await verify(mint(claims(nonce)), nonce);
+        fetchCalls = [];
+        providerAnswer = () => { throw new Error('ECONNREFUSED'); };
+        for (let i = 0; i < 3; i++) {
+            const next = issueNonce(SUBJECT);
+            const e = await refusal(verify(mint(claims(next), { header: { kid: `new-${i}` } }), next));
+            expect(e).toBeInstanceOf(SsoProviderUnavailableError);
+            expect(e.message).toBe(`${label} could not be reached to check the sign-in. Please try again in a minute.`);
+        }
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+        // A token with the key the node holds still goes through meanwhile.
+        const real = issueNonce(SUBJECT);
+        await verify(mint(claims(real)), real);
+    });
+
+    it('still picks up a key the provider rotated in, on the first token that names it', async () => {
+        const nonce = issueNonce(SUBJECT);
+        await verify(mint(claims(nonce)), nonce);
+        fetchCalls = [];
+        const rotatedJwk = { ...otherKey.publicKey.export({ format: 'jwk' }), kid: 'rotated-in', alg: 'RS256', use: 'sig' };
+        providerAnswer = () => new Response(JSON.stringify({ keys: [publicJwk, rotatedJwk] }), {
+            status: 200, headers: { 'cache-control': 'public, max-age=3600' },
+        });
+        const next = issueNonce(SUBJECT);
+        const identity = await verify(mint(claims(next), { header: { kid: 'rotated-in' }, key: otherKey.privateKey }), next);
+        expect(identity.sub).toBe(`${provider}-sub-1`);
+        expect(fetchCalls).toEqual([JWKS_URLS[provider]]);
+    });
+
     it('refuses a token with no kid', async () => {
         const nonce = issueNonce(SUBJECT);
         expectRefused(await refusal(verify(mint(claims(nonce), { header: { kid: undefined } }), nonce)),

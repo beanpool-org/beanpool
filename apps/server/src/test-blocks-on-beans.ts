@@ -69,9 +69,13 @@ async function child(): Promise<void> {
             const { putPushTokenRow } = await import('./services/push-token-seal.js');
             se.seedGenesisMember(a.genesis, 'Gwen');
             setReplicationToken(a.replicationToken);
+            // Joined 30 days ago, not today: the wash-trading analysis (engine trust.ts runWashTradingAnalysis, kept for 10 s) flags an
+            // insular cluster that is half or more under 14 days old, and Dee trading with only these five is exactly that. Brand-new
+            // members would make Eve's send depend on whether the analysis was made before or after the prune (it is recomputed on a
+            // slow run, refused as no completed trade); established members make it allow the send either way. Nothing here is about age.
             for (const [key, name] of a.members) {
                 db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'active',
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), ?, ?, 'active',
                                     strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, name, a.genesis, `INV-${name}`);
                 setMemberPhoto(db, key, 'data:image/png;base64,iVBORw0KGgo=');
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);

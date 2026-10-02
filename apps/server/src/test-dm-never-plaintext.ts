@@ -249,6 +249,10 @@ async function main(): Promise<void> {
         ORDER BY m.timestamp DESC LIMIT 1`).get(dee.pk) as any;
     assert(adminLine?.nonce === 'plaintext-v1' && decode(adminLine?.ciphertext ?? '') === 'Welcome to the community',
         'the message the operator writes on the node\'s admin page is still stored as written');
+    // Marked as the community admins' (core dm-crypto DM_FROM_ADMINS_KEY), so both apps show it as theirs, readable by the
+    // server, and never as a private line; a readable DM line without the mark is shown as nobody's words.
+    assert(JSON.parse(adminLine?.metadata ?? '{}')?.fromCommunityAdmins === true,
+        `and marked as the community admins' message (metadata ${adminLine?.metadata})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

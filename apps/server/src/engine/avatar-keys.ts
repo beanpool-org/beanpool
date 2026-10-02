@@ -29,7 +29,10 @@ export const AVATAR_KEY_SECRET_ROW = 'avatarKeySecret';
 /** The key's length: 22 base64url characters, 132 bits. */
 const KEY_CHARS = 22;
 
-let secret: Buffer | null = null;
+// The secret as one KeyObject, made at boot. Given the bytes, createHmac checks them as a key on every call: measured
+// 12 µs an HMAC on Node 26 against 2 µs with the KeyObject (2.3 against 1.7 on Node 22), and every post on the board and
+// every member in the list has a URL with one.
+let secret: crypto.KeyObject | null = null;
 
 function avatarKeySecret(): Buffer {
     let row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(AVATAR_KEY_SECRET_ROW) as { value: string } | undefined;
@@ -45,7 +48,7 @@ function avatarKeySecret(): Buffer {
     return key;
 }
 
-function keyFor(s: Buffer, id: string, version: string): string {
+function keyFor(s: crypto.KeyObject, id: string, version: string): string {
     return crypto.createHmac('sha256', s).update(`${id}|${version}`, 'utf-8').digest('base64url').slice(0, KEY_CHARS);
 }
 
@@ -59,7 +62,7 @@ export function installAvatarKeysAtBoot(): boolean {
         configureAvatarKeys(null);
         return false;
     }
-    const s = avatarKeySecret();
+    const s = crypto.createSecretKey(avatarKeySecret());
     secret = s;
     configureAvatarKeys((id, version) => keyFor(s, id, version));
     return true;

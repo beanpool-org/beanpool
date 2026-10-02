@@ -677,7 +677,8 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
             const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
             const panel = await openEventForm(async () => ({ ok: true, json: async () => nominatim }));
             await search(panel, 'bindarrabi hall');
-            expect((globalThis.fetch as any).mock.calls[0][0]).toBe(
+            // Not calls[0]: with no IndexedDB (jsdom has none) the app's own unsigned reads now go out too.
+            expect((globalThis.fetch as any).mock.calls.map((c: unknown[]) => c[0])).toContain(
                 'https://nominatim.openstreetmap.org/search?format=json&q=bindarrabi%20hall&limit=5');
 
             const options = within(panel).getAllByRole('option');

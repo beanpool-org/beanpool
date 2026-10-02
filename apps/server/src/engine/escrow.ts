@@ -888,9 +888,11 @@ export function completePostTransaction(
         }
         releaseCredits = rate * finalHours;
     }
-    // A healthy row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits
-    // near the largest number): the row is fine and the deal can still be cancelled, so the words say that, not
-    // assertDealRowAmount's "can't be cancelled" (sync check F2).
+    // A row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits near the
+    // largest number). Its escrow holds what was really paid, which can't cover what the row says, so a cancel is refused
+    // as well (measured in test-money-followups, #1445 re-review): the words say it can be neither completed nor cancelled,
+    // and that a moderator's removal of the listing clears it and the Beans held go back to whoever paid them (sync check
+    // F2). Nothing moves here.
     if (!isBeanAmount(releaseCredits)) {
         throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. `
             + "This deal holds an amount the Beans held for it can't cover, so it can't be completed or cancelled. "

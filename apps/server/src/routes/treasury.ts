@@ -44,6 +44,7 @@ import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
 import { avatarUrlOf, isSyntheticAccount } from '@beanpool/core';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { answerPotPaused } from '../engine/audit.js';
 
 /**
  * Which pledge `POST /api/(treasury|enterprise)/:treasury/pledge` makes: a keeper's backing, or a crowdfund pledge of
@@ -923,6 +924,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ok = conservingTransaction(() =>
                 moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, { authSigner: actor }));
         } catch (e: any) {
+            // The pot is unknown: every Bean move is paused, and the keeper is told so (503), not "please try again".
+            if (answerPotPaused(ctx, e)) return;
             const invariant = /moveToCommons is for/.test(e?.message || '');
             console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);
             ctx.status = invariant ? 400 : 500;

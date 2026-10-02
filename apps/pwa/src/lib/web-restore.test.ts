@@ -7,7 +7,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
-import { sealSeedToSso, signedRequestBytes, signedRequestText, toEd25519Seed, KEEPER_ALG_SSO, type SealedShare } from '@beanpool/core';
+import {
+    sealReleaseToDevice,
+    sealSeedToSso,
+    signedRequestBytes,
+    signedRequestText,
+    toEd25519Seed,
+    KEEPER_ALG_RELEASE,
+    KEEPER_ALG_SSO,
+    type SealedShare,
+} from '@beanpool/core';
 import {
     fetchSignInCopy,
     lookupRestorable,
@@ -211,6 +220,42 @@ describe('the copy is saved only when it opens to the account the lookup named',
             }),
         });
         expect(await fetchSignInCopy(makeEphemeralKey(), 'col-1')).toEqual({ copy });
+    });
+
+    // FABLE-sec-sso finding 2: the node seals the copy to the throwaway key when asked (core sealReleaseToDevice, as
+    // routes/recovery-collect.ts does), so the bytes on the wire are nothing without it.
+    function sealingNode(copy: SealedShare, to: string, collectionId = 'col-1') {
+        return stubNode({
+            '/api/recovery/collect/fragments': (body) => {
+                if (body?.seal !== KEEPER_ALG_RELEASE) return json(200, { fragments: [] });
+                const s = sealReleaseToDevice(copy, to, { collectionId, holderType: 'sso' });
+                return json(200, {
+                    fragments: [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv, payloadTag: s.shareTag,
+                        ephemeralPubkey: s.ephemeralPubkey, kdfParams: s.kdfParams }],
+                });
+            },
+        });
+    }
+
+    it('fetchSignInCopy asks for the copy sealed to the throwaway key, signed by it, and opens it with that key', async () => {
+        const eph = makeEphemeralKey();
+        const copy = await sealed(account, 'google', 'g-sub-1');
+        const calls = sealingNode(copy, eph.publicKey);
+        const fetched = await fetchSignInCopy(eph, 'col-1');
+        expect(fetched).toEqual({ copy });
+        expect(calls[0].body).toEqual({ collectionId: 'col-1', seal: KEEPER_ALG_RELEASE });
+        expect(signedBy(calls[0], eph.publicKey)).toBe(true);
+        const opened = await openRestoredAccount((fetched as { copy: SealedShare }).copy, 'google', 'g-sub-1', { publicKey: account.publicKey, callsign: 'Alice' });
+        expect(opened).toMatchObject({ kind: 'ok', identity: { publicKey: account.publicKey } });
+    });
+
+    it('a copy sealed to another key, or for another session, is not opened, and nothing of it is returned', async () => {
+        const copy = await sealed(account, 'google', 'g-sub-1');
+        sealingNode(copy, makeEphemeralKey().publicKey);
+        expect(await fetchSignInCopy(makeEphemeralKey(), 'col-1')).toEqual({ unopened: true });
+        const eph = makeEphemeralKey();
+        sealingNode(copy, eph.publicKey, 'col-other');
+        expect(await fetchSignInCopy(eph, 'col-1')).toEqual({ unopened: true });
     });
 });
 

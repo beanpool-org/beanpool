@@ -15,6 +15,7 @@ import { isGroupConvenor } from './groups.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -205,6 +206,14 @@ export interface PostFilter {
      */
     coarse?: boolean;
     /**
+     * The reader gets each post as guestPost gives it (a visitor on a node that shows them the listings but not the
+     * people, apps/server routes/marketplace.ts). guestPost puts a neutral value in place of the author's name, face,
+     * standing and trade count, so the read neither reads nor works out any of them (GUEST_POST_ROW_SELECT, rowToPost):
+     * no trust profile per post, no photo. Which posts there are, their order and everything else are as without it.
+     * Set only where every post read is then passed through guestPost.
+     */
+    guest?: boolean;
+    /**
      * The most posts a read with a point measures in its one pass (postRowsNear), for a read a request from outside makes
      * (apps/server routes/marketplace.ts sets ONE_PASS_MAX_MEASURED). Without it the one pass (a filter circles don't
      * take, a radius, a reader far from every post, a page deeper than circles go) measures and sorts every post the
@@ -253,14 +262,14 @@ export function isEventHost(
 ): boolean {
     if (!pubkey) return false;
     if (row.author_pubkey === pubkey) return true;
-    const keeper = db.prepare(`
+    const keeper = prepared(db, `
         SELECT 1 FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
         WHERE o.member_pubkey = ? AND o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0
     `).get(pubkey, row.author_pubkey);
     if (keeper) return true;
     if (row.audience_scope === 'group' && row.target_group_id) {
-        return !!db.prepare(`
+        return !!prepared(db, `
             SELECT 1 FROM group_members gm
             JOIN members m ON m.public_key = gm.member_pubkey
             WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.role = 'convenor' AND gm.status = 'active'
@@ -404,15 +413,21 @@ export function generateSearchKeywords(title: string, description: string, categ
     return [...expanded].join(' ');
 }
 
-export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): MarketplacePost {
+/**
+ * A post row as the reader gets it. `forGuest`: a visitor's read (PostFilter.guest), whose copy guestPost makes with a
+ * neutral value for the author's standing and face, so neither is worked out here: they stand as guestPost leaves them.
+ */
+export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, forGuest = false): MarketplacePost {
     const postPhotos = photosByPost.get(row.id) || [];
     // The author's tier credit, from the same profile their own tier comes from. The earned lane alone
     // left out grants and vouches, so an admin-badged Elder showed as a Newcomer on their cards.
     let trustPoints = 0;
-    try {
-        trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
-    } catch (e) {
-        trustPoints = 0;
+    if (!forGuest) {
+        try {
+            trustPoints = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - getMemberTrustProfile(db, row.author_pubkey).floor;
+        } catch (e) {
+            trustPoints = 0;
+        }
     }
 
     return {
@@ -447,7 +462,7 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>): M
         reachPeers: parseReachPeers(row.reach_peers),
         authorEnergyCycled: trustPoints,
         authorFoundingNeeded: (row.author_trade_count ?? 0) === 0 && (row.author_earned_credit ?? 0) === 0,
-        authorAvatarUrl: avatarUrlOf(row.author_pubkey, row.author_avatar),
+        authorAvatarUrl: forGuest ? null : avatarUrlOf(row.author_pubkey, row.author_avatar),
         createdBy: row.created_by || undefined,
         pollOptions: row.poll_options ? (() => { try { return JSON.parse(row.poll_options); } catch { return undefined; } })() : undefined,
         pollClosesAt: row.poll_closes_at || undefined,
@@ -693,6 +708,24 @@ const POST_ROW_SELECT = `
         LEFT JOIN members a ON p.accepted_by = a.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id`;
 
+/**
+ * POST_ROW_SELECT for a visitor's read (PostFilter.guest): the same rows, with none of the people in them. guestPost puts
+ * a neutral value in place of the author's name, face and standing and of who took the listing, and drops the group's
+ * name, so none of them is read: not the author's photo's reference (members.avatar_ref), nor their two
+ * trade counts, nor any name. `m` stays joined for the author's standing in the listing's conditions
+ * (ENTERPRISE_ON_BOARD_SQL).
+ */
+const GUEST_POST_ROW_SELECT = `
+        SELECT p.*, NULL as author_callsign, NULL as author_avatar, NULL as accepted_callsign,
+               NULL as target_group_name, 0 as author_earned_credit, 0 as author_trade_count
+        FROM posts p
+        LEFT JOIN members m ON p.author_pubkey = m.public_key`;
+
+/** The row select a read uses: a visitor's (GUEST_POST_ROW_SELECT) or everyone else's (POST_ROW_SELECT). */
+function postRowSelect(filter: PostFilter | undefined): string {
+    return filter?.guest ? GUEST_POST_ROW_SELECT : POST_ROW_SELECT;
+}
+
 const RECENT_ORDER = " ORDER BY p.updated_at DESC, p.created_at DESC";
 /**
  * RECENT_ORDER for a delta read (`updatedAfter`). The unary plus stops the ORDER BY from choosing idx_posts_updated_at:
@@ -768,6 +801,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     category: f => f.category === 'all',
     // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
     coarse: () => true,
+    // What is read of each post, not which posts.
+    guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
     measureAtMost: () => true,
     id: null, status: null, updatedAfter: null, query: null, authorPubkey: null, sync: null, beansOnly: null,
@@ -898,7 +933,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         ? rankBounded(near.radiusKm, filter.limit, offset, Math.floor(cap))
         : rank(near.radiusKm, filter.limit, offset, false);
 
-    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const full = selectInChunks(db, ranked.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));
     return ranked.flatMap(r => {
         const row = byId.get(r.id);
@@ -961,7 +996,7 @@ export function getPostsForPhotoHeal(db: Db, filter: PostFilter, heal: PhotoHeal
 }
 
 /** The rows of one heal page, in heal order, with `heal.next` set (getPostsForPhotoHeal). */
-function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: PhotoHealRead): any[] {
+function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: PhotoHealRead, filter: PostFilter | undefined): any[] {
     const limit = Math.max(0, Math.floor(heal.limit));
     let sql = `
         SELECT id, photo, live, upd, cre FROM (
@@ -986,7 +1021,7 @@ function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: Ph
     const last = page[page.length - 1];
     heal.next = !beyond || beyond.photo !== 1 ? null
         : last ? JSON.stringify([last.photo, last.live, last.upd, last.cre, last.id]) : (heal.after ?? '');
-    const full = selectInChunks(db, page.map(r => r.id), ph => `${POST_ROW_SELECT}\n        WHERE p.id IN (${ph})`);
+    const full = selectInChunks(db, page.map(r => r.id), ph => `${postRowSelect(filter)}\n        WHERE p.id IN (${ph})`);
     const byId = new Map(full.map(row => [row.id as string, row]));
     return page.flatMap(r => byId.get(r.id) ?? []);
 }
@@ -1151,11 +1186,11 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
     let rows: any[];
     if (heal) {
-        rows = postRowsForHeal(db, where, params, heal);
+        rows = postRowsForHeal(db, where, params, heal, filter);
     } else if (near) {
         rows = rowsNear(db, near, where, params, filter!);
     } else {
-        let query = `${POST_ROW_SELECT}
+        let query = `${postRowSelect(filter)}
         WHERE 1=1${where}${recentOrder(filter)}`;
         if (filter?.limit) {
             query += " LIMIT ? OFFSET ?";
@@ -1254,7 +1289,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     const nowMs = Date.now();
     const out: MarketplacePost[] = [];
     for (const r of rows) {
-        const post = rowToPost(db, r, photosByPost);
+        const post = rowToPost(db, r, photosByPost, !!filter?.guest);
         if (hiddenFromViewer && r.hidden_by_reports_at && r.author_pubkey !== viewer) {
             // Only a sync read gets this far with a hidden post it may not see (the SQL above left it out otherwise).
             // A removal says nothing of where the post was, so it carries no distance either.
@@ -1276,7 +1311,15 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
 
         if (post.type === 'event') {
             const rsvps = rsvpsByPost.get(post.id) || [];
-            const mine = viewer ? rsvps.find(v => v.member_pubkey === viewer) : undefined;
+            // ⚡ Bolt: single-pass RSVP loop to compute going/interested counts and locate viewer's RSVP without extra .find() array scan
+            let goingCount = 0;
+            let interestedCount = 0;
+            let mine: any | undefined;
+            for (const v of rsvps) {
+                if (v.status === 'going') goingCount++;
+                else if (v.status === 'interested') interestedCount++;
+                if (viewer && v.member_pubkey === viewer) mine = v;
+            }
             // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
             // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
             const host = !viewerIsVisitor && isEventHost(db, r, viewer);
@@ -1297,13 +1340,6 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
                 && authorsOffBoard(db, [r.author_pubkey]).has(r.author_pubkey) && !viewerKeeps().has(r.author_pubkey)
                 && db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(viewer)) {
                 noteEventReadOutsideSync(db, viewer, post.id, nowMs);
-            }
-            // ⚡ Bolt: single-pass RSVP counting to avoid double .filter() scans and array allocations
-            let goingCount = 0;
-            let interestedCount = 0;
-            for (const v of rsvps) {
-                if (v.status === 'going') goingCount++;
-                else if (v.status === 'interested') interestedCount++;
             }
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;

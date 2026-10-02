@@ -42,6 +42,7 @@ import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
@@ -103,6 +104,58 @@ export type DecisionEffect =
     | 'grant_enterprise'
     | 'grant_hardship'
     | 'write_off_deficit';
+
+/**
+ * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
+ * it isn't (its COMMONS_POOL row holds text, NULL, a BLOB or ±Infinity), every conservingTransaction refuses at its
+ * pre-flush, and no Beans move anywhere (#1465 review, NB-1). A removal moves Beans too, but at the end of its grace
+ * window (adminPruneUser), so its start is not here: the suspension is a plain row change.
+ */
+const POT_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['grant_enterprise', 'grant_hardship', 'write_off_deficit']);
+
+/** What a Decision waiting on an unknown pot says, to members and in the log. */
+export const WAITING_FOR_POT = 'Waiting: payments are paused on this community while its admins fix a problem with its accounts. '
+    + 'This is carried out once they are working again.';
+
+function potIsUnknown(): boolean {
+    return !Number.isFinite(getCommonsBalanceExact());
+}
+
+/**
+ * A due Decision that needs the pot, while the pot is unknown: left in its status (passed, queued for funds, or a
+ * removal's grace window), so the tick carries it out on its first run after the row is mended. It used to go to
+ * execution_blocked, which the tick never retries: a vote the community passed was lost to a broken row, and a removal
+ * left its member suspended for good (#1465 review, NB-1, measured on a real main server). Says so once, on the Decision
+ * and in the log.
+ */
+function waitForPot(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }, now: string): void {
+    const reason = decision.executionReason ?? decision.execution_reason ?? null;
+    if (reason === WAITING_FOR_POT) return;
+    db.prepare('UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?').run(WAITING_FOR_POT, now, decision.id);
+    console.warn(`[Decisions] ${decision.id} (${decision.effect}) waits: the Commons pot is not a number. It is carried out on the first `
+        + 'tick after the COMMONS_POOL row is mended.');
+    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
+}
+
+/**
+ * A removal whose grace window ended while payments were paused gets this many hours more once they work again, before it
+ * is carried out. 24: the window exists so an admin can halt the removal, and the end of it fell in a pause the
+ * admins were busy mending; one day after the mend is enough to see it on the next visit to Settings, and short
+ * against the 7-day window the community already granted, so the vote's outcome isn't held up for long.
+ */
+export const REOPENED_GRACE_HOURS = 24;
+
+/** What such a removal says while its reopened window runs. */
+export const REOPENED_GRACE = `Payments were paused when the grace window ended, so it was reopened for ${REOPENED_GRACE_HOURS} hours `
+    + 'after they worked again. An admin can still halt the removal until then.';
+
+/** The log line when a Decision that waited on the pot is carried out after all. */
+function noteCarriedOutAfterWait(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }): void {
+    const reason = decision.executionReason ?? decision.execution_reason ?? null;
+    if (reason === WAITING_FOR_POT || reason === REOPENED_GRACE) {
+        console.log(`[Decisions] ${decision.id} (${decision.effect}) carried out now that the Commons pot is a number again.`);
+    }
+}
 
 export interface Decision {
     id: string;
@@ -647,8 +700,12 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
+    // While the pot is unknown there is no cap to measure against: NaN or Infinity made both tests below false, and a
+    // grant of any size was opened for a vote (#1465 re-review, NB-1). Refused in the pause words, and nothing is written.
+    if (potIsUnknown()) throw new CommonsPotUnknownError();
     const cap = commonsGrantCap();
-    if (cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+    // Fails closed: a cap that isn't a finite number refuses, never lets through.
+    if (!Number.isFinite(cap.capCents) || cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────
@@ -1072,6 +1129,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         return { success: false, status: 'unresolved', error: why };
     }
 
+    // Needs the pot, and the pot is unknown: waits in its status, before the preflight (which reads the pot) and before
+    // anything is written. Retried by the tick. A Decision that moves no Beans goes on below whatever the pot is.
+    if (POT_EFFECTS.has(decision.effect) && potIsUnknown()) {
+        waitForPot(decision, now);
+        return { success: false, status: decision.status, error: WAITING_FOR_POT };
+    }
+
     const preflight = preflightAssert(decision);
 
     if (preflight.status === 'void') {
@@ -1114,7 +1178,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         try {
-            conservingTransaction(() => {
+            // A plain transaction, not a conservingTransaction: the suspension moves no Beans, so it must not wait on the
+            // pot's pre-flush (#1465 review, NB-1). The Beans move at the end of the grace window (adminPruneUser).
+            db.transaction(() => {
                 // Hold the member's node role aside before the suspension deletes it, so halting the removal
                 // in its grace window gives it back exactly (as an emergency suspension does).
                 db.prepare(`
@@ -1133,7 +1199,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         updated_at = ?
                     WHERE id = ?
                 `).run(graceEndsAt, now, decisionId);
-            });
+            })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
             broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
             return { success: true, status: 'execution_pending_grace' };
@@ -1152,7 +1218,12 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         const touchedEnterprises: string[] = [];
         const touchedProfiles: string[] = [];
 
-        conservingTransaction(() => {
+        // Beans move only for POT_EFFECTS, which need the pot's pre-flush and the in-memory unwind. Every other effect is
+        // row changes alone, so it runs in a plain transaction and is carried out whatever the pot is (#1465 review, NB-1).
+        const inTransaction = POT_EFFECTS.has(decision.effect)
+            ? (fn: () => void) => conservingTransaction(fn)
+            : (fn: () => void) => db.transaction(fn)();
+        inTransaction(() => {
             // Re-verify status under write lock to guard against concurrent execution
             const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
             if (!current || current.status === 'executed' || current.status === 'execution_void') {
@@ -1331,6 +1402,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             const current = getDecision(decisionId);
             return { success: true, status: current?.status || 'executed' };
         }
+        noteCarriedOutAfterWait(decision);
 
         for (const ent of touchedEnterprises) {
             clearEnterpriseFloorCache(ent);
@@ -1385,7 +1457,10 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     }
 
     const now = new Date().toISOString();
-    conservingTransaction(() => {
+    // A plain transaction: a halt moves no Beans (the Decision's status, the member's status and credit_frozen, the held
+    // role), so it must not wait on the pot's pre-flush. While the pot was unknown no Decision could be halted, not even a
+    // removal in its grace window (#1465 re-review, NB-2), as adminLiftSuspension and closeUnkeptSuspension already do.
+    db.transaction(() => {
         db.prepare(`
             UPDATE decisions SET
                 status = 'admin_halted',
@@ -1409,7 +1484,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
         if (decision.effect === 'keep_suspension') {
             liftEmergencySuspensionRow(decision);
         }
-    });
+    })();
 
     if (decision.subject) {
         broadcast({ type: 'profile_updated', publicKey: decision.subject });
@@ -1447,6 +1522,9 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
             error: `This member held the ${held} role, and only an owner can cut short the grace window on removing an owner or admin. Ask an owner to do this`,
         };
     }
+
+    // The prune moves Beans: refused in plain words while the pot is unknown, and the removal stays in its grace window.
+    if (potIsUnknown()) return { success: false, status: 503, error: COMMONS_POT_PAUSED };
 
     const now = new Date().toISOString();
     try {
@@ -1842,8 +1920,28 @@ export function tickDecisions(asOfTime?: number): {
                 continue;
             }
 
+            // The prune settles the member's balance with the Commons, so it waits for an unknown pot, still in its grace
+            // window with the member suspended, and completes on the first tick after the row is mended. It went to
+            // execution_blocked, which nothing retries or halts: the member stayed suspended for good (#1465 review, NB-1).
+            if (potIsUnknown()) {
+                waitForPot(r, now);
+                continue;
+            }
+            // The pot is a number again, and this removal's grace window ended while it wasn't: the brake gets a fresh
+            // window of REOPENED_GRACE_HOURS before the removal is carried out, because the first tick after a mend runs
+            // 30 s after boot, which no admin could use (#1465 re-review, NB-2).
+            if (r.execution_reason === WAITING_FOR_POT) {
+                const endsAt = new Date(Date.parse(nowIso) + REOPENED_GRACE_HOURS * 3600_000).toISOString();
+                db.prepare('UPDATE decisions SET grace_period_ends_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?')
+                    .run(endsAt, REOPENED_GRACE, now, r.id);
+                console.log(`[Decisions] ${r.id} (remove_member): payments work again; the grace window reopens until ${endsAt} so an admin `
+                    + 'can still halt it.');
+                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                continue;
+            }
             try {
                 adminPruneUser(r.subject, COMMUNITY_DECISION_ACTOR);
+                noteCarriedOutAfterWait(r);
                 db.prepare(`
                     UPDATE decisions SET
                         status = 'executed',
@@ -1878,8 +1976,42 @@ export function tickDecisions(asOfTime?: number): {
         const closesAtDate = new Date(top.closes_at);
         const ageDays = (now.getTime() - closesAtDate.getTime()) / (1000 * 60 * 60 * 24);
 
-        if (ageDays > 90) {
-            // Expired after 90 days
+        // What the queued Decision needs from the pot, and why it can't be waited on if it can't.
+        let requiredAmount: number;
+        let unusable: string | null = null;
+        if (top.effect === 'write_off_deficit' && top.subject) {
+            const entAccount = ledger.getAccount(top.subject);
+            // No deficit left is 0: the write-off completes without moving anything.
+            requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+            if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
+        } else {
+            let parsed: any = {};
+            try {
+                parsed = JSON.parse(top.params || '{}');
+            } catch (e: any) {
+                unusable = `params unreadable: ${e?.message || e}`;
+            }
+            requiredAmount = Number(parsed?.amount);
+            if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
+                unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
+            }
+        }
+
+        // Funding is tried BEFORE the 90-day expiry (#1465 re-review, NB-5): the days the pot was unknown counted
+        // towards the 90, and at the first tick after a mend a grant the mended pot covered was failed with "expired
+        // ... without sufficient pool funds", which was false. Only a finite amount above 0 is worth waiting for.
+        // Anything else goes straight to executeDecision, whose preflight blocks it and frees the one slot. Left here,
+        // it would hold the slot for 90 days while every other underfunded grant was turned away as "Funding queue is full".
+        if (unusable) {
+            console.warn(`[Decisions] Queued decision ${top.id} can't be funded as stored (${unusable}); handing it to preflight`);
+        }
+        if (unusable || requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
+            const res = executeDecision(top.id);
+            if (res.success && res.status === 'executed') {
+                executed++;
+            }
+        } else if (ageDays > 90 && !potIsUnknown()) {
+            // Expired after 90 days. Never while the pot is unknown: then it waited for a broken row, not for funds.
             db.prepare(`
                 UPDATE decisions SET
                     status = 'failed',
@@ -1888,40 +2020,6 @@ export function tickDecisions(asOfTime?: number): {
                 WHERE id = ?
             `).run(nowIso, top.id);
             broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(top.id)!) });
-        } else {
-            // What the queued Decision needs from the pot, and why it can't be waited on if it can't.
-            let requiredAmount: number;
-            let unusable: string | null = null;
-            if (top.effect === 'write_off_deficit' && top.subject) {
-                const entAccount = ledger.getAccount(top.subject);
-                // No deficit left is 0: the write-off completes without moving anything.
-                requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
-                if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
-            } else {
-                let parsed: any = {};
-                try {
-                    parsed = JSON.parse(top.params || '{}');
-                } catch (e: any) {
-                    unusable = `params unreadable: ${e?.message || e}`;
-                }
-                requiredAmount = Number(parsed?.amount);
-                if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
-                    unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
-                }
-            }
-
-            // Only a finite amount above 0 is worth waiting for. Anything else goes straight to executeDecision,
-            // whose preflight blocks it and frees the one slot. Left here, it would hold the slot for 90 days
-            // while every other underfunded grant was turned away as "Funding queue is full".
-            if (unusable) {
-                console.warn(`[Decisions] Queued decision ${top.id} can't be funded as stored (${unusable}); handing it to preflight`);
-            }
-            if (unusable || requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
-                const res = executeDecision(top.id);
-                if (res.success && res.status === 'executed') {
-                    executed++;
-                }
-            }
         }
     }
 

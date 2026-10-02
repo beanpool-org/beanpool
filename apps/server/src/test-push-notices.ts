@@ -232,10 +232,17 @@ async function main() {
             }
         };
         walk(srcDir);
-        const unsent = kinds.filter(k => !named.has(k));
+        // Kinds a phone still reads from a community that hasn't updated, which this server no longer sends: a session
+        // opening sent 'account.recovery-started' until anybody could use it to ping a member (FABLE-sec-sso finding 5,
+        // routes/recovery-collect.ts). The table keeps it so a phone still takes that push from an older node.
+        const RECEIVED_ONLY = new Set<string>(['account.recovery-started']);
+        const unsent = kinds.filter(k => !named.has(k) && !RECEIVED_ONLY.has(k));
         const unknown = [...named].filter(k => !isPushNoticeKind(k));
         assert(unsent.length === 0 && unknown.length === 0,
             `every kind in the table is named by a sender in the server's source, and every kind a sender names is in it (unsent: ${unsent.join(', ') || 'none'}; unknown: ${unknown.join(', ') || 'none'})`);
+        const resent = [...RECEIVED_ONLY].filter(k => named.has(k) || !isPushNoticeKind(k));
+        assert(resent.length === 0,
+            `a kind kept only for older communities' pushes is in the table and sent by nobody here (${resent.join(', ') || 'none'})`);
 
         // ── 2. Real senders ────────────────────────────────────────────────────────────────────────────────
         console.log('\n--- 2. Real senders ---');

@@ -218,6 +218,15 @@ function refuseUnencryptedDm(ciphertext: unknown, nonce: unknown): void {
     if (!isEncryptedDmPayload(ciphertext, nonce)) throw new MessagingError(DM_NOT_ENCRYPTED_ERROR, 400, DM_NOT_ENCRYPTED_CODE);
 }
 
+/**
+ * The id a line relayed from another node is stored under: the sender's own, verbatim, when it is a UUID v4 (lowered, as
+ * the send route lowers it). A DM line is sealed to its message id (apps' e2e-crypto, format 3), so a line stored under a
+ * new id would be one its recipient can't verify. Anything else gets an id of this node's, as before.
+ */
+export function relayedMessageId(id: unknown): string | undefined {
+    return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id.toLowerCase() : undefined;
+}
+
 /** One DM per pair, never keyed to a post (chat consolidation): the pair's conversation row, if they have one. */
 function findDirectConversationRow(a: string, b: string): any {
     return db.prepare(`

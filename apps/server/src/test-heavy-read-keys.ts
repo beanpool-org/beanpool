@@ -7,12 +7,16 @@
  * shrink a roster and `q`, `category`, `member` and `offset` the list. So one member's `?role=convenor` (405 bytes) made
  * a 12 MB roster light, and 64 full rosters at once then ran a 512 MB heap out of memory, the crash the cap exists to stop.
  *
+ * The list of groups can no longer be heavy: since #1493/#1494 a description is at most 2,000 characters and a list sends
+ * only its 300-character preview (engine groups.ts listGroups), so a page of 200 groups at the limit is under 512 KB and
+ * goes straight through whatever its key. Section 1 measures that, so a change that lets the list grow again shows here;
+ * the weighing cases are the roster's, which is still megabytes.
+ *
  * The real server here, in this process, with the cap at a 1 MB budget and a 1.5 s wait (setHeavyReadsForTests), one open
- * group of 25,000 members and 200 groups with long descriptions:
+ * group of 25,000 members and 200 groups with descriptions at their 2,000-character limit:
  *   1. Each full answer is read once with nothing in flight, so its size is known: the member's roster, the convenor's
- *      (every status), the list of 200 groups.
- *   2. The small answers under the same routes are read: a member's `?role=convenor`, the convenor's `?status=invited`,
- *      and the list `?q=` matching nothing.
+ *      (every status). The list of 200 groups is read too, and is under 512 KB.
+ *   2. The small answers under the same routes are read: a member's `?role=convenor` and the convenor's `?status=invited`.
  *   3. A member who stops reading holds a full roster: that answer's whole size is in flight, the budget full.
  *   4. The small answers still go straight through.
  *   5. The full ones are weighed by their own last size: each waits its 1.5 s and is told "busy". At 5257ccc0 each was
@@ -121,12 +125,13 @@ async function main(): Promise<void> {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const engine = await import('@beanpool/engine');
+    const { GROUP_DESCRIPTION_LIMIT } = await import('@beanpool/core');
     const { heavyReadStats, setHeavyReadsForTests } = await import('./heavy-reads.js');
     initAdminPassword();
     await initTls();
     se.initStateEngine();
 
-    // One open group of N members, its convenor and a member who reads it; 200 groups whose list is well over 512 KB.
+    // One open group of N members, its convenor and a member who reads it; 200 groups, each description at its limit.
     const N = 25_000, GROUPS = 200;
     const convenor = newKey(), member = newKey();
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status) VALUES (?, ?, ?, ?, 'active')`);
@@ -144,7 +149,7 @@ async function main(): Promise<void> {
         }
     })();
     for (let i = 1; i < GROUPS; i++) {
-        se.createGroup({ name: `Group ${i}`, description: `Group ${i}: ${'a long description. '.repeat(200)}`, createdBy: convenor.pk, joinPolicy: 'open' });
+        se.createGroup({ name: `Group ${i}`, description: `Group ${i}: ${'a long description. '.repeat(99)}`.slice(0, GROUP_DESCRIPTION_LIMIT.chars), createdBy: convenor.pk, joinPolicy: 'open' });
     }
 
     const port = await startHttpsServer(0);
@@ -161,7 +166,6 @@ async function main(): Promise<void> {
         convenorsOnly: { route: `${roster}?role=convenor`, key: member },
         invitedOnly: { route: `${roster}?status=invited`, key: convenor },
         allGroups: { route: `/api/groups?limit=${GROUPS}`, key: member },
-        noGroups: { route: `/api/groups?limit=${GROUPS}&q=no-such-group`, key: member },
     };
     const read = (r: { route: string; key: Key }, o: { hold?: boolean } = {}) => open(port, r.route, r.key, o);
     let holder: Open | null = null;
@@ -177,22 +181,19 @@ async function main(): Promise<void> {
             `a member's full roster is a heavy answer (${full.memberRoster.status}, ${(full.memberRoster.bytes / MB).toFixed(1)} MB)`);
         assert(full.convenorRoster.status === 200 && full.convenorRoster.bytes >= full.memberRoster.bytes,
             `so is the convenor's, every status (${full.convenorRoster.status}, ${(full.convenorRoster.bytes / MB).toFixed(1)} MB)`);
-        assert(full.allGroups.status === 200 && full.allGroups.bytes >= LIGHT_BYTES,
-            `and the list of ${GROUPS} groups (${full.allGroups.status}, ${(full.allGroups.bytes / 1024).toFixed(0)} KB)`);
+        assert(full.allGroups.status === 200 && full.allGroups.bytes < LIGHT_BYTES,
+            `the list of ${GROUPS} groups, each description at its limit, is under 512 KB: previews only, it can't be heavy (${full.allGroups.status}, ${(full.allGroups.bytes / 1024).toFixed(0)} KB)`);
         assert(await free(), `nothing is in flight once they are read (${inFlight()} bytes)`);
 
         // ── 2. The small answers under the same routes ───────────────────────────────────────────────────────────
         const small = {
             convenorsOnly: await read(routes.convenorsOnly).done,
             invitedOnly: await read(routes.invitedOnly).done,
-            noGroups: await read(routes.noGroups).done,
         };
         assert(small.convenorsOnly.status === 200 && rows(small.convenorsOnly) === 1 && small.convenorsOnly.bytes < 4096,
             `a member's ?role=convenor is one row (${small.convenorsOnly.status}, ${small.convenorsOnly.bytes} bytes)`);
         assert(small.invitedOnly.status === 200 && small.invitedOnly.text === '[]',
             `the convenor's ?status=invited is none (${small.invitedOnly.status}, ${small.invitedOnly.text})`);
-        assert(small.noGroups.status === 200 && small.noGroups.text === '[]',
-            `the list's ?q= matching nothing is none (${small.noGroups.status}, ${small.noGroups.text})`);
         assert(await free(), `nothing is in flight (${inFlight()} bytes)`);
 
         // ── 3. A member who stops reading holds a full roster ────────────────────────────────────────────────────
@@ -206,7 +207,6 @@ async function main(): Promise<void> {
         const smallAgain = {
             convenorsOnly: await read(routes.convenorsOnly).done,
             invitedOnly: await read(routes.invitedOnly).done,
-            noGroups: await read(routes.noGroups).done,
         };
         assert(Object.values(smallAgain).every((a) => a.status === 200 && a.ms < 1000),
             `with the budget full, the small answers are still light and go straight through (${Object.values(smallAgain).map((a) => `${a.status} in ${Math.round(a.ms)} ms`).join(', ')})`);
@@ -215,15 +215,12 @@ async function main(): Promise<void> {
         const fullAgain = {
             memberRoster: await read(routes.memberRoster).done,
             convenorRoster: await read(routes.convenorRoster).done,
-            allGroups: await read(routes.allGroups).done,
         };
         const said = (a: Answer) => `${a.status} after ${Math.round(a.ms)} ms`;
         assert(isBusy(fullAgain.memberRoster) && fullAgain.memberRoster.ms >= 1400,
             `after a member's ?role=convenor, a member's full roster is still weighed: it waits its 1.5 s and is told "busy" (${said(fullAgain.memberRoster)})`);
         assert(isBusy(fullAgain.convenorRoster) && fullAgain.convenorRoster.ms >= 1400,
             `after the convenor's ?status=invited, the convenor's full roster is still weighed (${said(fullAgain.convenorRoster)})`);
-        assert(isBusy(fullAgain.allGroups) && fullAgain.allGroups.ms >= 1400,
-            `after a ?q= that matches nothing, the whole list of ${GROUPS} groups is still weighed (${said(fullAgain.allGroups)})`);
 
         // ── 6. The holder hangs up: the budget comes back, and a full roster is served again ─────────────────────
         holder.hangUp();

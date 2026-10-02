@@ -58,6 +58,7 @@ export const SUITES = [
     'test-keeper-routes',
     'test-keeper-release',
     'test-recovery-collect',
+    'test-sso-copy-hardening',
     'test-sso-recovery-roundtrip',
     'test-recovery-seal',
     'test-recovery-seal-rollback',

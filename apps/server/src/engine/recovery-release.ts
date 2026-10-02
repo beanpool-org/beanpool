@@ -66,15 +66,33 @@ export const HUB_DELAY_MS = 24 * 60 * 60 * 1000;
 const RELEASABLE: readonly KeeperType[] = ['hub', 'sso'];
 
 /**
- * Most live sessions one account may have at once.
+ * Most IDLE live sessions one account may have at once: sessions past their sign-in window that have released nothing.
  *
  * A cap that REFUSED the new session would be worse than the problem it solves: opening one is
  * deliberately unauthenticated (it has to be — see the header), so anyone could park the maximum
- * against a member and lock them out of their own recovery. Evicting the OLDEST instead means a
- * flood pushes out its own earlier attempts, and the person actually driving a recovery — who
- * opens a session and immediately uses it — always has the newest.
+ * against a member and lock them out of their own recovery. So the oldest idle session is evicted instead.
+ *
+ * And only an idle one (defence review FABLE-sec-sso finding 5, 2026-10-01). Evicting the oldest of ALL live sessions
+ * let anybody with a callsign push out the member's own: open, then ten throwaway opens while the member is on
+ * Google's sheet, and the member's sign-in landed on an evicted session. Two kinds are never evicted:
+ *
+ *   - one in its sign-in window ({@link SIGN_IN_WINDOW_MS}): a device opens a session, asks for a nonce and signs in,
+ *     all inside it, and nobody can tell the member's from a stranger's until the sign-in checks out;
+ *   - one that has released something: its device is about to fetch the copy (finding 4 hands it over only while the
+ *     session is live), and it is the evidence the owner sees.
+ *
+ * Storage stays bounded without a per-owner limit anybody can spend: idle sessions by this cap, sessions in their
+ * window by the auth limiter (15 opens a minute per address) times the window, released ones by sign-ins that
+ * verified. The hub's 24-hour path (D7) waits on an idle session, and only legacy two-layer copies have one; what it
+ * releases alone is half a seed, useless without the sign-in.
  */
 const MAX_LIVE_COLLECTIONS_PER_OWNER = 10;
+
+/**
+ * How long a session is safe from eviction after it opens: three times a sign-in nonce's ten minutes, so a member who
+ * opens, asks for a nonce, is slow on the provider's sheet and asks again is still covered.
+ */
+export const SIGN_IN_WINDOW_MS = 30 * 60 * 1000;
 
 /**
  * Retention, decided rather than defaulted (CR).
@@ -97,8 +115,10 @@ const MAX_LIVE_COLLECTIONS_PER_OWNER = 10;
  */
 export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evicted: number } {
     const now = nowIso();
+    const windowStart = new Date(Date.now() - SIGN_IN_WINDOW_MS).toISOString();
 
-    // Oldest live sessions beyond the cap stop being live. Done BEFORE the delete so an evicted
+    // Oldest IDLE live sessions beyond the cap stop being live (see MAX_LIVE_COLLECTIONS_PER_OWNER: one in its sign-in
+    // window, or one that has released something, is never evicted). Done BEFORE the delete so an evicted
     // empty session is cleaned up in the same pass rather than lingering until the next open.
     const evicted = db.prepare(`
         UPDATE recovery_collections SET status = 'expired',
@@ -106,6 +126,8 @@ export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evi
         WHERE id IN (
             SELECT id FROM recovery_collections
             WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ?
+              AND created_at <= ?
+              AND id NOT IN (SELECT collection_id FROM recovery_releases)
             -- rowid breaks the tie, and it is not optional. created_at is millisecond precision,
             -- so a burst of sessions opened in the same millisecond compares EQUAL and SQLite is
             -- free to order them however it likes — which made "evict the oldest" evict an
@@ -115,7 +137,7 @@ export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evi
             ORDER BY created_at DESC, rowid DESC
             LIMIT -1 OFFSET ?
         )
-    `).run(ownerPubkey, now, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
+    `).run(ownerPubkey, now, windowStart, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
 
     const deleted = db.prepare(`
         DELETE FROM recovery_collections
@@ -317,6 +339,18 @@ export function listReleases(collectionId: string): ReleasedFragment[] {
         );
         return { ...r, payload: copy.encryptedShare, payloadIv: copy.shareIv, payloadTag: copy.shareTag, kdfParams: copy.kdfParams };
     });
+}
+
+/**
+ * The releases a recovering device may still be HANDED: only while its session is live (defence review FABLE-sec-sso
+ * finding 4, 2026-10-01). Releases are kept forever as evidence (see pruneCollectionsFor), and the route unwraps on
+ * demand, so without this a session the owner stopped, re-split out from under, or that expired kept handing its copy
+ * to its key: a year later, or a second after "Stop". The hub and the sign-in already check the same thing before
+ * they release. Throws RecoveryReleaseError with the reason, as they do.
+ */
+export function releasesForLiveSession(collectionId: string): ReleasedFragment[] {
+    requireLive(collectionId);
+    return listReleases(collectionId);
 }
 
 /**

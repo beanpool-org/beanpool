@@ -50,6 +50,13 @@ export interface JwksCache {
 /** Per request to a provider's JWKS endpoint. */
 const JWKS_TIMEOUT_MS = 10_000;
 
+/**
+ * The least time between two refetches for a key id the cached set doesn't have, per provider (defence review
+ * FABLE-sec-sso finding 3, 2026-10-01). The `kid` comes from a token's header before its signature is checked, so
+ * anybody who can reach a sign-in route can name one that was never published.
+ */
+export const UNKNOWN_KID_REFETCH_MS = 60_000;
+
 // ─── JWKS cache ───────────────────────────────────────────────────────────────────────────────
 //
 // Both providers rotate signing keys and publish a Cache-Control max-age. Honouring it matters in
@@ -82,6 +89,8 @@ export function createJwksCache(options: JwksCacheOptions = {}): JwksCache {
     const now = options.now ?? (() => Date.now());
     const jwksCache: JwksStore = options.store ?? new Map<SsoProvider, JwksEntry>();
     const inFlight = new Map<SsoProvider, Promise<Jwk[]>>();
+    /** When each provider's set was last refetched for an unknown kid ({@link UNKNOWN_KID_REFETCH_MS}). */
+    const lastUnknownKidFetch = new Map<SsoProvider, number>();
 
     async function fetchJwks(provider: SsoProvider): Promise<Jwk[]> {
         // Coalesce concurrent misses into one request, so a node restarting under load does not open
@@ -148,9 +157,19 @@ export function createJwksCache(options: JwksCacheOptions = {}): JwksCache {
         let key = jwksCache.get(provider)?.keys.find(k => k.kid === kid);
         if (!key && !refetched) {
             // Unknown kid against a cache we believe is fresh means the provider rotated early.
-            // Refetch once rather than fail — but only once, so a token with a garbage kid cannot be
-            // used to make this node hammer the provider.
-            await fetchJwks(provider);
+            // Refetch once rather than fail — but only once per call, and at most once a minute per provider: "once"
+            // was per CALL, so every token with a made-up kid cost the provider a request, up to the auth limiter's 15
+            // a minute per address (FABLE-sec-sso finding 3). A real rotation is picked up by the first token that
+            // names the new key; a provider publishes a key before it signs with it, so one fetch a minute loses
+            // nothing. A refetch already in flight is waited for, never repeated.
+            const pending = inFlight.get(provider);
+            const last = lastUnknownKidFetch.get(provider);
+            if (pending) {
+                await pending.catch(() => undefined);
+            } else if (last === undefined || now() - last >= UNKNOWN_KID_REFETCH_MS) {
+                lastUnknownKidFetch.set(provider, now());
+                await fetchJwks(provider);
+            }
             key = jwksCache.get(provider)?.keys.find(k => k.kid === kid);
         }
         if (!key) {
@@ -165,10 +184,12 @@ export function createJwksCache(options: JwksCacheOptions = {}): JwksCache {
         if (!provider) {
             jwksCache.clear();
             inFlight.clear();
+            lastUnknownKidFetch.clear();
             return;
         }
         if (seed) jwksCache.set(provider, seed); else jwksCache.delete(provider);
         inFlight.delete(provider);
+        lastUnknownKidFetch.delete(provider);
     }
 
     return { getSigningKey, reset };

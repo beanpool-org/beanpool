@@ -23,7 +23,8 @@
  *      nothing; a picture past the member photo cap is refused.
  *   3. The local profile's crowdfunds, made as the phone (POST /api/enterprise) and the web app (POST /api/treasury) make
  *      them, and by POST /api/crowdfund/projects with three photos: the list gives each its enterprise's photo as its URL and
- *      no photo, to its maker and to another member; the one project's read still hands every photo out as stored.
+ *      no photo, to its maker and to another member; the one project's read still hands every photo out as stored; an
+ *      older phone's edit that sends the list's URL back stores no URL and loses no photo.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-group-pictures-crowdfund-urls.ts
  */
@@ -97,6 +98,8 @@ const carriesPicture = (text: string) => /data:image\//i.test(text) || /[A-Za-z0
 /** A group's own picture as every group read hands it out: its route, its version and its key (keyed on every node). */
 const GROUP_URL = (id: string) => new RegExp(`^/api/groups/${id}/picture\\?v=[0-9a-f]{8}&k=[A-Za-z0-9_-]{22}$`);
 const PLAIN_AVATAR_URL = (pk: string) => new RegExp(`^/api/avatar/${pk}\\?size=thumb&v=[0-9a-f]{8}$`);
+/** When every member here joined: a month before the run. */
+const JOINED = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
 
 // ── The children ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -113,9 +116,9 @@ async function seedHeap(a: { convenor: string; member: string; keeper: string })
     const { db } = await import('./db/db.js');
     se.initStateEngine();
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status) VALUES (?, ?, ?, ?, 'active')`);
-    insert.run(a.convenor, 'Convenor', '2026-01-01T00:00:00.000Z', 'INV-CONVENOR');
-    insert.run(a.member, 'Member', '2026-01-01T00:00:00.000Z', 'INV-MEMBER');
-    insert.run(a.keeper, 'Keeper', '2026-01-01T00:00:00.000Z', 'INV-KEEPER');
+    insert.run(a.convenor, 'Convenor', JOINED, 'INV-CONVENOR');
+    insert.run(a.member, 'Member', JOINED, 'INV-MEMBER');
+    insert.run(a.keeper, 'Keeper', JOINED, 'INV-KEEPER');
     db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(a.keeper);
     const small = [1, 2, 3, 4].map((s) => dataUrl(jpeg(SMALL_BYTES, s)));
     db.transaction(() => {
@@ -209,8 +212,8 @@ async function rulesOnGlobal(): Promise<void> {
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status) VALUES (?, ?, ?, ?, 'active')`);
     const [C, M, O, I] = Array.from({ length: 4 }, newKey);
     const visitor = newKey(), stranger = newKey();
-    [[C, 'Cleo'], [M, 'Mira'], [O, 'Otto'], [I, 'Ivo']].forEach(([k, name], i) => insert.run((k as Key).pk, name as string, '2026-01-01T00:00:00.000Z', `INV-G${i}`));
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor) VALUES (?, 'Vee', '2026-01-01T00:00:00.000Z', 'active', 1)`).run(visitor.pk);
+    [[C, 'Cleo'], [M, 'Mira'], [O, 'Otto'], [I, 'Ivo']].forEach(([k, name], i) => insert.run((k as Key).pk, name as string, JOINED, `INV-G${i}`));
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor) VALUES (?, 'Vee', ?, 'active', 1)`).run(visitor.pk, JOINED);
 
     console.log('\n— 2. who gets what, on the global profile —');
     const sockM = await socket(base, M);
@@ -270,7 +273,7 @@ async function rulesOnGlobal(): Promise<void> {
     // The URL opens the picture, as the web app asks for it and as the phone does (its &_v= after the key).
     const url: string = open.avatarUrl;
     const asWeb = await call(base, 'GET', url, null);
-    const asPhone = await call(base, 'GET', `${url}&_v=1767225600000`, null);
+    const asPhone = await call(base, 'GET', `${url}&_v=${Date.now()}`, null);
     const want0 = bytesOf(stored(open.id)!);
     assert(asWeb.status === 200 && asWeb.bytes.equals(want0) && asWeb.headers.get('content-type') === 'image/jpeg'
         && asWeb.headers.get('x-content-type-options') === 'nosniff' && /private/.test(asWeb.headers.get('cache-control') ?? ''),
@@ -309,7 +312,7 @@ async function rulesOnGlobal(): Promise<void> {
 
     // An old app sends the URL back (an edit that read the group): unchanged. A new picture is a new URL; the old one opens nothing.
     const before = stored(open.id);
-    const sentBack = await call(base, 'PATCH', `/api/groups/${open.id}`, C, { name: 'Open again', avatarUrl: `${base}${url}&_v=1767225600000` });
+    const sentBack = await call(base, 'PATCH', `/api/groups/${open.id}`, C, { name: 'Open again', avatarUrl: `${base}${url}&_v=${Date.now()}` });
     assert(sentBack.status === 200 && sentBack.body?.group?.name === 'Open again' && sentBack.body?.group?.avatarUrl === url && stored(open.id) === before,
         `its own URL sent back with a new name, as an old app might, leaves the picture as it was (${sentBack.status} ${sentBack.body?.group?.avatarUrl})`);
     sockM.events.length = 0;
@@ -351,9 +354,9 @@ async function crowdfundsOnLocal(): Promise<void> {
     const { base, db } = await inProcessServer();
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invite_code, status) VALUES (?, ?, ?, ?, 'active')`);
     const K = newKey(), R = newKey(), visitor = newKey();
-    insert.run(K.pk, 'Kit', '2026-01-01T00:00:00.000Z', 'INV-K');
-    insert.run(R.pk, 'Rue', '2026-01-01T00:00:00.000Z', 'INV-R');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor) VALUES (?, 'Vee', '2026-01-01T00:00:00.000Z', 'active', 1)`).run(visitor.pk);
+    insert.run(K.pk, 'Kit', JOINED, 'INV-K');
+    insert.run(R.pk, 'Rue', JOINED, 'INV-R');
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_visitor) VALUES (?, 'Vee', ?, 'active', 1)`).run(visitor.pk, JOINED);
 
     console.log('\n— 3. the local profile\'s crowdfunds, made as the apps make them —');
     const [p1, p2, p3] = [21, 22, 23].map((s) => dataUrl(jpeg(8_000, s)));
@@ -392,6 +395,24 @@ async function crowdfundsOnLocal(): Promise<void> {
         const held = JSON.parse(projectsPhotos.find((p) => p.id === ids[i])!.photos);
         assert(one.status === 200 && one.body?.project?.photos === JSON.stringify(held), `${label} own read still hands out every photo as stored (${held.length}): a read of one`);
     }
+
+    // An older phone (before #792) edits a crowdfund with the photos it read from the list, its node in front of each:
+    // this node's own URL stands for the photo it opens and is never stored as itself (#1475's rule).
+    const storedPhotos = (id: string) => JSON.parse((db.prepare('SELECT photos FROM projects WHERE id = ?').get(id) as { photos: string }).photos) as string[];
+    const avatarOf = (id: string) => (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(id) as { photo: string } | undefined)?.photo;
+    const routeId = ids[2];
+    const before = { photos: storedPhotos(routeId), avatar: avatarOf(routeId) };
+    const listedNow = ((await call(base, 'GET', '/api/crowdfund/projects', K)).body?.projects ?? []) as any[];
+    const asOldPhone = (JSON.parse(listedNow.find((p) => p.id === routeId)?.photos ?? '[]') as string[]).map((u) => `${base}${u}`);
+    const edit = (photos: string[]) => call(base, 'POST', '/api/crowdfund/projects/update', K, { id: routeId, creatorPubkey: K.pk, title: 'Route fund', description: 'A bridge, again', photos, goalAmount: 900 });
+    const unchanged = await edit(asOldPhone);
+    assert(unchanged.status === 200 && asOldPhone.length === 1 && JSON.stringify(storedPhotos(routeId)) === JSON.stringify(before.photos) && avatarOf(routeId) === before.avatar,
+        `an old phone's edit sending back the list's URL alone keeps every photo as stored (${unchanged.status}, ${storedPhotos(routeId).length} of ${before.photos.length})`);
+    const added = await edit([asOldPhone[0], dataUrl(jpeg(8_000, 24))]);
+    const after = storedPhotos(routeId);
+    assert(added.status === 200 && after.length === 2 && after[0] === before.avatar && after[1].startsWith('data:image/jpeg') && !after.some((p) => p.includes('/api/avatar/'))
+        && avatarOf(routeId) === before.avatar,
+        `and beside a new photo, the URL is the enterprise's photo it opens: none stored as a URL (${added.status}, ${after.map((p) => p.slice(0, 24)).join(', ')})`);
 
     console.log(`@@ ${JSON.stringify({ run, passed })}`);
     process.exit(0);
@@ -457,7 +478,8 @@ async function startServer(dataDir: string, profile: 'global' | 'local', heapMb:
     const replies: ((m: any) => void)[] = [];
     let readyResolve!: (m: any) => void;
     const ready = new Promise<any>((r) => { readyResolve = r; });
-    const exited = new Promise<void>((r) => p.on('exit', () => { dead = true; r(); }));
+    // Gone: any question still waiting for its answer gets none.
+    const exited = new Promise<void>((r) => p.on('exit', () => { dead = true; replies.splice(0).forEach((reply) => reply({ peak: NaN })); r(); }));
     readline.createInterface({ input: p.stdout! }).on('line', (line) => {
         out += line + '\n';
         if (!line.startsWith('@@ ')) return;
@@ -465,6 +487,9 @@ async function startServer(dataDir: string, profile: 'global' | 'local', heapMb:
         if (m.ready) readyResolve(m); else replies.shift()?.(m);
     });
     p.stderr!.on('data', (b) => { out += b; });
+    // A server that ran out of heap is gone before its exit is heard: a write to it then fails (EPIPE), and the read that
+    // asked reports the crash.
+    p.stdin!.on('error', () => { dead = true; });
     const first = await Promise.race([ready, exited.then(() => null)]);
     if (!first) throw new Error(`the server exited before it was ready:\n${out.slice(-3000)}`);
     return {

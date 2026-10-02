@@ -2474,6 +2474,24 @@ export function createCrowdfundProject(
     })();
 }
 
+/**
+ * A project's photos as an edit sends them, with this node's own avatar URL read as the photo it stands for, never stored
+ * as itself (#1475's rule for a member's photo). The crowdfund list sends each project's photo as that URL (#1486), and
+ * an older phone's edit screen (before #792) sends back the photos it read from the list. Sent back alone, the photos are
+ * unchanged: every one kept as stored, the ones the list leaves out included. Beside new ones, the URL is the
+ * enterprise's photo, the one it opens.
+ */
+function ownAvatarUrlsAsStored(enterpriseId: string, storedJson: string | undefined, sent: string[]): string[] {
+    if (!Array.isArray(sent) || !sent.some((p) => isSelfAvatarUrl(p))) return sent;
+    if (sent.every((p) => isSelfAvatarUrl(p))) {
+        let stored: unknown = [];
+        try { stored = JSON.parse(storedJson || '[]'); } catch { /* none */ }
+        return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+    }
+    const own = (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(enterpriseId) as { photo: string } | undefined)?.photo;
+    return sent.flatMap((p) => (isSelfAvatarUrl(p) ? (own ? [own] : []) : [p]));
+}
+
 export function updateCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -2501,6 +2519,7 @@ export function updateCrowdfundProject(
     // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
+    photos = ownAvatarUrlsAsStored(id, project.photos, photos);
 
     db.transaction(() => {
         if (deadline_at !== undefined) {

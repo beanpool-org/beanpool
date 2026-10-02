@@ -861,7 +861,10 @@ async function partTwo(): Promise<void> {
     }, member);
     assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
     listed = await projectPhotos();
-    assert(listed[0] === `/api/avatar/${projectId}`, 'the avatar address is kept as sent');
+    // The address stands for the photo it opens and is never stored as itself (#1486, #1475's rule): photos[0] is the
+    // enterprise's photo, which the edit left as it was.
+    assert(typeof listed[0] === 'string' && !String(listed[0]).includes('/api/avatar/'), 'the avatar address is stored as the photo it opens, not as itself');
+    await served('crowdfund photo sent back as the avatar address', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED);
     await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
 

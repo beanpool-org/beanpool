@@ -81,9 +81,10 @@ export function OneWayBackCard({ place, colors = lightColors }: { place: 'landin
     }
 
     return (
-        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary">
+        <View style={[s.card, place === 'landing' && s.landing]} accessibilityRole="summary" accessibilityLabel={ONE_WAY_BACK_TEXT.title}>
+            {/* The design's one sentence, as it is: no heading that says it twice. */}
             <View style={s.row}>
-                <Text style={s.title} accessibilityRole="header">🔑 {ONE_WAY_BACK_TEXT.title}</Text>
+                <Text style={s.title}>🔑 {ONE_WAY_BACK_TEXT.body}</Text>
                 {place === 'landing' && (
                     <Pressable
                         onPress={async () => { await dismissOneWayBack(identity.publicKey, hasPosted); void refresh(); }}
@@ -95,7 +96,6 @@ export function OneWayBackCard({ place, colors = lightColors }: { place: 'landin
                     </Pressable>
                 )}
             </View>
-            <Text style={s.body}>{ONE_WAY_BACK_TEXT.body}</Text>
             <Pressable style={s.primary} onPress={() => setLinking(true)} accessibilityRole="button">
                 <Text style={s.primaryText}>{ONE_WAY_BACK_TEXT.addSignIn}</Text>
             </Pressable>
@@ -141,7 +141,7 @@ function make(colors: AppColors) {
         landing: { marginHorizontal: 16, marginBottom: 8 },
         quietCard: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12, marginBottom: 12 },
         row: { flexDirection: 'row', alignItems: 'flex-start' },
-        title: { flex: 1, fontSize: 15, fontWeight: '800', color: colors.text.heading },
+        title: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text.heading, lineHeight: 21 },
         close: { fontSize: 16, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 },
         body: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 4 },
         primary: { minHeight: 44, marginTop: 10, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },

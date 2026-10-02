@@ -25,6 +25,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.GOOGLE_CLIENT_IDS;
 process.env.NODE_PROFILE = 'global';
+// No release check against GitHub (routes/settings.ts): the guard below would refuse it anyway.
+process.env.DISABLE_UPDATE_CHECK = 'true';
 
 const realFetch = globalThis.fetch;
 globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {

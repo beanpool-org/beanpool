@@ -105,9 +105,11 @@ let googleKey: KeyObject;
 const replies = new Map<number, (r: { result?: any; error?: string }) => void>();
 let nextId = 1;
 const realFetch = globalThis.fetch;
-/** Every request the phone made, and anything it tried to send elsewhere (which would fail the run). */
+/** Every request the phone made, and anything it tried to send elsewhere (which fails the run). */
 const sent: { method: string; path: string; status: number }[] = [];
 const elsewhere: string[] = [];
+/** What the node's own guard refused (a background job of the node, never the phone's): reported, contacted nobody. */
+const nodeBlocked: string[] = [];
 const runs: DoorWorkRun[] = [];
 
 function control<T = any>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -166,7 +168,7 @@ beforeAll(async () => {
         });
         node.stderr.on('data', (chunk: Buffer) => {
             log += chunk.toString();
-            if (/BLOCKED-FETCH/.test(chunk.toString())) elsewhere.push(`node: ${chunk.toString().trim()}`);
+            if (/BLOCKED-FETCH/.test(chunk.toString())) nodeBlocked.push(chunk.toString().trim());
         });
         node.on('exit', (code) => reject(new Error(`the test node exited (${code}):\n${log.slice(-3000)}`)));
     });
@@ -196,6 +198,7 @@ afterAll(async () => {
         });
     }
     if (dataDir) rmSync(dataDir, { recursive: true, force: true });
+    if (nodeBlocked.length) console.log(`[e2e] the test node's guard refused (nothing was contacted): ${nodeBlocked.join('; ')}`);
     expect(elsewhere).toEqual([]);
 }, START_MS);
 

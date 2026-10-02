@@ -15,6 +15,12 @@ describe('resolveAvatarUrl', () => {
         expect(resolveAvatarUrl(keyed)).toBe(keyed);
     });
 
+    it("passes a group's own picture URL through unchanged, its version and key included (#1486)", () => {
+        // The node sends a group's picture the same way, relative and keyed on every node: /api/groups/<id>/picture.
+        const keyed = '/api/groups/g-seeds/picture?v=1a2b3c4d&k=GrOuPkEyGrOuPkEyGrOu_-';
+        expect(resolveAvatarUrl(keyed)).toBe(keyed);
+    });
+
     it('maps a shipped picture to the app\'s own file, and reads nothing as no photo', () => {
         expect(resolveAvatarUrl('bundled://leaf')).toBe('/avatars/avatar_leaf.jpg');
         expect(resolveAvatarUrl(null)).toBeNull();

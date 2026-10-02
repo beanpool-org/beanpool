@@ -7,6 +7,7 @@
 
 import { db } from '../db/db.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { COMMONS_BALANCE } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
@@ -227,10 +228,29 @@ export function listBrokenBalances(limit = 50): { total: number; accounts: Broke
 export const BROKEN_BALANCE_REPAIR = 'Stop the server, set each one\'s balance in state.db to what its transactions say, start it again, '
     + 'then set a new baseline for any difference left.';
 
+/** Whether the last call found Beans off and said so: the line is said once, not every day. */
+let saidBeansOff = false;
+
 /**
  * Computes and persists wash trading/Sybil metrics to the system_metrics table.
+ *
+ * Where Beans are off (the global profile, or `nodeProfile.beans=false` on a ledger that has never moved) it does
+ * nothing and returns null: every number it computes (negative balances, members near their credit floor, dormant
+ * credit-drawn accounts, cohorts at deep floors) is about Beans, and the walk is synchronous over every active member,
+ * twice through getMemberTrustProfile: 825 ms at 6,403 members on an M4 (the global load rehearsal, 2026-10-02), with
+ * the whole node answering nothing meanwhile, 2.5 minutes after every boot. No system_metrics row is written, so the
+ * health flags that read them (getCommunityHealth: aggregate spike, cohort velocity, delinquency) raise none. The
+ * switch is read at every call, so an operator's override takes effect at the next run, with no restart.
  */
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
+    if (!getProfileSwitches().beans) {
+        if (!saidBeansOff) {
+            console.log('📊 [MetricsAudit] Beans are off: the daily Wash Trading & Sybil metrics audit does not run here, as every number it computes is about Beans.');
+            saidBeansOff = true;
+        }
+        return null;
+    }
+    saidBeansOff = false;
     console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
     const metrics = computeWashSybilMetrics(db);
 

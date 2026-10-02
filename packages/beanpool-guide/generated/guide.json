@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 99,
-  "hash": "7dab0a7a09656ef8b964e61c2a9abfe699b9a2bdc6b1c1633a1a964523b7efae",
+  "version": 100,
+  "hash": "2e1cf6e72e7b30b747836947adc706514516e623cf6777ca6060d8cc06d2ba3c",
   "sections": [
     {
       "id": "about",
@@ -1398,7 +1398,7 @@
         },
         {
           "type": "p",
-          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to."
+          "text": "Under **Contact details** you can add a phone number, an email or a WhatsApp number, up to 200 characters. You do not have to."
         },
         {
           "type": "p",
@@ -2975,7 +2975,7 @@
           "type": "ul",
           "items": [
             "In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.",
-            "Give it a **Group Name** and, if you like, a **Purpose / Description**.",
+            "Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.",
             "Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.",
             "Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.",
             "Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat."
@@ -3066,7 +3066,7 @@
         },
         {
           "type": "p",
-          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Open a group, then:"
+          "text": "In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:"
         },
         {
           "type": "ul",

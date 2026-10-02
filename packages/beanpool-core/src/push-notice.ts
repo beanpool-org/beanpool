@@ -185,7 +185,7 @@ export function verifyPushNotice(
     }
     let valid: boolean;
     try {
-        valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes({ c: d.c, k: d.k, i: d.i, t: d.t }, opts.recipient), hexToBytes(opts.pushKey));
+        valid = ed25519.verify(hexToBytes(d.s), pushNoticeBytes({ c: d.c, k: d.k, i: d.i, t: d.t }, opts.recipient), hexToBytes(opts.pushKey), { zip215: false });
     } catch {
         valid = false;
     }

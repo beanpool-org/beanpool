@@ -5,7 +5,7 @@
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -196,7 +196,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
     // empty list — hiding a recoverable member behind namesakes who happen to sort earlier.
     const rows = db.prepare(`
         SELECT * FROM (
-            SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
+            SELECT m.public_key, m.callsign, m.joined_at, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) AS avatar_url,
                    (SELECT COUNT(*) FROM recovery_shares s
                      WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
@@ -432,12 +432,12 @@ export function updateProfile(
     recordActivity(publicKey);
 
     // The photo rule, bare base64 included (G9a-3): /api/avatar/<pk> sniffs, but the group, group-members and profile
-    // routes hand members.avatar_url out exactly as stored, so a HEIC or any other format the strip does not know would
+    // routes hand a member's photo out exactly as stored, so a HEIC or any other format the strip does not know would
     // reach other members with its GPS. Both apps send a JPEG data URL or a bundled:// name, which pass.
     if (update.avatar !== undefined && !isAcceptablePhotoValue(update.avatar)) throw new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     // The node never stores its OWN avatar URL as an avatar. Installed builds read
-    // `members.avatar_url` out of their synced local row — which since #725 holds this node's
+    // their avatar out of their synced local row — which since #725 holds this node's
     // `/api/avatar/<pk>?size=thumb` string, not the photo — and post it straight back here on
     // every Save. Storing it replaced the member's photo with a pointer to itself, and from
     // then on `GET /api/avatar/<pk>` 404d: the photo was destroyed, on the node and (via the
@@ -448,7 +448,7 @@ export function updateProfile(
     // name at all. Read as "avatar unchanged" instead, which is what the sender meant.
     const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar);
     // A new photo is stored without its metadata (G9a-3): /api/avatar/<pk> serves it to anyone who asks.
-    const avatar = avatarUnchanged ? existing.avatar_url : stripImageValue(update.avatar);
+    const avatar = avatarUnchanged ? undefined : stripImageValue(update.avatar);
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
     // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
     // changes — re-saving your own name (e.g. the background profile push) must not
@@ -480,8 +480,12 @@ export function updateProfile(
 
     const profileUpdatedAt = new Date().toISOString();
 
-    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
-      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
+    db.transaction(() => {
+        db.prepare(`UPDATE members SET bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
+          .run(bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
+        // The photo, with its reference in the row, by its one writer (the engine's setMemberPhoto).
+        if (avatar !== undefined) setMemberPhoto(db, publicKey, avatar);
+    })();
 
     broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt }, undefined, { ownCard: true });
     // Read as the owner: POST /api/profile/update answers the signer, who always sees their own contact details.

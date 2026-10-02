@@ -17,7 +17,7 @@
  *      completed, an enterprise paused) and of listing (photos, a poll, an event, one spoken for, one hidden by reports).
  *   2. What a visitor's read does: a warm board read of 50 posts by 50 authors compiles a handful of statements (on
  *      origin/main one per author per trust-profile query, hundreds), and none of the statements a visitor's reads
- *      compile reads an author's photo (members.avatar_url). A member's warm read compiles no statement per post, and still
+ *      compile reads an author's photo (member_photos, or its reference members.avatar_ref). A member's warm read compiles no statement per post, and still
  *      carries each author's standing and keyed face, which follow a change (a tier badge) at once.
  *   3. The CPU a visitor's board read costs, measured over 200 reads in this process (client included) and printed, held
  *      to a loose bound: origin/main measured above it on an M4 Pro (see the PR), this change well under.
@@ -60,7 +60,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { initAdminPassword, updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { db } = await import('./db/db.js');
-    const { guestPost, ONE_PASS_MAX_MEASURED } = await import('@beanpool/engine');
+    const { guestPost, ONE_PASS_MAX_MEASURED, setMemberPhoto } = await import('@beanpool/engine');
 
     initAdminPassword();
     await initTls();
@@ -73,10 +73,11 @@ async function main() {
 
     // ── the seed ─────────────────────────────────────────────────────────────────────────────────────────────────────
     const iso = (msFromNow: number) => new Date(Date.now() + msFromNow).toISOString();
-    const insertMember = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                VALUES (?, ?, 'active', ?, 'seed', 'seed', ?)`);
+    const insertMemberRow = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', ?, 'seed', 'seed')`);
+    const insertMember = { run: (pk: string, callsign: string, joinedAt: string, avatar: string) => { insertMemberRow.run(pk, callsign, joinedAt); setMemberPhoto(db, pk, avatar); } };
     const insertAccount = db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)');
-    // A photo as the apps store one: a JPEG data URL of about 20 KB, inline in the row.
+    // A photo as the apps store one: a JPEG data URL of about 20 KB.
     const photo = () => `data:image/jpeg;base64,/9j/${crypto.randomBytes(15_000).toString('base64')}`;
     const authors: Id[] = [];
     for (let i = 0; i < 50; i++) {
@@ -199,7 +200,7 @@ async function main() {
 
     // ── 2. what a visitor's read does ────────────────────────────────────────────────────────────────────────────────
     console.log("\n— 2. what a visitor's read compiles and reads —");
-    const photoReads = guestCompiled.filter(sql => /avatar_url/.test(sql));
+    const photoReads = guestCompiled.filter(sql => /avatar_url|avatar_ref|avatar_bytes|member_photos/.test(sql));
     assert(photoReads.length === 0,
         `no statement a visitor's reads compiled reads an author's photo (${photoReads.length} did${photoReads.length ? `: ${photoReads[0].replace(/\s+/g, ' ').slice(0, 120)}…` : ''})`);
     await guestRead({});

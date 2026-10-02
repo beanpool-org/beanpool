@@ -15,6 +15,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -28,9 +29,10 @@ function makeMember(callsign: string, initialBalance = 100) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url, status)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)`).run(pubKeyHex, initialBalance);
 
     // Update audit baseline sum for ledger

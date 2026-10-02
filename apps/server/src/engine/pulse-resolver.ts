@@ -24,7 +24,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 import { pulseHarvestAllowance } from './writer-bounds.js';
 
 // ============================================================================
@@ -2233,7 +2233,7 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
     const rows = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
-                m.callsign, m.avatar_url
+                m.callsign, m.avatar_ref
            FROM pulse_items i
            JOIN creator_channels c ON c.id = i.channel_id
            JOIN members m ON m.public_key = i.owner_pubkey
@@ -2251,7 +2251,7 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: avatarUrlFor(r.owner_pubkey, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.owner_pubkey, r.avatar_ref),
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -2269,7 +2269,7 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
     const row = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, i.muted, i.deleted_at,
-                c.oauth_verified_at, m.callsign, m.avatar_url
+                c.oauth_verified_at, m.callsign, m.avatar_ref
            FROM pulse_items i
            JOIN creator_channels c ON c.id = i.channel_id
            JOIN members m ON m.public_key = i.owner_pubkey
@@ -2299,7 +2299,7 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
             id: row.id,
             ownerPubkey: row.owner_pubkey,
             callsign: row.callsign || 'Neighbour',
-            avatarUrl: avatarUrlFor(row.owner_pubkey, row.avatar_url),
+            avatarUrl: avatarUrlOf(row.owner_pubkey, row.avatar_ref),
             platform: row.platform,
             category: row.category,
             url: row.url || null,

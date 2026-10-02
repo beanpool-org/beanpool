@@ -65,6 +65,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
         db.prepare("UPDATE members SET public_key = ?, status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END, updated_at = ? WHERE public_key = ?").run(newKey, at, oldKey);
     }
 
+    // (a2) their avatar, out of the row (member_photos): it goes where the row goes. The row's avatar_ref names it, and
+    // its URL is made under the new key.
+    move('member_photos', 'public_key');
+
     // (b) members foreign keys (referrals & vouches)
     move('members', 'invited_by');
     move('members', 'elder_vouched_by');

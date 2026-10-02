@@ -31,6 +31,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { spawnNode, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -73,9 +74,10 @@ async function child(): Promise<void> {
             // members would make Eve's send depend on whether the analysis was made before or after the prune (it is recomputed on a
             // slow run, refused as no completed trade); established members make it allow the send either way. Nothing here is about age.
             for (const [key, name] of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, avatar_url, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), ?, ?, 'active', 'data:image/png;base64,iVBORw0KGgo=',
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, updated_at)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now','-30 days'), ?, ?, 'active',
                                     strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(key, name, a.genesis, `INV-${name}`);
+                setMemberPhoto(db, key, 'data:image/png;base64,iVBORw0KGgo=');
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
                 putPushTokenRow(key, `ExponentPushToken[${name}]`, 'android');
             }

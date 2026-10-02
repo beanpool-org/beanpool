@@ -26,6 +26,7 @@ import {
     completePostTransaction, cancelPostTransaction, getBalance, runLedgerAudit,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 // Loaded so that this suite runs to the end on a tree without the boot step (it fails there, with a count, rather than
 // stopping at the import). The refusals are matched by their words for the same reason.
@@ -52,8 +53,9 @@ type Id = { pk: string; privateKey: crypto.KeyObject; callsign: string };
 /** A member with a balance, written as rows, before the ledger is loaded. The window closed now, so nothing decays. */
 function plantMember(callsign: string, balance: number): string {
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active')`)
-        .run(pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`)
+        .run(pk, callsign);
+    setMemberPhoto(db, pk, AVATAR);
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)').run(pk, balance, EPOCH_NOW);
     return pk;
 }
@@ -92,8 +94,9 @@ function keypair(callsign: string): Id {
 /** A member who can sign, trade (a photo, a name, an Offer listed) and pay. */
 function makeMember(callsign: string, beans: number): Id {
     const id = keypair(callsign);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id.pk, callsign);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, ?)').run(id.pk, EPOCH_NOW);
     transfer('genesis', id.pk, beans, `seed ${callsign}`, 'direct', true);
     createPost('offer', 'general', `${callsign} odd jobs`, 'Help around the place', 5, 'fixed', id.pk, undefined, undefined, undefined, true);

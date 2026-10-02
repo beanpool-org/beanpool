@@ -18,7 +18,7 @@ import {
 } from './event-thread.js';
 import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 
@@ -186,7 +186,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Enterprises the member keeps (a keeper whose operator capability is live), not hidden ones.
     const enterprises = db.prepare(`
-        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_url, e.status, e.joined_at
+        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_ref, e.status, e.joined_at
         FROM treasury_operators o JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND COALESCE(e.is_treasury, 0) = 1
     `).all(pubkey) as any[];
@@ -196,7 +196,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         ensureKeeperReadCursor(e.id, pubkey);
         finish({
             kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
-            avatarUrl: avatarUrlFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',
+            avatarUrl: avatarUrlOf(e.id, e.avatar_ref), role: e.role === 'lead' ? 'lead' : 'keeper',
             readOnly: isEnterpriseThreadReadOnly(e.status),
         }, 'removed by a keeper', e.joined_at);
     }

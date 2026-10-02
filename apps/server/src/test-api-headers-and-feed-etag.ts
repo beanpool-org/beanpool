@@ -38,6 +38,7 @@ import {
 import { db } from './db/db.js';
 import { recordActivity, pruneOldActivity } from './db/activity-feed-db.js';
 import { startHttpsServer } from './https-server.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -65,9 +66,10 @@ async function main(): Promise<void> {
     const authorPk = authorKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const authorCallsign = 'HeaderTester_' + crypto.randomBytes(4).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url)
-        VALUES (?, ?, ?, ?)
-    `).run(authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed');
+        INSERT INTO members (public_key, callsign, joined_at)
+        VALUES (?, ?, ?)
+    `).run(authorPk, authorCallsign, new Date().toISOString());
+    setMemberPhoto(db, authorPk, 'bundled://seed');
 
     // Start real HTTPS server
     PORT = await startHttpsServer(0);

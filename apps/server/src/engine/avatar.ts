@@ -194,7 +194,7 @@ export class AvatarCache {
 }
 
 function findBundledAvatarFile(name: string): string | null {
-    // `name` comes from member-supplied `avatar_url` ("bundled://<name>"), so it must not be
+    // `name` comes from a member-supplied avatar ("bundled://<name>", member_photos), so it must not be
     // allowed to walk out of the avatars directory via path separators or "..".
     if (!/^[a-z0-9_-]{1,64}$/i.test(name)) return null;
     const filename = `avatar_${name.replace(/-/g, '_')}.jpg`;
@@ -233,16 +233,17 @@ export class AvatarService {
             return { status: 400, error: 'Invalid public key' };
         }
 
-        // Check if member exists and has an avatar_url
+        // The member's avatar as they set it (member_photos: written with the row's avatar_ref, @beanpool/engine
+        // members.ts setMemberPhoto, so a member with none has no row here).
         const row = db.prepare(
-            `SELECT public_key, avatar_url FROM members WHERE public_key = ?`
-        ).get(pubkey) as { public_key: string; avatar_url: string | null } | undefined;
+            `SELECT photo FROM member_photos WHERE public_key = ?`
+        ).get(pubkey) as { photo: string } | undefined;
 
-        if (!row || !row.avatar_url || !row.avatar_url.trim()) {
+        if (!row || !row.photo.trim()) {
             return { status: 404, error: 'Avatar not found' };
         }
 
-        const rawUrl = row.avatar_url.trim();
+        const rawUrl = row.photo.trim();
 
         // Check in-memory L1 cache; if rawUrl matches, use cached decoded buffer and etag
         const cached = this.cache.get(pubkey);
@@ -281,7 +282,7 @@ export class AvatarService {
             // `[\s\S]` rather than `.` so a base64 body wrapped across lines still matches.
             const dataMatch = rawUrl.match(/^data:([^;,]+);base64,([\s\S]*)$/i);
             if (dataMatch) {
-                // Allowlist on the way OUT, not only on the way in. `members.avatar_url` is
+                // Allowlist on the way OUT, not only on the way in. A member's photo (member_photos) is
                 // member-supplied and `POST /api/profile/update` does not validate its format
                 // the way post photos do, so the stored MIME type is attacker-controlled. This
                 // route is public and unauthenticated, so echoing a stored `text/html` or

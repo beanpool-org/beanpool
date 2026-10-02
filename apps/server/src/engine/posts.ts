@@ -8,7 +8,6 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { pollVoterNewOrWords } from './probation.js';
@@ -103,14 +102,12 @@ function assertMemberActive(publicKey: string): void {
 }
 
 function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT avatar_ref, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    // `isServableAvatarValue`, not a truthiness test. A row whose avatar_url is this node's own
-    // /api/avatar/ URL (written before updateProfile refused to store one) holds no photo at
-    // all — GET /api/avatar/<pk> 404s for it. Counting it as "has a photo" meant the gate stayed
-    // open on a photo nobody could see, and the phone's self-heal never got the signal to
-    // republish the real one.
-    if (!isServableAvatarValue(member.avatar_url)) {
+    // The row's avatar reference, set only for an avatar the node serves (@beanpool/core avatarRefOf): never this
+    // node's own /api/avatar/ URL sent back, which holds no photo at all. Counting that as "has a photo" kept the gate
+    // open on a photo nobody could see, and the phone's self-heal never got the signal to republish the real one.
+    if (!member.avatar_ref) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {

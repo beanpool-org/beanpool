@@ -36,7 +36,8 @@ import {
 } from './state-engine.js';
 import {
     liveOfferCount,
-    hasListedOffer
+    hasListedOffer,
+    setMemberPhoto,
 } from '@beanpool/engine';
 
 let run = 0;
@@ -72,9 +73,10 @@ async function main() {
 
     for (const m of members) {
         db.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, credit_frozen, joined_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `).run(m.pubkey, m.callsign, m.avatar, m.status, m.frozen);
+            INSERT OR REPLACE INTO members (public_key, callsign, status, credit_frozen, joined_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+        `).run(m.pubkey, m.callsign, m.status, m.frozen);
+        setMemberPhoto(db, m.pubkey, m.avatar);
     }
 
     console.log('--- 1. Validation & Options Check ---');
@@ -524,9 +526,10 @@ async function main() {
     replicaDb.exec(schemaSql);
     for (const m of members) {
         replicaDb.prepare(`
-            INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, status, credit_frozen, joined_at)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
-        `).run(m.pubkey, m.callsign, m.avatar, m.status, m.frozen);
+            INSERT OR REPLACE INTO members (public_key, callsign, status, credit_frozen, joined_at)
+            VALUES (?, ?, ?, ?, datetime('now'))
+        `).run(m.pubkey, m.callsign, m.status, m.frozen);
+        setMemberPhoto(replicaDb, m.pubkey, m.avatar);
     }
     for (const rp of syncSnapshot.posts ?? []) {
         const pollOptionsJson = rp.pollOptions != null

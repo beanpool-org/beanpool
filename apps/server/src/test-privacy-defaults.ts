@@ -58,6 +58,7 @@ process.env.ADMIN_PASSWORD = ADMIN_PW;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -153,10 +154,11 @@ async function main() {
 
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number; balance?: number; joinedAt?: string } = {}): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, is_visitor, earned_credit)
-                    VALUES (?, ?, ?, ?, 'seed', ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_visitor, earned_credit)
+                    VALUES (?, ?, ?, ?, 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, opts.status ?? 'active', opts.joinedAt ?? new Date(Date.now() - 60 * DAY).toISOString(),
-                `INV-${callsign.toUpperCase()}`, TINY_PNG, opts.visitor ? 1 : 0, opts.earned ?? 0);
+                `INV-${callsign.toUpperCase()}`, opts.visitor ? 1 : 0, opts.earned ?? 0);
+        setMemberPhoto(db, id.pk, TINY_PNG);
         db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, 0)').run(id.pk, opts.balance ?? 0);
         return id;
     };

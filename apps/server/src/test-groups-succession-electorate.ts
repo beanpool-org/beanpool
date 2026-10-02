@@ -41,6 +41,7 @@ import { issueRekeyCode } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -63,9 +64,10 @@ function keypair(callsign: string): Id {
 function makeMember(callsign: string): Id {
     const id = keypair(callsign);
     db.prepare(
-        `INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
-    ).run(id.pk, callsign, AVATAR);
+        `INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id.pk, callsign);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     return id;
 }

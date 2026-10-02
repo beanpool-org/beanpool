@@ -361,7 +361,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
      * before this names one session per request: the first request stops them all, so its words are true too.
      *
      * A named session is still checked: it must be the caller's own (400 otherwise, as before). The answer says what
-     * happened: `cancelled` (the named session, or any, was live and is stopped), `stopped` (how many), and `live`
+     * this request did: `cancelled` (it stopped at least one session, named or not), `stopped` (how many), and `live`
      * (how many are live now: 0 unless a new one opened since).
      */
     router.post('/api/recovery/collect/cancel', async (ctx) => {
@@ -378,7 +378,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
             const rest = cancelAllCollectionsFor(owner);
             const stopped = rest + (named ? 1 : 0);
             ctx.status = 200;
-            ctx.body = { cancelled: named ?? stopped > 0, stopped, live: countOpenCollectionsFor(owner) };
+            ctx.body = { cancelled: stopped > 0, stopped, live: countOpenCollectionsFor(owner) };
         } catch (e) { return fail(ctx, e); }
     });
 
@@ -390,8 +390,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
      * 624 KB a poll at 2,100 sessions and held the node for 0.7 s at 20,000 (PR #1456 deciding review). Both banners
      * show the count and when the newest started; an app from before `count` shows how many it was sent.
      *
-     * Sessions past their sign-in window are pruned first (engine pruneCollectionsFor), so a burst of strangers' opens
-     * is gone from here half an hour after it stops, rather than when somebody next opens one.
+     * Sessions past their sign-in window are pruned first (engine pruneCollectionsFor, a batch at a time), so what the
+     * owner sees is current; the node-wide sweep (sweepRecoveryCollections) retires the rest of a pile, and retires it
+     * for an owner who never opens the app too.
      */
     router.post('/api/recovery/collect/mine', async (ctx) => {
         const owner = ctx.state?.actor as string | undefined;

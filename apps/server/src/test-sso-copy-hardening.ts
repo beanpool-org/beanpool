@@ -16,6 +16,9 @@
  *      What that costs the member stays small: their app is sent the count and the newest few, one Stop takes every
  *      session in one request (and says so truthfully), and a pile is gone from their app half an hour after it stops
  *      growing. Their own restore, in progress through the flood, still goes through.
+ *   7. (PR #1456 re-review) And a pile against a member who never opens the app is retired anyway: a node-wide sweep,
+ *      in batches that never hold the node, leaves each owner's idle cap, deletes the expired and the long-stopped, and
+ *      keeps every session that released something and every one in its sign-in window.
  *
  * Local only: the node is this process's own HTTPS server on localhost. Google's key set is answered here, Expo's push
  * endpoint is answered here, and anything else is refused and counted.
@@ -342,6 +345,11 @@ async function main(): Promise<void> {
     // PR #1456 deciding review: nothing evicts a session in its sign-in window (5, above), so strangers with many
     // addresses can pile thousands against one name. Real signed HTTP, distinct /64s, and no limiter is ever reset here.
     console.log('\n── 6. a pile of strangers\' sessions ────────────────────');
+    // The node-wide sweep (§7), looked up rather than imported, so this suite runs (and fails where it should) on a node
+    // without it.
+    const rr = await import('./engine/recovery-release.js') as Record<string, unknown>;
+    const sweep = rr.sweepRecoveryCollections as undefined | ((onBatch?: (ms: number, rows: number) => void) => Promise<{ deleted: number; batches: number }>);
+    const sweepNow = async (onBatch?: (ms: number, rows: number) => void) => { if (sweep) await sweep(onBatch); };
     const eve = addOwner();
     await deposit(eve);
     const EVE_ADDR = '198.51.100.7';      // Eve's own phone, the one with the banner
@@ -412,7 +420,8 @@ async function main(): Promise<void> {
     db.prepare(`UPDATE recovery_collections SET updated_at = ? WHERE owner_pubkey = ? AND status = 'cancelled'`)
         .run(new Date(Date.now() - 31 * 60_000).toISOString(), eve.key.pk);
     await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
-    assert(emptyLeft() === 0, `half an hour on, Eve's next poll deletes every stopped session that released nothing (${emptyLeft()} left)`);
+    await sweepNow();
+    assert(emptyLeft() === 0, `half an hour on, Eve's next poll and the sweep delete every stopped session that released nothing (${emptyLeft()} left)`);
     assert(getRow(evesRestore.collectionId)?.status === 'cancelled', "...while her own restore, which released her copy, is kept as evidence");
 
     // An app from before names one session per Stop: its first request stops them all, so its "all cancelled" is true.
@@ -435,6 +444,102 @@ async function main(): Promise<void> {
     const later = await callFrom(EVE_ADDR, eve.key, '/api/recovery/collect/mine', {});
     assert(later.body?.count <= 10 && liveFor(eve) <= 10,
         `${piled} strangers' sessions past their sign-in window are down to the idle cap at Eve's next poll (${later.body?.count}, ${liveFor(eve)} live)`);
+
+    // ── 7. A pile against a member who never opens the app is retired anyway ──────────────────────────────────────
+    // PR #1456 re-review: the per-owner prune ran only when the owner polled or somebody opened against them, so a pile
+    // against a member whose app stays closed was never retired (750 rows at 400 days). A node-wide sweep, in batches.
+    console.log('\n── 7. the node-wide sweep ───────────────────────────────');
+    assert(typeof sweep === 'function', 'the node sweeps recovery sessions across every owner');
+    const rowsFor = (o: Owner, where = '1'): number => (db.prepare(`SELECT COUNT(*) AS n FROM recovery_collections
+        WHERE owner_pubkey = ? AND ${where}`).get(o.key.pk) as { n: number }).n;
+    const EMPTY = 'id NOT IN (SELECT collection_id FROM recovery_releases)';
+
+    const fay = addOwner();     // never opens the app: no poll, ever
+    await deposit(fay);
+    // A restore of Fay's that released its copy: evidence, kept whatever happens.
+    const faysEvidence = { device: throwaway(), collectionId: '' };
+    faysEvidence.collectionId = (await callFrom('203.0.113.70', faysEvidence.device, '/api/recovery/collect', { callsign: fay.callsign })).body?.collectionId;
+    const evNonce = (await callFrom('203.0.113.70', faysEvidence.device, '/api/recovery/collect/sso-nonce', { collectionId: faysEvidence.collectionId })).body?.nonce;
+    const evRelease = await callFrom('203.0.113.70', faysEvidence.device, '/api/recovery/collect/sso', {
+        collectionId: faysEvidence.collectionId, provider: 'google', idToken: googleToken(SUB, evNonce), nonce: evNonce,
+    });
+    assert(evRelease.status === 200, 'a restore of Fay\'s releases her copy (evidence from here on)');
+    const flood7 = await flood(fay.callsign, 7, 50, 15);
+    assert(flood7.length === 750 && flood7.every(st => st === 200), `750 strangers' opens from 50 /64s against Fay (${flood7.filter(st => st === 200).length} went through)`);
+    db.prepare(`UPDATE recovery_collections SET created_at = ? WHERE owner_pubkey = ?`).run(new Date(Date.now() - 31 * 60_000).toISOString(), fay.key.pk);
+    // Then Fay starts a restore of her own, on a new phone: in its sign-in window when the sweep runs.
+    const faysOwn = { device: throwaway(), collectionId: '' };
+    faysOwn.collectionId = (await callFrom('203.0.113.71', faysOwn.device, '/api/recovery/collect', { callsign: fay.callsign })).body?.collectionId;
+    const ownNonce = (await callFrom('203.0.113.71', faysOwn.device, '/api/recovery/collect/sso-nonce', { collectionId: faysOwn.collectionId })).body?.nonce;
+    // That open pruned one batch for Fay; put the pile back as it would be if nobody had opened against her.
+    const before7 = rowsFor(fay, EMPTY);
+    db.prepare(`UPDATE recovery_collections SET status = 'open' WHERE owner_pubkey = ? AND status = 'expired'`).run(fay.key.pk);
+    db.prepare(`WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
+        INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+        SELECT lower(hex(randomblob(32))), ?, (SELECT generation FROM recovery_collections WHERE id = ?), lower(hex(randomblob(32))), 'open', ?, ? FROM k`)
+        .run(Math.max(0, 751 - before7), fay.key.pk, faysOwn.collectionId, new Date(Date.now() - 31 * 60_000).toISOString(), new Date(Date.now() + 71 * 3600_000).toISOString());
+    const piled7 = rowsFor(fay, `${EMPTY} AND status = 'open' AND created_at <= '${new Date(Date.now() - 30 * 60_000).toISOString()}'`);
+    console.log(`  (${piled7} idle sessions against Fay past their window, her app closed)`);
+
+    await sweepNow();
+    const idle7 = rowsFor(fay, `${EMPTY} AND id != '${faysOwn.collectionId}'`);
+    assert(idle7 <= 10, `at 31 min, with no poll from Fay and no open against her, the sweep leaves her idle cap (${piled7} -> ${idle7})`);
+    assert(getRow(faysEvidence.collectionId)?.status === 'open', '...keeps the session that released her copy');
+    const ownIn = await callFrom('203.0.113.71', faysOwn.device, '/api/recovery/collect/sso', {
+        collectionId: faysOwn.collectionId, provider: 'google', idToken: googleToken(SUB, ownNonce), nonce: ownNonce,
+    });
+    assert(ownIn.status === 200, `...and Fay's own restore, in its sign-in window, survives it and goes through (${ownIn.status} ${ownIn.body?.error ?? ''})`);
+
+    db.prepare(`UPDATE recovery_collections SET expires_at = ? WHERE owner_pubkey = ?`).run(new Date(Date.now() - 1000).toISOString(), fay.key.pk);
+    await sweepNow();
+    assert(rowsFor(fay, EMPTY) === 0, `past their expiry, every session against Fay that released nothing is gone (${rowsFor(fay, EMPTY)} left)`);
+    assert(rowsFor(fay) === 2 && !!getRow(faysEvidence.collectionId) && !!getRow(faysOwn.collectionId),
+        `...and the two that released her copy are kept as evidence (${rowsFor(fay)})`);
+
+    // Stopped, past the half hour, with Fay's app closed after her Stop.
+    await flood(fay.callsign, 8, 4, 15);
+    assert((await callFrom('198.51.100.70', fay.key, '/api/recovery/collect/cancel', {})).body?.live === 0, 'Fay stops a new pile of 60, then closes the app');
+    db.prepare(`UPDATE recovery_collections SET updated_at = ? WHERE owner_pubkey = ? AND status = 'cancelled'`).run(new Date(Date.now() - 31 * 60_000).toISOString(), fay.key.pk);
+    await sweepNow();
+    assert(rowsFor(fay, EMPTY) === 0, `half an hour on, the sweep deletes the stopped ones that released nothing (${rowsFor(fay, EMPTY)} left)`);
+
+    // 250,000: half idle past its window against one member, half expired against another. No batch holds the node.
+    const gus = addOwner(); await deposit(gus);
+    const hal = addOwner(); await deposit(hal);
+    const gen = (o: Owner) => (db.prepare('SELECT MAX(generation) AS g FROM recovery_shares WHERE owner_pubkey = ?').get(o.key.pk) as { g: number }).g;
+    const bulk = (o: Owner, n: number, created: string, expires: string) => db.prepare(`WITH RECURSIVE k(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM k WHERE i < ?)
+        INSERT INTO recovery_collections (id, owner_pubkey, generation, requester_ephemeral_pubkey, status, created_at, expires_at)
+        SELECT lower(hex(randomblob(32))), ?, ?, lower(hex(randomblob(32))), 'open', ?, ? FROM k`).run(n, o.key.pk, gen(o), created, expires);
+    bulk(gus, 125_000, new Date(Date.now() - 40 * 60_000).toISOString(), new Date(Date.now() + 70 * 3600_000).toISOString());
+    bulk(hal, 125_000, new Date(Date.now() - 73 * 3600_000).toISOString(), new Date(Date.now() - 3600_000).toISOString());
+    const gusPoll = await callFrom('198.51.100.71', gus.key, '/api/recovery/collect/mine', {});
+    console.log(`  (Gus's first poll on 125,000 aged sessions: ${Math.round(gusPoll.ms)} ms)`);
+    assert(gusPoll.status === 200 && gusPoll.ms < 500, `a poll on an aged pile of 125,000 prunes one batch, not the pile (${Math.round(gusPoll.ms)} ms)`);
+    const times: number[] = [];
+    let swept = 0;
+    // A bystander asks the node something the whole time; how long it waits is how long the sweep holds the loop.
+    let sweepDone = false;
+    const waits: number[] = [];
+    const bystander = (async () => {
+        while (!sweepDone) {
+            const t = performance.now();
+            await fetch(`${BASE}/api/version`).then(r => r.text()).catch(() => '');
+            waits.push(performance.now() - t);
+        }
+    })();
+    const t7 = performance.now();
+    await sweepNow((ms, rows) => { times.push(ms); swept += rows; });
+    const sweepMs = performance.now() - t7;
+    sweepDone = true;
+    await bystander;
+    const longest = Math.max(0, ...times);
+    const median = [...times].sort((x, y) => x - y)[Math.floor(times.length / 2)] ?? 0;
+    const longestWait = Math.max(0, ...waits);
+    console.log(`  (swept ${swept} rows in ${times.length} batches, ${Math.round(sweepMs)} ms; median batch ${median.toFixed(1)} ms, longest ${longest.toFixed(1)} ms; `
+        + `a bystander's longest wait ${longestWait.toFixed(1)} ms over ${waits.length} requests)`);
+    assert(rowsFor(gus, EMPTY) <= 10 && rowsFor(hal, EMPTY) === 0, `the sweep retires the 250,000 (Gus ${rowsFor(gus, EMPTY)}, Hal ${rowsFor(hal, EMPTY)} left)`);
+    assert(times.length > 1 && longest < 100, `...in batches, none holding the node for more than ~100 ms (longest ${longest.toFixed(1)} ms)`);
+    assert(waits.length > 1 && longestWait < 400, `...so a request made meanwhile is answered within a batch (longest wait ${longestWait.toFixed(1)} ms)`);
 
     assert(blocked.length === 0, `nothing was reached off this machine (${blocked.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} checks passed.`);

@@ -95,8 +95,10 @@ const RELEASABLE: readonly KeeperType[] = ['hub', 'sso'];
  * member's session and a stranger's look the same, so any cap on them evicts or refuses the member once the stranger
  * has enough addresses. What such a pile can cost is bounded instead, where it lands:
  *
- *   - it lasts one window, not 72 hours: the prune runs when the owner's app reads its sessions as well as on each
- *     open, so thirty minutes after the last open the pile is down to this cap;
+ *   - it lasts one window, not 72 hours, whether or not the owner ever opens the app: the node-wide sweep
+ *     (sweepRecoveryCollections, every SWEEP_EVERY_MS on every server) retires idle sessions past this cap for every
+ *     owner, so storage is bounded by recent opens rather than by whether their targets look; the owner's own poll and
+ *     each open against them prune the same way sooner;
  *   - the owner is sent its size and the newest few (routes/recovery-collect.ts `/collect/mine`), never every row;
  *   - the owner's Stop takes every one in one statement (cancelAllCollectionsFor).
  */
@@ -110,8 +112,8 @@ export const SIGN_IN_WINDOW_MS = 30 * 60 * 1000;
 
 /**
  * How long a session the owner stopped is kept when it released nothing: long enough for the device using it to be told
- * "That recovery session was cancelled" rather than that it never existed. Then the prune deletes it, so a Stop of a
- * stranger's pile frees it within the half hour.
+ * "That recovery session was cancelled" rather than that it never existed. After that, the next prune for that owner
+ * or the next node-wide sweep (sweepRecoveryCollections) deletes it.
  */
 export const STOPPED_SESSION_KEPT_MS = SIGN_IN_WINDOW_MS;
 
@@ -130,11 +132,13 @@ export const STOPPED_SESSION_KEPT_MS = SIGN_IN_WINDOW_MS;
  * kept whatever its state, because that one is evidence — the owner needs to be able to see that
  * an attempt happened, which is the whole point of being able to cancel and re-split.
  *
- * Run opportunistically, scoped to one owner: when a session opens, when the owner's app reads its live sessions
- * (`/collect/mine`), and after the owner's Stop. No timer (this codebase keeps having to remove those) and no hourly
- * sweep to forget about. Opening is the only moment rows appear; the read is what retires a pile of sessions whose
- * sign-in window has passed without waiting for somebody to open another one (PR #1456 deciding review: a burst
- * otherwise stayed listed for the full 72 hours).
+ * Two ways, retiring the same rows:
+ *   - this one, scoped to one owner: when a session opens against them, and when their app reads its live sessions
+ *     (`/collect/mine`), so what they see is current;
+ *   - sweepRecoveryCollections, across every owner on a timer: an owner whose app stays closed is never pruned here,
+ *     and a pile against them stayed for good (PR #1456 re-review: 750 rows still there at 400 days).
+ * Each statement here takes at most SWEEP_BATCH rows, so an open or a poll against a pile of 250,000 never holds the
+ * node for seconds; whatever is left goes in the sweep's batches.
  */
 export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evicted: number } {
     const now = nowIso();
@@ -158,20 +162,126 @@ export function pruneCollectionsFor(ownerPubkey: string): { deleted: number; evi
             -- insertion-ordered by construction, so newest-survives becomes true rather than
             -- usually-true.
             ORDER BY created_at DESC, rowid DESC
-            LIMIT -1 OFFSET ?
+            LIMIT ? OFFSET ?
         )
-    `).run(ownerPubkey, now, windowStart, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
+    `).run(ownerPubkey, now, windowStart, SWEEP_BATCH, MAX_LIVE_COLLECTIONS_PER_OWNER).changes;
 
     // Dead and empty: past its expiry, or evicted just now, goes at once. One the owner STOPPED stays for
     // STOPPED_SESSION_KEPT_MS first, so the device using it reads "cancelled" rather than "no such session".
     const deleted = db.prepare(`
-        DELETE FROM recovery_collections
-        WHERE owner_pubkey = ?
-          AND (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
-          AND id NOT IN (SELECT collection_id FROM recovery_releases)
-    `).run(ownerPubkey, now, new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString()).changes;
+        DELETE FROM recovery_collections WHERE rowid IN (
+            SELECT rowid FROM recovery_collections
+            WHERE owner_pubkey = ?
+              AND (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
+              AND id NOT IN (SELECT collection_id FROM recovery_releases)
+            LIMIT ?
+        )
+    `).run(ownerPubkey, now, new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString(), SWEEP_BATCH).changes;
 
     return { deleted, evicted };
+}
+
+/**
+ * The most rows one statement of the prune or the sweep takes. Deleting a session costs about 30 µs here (secure_delete
+ * is on, and the table has four indexes), so a batch is about 15 ms (test-sso-copy-hardening §7 measures it; a 250,000
+ * pile goes in about 8 s of batches, with requests answered between them).
+ */
+export const SWEEP_BATCH = 500;
+
+/** How often every server sweeps its recovery sessions (startSweepingRecoveryCollections). */
+export const SWEEP_EVERY_MS = 10 * 60 * 1000;
+
+const yieldToEventLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
+
+/**
+ * Retire, across every owner, what pruneCollectionsFor retires for one: sessions that released nothing and are past
+ * their expiry, evicted, or stopped more than STOPPED_SESSION_KEPT_MS ago; and each owner's idle sessions (past their
+ * sign-in window, released nothing) beyond MAX_LIVE_COLLECTIONS_PER_OWNER, oldest first. Never one in its sign-in
+ * window, and never one that released something (evidence).
+ *
+ * PR #1456 re-review: the per-owner prune runs only when somebody opens a session against that owner or the owner's
+ * app polls, so a pile against a member who never opens the app was never retired. This runs on a timer instead.
+ *
+ * In batches of SWEEP_BATCH rows, each its own statement (so its own transaction), yielding to the event loop between
+ * them: a 250,000 pile goes without any request waiting more than one batch. Evicted idle sessions are deleted
+ * outright: they released nothing, so pruneCollectionsFor would delete them in the same pass. `onBatch` is for tests
+ * that time each batch.
+ */
+export async function sweepRecoveryCollections(
+    onBatch?: (ms: number, rows: number) => void,
+): Promise<{ deleted: number; batches: number }> {
+    let deleted = 0;
+    let batches = 0;
+    const run = (stmt: () => number): number => {
+        const t0 = performance.now();
+        const n = stmt();
+        batches++;
+        deleted += n;
+        onBatch?.(performance.now() - t0, n);
+        return n;
+    };
+
+    // Dead and empty, any owner.
+    const dead = db.prepare(`
+        DELETE FROM recovery_collections WHERE rowid IN (
+            SELECT rowid FROM recovery_collections
+            WHERE (expires_at <= ? OR status = 'expired' OR (status != 'open' AND updated_at <= ?))
+              AND id NOT IN (SELECT collection_id FROM recovery_releases)
+            LIMIT ?
+        )
+    `);
+    while (run(() => dead.run(nowIso(), new Date(Date.now() - STOPPED_SESSION_KEPT_MS).toISOString(), SWEEP_BATCH).changes) >= SWEEP_BATCH) {
+        await yieldToEventLoop();
+    }
+    await yieldToEventLoop();
+
+    // Idle beyond each owner's cap. The owners first (one indexed pass), then each owner's oldest idle, a batch at a time.
+    const windowStart = (): string => new Date(Date.now() - SIGN_IN_WINDOW_MS).toISOString();
+    let owners: { owner: string }[] = [];
+    run(() => {
+        owners = db.prepare(`
+            SELECT owner_pubkey AS owner FROM recovery_collections
+            WHERE status = 'open' AND expires_at > ? AND created_at <= ?
+            GROUP BY owner_pubkey HAVING COUNT(*) > ?
+        `).all(nowIso(), windowStart(), MAX_LIVE_COLLECTIONS_PER_OWNER) as { owner: string }[];
+        return 0;
+    });
+    const idle = db.prepare(`
+        DELETE FROM recovery_collections WHERE rowid IN (
+            SELECT rowid FROM recovery_collections
+            WHERE owner_pubkey = ? AND status = 'open' AND expires_at > ? AND created_at <= ?
+              AND id NOT IN (SELECT collection_id FROM recovery_releases)
+            ORDER BY created_at DESC, rowid DESC
+            LIMIT ? OFFSET ?
+        )
+    `);
+    for (const { owner } of owners) {
+        await yieldToEventLoop();
+        while (run(() => idle.run(owner, nowIso(), windowStart(), SWEEP_BATCH, MAX_LIVE_COLLECTIONS_PER_OWNER).changes) >= SWEEP_BATCH) {
+            await yieldToEventLoop();
+        }
+    }
+    return { deleted, batches };
+}
+
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
+let sweeping = false;
+
+/**
+ * Sweep every SWEEP_EVERY_MS, on every server whatever its role: the sessions are each server's own (engine/
+ * replication-manifest.ts, `local`), so a standby that takes opens bounds its own. One sweep at a time. Unref'd.
+ */
+export function startSweepingRecoveryCollections(everyMs = SWEEP_EVERY_MS): void {
+    if (sweepTimer) clearInterval(sweepTimer);
+    sweepTimer = setInterval(() => {
+        if (sweeping) return;
+        sweeping = true;
+        sweepRecoveryCollections()
+            .then(({ deleted }) => { if (deleted > 0) console.log(`[Recovery] Swept ${deleted} recovery session(s) that released nothing.`); })
+            .catch(e => console.warn('[Recovery] Could not sweep recovery sessions:', (e as Error)?.message || e))
+            .finally(() => { sweeping = false; });
+    }, everyMs);
+    sweepTimer.unref?.();
 }
 
 export class RecoveryReleaseError extends Error {
@@ -745,8 +855,8 @@ export function cancelCollection(collectionId: string, byPubkey: string): boolea
  * MAX_LIVE_COLLECTIONS_PER_OWNER: nothing evicts those, so nobody can push out the member's own sign-in). A stop that
  * took them one request at a time ran into the owner's own rate limits a few hundred in, with the rest still live (PR
  * #1456 deciding review). This one takes them all, however many, and the owner's "all stopped" is then true. The
- * ones that released nothing are deleted by the prune once STOPPED_SESSION_KEPT_MS has passed; one that released
- * something stays as evidence.
+ * ones that released nothing are deleted once STOPPED_SESSION_KEPT_MS has passed, by the next prune for this owner or
+ * the next node-wide sweep (sweepRecoveryCollections); one that released something stays as evidence.
  *
  * @returns how many were live and are now stopped
  */

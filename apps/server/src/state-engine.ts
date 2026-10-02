@@ -35,6 +35,7 @@ import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
 import { pruneWebVisits } from './engine/web-visits.js';
 import { startPruningUnusedInvites } from './engine/writer-bounds.js';
+import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
 import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
 import { noteRemovedNewcomer } from './engine/door-signal.js';
 import { admitByAddress } from './db/writes-by-address.js';
@@ -820,6 +821,11 @@ export function initStateEngine(): void {
     // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
     // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
     startPruningUnusedInvites();
+
+    // Recovery sessions that released nothing, past their window or stopped, for every owner: a pile of strangers' opens
+    // against a member who never opens the app is retired too (engine/recovery-release.ts sweepRecoveryCollections).
+    // Every role: the sessions are each server's own.
+    startSweepingRecoveryCollections();
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;

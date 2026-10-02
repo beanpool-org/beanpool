@@ -115,3 +115,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-23 - Add loading indicators for EconomySection enterprises and proposals
 **Learning:** `EconomySection.tsx` fell through to "No pending proposals." while `loadingCommons` was `true`, misleading operators into thinking no proposals existed before data finished loading.
 **Action:** Render explicit loading indicators with `animate-spin` spinners when `loadingTreasuries` or `loadingCommons` is `true`.
+
+## 2026-11-24 - Add loading spinner indicator to AppVersionsCard
+**Learning:** `AppVersionsCard.tsx` displayed static "Counting..." text without a visual loading indicator while app versions were fetched asynchronously.
+**Action:** Render an animated hourglass spinner (`animate-spin`) alongside the "Counting..." text to give clearer feedback during async fetches.

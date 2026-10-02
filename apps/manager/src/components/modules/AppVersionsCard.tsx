@@ -135,7 +135,10 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
             {error ? (
                 <p role="alert" className="text-sm text-amber-300 m-0">{error}</p>
             ) : !data ? (
-                <p className="text-sm text-nature-400 m-0">Counting…</p>
+                <div className="flex items-center gap-2 text-sm text-nature-400 m-0">
+                    <span className="animate-spin text-terra-400" aria-hidden="true">⏳</span>
+                    <span>Counting…</span>
+                </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {PLATFORMS.filter((pl) => Array.isArray(data.platforms[pl.key]?.versions)).map((pl) => (

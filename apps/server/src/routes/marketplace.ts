@@ -382,9 +382,11 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
+    // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
+    // no author's trust profile, photo or trade count per post.
     const listing = {
         id, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
-        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
     };
     let posts: MarketplacePost[];
     if (heal && updatedAfter) {

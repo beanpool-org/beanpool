@@ -234,22 +234,29 @@ async function main() {
 
     // ── 3. the CPU a visitor's board read costs ──────────────────────────────────────────────────────────────────────
     console.log("\n— 3. the CPU a visitor's board read costs —");
-    for (let i = 0; i < 20; i++) await guestRead({});
-    const N = 200;
-    const cpu0 = process.cpuUsage();
-    const t0 = performance.now();
-    for (let i = 0; i < N; i++) await guestRead({});
-    const cpu = process.cpuUsage(cpu0);
-    const cpuMs = (cpu.user + cpu.system) / 1000 / N;
-    const wallMs = (performance.now() - t0) / N;
-    // Loose: client and server share this process, and CI is slower than a laptop.
-    const BOUND_MS = 6;
-    assert(cpuMs < BOUND_MS, `a visitor's board read of 50 posts: ${cpuMs.toFixed(2)} ms of CPU each, client included (${wallMs.toFixed(2)} ms wall), under ${BOUND_MS}`);
-    for (let i = 0; i < 20; i++) await memberRead(reader);
-    const mcpu0 = process.cpuUsage();
-    for (let i = 0; i < N; i++) await memberRead(reader);
-    const mcpu = process.cpuUsage(mcpu0);
-    console.log(`  (measured, not asserted: a member's board read ${((mcpu.user + mcpu.system) / 1000 / N).toFixed(2)} ms of CPU each)`);
+    // No absolute time: a CPU time in ms doesn't carry from a laptop to a CI runner (6.63 ms on CI against 1.5 to 4.9 ms
+    // here, and origin/main's 6.3 ms sits between them). What carries is a ratio inside one process, measured in
+    // alternating rounds so a neighbour's burst lands on both: a visitor's read against a member's read of the same
+    // board (a member's read still reads each author's standing and keyed face). On the head the ratio is 0.44 to 0.54;
+    // on origin/main a visitor's read cost what a member's did (~1.0). The work itself is asserted exactly in §2.
+    for (let i = 0; i < 20; i++) { await guestRead({}); await memberRead(reader); }
+    const N = 40, ROUNDS = 7;
+    const cpuOf = async (fn: () => Promise<unknown>): Promise<number> => {
+        const c0 = process.cpuUsage();
+        for (let i = 0; i < N; i++) await fn();
+        const c = process.cpuUsage(c0);
+        return (c.user + c.system) / 1000 / N;
+    };
+    const ratios: number[] = [], guestMs: number[] = [], memberMs: number[] = [];
+    for (let r = 0; r < ROUNDS; r++) {
+        const g = await cpuOf(() => guestRead({}));
+        const m = await cpuOf(() => memberRead(reader));
+        guestMs.push(g); memberMs.push(m); ratios.push(g / m);
+    }
+    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)];
+    const RATIO_BOUND = 0.85;
+    assert(median(ratios) < RATIO_BOUND,
+        `a visitor's board read costs ${median(ratios).toFixed(2)} of a member's (median of ${ROUNDS} alternating rounds; ${median(guestMs).toFixed(2)} against ${median(memberMs).toFixed(2)} ms of CPU each, client included), under ${RATIO_BOUND}`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

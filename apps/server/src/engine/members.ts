@@ -293,7 +293,7 @@ export function registerMemberInternal(
         // changed, and uniquify it (excluding self) so a re-register never collides.
         if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
             callsign = uniquifyCallsign(callsign, publicKey);
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
         }
         return getMember(db, publicKey)!;
@@ -365,7 +365,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     if (existing) {
         let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
         if (homeNodeUrl && !existing.home_node_url) {

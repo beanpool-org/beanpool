@@ -126,7 +126,7 @@ async function child(): Promise<void> {
     se.initStateEngine();
     if (process.env.PKR_PROMOTE_IN_PROCESS === '1') {
         // A take-over's "role" step finished at this boot, after the state engine read the role as a standby's
-        // (index.ts: initStateEngine, then resumeTakeoverAtBoot), as test-schema-upgrade plays it.
+        // (index.ts: initStateEngine, then resumeTakeoverAtBoot), as test-schema-upgrade-triggers-visitors plays it.
         const { updateLocalConfig } = await import('./config/local-config.js');
         const { resumeTakeoverAtBoot } = await import('./services/takeover.js');
         updateLocalConfig({ nodeRole: 'primary' });

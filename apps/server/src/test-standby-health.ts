@@ -73,8 +73,11 @@ const HOUR = 60 * 60_000;
 // `generic` says the lock screen showed only "Your community's standby server needs you." and the notice.
 type CaughtPush = { to: string[]; title: string; body: string; generic: boolean };
 
-function guardFetch(): { blocked: string[]; pushes: CaughtPush[] } {
-    const seen = { blocked: [] as string[], pushes: [] as CaughtPush[] };
+function guardFetch(): { blocked: string[]; pushes: CaughtPush[]; filled: () => Promise<void> } {
+    // Each push's details are filled in a moment after it is caught; `filled` waits for every one, so a check never reads a
+    // push before its details are in (a slow runner read one with an empty title: CI run 36885696735).
+    const filling: Promise<void>[] = [];
+    const seen = { blocked: [] as string[], pushes: [] as CaughtPush[], filled: async () => { await Promise.all(filling); } };
     const real = globalThis.fetch;
     globalThis.fetch = (async (input: any, init?: any) => {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
@@ -84,7 +87,7 @@ function guardFetch(): { blocked: string[]; pushes: CaughtPush[] } {
             // Kept at once; its details are read just after, by the time a check takes the push.
             const push: CaughtPush = { to: batch.map((m) => m.to), title: '', body: '', generic: batch.every((m) => pushIsGeneric(m) && m.data.k === 'owner.standby') };
             seen.pushes.push(push);
-            if (batch[0]) void import('./db/db.js').then(({ db }) => { const told = toldPush(db, batch[0]); push.title = told.title ?? ''; push.body = told.body ?? ''; });
+            if (batch[0]) filling.push(import('./db/db.js').then(({ db }) => { const told = toldPush(db, batch[0]); push.title = told.title ?? ''; push.body = told.body ?? ''; }));
             return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
         }
         seen.blocked.push(url.hostname);
@@ -306,7 +309,7 @@ async function child(): Promise<void> {
             const q = getAdminQueue as (opts?: { forModerator?: boolean; forOwner?: boolean }) => { total: number; items: { kind: string; count: number; section: string; settingsPath: string; label: string }[] };
             return { owner: q({ forOwner: true }), admin: q({}), moderator: q({ forModerator: true }) };
         },
-        fetches: async () => fetches,
+        fetches: async () => { await fetches.filled(); return { blocked: fetches.blocked, pushes: fetches.pushes }; },
         checkpoint: async () => {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');

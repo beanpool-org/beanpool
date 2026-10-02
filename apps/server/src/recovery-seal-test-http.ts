@@ -10,6 +10,7 @@
 
 import crypto from 'node:crypto';
 import { sealSeedToSso, openSeedFromSso } from '@beanpool/core';
+import { localFetch } from './keepalive-test-fetch.js';
 
 const GOOGLE_KID = 'test-recovery-seal-s2-google-kid';
 const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
@@ -89,7 +90,7 @@ export async function startRecoveryHttps(): Promise<RecoveryHttps> {
         const bodyString = JSON.stringify(body ?? {});
         const ts = Date.now();
         const nonce = crypto.randomBytes(16).toString('hex');
-        const res = await fetch(`${base}${p}`, {
+        const res = await localFetch(`${base}${p}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

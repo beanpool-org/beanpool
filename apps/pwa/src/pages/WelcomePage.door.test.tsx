@@ -4,7 +4,7 @@
  * in components/WebJoin.test.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { WelcomePage } from './WelcomePage';
 import {
     generateIdentity, identityFromMnemonic, importIdentity, loadIdentity, loadPendingJoin, savePendingJoin, PENDING_JOIN_TTL_MS,
@@ -170,11 +170,17 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         return calls;
     }
 
+    /**
+     * The line above the words, where "the <strong>only</strong> way" is said. Read there and not on the whole screen: each
+     * of the 12 words is a <strong> too, and "only" is one of the 2048 (CI run 36892145303 drew it).
+     */
+    const wordsIntro = () => screen.getByText(/Write these 12 words down on paper and keep them safe\./);
+
     it('stored: the words screen says the sign-in brings the account back too, and never "the only way"', async () => {
         const calls = await toTheWords({ enrolled: true, generation: 1, provider: 'google', enrolledSso: ['google'] });
         expect(calls.find((c) => c.path === '/api/join')?.body.recovery.shares).toHaveLength(1);
         expect(screen.getByTestId('backup-signin-recovery')).toHaveTextContent('Signing in with Google also brings this account back.');
-        expect(screen.queryByText(/only/, { selector: 'strong' })).toBeNull();
+        expect(within(wordsIntro()).queryByText(/only/, { selector: 'strong' })).toBeNull();
         expect(screen.getByText(/They bring your identity back if you lose this device\./)).toBeInTheDocument();
         // The tickbox and the words are today's.
         for (const w of identity.mnemonic!) expect(screen.getAllByText(w).length).toBeGreaterThan(0);
@@ -185,7 +191,7 @@ describe('the words screen after a door join that enrolled its sign-in (G11-c)',
         await toTheWords({ enrolled: false, error: 'The recovery keeper could not be stored.' });
         expect(screen.queryByTestId('backup-signin-recovery')).toBeNull();
         expect(screen.getByText(/way to recover your identity if you lose this device\./)).toBeInTheDocument();
-        expect(screen.getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
+        expect(within(wordsIntro()).getAllByText('only', { selector: 'strong' }).length).toBeGreaterThan(0);
     });
 });
 

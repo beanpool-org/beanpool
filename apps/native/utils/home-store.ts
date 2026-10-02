@@ -4,8 +4,9 @@
  *
  * - **One signed read for the whole screen**, `GET /api/home?cards=…` (apps/server routes/home.ts), sent with the
  *   `If-None-Match` of the answer the phone keeps, so a repeat read is a 304 with no body. The address names the cards in
- *   the catalogue's order and nothing that changes between reads (no point: the node uses the member's own area), so the
- *   same layout asks the same address and the node can confirm the copy.
+ *   the catalogue's order and, on the global node only, the phone's place to about a kilometre (H4: Find your community
+ *   and "Near you" are measured from it, as the Market's card was; a local community gets no point and uses the member's
+ *   own area), so the same layout in the same place asks the same address and the node can confirm the copy.
  * - **The last answer is kept** per account and community (storage-keys.ts `homeAnswerStoreKey`) and drawn at once on
  *   the next landing, before the network answers (§5.2 "Offline / 2G"). Nothing on Home waits on the network.
  * - **Overlapping reads are one read**: a focus, a doorbell and a pull that meet share the read already out.
@@ -61,8 +62,27 @@ export interface StoredHome {
     at: number;
 }
 
-export function homePath(asked: readonly HomeCardId[]): string {
-    return `/api/home?cards=${asked.join(',')}`;
+/** A point Home is measured from: the phone's last known place, on the global node only (H4; see {@link coarseHomePoint}). */
+export interface HomePoint { lat: number; lng: number }
+
+/**
+ * The phone's place as Home sends it: two decimals (about a kilometre), so the address stays the same while the phone
+ * moves about a street and a repeat read can still be a 304, and the node learns no more than the Market's own "near
+ * you" read tells it. Null for anything that isn't a place.
+ */
+export function coarseHomePoint(point: HomePoint | null | undefined): HomePoint | null {
+    if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng) || Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180) return null;
+    const two = (n: number) => Math.round(n * 100) / 100;
+    return { lat: two(point.lat), lng: two(point.lng) };
+}
+
+/**
+ * The address: the cards in the catalogue's order and, on the global node, the coarse point "near you" is measured from
+ * (GET /api/home's `lat`/`lng`; without one the node uses the member's own area). The signature covers the path only.
+ */
+export function homePath(asked: readonly HomeCardId[], point?: HomePoint | null): string {
+    const p = coarseHomePoint(point);
+    return `/api/home?cards=${asked.join(',')}${p ? `&lat=${p.lat.toFixed(2)}&lng=${p.lng.toFixed(2)}` : ''}`;
 }
 
 export async function readStoredHome(publicKey: string, url: string): Promise<StoredHome | null> {
@@ -108,7 +128,7 @@ export type HomeRead =
  */
 export async function readHomeFromNode(
     url: string, identity: BeanPoolIdentity, asked: readonly HomeCardId[], cached: StoredHome | null,
-    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount } = {},
+    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount; point?: HomePoint | null } = {},
 ): Promise<HomeRead> {
     const now = options.now ?? Date.now;
     const whose = options.whose ?? homeAccount(identity.publicKey);
@@ -119,7 +139,9 @@ export async function readHomeFromNode(
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), options.timeoutMs ?? HOME_READ_TIMEOUT_MS);
     try {
-        const res = await signedGet(url, homePath(asked), identity, stop.signal, copy?.etag ? { 'If-None-Match': copy.etag } : undefined);
+        // The copy's tag is sent whatever point it was read at: the tag is the answer's own (routes/home.ts), so the node
+        // confirms the copy only while it is still the whole answer for this point too.
+        const res = await signedGet(url, homePath(asked, options.point), identity, stop.signal, copy?.etag ? { 'If-None-Match': copy.etag } : undefined);
         if (res.status === 304) {
             if (!copy) return { kind: 'failed' };
             if (!stillOnPhone(whose)) return { kind: 'left' };
@@ -161,10 +183,10 @@ onHomeAccountChange(() => {
  */
 export function loadHome(
     url: string, identity: BeanPoolIdentity, asked: readonly HomeCardId[], cached: StoredHome | null,
-    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount } = {},
+    options: { timeoutMs?: number; now?: () => number; whose?: HomeAccount; point?: HomePoint | null } = {},
 ): Promise<HomeRead> {
     const whose = options.whose ?? homeAccount(identity.publicKey);
-    const key = `${identity.publicKey}|${whose.generation}|${norm(url)}|${asked.join(',')}`;
+    const key = `${identity.publicKey}|${whose.generation}|${norm(url)}|${homePath(asked, options.point)}`;
     if (inflight?.key === key) return inflight.promise;
     const promise = readHomeFromNode(url, identity, asked, cached, { ...options, whose }).then((answered): HomeRead => {
         const read: HomeRead = answered.kind === 'answer' && !stillOnPhone(whose) ? { kind: 'left' } : answered;

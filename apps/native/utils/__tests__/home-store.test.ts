@@ -32,7 +32,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 vi.mock('../pulse-token-store', () => ({ forgetAllPulseTokens: vi.fn(async () => undefined) }));
 
 import {
-    FAV_CATEGORIES_STORE_KEY, HOME_HEADER_WAIT_MS, freshHomeForHeader, homeForHeader, loadHome, readHomeFromNode, readStoredHome,
+    FAV_CATEGORIES_STORE_KEY, HOME_HEADER_WAIT_MS, coarseHomePoint, freshHomeForHeader, homeForHeader, homePath, loadHome, readHomeFromNode, readStoredHome,
     interestsTurnNow, reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests,
 } from '../home-store';
 import { HOME_FRESH_FOR_HEADER_MS, cardsToAsk, type HomeAnswer, type HomeLayout } from '../home-cards';
@@ -144,12 +144,34 @@ describe('one signed read for the whole screen, and the 304', () => {
         expect(read.kind).toBe('answer');
         expect(homeReads()).toHaveLength(1);
         const [r] = homeReads();
-        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community`);
+        expect(r.url).toBe(`${NODE}/api/home?cards=needs,safety,find,steps,deals,enterprise,events,market,decide,groups,joined,pulse,beans,notices,community`);
         expect(r.headers['If-None-Match']).toBeUndefined();
         expect(boundSignatureValid(r, me.publicKey)).toBe(true);
         const kept = await readStoredHome(me.publicKey, NODE);
         expect(kept?.answer.cards.community?.name).toBe('Mullumbimby');
         expect(kept?.etag).toBe(etagOf(me.publicKey, node.answer!));
+    });
+
+    it('a point (the global node, H4): two decimals in the address, outside the signature, and the kept tag still sent', async () => {
+        expect(homePath(['market'], { lat: -28.548_31, lng: 153.499_97 })).toBe('/api/home?cards=market&lat=-28.55&lng=153.50');
+        expect(coarseHomePoint({ lat: -28.548_31, lng: 153.499_97 })).toEqual({ lat: -28.55, lng: 153.5 });
+        // No point, or one that isn't a place: the address is H2's.
+        expect(homePath(['market'])).toBe('/api/home?cards=market');
+        expect(homePath(['market'], { lat: NaN, lng: 1 })).toBe('/api/home?cards=market');
+        expect(homePath(['market'], { lat: 91, lng: 1 })).toBe('/api/home?cards=market');
+        // A street's move is the same address, so a repeat read is still a 304.
+        expect(homePath(['market'], { lat: -28.5481, lng: 153.4999 })).toBe(homePath(['market'], { lat: -28.5517, lng: 153.4962 }));
+        const first = await readHomeFromNode(NODE, me, asked, null, { point: { lat: -28.548_31, lng: 153.499_97 } });
+        if (first.kind !== 'answer') throw new Error('no answer');
+        const again = await readHomeFromNode(NODE, me, asked, first.stored, { point: { lat: -28.5517, lng: 153.4962 } });
+        expect(again).toMatchObject({ kind: 'answer', confirmed: true });
+        const [r1, r2] = homeReads();
+        expect(new URL(r1.url).searchParams.get('lat')).toBe('-28.55');
+        expect(new URL(r1.url).searchParams.get('lng')).toBe('153.50');
+        expect(boundSignatureValid(r1, me.publicKey)).toBe(true);
+        expect(r2.headers['If-None-Match']).toBe(first.stored.etag);
+        // The answer the header reads keeps its own list of cards (the point is not part of it).
+        expect(first.stored.asked).toBe(asked.join(','));
     });
 
     it('a repeat sends the kept tag: a 304 with no body, the copy confirmed and its time renewed', async () => {

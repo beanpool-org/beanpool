@@ -173,7 +173,10 @@ describe('where it starts on the open door', () => {
         stubNode({ '/api/recovery/lookup/': () => json(200, []) });
         render(<WelcomePage onComplete={vi.fn()} />);
         fireEvent.click(await screen.findByRole('button', { name: 'Already have BeanPool?' }));
-        fireEvent.click(await screen.findByTestId('join-restore-signin'));
+        // Disabled until WebJoin's browserKeyProblem() answers: wait for it, or a slow runner clicks a disabled button.
+        const signin = await screen.findByTestId('join-restore-signin');
+        await waitFor(() => expect(signin).not.toBeDisabled());
+        fireEvent.click(signin);
         await screen.findByTestId('restore-screen-name');
         // And back: the lobby again.
         fireEvent.click(screen.getByRole('button', { name: '← Back' }));

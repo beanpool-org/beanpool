@@ -8,8 +8,9 @@ import type { RolesViewer } from './NodeRolesPanel';
  * People & Safety → Invites & QR → "Who may invite": the door (community modes slice 1; apps/server config/door.ts).
  *
  * Two presets, each one setting of the door: **Invite** (any member invites, every community until now and the default)
- * and **Known** (only owners and admins invite; said plainly as "only admins invite", since the names list Known will
- * later add doesn't exist yet). The global node's door is open: anyone joins with a sign-in and nobody invites, which
+ * and **Known** (only owners and admins invite, said plainly as "only admins invite"). Known's words point to the names
+ * list (community modes slice 2), which opens in the app on an owner's or admin's phone and needs their key: a password
+ * session here can't read it (design §4.3). The global node's door is open: anyone joins with a sign-in and nobody invites, which
  * its profile sets, so it is shown and not offered. A local community can't open its door: the node refuses it.
  *
  * Read from /api/node/config (`door`, public); a node older than the door says nothing, and nothing is shown. Saved
@@ -37,7 +38,8 @@ export const DOOR_PRESETS: ReadonlyArray<{ door: CommunityDoor; name: string; pl
         door: 'admins',
         name: 'Known',
         plain: 'only admins invite',
-        detail: 'Only owners and admins can make invites and answer requests to join. Members are told to ask an admin, and their app shows no invite to make.',
+        detail: 'Only owners and admins can make invites and answer requests to join. Members are told to ask an admin, and their app shows no invite to make. '
+            + 'Owners and admins can also keep a names list of who the members are: it opens in the BeanPool app on their own phones, signed in with their key, not with this password.',
     },
 ];
 

@@ -697,14 +697,16 @@ describe('the screens are wired to what is tested above (the screens can\'t rend
     });
 
     it('"+ ADD POST" steps aside while the card\'s actions rest under it; the actions stay full width (re-review, finding 4)', () => {
-        // The landing screen is Home since H2: its button steps aside for the card's actions (and every card's), and
-        // the Market's still steps aside for the Find your community card's.
+        // The landing screen is Home since H2: its button steps aside for the card's actions (and every card's, Find your
+        // community's included since H4 moved that card from the Market to Home). The Market draws neither card now, so
+        // its button has nothing to step aside for.
         const home = src('app/(tabs)/index.tsx');
         expect(home).toMatch(/\{!fabAside && \(\s*<Pressable accessibilityRole="button" accessibilityLabel="Add a post" style=\{\[st\.fab/);
         expect(home).toMatch(/onActionsAt=\{at => band\.report\('safety:actions', at\)\}/);
+        expect(src('components/home/FindCommunityBody.tsx')).toMatch(/<FabAware id="find:actions"/);
         const market = src('app/(tabs)/market.tsx');
-        expect(market).toMatch(/\{!categoryPanel\.open && !fabAside && \(\s*<Pressable accessibilityRole="button" style=\{styles\.fab\}/);
-        expect(market).toMatch(/onScrollY: \(y\) => \{ marketScrollY\.current = y; updateFabAside\(\); \}/);
+        expect(market).toMatch(/\{!categoryPanel\.open && \(\s*<Pressable accessibilityRole="button" style=\{styles\.fab\}/);
+        expect(market).not.toMatch(/FindCommunity|fabAside/);
         const card = src('components/OneWayBackCard.tsx');
         expect(card).not.toMatch(/marginRight|clearOfFab/);
         expect(card).toMatch(/measureInWindow\?\.\(\(_x, y, _w, h\) => \{\s*if \(h > 0\) reportAt\.current\?\.\(\{ top: y, bottom: y \+ h \}\);/);

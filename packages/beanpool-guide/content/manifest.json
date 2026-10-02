@@ -52,7 +52,7 @@
       "id": "settings",
       "title": "Settings and safety",
       "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
-      "pages": ["privacy", "blocking", "reporting", "notifications", "appearance", "holiday-mode", "leaving-or-deleting", "recovery", "check-your-12-words"]
+      "pages": ["privacy", "what-the-admins-can-see", "blocking", "reporting", "notifications", "appearance", "holiday-mode", "leaving-or-deleting", "recovery", "check-your-12-words"]
     }
   ]
 }

@@ -15,7 +15,8 @@ vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Ar
 import {
     HOME_CARD_IDS, HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canHideCard, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
-    invitesForReader,
+    invitesForReader, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
+    pinnedCards, probationSentence,
     hideCard, isHidden, joinedLine, localNeeds, marketForward, mergeNeeds, moveCard, pickLayout, readHomeAnswer, readHomeLayout,
     needsLineA11y, resetLayout, safetyWord, sentence, showCard, starredFirst, stepLines, voteLabelHere,
     type HomeAnswer, type HomeCards, type HomeLayout,
@@ -52,6 +53,12 @@ const events: HomeCards['events'] = { items: [{ id: 'e1', title: 'Seed swap', st
 const steps = (over: Partial<NonNullable<HomeCards['steps']>> = {}): NonNullable<HomeCards['steps']> => ({
     joinedAt: iso(NOW - 2 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null, ...over,
 });
+/** Find your community's body as the global node sends it (routes/global-directory.ts landingCardFor): one community 12 km away. */
+const find = (over: Partial<NonNullable<HomeCards['find']>> = {}): NonNullable<HomeCards['find']> => ({
+    point: 'area',
+    communities: [{ key: 'byron', name: 'Byron Shire BeanPool', url: 'https://byron.example.org', lat: -28.6, lng: 153.6, radiusKm: 20, memberCount: 40, contactEmail: null, contactPhone: null, distanceKm: 12 }],
+    communityCount: 38, nearbyPosts: { radiusKm: 25, count: 9, more: false }, watches: [], knock: null, directoryFetchedAt: iso(NOW - H), ...over,
+});
 
 describe('the catalogue and the default order (§3.1)', () => {
     it('17 cards in the design\'s order, the node\'s own list (apps/server engine/home-preferences.ts)', () => {
@@ -62,9 +69,9 @@ describe('the catalogue and the default order (§3.1)', () => {
         expect(cardOrder(null)).toEqual([...HOME_CARD_IDS]);
     });
 
-    it('this build draws every card but `find` (it comes to Home in H4)', () => {
-        expect(HOME_DRAWN).not.toContain('find');
-        expect(HOME_DRAWN).toHaveLength(16);
+    it('this build draws the whole catalogue: Find your community came to Home in H4', () => {
+        expect(HOME_DRAWN).toContain('find');
+        expect(HOME_DRAWN).toEqual([...HOME_CARD_IDS]);
     });
 
     it('`needs` and `community` can\'t be hidden or moved; everything else can', () => {
@@ -143,18 +150,18 @@ describe('what each person sees, top down (§3.2)', () => {
         expect(cardsToDraw(answer({ cards: { market: undefined, community: a.cards.community } }), null, ctx({ interests: ['food'] }))).toEqual(['community']);
     });
 
-    it('(a) the global community in H2: never `find` (H4), no local First steps lines, `joined` a count, the way-back card when it is up', () => {
+    it('(a) a new global member by 12 words, a community 12 km away: safety · find · steps · interests · market · events · joined · community', () => {
         const a = answer({
             profile: 'global',
             features: { beans: false, escrow: false, invites: false, exampleListings: true },
             cards: {
-                safety: { words: true, signInLinked: false }, find: { anything: true }, steps: steps({ area: false, firstPost: false }),
+                safety: { words: true, signInLinked: false }, find: find(), steps: steps({ area: false, firstPost: false }),
                 market: market(2), events, joined: { count7d: 14, radiusKm: 50 }, community: { name: 'Global', members: 2310, communities: 38 },
             },
         });
-        expect(cardsToDraw(a, null, ctx({ safetyUp: true }))).toEqual(['safety', 'interests', 'events', 'market', 'joined', 'community']);
-        expect(cardsToDraw(a, null, ctx({ safetyUp: false, interests: ['food'] }))).toEqual(['events', 'market', 'joined', 'community']);
-        expect(joinedLine(a.cards.joined!)).toBe('14 people within 50 km joined this week.');
+        expect(cardsToDraw(a, null, ctx({ safetyUp: true, now: NOW }))).toEqual(['safety', 'find', 'steps', 'interests', 'events', 'market', 'joined', 'community']);
+        expect(cardsToDraw(a, null, ctx({ safetyUp: false, interests: ['food'], now: NOW }))).toEqual(['find', 'steps', 'events', 'market', 'joined', 'community']);
+        expect(joinedLine(a.cards.joined!, 'global')).toBe('14 people within 50 km joined this week.');
         expect(communityLines(a.cards.community, 'global', false)).toEqual({ title: 'The worldwide community', line: '2,310 members · 38 communities listed.' });
     });
 
@@ -215,18 +222,21 @@ describe('the layout (§4)', () => {
         expect(readHomeLayout({ v: 1, hidden: ['needs', 'community', 'pulse'] })!.hidden).toEqual(['pulse']);
     });
 
-    it('cards= is the catalogue\'s order, the same each time: no `find`, no data-less cards; a move doesn\'t change it', () => {
-        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
+    it('cards= is the catalogue\'s order, the same each time: `find` too (a local node answers none), no data-less cards; a move doesn\'t change it', () => {
+        expect(cardsToAsk(null)).toEqual(['needs', 'safety', 'find', 'steps', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'community']);
         expect(cardsToAsk(layout({ order: ['beans', 'market'] }))).toEqual(cardsToAsk(null));
     });
 
     it('cards= never depends on what the last answer said of the node: a community that changed still gets First steps', () => {
         // Measured on the emulator: built from a cached global answer, the list left out `steps`, and the community's
-        // First steps never came. The list is the layout's alone now; whether a card is drawn is cardsToDraw's.
+        // First steps never came. The list is the layout's (and a pin's) alone; whether a card is drawn is cardsToDraw's.
         expect(cardsToAsk.length).toBe(1);
         expect(cardsToAsk(null)).toContain('steps');
+        // A local answer that names a First steps card with every line done draws none; the global one draws its own lines.
+        const done = steps({ firstOffer: true, firstPost: true, photo: true, interests: true, invited: true });
+        expect(cardsToDraw(answer({ cards: { steps: done, community: { name: 'L', members: 9 } } }), null, ctx({ interests: ['food'] }))).not.toContain('steps');
         const global = answer({ profile: 'global', cards: { steps: steps(), community: { name: 'G', members: 9 } } });
-        expect(cardsToDraw(global, null, ctx({ interests: ['food'] }))).not.toContain('steps');
+        expect(cardsToDraw(global, null, ctx({ interests: ['food'] }))).toContain('steps');
     });
 
     it('hide, show again, and the date moves on each edit', () => {
@@ -520,10 +530,10 @@ describe('what a node can show, and where the Decide card leads (PR #1483 review
     const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, invites: true, decisions: true } };
     const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
 
-    it('the money cards and the invite card only where the node has them; First steps not on global until H4; never `find` (H4)', () => {
+    it('the money cards and the invite card only where the node has them; Find your community only on the global node, First steps on both', () => {
         const on = (n: typeof LOCAL) => HOME_CARD_IDS.filter(id => cardOnNode(id, n));
         expect(on(LOCAL)).toEqual(HOME_CARD_IDS.filter(id => id !== 'find'));
-        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
+        expect(on(GLOBAL)).toEqual(['needs', 'safety', 'find', 'steps', 'interests', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'notices', 'community']);
         // A node that says nothing has everything, as every node before the switches.
         expect(on({ profile: 'local', features: { invites: true } } as typeof LOCAL)).toEqual(on(LOCAL));
     });
@@ -616,5 +626,155 @@ describe('where only a community\'s admins invite, Home asks only them to (PR #1
         // Invites off (the node then sends `invited: null`): neither, whatever the role.
         const off = known({ features: { ...known().features, invites: false }, cards: { ...known().cards, steps: steps({ firstOffer: true, photo: true, interests: true, invited: null }) } });
         expect(cardsToDraw(off, null, ctx({ interests: ['food'], role: 'owner' }))).toEqual(['community']);
+    });
+});
+
+// ── The global flavour (slice H4: §3.1, §7, §13 Q4 and Q5) ─────────────────────────────────────────────────────────────
+
+describe('the global node\'s Home (H4)', () => {
+    const GLOBAL_FEATURES = { beans: false, escrow: false, enterprises: false, invites: false, exampleListings: true, decisions: false, wordsDoor: true };
+    const DAY = 24 * H;
+    /** A global member `days` days after joining (null: a join date the node didn't send). */
+    const member = (days: number | null, over: Partial<HomeAnswer> & { cards?: HomeCards } = {}) => answer({
+        profile: 'global', features: GLOBAL_FEATURES,
+        me: { ...answer().me!, interests: ['food'], joinedAt: days === null ? null : iso(NOW - days * DAY) },
+        cards: { find: find(), market: market(2), events, community: { name: 'BeanPool', members: 2310, communities: 38 } },
+        ...over,
+    });
+    const hidesFind = layout({ hidden: ['find'], order: ['market', 'events', 'find'] });
+
+    it('Find your community is first, and can\'t be hidden or moved, for the first 30 days', () => {
+        const a = member(3);
+        expect(findPinned(a, NOW)).toBe(true);
+        const pins = pinnedCards(a, NOW);
+        expect(pins).toEqual(['find']);
+        // First, whatever the layout says: hidden and moved down on another copy, it is still drawn at the top.
+        expect(cardsToDraw(a, hidesFind, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'market', 'events', 'community']);
+        expect(cardsToDraw(a, null, ctx({ interests: ['food'], now: NOW }))[0]).toBe('find');
+        expect(canHideCard('find', pins)).toBe(false);
+        expect(canMoveCard('find', pins)).toBe(false);
+        expect(hideCard(null, 'find', NOW, pins)).toBeNull();
+        expect(isHidden(hidesFind, 'find', pins)).toBe(false);
+        expect(moveCard(null, 'find', 'down', ['find', 'events', 'market'], NOW, pins)).toBeNull();
+        // Nothing moves up past it: the card under it has no movable card above it on screen.
+        expect(moveCard(null, 'events', 'up', ['needs', 'find', 'events', 'market', 'community'], NOW, pins)).toBeNull();
+        // Asked for even where the layout hides it, so the node builds it.
+        expect(cardsToAsk(hidesFind, pins)).toContain('find');
+        // The last moment of day 30 is still pinned; a join date the node didn't send counts as pinned (the node's rule).
+        expect(findPinned(member(FIND_PINNED_DAYS - 0.001), NOW)).toBe(true);
+        expect(findPinned(member(null), NOW)).toBe(true);
+    });
+
+    it('after 30 days it is a card like any other: hidden from its "…" or Edit home, moved, and not asked for once hidden', () => {
+        const a = member(FIND_PINNED_DAYS + 1);
+        expect(findPinned(a, NOW)).toBe(false);
+        const pins = pinnedCards(a, NOW);
+        expect(pins).toEqual([]);
+        expect(canHideCard('find', pins)).toBe(true);
+        const hidden = hideCard(null, 'find', NOW, pins)!;
+        expect(hidden.hidden).toEqual(['find']);
+        expect(cardsToDraw(a, hidden, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'market', 'community']);
+        expect(cardsToAsk(hidden, pins)).not.toContain('find');
+        expect(cardsToDraw(a, null, ctx({ interests: ['food'], now: NOW }))).toEqual(['find', 'events', 'market', 'community']);
+        // It moves now.
+        const down = moveCard(null, 'find', 'down', ['needs', 'find', 'events', 'market', 'community'], NOW, pins)!;
+        expect(cardsToDraw(a, down, ctx({ interests: ['food'], now: NOW }))).toEqual(['events', 'find', 'market', 'community']);
+    });
+
+    it('pinned: under Needs you, and under "Your way back in" while that one leads; a move made during the pin keeps it near the top after', () => {
+        const pins: ['find'] = ['find'];
+        expect(cardOrder(null, pins).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+        expect(cardOrder(layout({ order: ['market', 'events'] }), pins).slice(0, 4)).toEqual(['needs', 'find', 'market', 'events']);
+        expect(cardOrder(layout({ order: ['safety', 'market', 'find'] }), pins).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'market']);
+        expect(cardOrder(null, pins).at(-1)).toBe('community');
+        // Events moved above market during the pin: the whole order is written with find where it stands.
+        const moved = moveCard(null, 'market', 'up', ['find', 'events', 'market'], NOW, pins)!;
+        expect(moved.order.slice(0, 3)).toEqual(['safety', 'find', 'steps']);
+        expect(cardOrder(moved).slice(0, 4)).toEqual(['needs', 'safety', 'find', 'steps']);
+    });
+
+    it('no answer yet: a hidden `find` is asked for until an answer says whether it is pinned; a local node never pins', () => {
+        expect(askPinned(null, NOW)).toEqual(['find']);
+        expect(cardsToAsk(hidesFind, askPinned(null, NOW))).toContain('find');
+        expect(askPinned(member(40), NOW)).toEqual([]);
+        expect(askPinned(answer({ me: { ...answer().me!, joinedAt: iso(NOW) } }), NOW)).toEqual([]);
+        expect(findPinned(answer(), NOW)).toBe(false);
+    });
+
+    it('a local community never draws Find your community, whatever an answer holds', () => {
+        const local = answer({ me: { ...answer().me!, interests: ['food'] }, cards: { find: find(), community: { name: 'M', members: 9 } } });
+        expect(cardsToDraw(local, null, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
+        // A body that isn't one is no card.
+        expect(isFindCard({ communities: 'nope' })).toBe(false);
+        expect(cardsToDraw(member(3, { cards: { find: { anything: true } as never, community: { name: 'G', members: 9 } } }), null, ctx({ interests: ['food'], now: NOW }))).toEqual(['community']);
+    });
+
+    it('First steps\' global words: a first post free or for swap; asking a community near while no knock is remembered', () => {
+        expect(globalStepLines(steps(), find(), false)).toEqual([
+            { id: 'post', text: 'Post something free or for swap', done: false },
+            { id: 'ask', text: 'Ask a community to let you in', done: false, suggestion: true },
+        ]);
+        // A knock sent from this phone: the ask goes (the find card says the answer).
+        expect(globalStepLines(steps(), find(), true).map(l => l.id)).toEqual(['post']);
+        // No community near, or none with an address to knock on: no ask.
+        expect(globalStepLines(steps(), find({ communities: [] }), false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: null }] }), false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps(), find({ communities: [{ key: 'x', name: 'X', url: 'http://plain.example.org' }] }), false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps(), undefined, false).map(l => l.id)).toEqual(['post']);
+        expect(globalStepLines(steps({ firstPost: true }), find(), false)[0].done).toBe(true);
+        // Never a local line on the global node: no Offer, photo, interests or invite.
+        const g = firstSteps(member(3, { cards: { steps: steps(), find: find(), community: { name: 'G', members: 9 } } }), { interests: [], knocked: false });
+        expect(g.lines.map(l => l.text)).toEqual(['Post something free or for swap', 'Ask a community to let you in']);
+    });
+
+    it('the new-account limits in one sentence, from the node\'s own numbers: 3 days / 3 posts / 10 chats, or 7 days / 2 / 3 by 12 words', () => {
+        const ordinary = { onProbation: true, rules: 'ordinary' as const, limits: { posts: { limit: 3 }, photos: { limit: 5 }, new_dm_recipients: { limit: 10 } }, endsWhen: { hours: 72, keptPosts: 3 } };
+        const words = { onProbation: true, rules: 'words' as const, limits: { posts: { limit: 2 }, photos: { limit: 4 }, new_dm_recipients: { limit: 3 } }, endsWhen: { hours: 168, keptPosts: 3 } };
+        expect(probationSentence(ordinary)).toBe('For your first 3 days: 3 posts and 10 new chats a day.');
+        expect(probationSentence(words)).toBe('For your first 7 days: 2 posts and 3 new chats a day.');
+        expect(probationSentence({ ...ordinary, endsWhen: { hours: 36, keptPosts: 3 }, limits: { ...ordinary.limits, posts: { limit: 1 }, new_dm_recipients: { limit: 1 } } }))
+            .toBe('For your first 36 hours: 1 post and 1 new chat a day.');
+        expect(probationSentence(null)).toBeNull();
+        expect(probationSentence({ ...ordinary, onProbation: false })).toBeNull();
+        expect(probationSentence({ onProbation: true } as never)).toBeNull();
+        expect(probationSentence({ ...ordinary, endsWhen: { hours: 'x' } } as never)).toBeNull();
+        // On the card: under the lines, and the card stays while the limits apply even with the post made.
+        const posted = member(1, { me: { ...member(1).me!, probation: words }, cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
+        expect(firstSteps(posted, { interests: ['food'], knocked: true })).toEqual({ lines: [{ id: 'post', text: 'Post something free or for swap', done: true }], note: 'For your first 7 days: 2 posts and 3 new chats a day.', show: true });
+        expect(cardsToDraw(posted, null, ctx({ interests: ['food'], knocked: true, now: NOW }))).toContain('steps');
+        // The post made, the limits over: nothing to say, though a community is near (the ask never holds the card open).
+        const done = member(20, { cards: { steps: steps({ firstPost: true }), find: find(), community: { name: 'G', members: 9 } } });
+        expect(firstSteps(done, { interests: ['food'], knocked: false }).show).toBe(false);
+        expect(cardsToDraw(done, null, ctx({ interests: ['food'], now: NOW }))).not.toContain('steps');
+        // A local community's First steps never says the limits (unchanged from H2).
+        expect(firstSteps(answer({ me: { ...answer().me!, probation: words }, cards: { steps: steps() } }), { interests: [] }).note).toBeNull();
+    });
+
+    it('Who joined on the global node: a count by area, never a name or a face, whatever an answer holds', () => {
+        const withNames = { count7d: 14, radiusKm: 50, names: [{ callsign: 'Ana', avatarUrl: '/api/avatars/a' }, { callsign: 'Kofi', avatarUrl: null }] };
+        expect(joinedNames(withNames, 'global')).toEqual([]);
+        expect(joinedLine(withNames, 'global')).toBe('14 people within 50 km joined this week.');
+        expect(joinedLine({ count7d: 3, radiusKm: null }, 'global')).toBe('3 people joined this week.');
+        // A local community keeps its names and faces (H2).
+        expect(joinedNames(withNames, 'local')).toEqual(withNames.names);
+        expect(joinedLine(withNames, 'local')).toBe('Ana, Kofi and 12 more joined this week.');
+        expect(joinedLine(withNames)).toBe('Ana, Kofi and 12 more joined this week.');
+    });
+
+    it('"Near you": the nearest first, those with no distance after; starred categories first, each part nearest first', () => {
+        const items = [
+            { id: 'far', category: 'goods', distanceKm: 18 },
+            { id: 'none', category: 'food', distanceKm: null },
+            { id: 'near', category: 'tools', distanceKm: 0.4 },
+            { id: 'mid', category: 'food', distanceKm: 5 },
+            { id: 'mid2', category: 'goods', distanceKm: 5 },
+        ];
+        expect(marketInOrder(items, [], 'global').map(i => i.id)).toEqual(['near', 'mid', 'mid2', 'far', 'none']);
+        expect(marketInOrder(items, ['food'], 'global').map(i => i.id)).toEqual(['mid', 'none', 'near', 'mid2', 'far']);
+        // Never fewer: interests reorder, they never filter.
+        expect(marketInOrder(items, ['arts'], 'global')).toHaveLength(5);
+        // A local community: what's new, as the node sent it, starred first (H2), never by distance.
+        expect(marketInOrder(items, [], 'local').map(i => i.id)).toEqual(['far', 'none', 'near', 'mid', 'mid2']);
+        expect(marketInOrder(items, ['food'], 'local').map(i => i.id)).toEqual(starredFirst(items, i => i.category, ['food']).map(i => i.id));
     });
 });

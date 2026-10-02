@@ -150,9 +150,10 @@ export function oneWayBackAskedStoreKey(publicKey: string): string {
 
 /**
  * Home (app/(tabs)/index.tsx, utils/home-store.ts): one account's last answer from one community, its copy of the layout,
- * and an interests save still owed to the node. They hold the account's own things (its Beans, its deals, who wrote to
- * it), so every key starts with {@link HOME_STORE_PREFIX} and Sign Out wipes them with the account (utils/identity.ts
- * wipeIdentityScopedStorage); each also names the account, so another account on the phone never reads one.
+ * an interests save still owed to the node, and whether it has seen the one-time reveal and hint. They hold the
+ * account's own things (its Beans, its deals, who wrote to it), so every key starts with {@link HOME_STORE_PREFIX} and
+ * Sign Out and a replacing restore wipe them all with the account (utils/identity.ts wipeIdentityScopedStorage): a new
+ * Home key needs no line of its own there. Each also names the account, so another account on the phone never reads one.
  */
 export const HOME_STORE_PREFIX = 'beanpool_home:';
 
@@ -179,14 +180,14 @@ export function homeInterestsOwedStoreKey(publicKey: string, url: string): strin
 export const FAV_CATEGORIES_STORE_KEY = 'bp_fav_categories';
 
 /**
- * Home's one-time reveal and its one-line hint (design §6.2), per account: '1' once each has been seen. Kept through Sign
- * Out on purpose, as the "one way back" card is: each names its account, so no other account reads it, and the same
- * account restored here doesn't get the welcome again.
+ * Home's one-time reveal and its one-line hint (design §6.2), per account: '1' once each has been seen. They go with the
+ * account like the rest of Home's keys (PR #1483 fix round 1: everything Home keeps for an account leaves with it), so
+ * the same account restored here later sees the hint once more.
  */
 export function homeRevealStoreKey(publicKey: string): string {
-    return `beanpool_home_reveal:${publicKey.toLowerCase()}`;
+    return `${HOME_STORE_PREFIX}reveal:${publicKey.toLowerCase()}`;
 }
 
 export function homeHintStoreKey(publicKey: string): string {
-    return `beanpool_home_hint:${publicKey.toLowerCase()}`;
+    return `${HOME_STORE_PREFIX}hint:${publicKey.toLowerCase()}`;
 }

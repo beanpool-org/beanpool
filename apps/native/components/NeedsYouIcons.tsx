@@ -17,7 +17,7 @@ import {
 } from '../utils/needs-you';
 import { useManageNode } from './useManageNode';
 import { HOME_HEADER_WAIT_MS, homeForHeader, onHomeRead } from '../utils/home-store';
-import { localNeeds, mergeNeeds, type HomeNeedsItem } from '../utils/home-cards';
+import { localNeeds, mergeNeeds, type HomeAnswer, type HomeNeedsItem } from '../utils/home-cards';
 
 // The slot between the bean and the invite icon holds one small icon per kind of thing that needs the
 // member, only while something of that kind does. No text. What counts, the order, the accent and the
@@ -138,8 +138,8 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
 
     const local = useRef<LocalParts>({ transactions: null, conversations: null });
     const node = useRef<NodeParts>({ decisions: null, groupChats: null, admin: null, communityName: null });
-    /** The node's lines from Home's answer, while the header draws from it (null: from its own reads). */
-    const home = useRef<HomeNeedsItem[] | null>(null);
+    /** The node's lines from Home's answer, with the node's switches, while the header draws from it (null: from its own reads). */
+    const home = useRef<{ items: HomeNeedsItem[]; features: HomeAnswer['features'] } | null>(null);
     const localBusy = useRef(false);
     const localAgain = useRef(false);
     const nodeBusy = useRef(false);
@@ -151,7 +151,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         if (!me) { setEntries([]); return; }
         const now = Date.now();
         if (home.current) {
-            setEntries(mergeNeeds(home.current, localNeeds(me, now, local.current.transactions, local.current.conversations), now));
+            setEntries(mergeNeeds(home.current.items, localNeeds(me, now, local.current.transactions, local.current.conversations), now, home.current.features));
             return;
         }
         setEntries(buildNeedsYou({ me, now, ...local.current, ...node.current }));
@@ -186,7 +186,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                 const url = await anchorUrl();
                 const fromHome = await homeForHeader(url, me, pathnameRef.current === '/' ? HOME_HEADER_WAIT_MS : 0);
                 if (fromHome) {
-                    home.current = fromHome.answer.cards.needs?.items ?? [];
+                    home.current = { items: fromHome.answer.cards.needs?.items ?? [], features: fromHome.answer.features };
                     node.current = { ...node.current, communityName: fromHome.answer.cards.community?.name ?? node.current.communityName };
                 } else {
                     home.current = null;
@@ -199,7 +199,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
         // Home's read landed: draw from it at once (its lines are the node's, as fresh as they come).
         const off = onHomeRead((read, _url, publicKey) => {
             if (read.kind !== 'answer' || publicKey !== me || !read.stored.asked.split(',').includes('needs')) return;
-            home.current = read.stored.answer.cards.needs?.items ?? [];
+            home.current = { items: read.stored.answer.cards.needs?.items ?? [], features: read.stored.answer.features };
             rebuild();
         });
         return () => { g.cancel(); off(); if (gate.current === g) gate.current = null; };

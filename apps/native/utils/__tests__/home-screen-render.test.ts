@@ -110,9 +110,9 @@ import * as db from '../db';
 import { draftIdentity } from '../identity';
 import { resetHomeStoreForTests } from '../home-store';
 import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey } from '../storage-keys';
-import type { HomeAnswer } from '../home-cards';
+import { decideOnNode, mergeNeeds, type HomeAnswer } from '../home-cards';
 import { needsTargetHref } from '../needs-you';
-import { hiddenTabsFor } from '../node-profile';
+import { decisionsOn, hiddenTabsFor } from '../node-profile';
 import { commonsSectionFor } from '../commons-sections';
 import { marketFilterFromLink } from '../market-filters';
 import { boundSignatureValid } from './server-signature-check';
@@ -428,14 +428,16 @@ describe('links into Home, and the "one way back" card', () => {
 
 // ── Every line's link, on each kind of node (PR #1483 review 4165383429) ──────────────────────────────────────────────
 
-const LOCAL_FEATURES = { beans: true, escrow: true, enterprises: true, invites: true, exampleListings: false, decisions: true };
-/** The global node's switches (config/node-profile.ts): no Beans, escrow, enterprises, invites or formal Decisions. */
-const GLOBAL_FEATURES = { beans: false, escrow: false, enterprises: false, invites: false, exampleListings: true, decisions: false };
+/** A local community's switches (config/node-profile.ts): its door takes invites, never 12 words. */
+const LOCAL_FEATURES = { beans: true, escrow: true, enterprises: true, invites: true, exampleListings: false, decisions: true, wordsDoor: false };
+/** The global node's switches: no Beans, escrow, enterprises, invites or formal Decisions; its open door takes 12 words. */
+const GLOBAL_FEATURES = { beans: false, escrow: false, enterprises: false, invites: false, exampleListings: true, decisions: false, wordsDoor: true };
 
 /**
- * Every card with something to say, as a node of this profile sends it. The global answer also carries the money cards
- * and a Decision, which the global node never sends, so the phone's own rules are what keep them off its Home. Variant 2
- * takes each line's other branch (one deal or several, a Decision and no poll, the Offer not yet posted).
+ * Every card with something to say, as a node of this profile sends it. The global answer also carries the money cards,
+ * a Decision and a vote waiting in Needs you, which the global node never sends, so the phone's own rules are what keep
+ * them off its Home. Variant 2 takes each line's other branch (one deal or several, a Decision and no poll, the Offer not
+ * yet posted).
  */
 function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
     const now = Date.now();
@@ -445,8 +447,8 @@ function everyCard(profile: 'local' | 'global', variant: 1 | 2): HomeAnswer {
             { kind: 'admin', count: 2, accent: false, label: '2 reports to review', target: { to: 'admin', section: 'reports' as never } },
             ...(local ? [
                 { kind: 'deal' as const, count: 1, accent: true, label: 'A deal is waiting for you: Sourdough', target: { to: 'deal' as const, postId: 'p1', txId: 't1' } },
-                { kind: 'vote' as const, count: 1, accent: true, label: 'Vote closes in 5 hours: Compost bay', target: { to: 'decide' as const }, closesAt: iso(now + 5 * H) },
             ] : []),
+            { kind: 'vote' as const, count: 1, accent: true, label: 'Vote closes in 5 hours: Compost bay', target: { to: 'decide' as const }, closesAt: iso(now + 5 * H) },
             { kind: 'message', count: 1, accent: false, label: 'Unread message from Ana', target: { to: 'chat', conversationId: 'dm1' } },
             { kind: 'group', count: 1, accent: false, label: 'New in Garden Group', target: { to: 'chat', conversationId: 'g1', thread: 'group' } },
         ]
@@ -580,8 +582,8 @@ const TABLE: Record<'local' | 'global', Record<1 | 2, string[]>> = {
             'home-beans-line → /(tabs)/ledger',
         ],
     },
-    // No First steps (its global words are H4's), no money cards and no invite whatever the answer holds, no Decisions:
-    // the Decide card is polls only, and they open the Market's Polls.
+    // No First steps (its global words are H4's), no money cards and no invite whatever the answer holds, no Decisions
+    // and no vote in Needs you (Commons is hidden there): the Decide card is polls only, and they open the Market's Polls.
     global: {
         1: [
             'home-needs-message → /chat/[id] id=dm1',
@@ -680,6 +682,24 @@ describe('every line on Home opens a screen this node shows, with what the line 
         expect(nav.router.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/(tabs)/projects' }));
     });
 
+    it('Home\'s rule for Commons → Decide is the tab strip\'s and Commons\' own, on every mix of switches', () => {
+        for (const beans of [true, false, undefined]) {
+            for (const decisions of [true, false, undefined]) {
+                const f = { beans, decisions };
+                expect(decideOnNode(f)).toBe(decisionsOn(f) && !(hiddenTabsFor(f) as string[]).includes('projects'));
+            }
+        }
+    });
+
+    it('a vote line the node sends where Commons → Decide isn\'t there is left out, on Home and in the header alike (both merge the same way)', () => {
+        const vote = { kind: 'vote' as const, count: 1, accent: true, label: 'Vote closes in 5 hours: Compost bay', target: { to: 'decide' as const } };
+        const dm = { kind: 'message' as const, count: 1, accent: false, label: 'Unread message from Ana', target: { to: 'chat' as const, conversationId: 'dm1' } };
+        expect(mergeNeeds([vote, dm], null, Date.now(), GLOBAL_FEATURES).map(e => e.kind)).toEqual(['message']);
+        expect(mergeNeeds([vote, dm], null, Date.now(), LOCAL_FEATURES).map(e => e.kind)).toEqual(['vote', 'message']);
+        const header = fs.readFileSync(path.join(__dirname, '../../components/NeedsYouIcons.tsx'), 'utf-8');
+        expect(header).toMatch(/mergeNeeds\(home\.current\.items, [^;]*, home\.current\.features\)/);
+    });
+
     it('the "one way back" card\'s own link (drawn by OneWayBackCard) opens Settings, which no node hides, on a section it opens', () => {
         const card = fs.readFileSync(path.join(__dirname, '../../components/OneWayBackCard.tsx'), 'utf-8');
         const pushes = [...card.matchAll(/router\.push\(\{ pathname: '([^']+)', params: \{ section: '([^']+)' \} \}\)/g)];
@@ -757,10 +777,21 @@ describe('Edit home offers only the cards this node can show', () => {
         expect(document.body.textContent).not.toMatch(/Your deals|Your enterprise|Your Beans|Grow your community/);
     });
 
-    it('a local community with Beans, escrow, enterprises and invites: every card but Find your community (H4)', async () => {
+    it('a local community with Beans, escrow, enterprises and invites: every card but Find your community (H4) and "Your way back in" (no 12-words door)', async () => {
         node.answer = everyCard('local', 1);
         await render();
         await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
-        expect(editRows()).toEqual(['safety', 'steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
+        expect(editRows()).toEqual(['steps', 'interests', 'deals', 'enterprise', 'events', 'market', 'decide', 'groups', 'joined', 'pulse', 'beans', 'notices', 'invite']);
+        expect(document.body.textContent).not.toContain('Your way back in');
+    });
+
+    it('a node whose 12-words door has shut still draws and offers the "Your way back in" it sends a member who came in by it', async () => {
+        const a = everyCard('global', 1);
+        node.answer = { ...a, features: { ...GLOBAL_FEATURES, wordsDoor: false }, cards: { ...a.cards, safety: { words: true, signInLinked: false } } };
+        await render();
+        // The card is drawn by OneWayBackCard, which decides when it is up: it is given the node's word.
+        expect(safety.props.homeWord).toEqual({ url: NODE, standing: { words: true, joinedAt: Date.parse(a.me!.joinedAt!) } });
+        await act(async () => { (document.querySelector('[data-testid="home-edit"]') as HTMLElement).click(); });
+        expect(editRows()[0]).toBe('safety');
     });
 });

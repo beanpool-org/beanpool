@@ -9,8 +9,8 @@
  * - Sign Out (account-leaves-phone.ts `signOutOfThisPhone`) and Replace (restore-account.ts `saveRestoredAccount`) go
  *   through the one wipe (identity.ts `wipeIdentityScopedStorage`), which takes the stars with Home's other copies.
  * - The next account's first landing sends nothing of the last one's, and asks it what it is into.
- * - Of everything Home keeps for an account, only the one-time reveal and hint flags stay, each under its own account
- *   (storage-keys.ts): the same account restored here isn't welcomed twice, and no other account reads them.
+ * - Nothing Home keeps for an account stays: its answer, layout, owed save, reveal and hint flags all start with the one
+ *   prefix the wipe takes (storage-keys.ts `HOME_STORE_PREFIX`), and the stars go with them.
  *
  * App and secure storage are maps; the one community is a stub that keeps each signer's own preferences row and refuses
  * anything else, so nothing is contacted.
@@ -148,10 +148,11 @@ describe('Sign Out', () => {
         expect(await readPhoneInterests()).toEqual([]);
     });
 
-    it('of everything Home kept for the account, only its own reveal and hint flags stay; the next account reads nothing of it', async () => {
+    it('nothing Home kept for the account stays, its reveal and hint flags included; the next account reads nothing of it', async () => {
         await zaraUsesHome();
+        expect(homeKeys().length).toBeGreaterThanOrEqual(5);
         await signOut(zara);
-        expect(homeKeys()).toEqual([homeHintStoreKey(zara.publicKey), homeRevealStoreKey(zara.publicKey)].sort());
+        expect(homeKeys()).toEqual([]);
         expect(await readStoredHome(yusuf.publicKey, NODE)).toBeNull();
         expect(await readPhoneLayout(yusuf.publicKey, NODE)).toBeNull();
     });
@@ -162,7 +163,7 @@ describe('a restore that replaces the account on the phone', () => {
         await zaraUsesHome();
         await saveRestoredAccount({ identity: yusuf, replacesAnother: true }, NODE);
         expect(mem.async.has('bp_fav_categories')).toBe(false);
-        expect(homeKeys()).toEqual([homeHintStoreKey(zara.publicKey), homeRevealStoreKey(zara.publicKey)].sort());
+        expect(homeKeys()).toEqual([]);
         expect(await yusufLands()).toEqual([]);
         expect(node.posts.filter(p => p.signer === yusuf.publicKey)).toEqual([]);
         expect(node.rows.get(yusuf.publicKey)?.interests).toBeUndefined();

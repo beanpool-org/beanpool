@@ -346,7 +346,7 @@ export default function HomeScreen() {
     // ── What to draw ──
     const answer = stored?.answer ?? null;
     const now = Date.now();
-    const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now) : [];
+    const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
     const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length }) : [];
     const interestsUp = drawn.includes('interests');
     useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);

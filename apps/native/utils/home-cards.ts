@@ -116,7 +116,7 @@ export interface HomeLayout {
 export interface HomeAnswer {
     generatedAt: string;
     profile: string;
-    features: { beans?: boolean; escrow?: boolean; enterprises?: boolean; invites?: boolean; exampleListings?: boolean; decisions?: boolean; [k: string]: unknown };
+    features: { beans?: boolean; escrow?: boolean; enterprises?: boolean; invites?: boolean; exampleListings?: boolean; decisions?: boolean; wordsDoor?: boolean; [k: string]: unknown };
     welcome?: true;
     me: HomeMe | null;
     layout: HomeLayout | null;
@@ -248,14 +248,17 @@ export function dismissSafety(layout: HomeLayout | null, now: number): HomeLayou
 /**
  * Whether a node of this profile can ever show the card in this build: the money cards only where Beans, escrow and
  * enterprises are on (the node builds them only then, routes/home-answer.ts), the invite card only where invites are,
- * and First steps not on the global node, whose words come in H4. Unknown counts as on, as utils/node-profile.ts reads a
- * node's features (kept here so this file stays pure). Home draws only these whatever an answer holds, and Edit home
+ * First steps not on the global node, whose words come in H4, and "Your way back in" only where the 12-words door is
+ * open (only a member who came in by 12 words has it: a local community's door never takes 12 words), or where the node
+ * sent one (a member who came in before the door shut keeps theirs). Unknown counts as on, as utils/node-profile.ts reads
+ * a node's features (kept here so this file stays pure). Home draws only these whatever an answer holds, and Edit home
  * offers only these: "Nothing to show now" is said of a card that could show, never of one that can't.
  */
-export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'>): boolean {
+export function cardOnNode(id: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeCards }): boolean {
     if (!HOME_DRAWN.includes(id)) return false;
     const f = answer.features;
     switch (id) {
+        case 'safety': return f.wordsDoor !== false || !!answer.cards?.safety;
         case 'steps': return answer.profile !== 'global';
         case 'beans': return f.beans !== false;
         case 'deals': return f.escrow !== false;
@@ -402,11 +405,15 @@ const sameDeal = (a: NeedsYouTarget, b: NeedsYouTarget) => a.to === 'deal' && b.
  *   the node's until the next sync (measured on the emulator: a request made to the member showed in the answer, not yet
  *   on the phone), and a deal is the line that costs a member something if missed.
  */
-export function mergeNeeds(node: readonly HomeNeedsItem[] | null | undefined, local: LocalNeeds | null, now: number): NeedsYouEntry[] {
+export function mergeNeeds(
+    node: readonly HomeNeedsItem[] | null | undefined, local: LocalNeeds | null, now: number, features?: HomeAnswer['features'] | null,
+): NeedsYouEntry[] {
     const phoneHas = (kind: NeedsYouKind) => kind === 'message'
         ? !!local?.kinds.has('message')
         : kind === 'deal' && !!local?.entries.some(e => e.kind === 'deal');
-    const fromNode = (node ?? []).filter(i => !phoneHas(i.kind))
+    // A vote lands on Commons → Decide: never on a node without it (the node sends none there; this keeps it so).
+    const lands = (i: HomeNeedsItem) => i.target.to !== 'decide' || !features || decideOnNode(features);
+    const fromNode = (node ?? []).filter(i => !phoneHas(i.kind) && lands(i))
         .map((i): NeedsYouEntry => ({ kind: i.kind, count: i.count, accent: i.accent, label: voteLabelHere(i, now), target: i.target }));
     const fromPhone = (local?.entries ?? []).map(e => {
         // One deal the node names too: its words carry the listing's title.
@@ -500,6 +507,13 @@ export interface HomeHref { pathname: string; params?: Record<string, string> }
 
 /** Formal Decisions: Commons → Decide (app/(tabs)/projects.tsx). */
 export const DECIDE_HREF: HomeHref = { pathname: '/(tabs)/projects', params: { section: 'decide' } };
+
+/**
+ * Whether Commons → Decide is there on this node: formal Decisions on, and the Commons tab shown (utils/node-profile.ts
+ * `decisionsOn` and `hiddenTabsFor`, said again here so this file stays pure; a test holds the two together). The global
+ * node has neither.
+ */
+export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;
 /** Polls are posts, on every node: the Market's Polls pill (app/(tabs)/market.tsx takes `filter=polls`). Decide never lists them. */
 export const POLLS_HREF: HomeHref = { pathname: '/(tabs)/market', params: { filter: 'polls' } };
 
@@ -513,7 +527,7 @@ export interface DecideLine { id: 'decisions' | 'polls'; text: string; a11y: str
  */
 export function decideLines(card: NonNullable<HomeCards['decide']>, features: HomeAnswer['features'], now: number): DecideLine[] {
     const lines: DecideLine[] = [];
-    if (card.open > 0 && features.decisions !== false && features.beans !== false) {
+    if (card.open > 0 && decideOnNode(features)) {
         const closes = card.soonestClosesAt ? closesInWords(card.soonestClosesAt, now) : null;
         const when = !closes ? '' : card.open === 1 ? `, ${closes}` : `, the first ${closes}`;
         const text = `${plural(card.open, 'Decision', 'Decisions')} open${when}`;

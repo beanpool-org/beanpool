@@ -356,8 +356,8 @@ export async function saveInterests(url: string | null, identity: BeanPoolIdenti
 
 /**
  * At a landing, the account's interests (from the answer's `me`) and the phone's made one: an owed save is sent; the
- * stars a member made in the Market before Home existed are sent once to an account that has none; otherwise the
- * account's win and the phone's copy follows. A star tapped since `since` (the count when the answer was asked, so an
+ * stars a member made in the Market before Home existed are sent once to an account that has none; otherwise, or when
+ * the node refuses the phone's, the account's win and the phone's copy follows. A star tapped since `since` (the count when the answer was asked, so an
  * answer made before the star can't undo it) is left as it is: its own save carries it. Returns the list Home draws with.
  */
 export async function reconcileInterests(url: string, identity: BeanPoolIdentity, account: readonly string[], since: number = interestsTurn): Promise<string[]> {
@@ -367,13 +367,15 @@ export async function reconcileInterests(url: string, identity: BeanPoolIdentity
     if (turn !== interestsTurn) return readPhoneInterests();
     const push = state === 'owed' || (state === null && account.length === 0 && phone.length > 0);
     if (push) {
-        await inTurn(async () => {
-            if (turn !== interestsTurn) return;
-            const saved = await saveHomePreferences(url, identity, { interests: phone });
-            // Refused: the account's list stands, and the phone's is never sent again by itself.
-            if (saved && turn === interestsTurn) await setInterestsState(identity.publicKey, url, 'synced');
+        const saved = await inTurn(async () => {
+            if (turn !== interestsTurn) return null;
+            const out = await saveHomePreferences(url, identity, { interests: phone });
+            if (out && out !== SAVE_REFUSED && turn === interestsTurn) await setInterestsState(identity.publicKey, url, 'synced');
+            return out;
         });
-        return turn === interestsTurn ? phone : readPhoneInterests();
+        if (turn !== interestsTurn) return readPhoneInterests();
+        // Refused: the account's list stands (below), and the phone's is never sent again by itself.
+        if (saved !== SAVE_REFUSED) return phone;
     }
     if (!sameList(account, phone)) await writePhoneInterests(account);
     if (turn !== interestsTurn) return readPhoneInterests();

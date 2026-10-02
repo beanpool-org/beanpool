@@ -18,8 +18,8 @@ import { HOME_TARGET_DP } from './HomeParts';
 export function EditHomeSheet({ visible, layout, node, drawnNow, colors, onChange, onClose }: {
     visible: boolean;
     layout: HomeLayout | null;
-    /** The node's profile and switches, from its answer. */
-    node: Pick<HomeAnswer, 'profile' | 'features'>;
+    /** The node's profile and switches, from its answer (with its cards: a "Your way back in" it sent is offered). */
+    node: Pick<HomeAnswer, 'profile' | 'features'> & { cards?: HomeAnswer['cards'] };
     /** The cards on Home now; the others say they have nothing to show yet. */
     drawnNow: readonly HomeCardId[];
     colors: AppColors;

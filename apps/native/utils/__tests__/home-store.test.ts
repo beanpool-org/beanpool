@@ -36,7 +36,7 @@ import {
     interestsTurnNow, reconcileInterests, resetHomeStoreForTests, saveHomePreferences, saveInterests,
 } from '../home-store';
 import { HOME_FRESH_FOR_HEADER_MS, cardsToAsk, type HomeAnswer, type HomeLayout } from '../home-cards';
-import { homeAnswerStoreKey, homeHintStoreKey, homeLayoutStoreKey, homeRevealStoreKey } from '../storage-keys';
+import { homeAnswerStoreKey, homeHintStoreKey, homeInterestsOwedStoreKey, homeLayoutStoreKey, homeRevealStoreKey } from '../storage-keys';
 import { draftIdentity, wipeIdentityScopedStorage, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid, type SentRequest } from './server-signature-check';
 
@@ -377,18 +377,36 @@ describe('a save the node refuses is not sent again and again (PR #1483 review 4
         for (let i = 0; i < 4; i++) await reconcileInterests(NODE, me, []);
         expect(node.requests.filter(r => r.method === 'POST').length).toBeLessThanOrEqual(2);
     });
+
+    it('an owed list the node refuses at a landing: the account\'s list is drawn at once and the phone follows it', async () => {
+        node.saves = ['fail'];
+        expect(await saveInterests(NODE, me, ['food'])).toBe(false);
+        node.refuse = 400;
+        expect(await reconcileInterests(NODE, me, ['garden'])).toEqual(['garden']);
+        expect(JSON.parse(mem.store.get(FAV_CATEGORIES_STORE_KEY)!)).toEqual(['garden']);
+        const posts = node.requests.filter(r => r.method === 'POST').length;
+        expect(await reconcileInterests(NODE, me, ['garden'])).toEqual(['garden']);
+        expect(node.requests.filter(r => r.method === 'POST').length).toBe(posts);
+    });
 });
 
 describe('Sign Out takes Home\'s copies with the account', () => {
-    it('the answer, the layout and an owed save go; the one-time reveal and hint flags stay (the same account restored here)', async () => {
+    it('the answer, the layout, an owed save, the reveal and hint seen, and the stars all go: nothing of Home stays', async () => {
         await readHomeFromNode(NODE, me, asked, null);
         mem.store.set(homeLayoutStoreKey(me.publicKey, NODE), '{}');
         mem.store.set(homeRevealStoreKey(me.publicKey), '1');
         mem.store.set(homeHintStoreKey(me.publicKey), '1');
+        mem.store.set(FAV_CATEGORIES_STORE_KEY, '["food"]');
         const { default: storage } = await import('@react-native-async-storage/async-storage');
         await wipeIdentityScopedStorage(storage as never);
-        expect([...mem.store.keys()].filter(k => k.startsWith('beanpool_home:'))).toEqual([]);
-        expect(mem.store.get(homeRevealStoreKey(me.publicKey))).toBe('1');
-        expect(mem.store.get(homeHintStoreKey(me.publicKey))).toBe('1');
+        expect([...mem.store.keys()].filter(k => k.startsWith('beanpool_home') || k === FAV_CATEGORIES_STORE_KEY)).toEqual([]);
+    });
+
+    it('every key Home writes for an account starts with the one prefix the wipe takes', () => {
+        const keys = [
+            homeAnswerStoreKey(me.publicKey, NODE), homeLayoutStoreKey(me.publicKey, NODE), homeInterestsOwedStoreKey(me.publicKey, NODE),
+            homeRevealStoreKey(me.publicKey), homeHintStoreKey(me.publicKey),
+        ];
+        expect(keys.filter(k => !k.startsWith('beanpool_home:'))).toEqual([]);
     });
 });

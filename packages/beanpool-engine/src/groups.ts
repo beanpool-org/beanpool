@@ -40,6 +40,7 @@ import {
     DEFAULT_GROUP_CATEGORY
 } from '@beanpool/core';
 import { isSuspendedAccount } from './members.js';
+import { likeContains } from './like.js';
 
 export type {
     Group,
@@ -269,8 +270,9 @@ export function listGroups(db: Db, filter?: ListGroupsFilter, viewerPubkey?: str
     }
 
     if (filter?.query && filter.query.trim()) {
-        query += " AND (g.name LIKE ? OR g.description LIKE ?)";
-        const term = `%${filter.query.trim()}%`;
+        // The text taken literally: a `%` or `_` someone types is that character, not a wildcard.
+        query += " AND (g.name LIKE ? ESCAPE '\\' OR g.description LIKE ? ESCAPE '\\')";
+        const term = likeContains(filter.query.trim());
         params.push(term, term);
     }
 

@@ -5,6 +5,10 @@
 // statements, 40% of a visitor's board read on the global node (scratch/global-node/REPORT-global-load-rehearsal.md §4).
 // A statement kept here is compiled once and run with fresh parameters each time.
 //
+// For the statements a read runs once per row (the trust profile per author, the host test per event), where compiling
+// is the cost. A read's own queries, run once each, stay `db.prepare`: compiling one is a small part of running it, and
+// suites watch which of them ran by wrapping `db.prepare` (the nearest-first circles, a sync's delta read).
+//
 // Only for a statement run with `.get()`, `.all()` or `.run()` and nothing else: one switched to `.pluck()`, `.raw()` or
 // `.expand()`, or left mid-`.iterate()`, would change it for every later caller. Keyed by the handle itself, as the trust
 // caches are, so the manager's many replica databases never share one; a handle that is closed throws on its cached

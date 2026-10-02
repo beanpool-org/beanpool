@@ -349,7 +349,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
     for (let i = 0; i < ids.length; i += chunkSize) {
         const chunk = ids.slice(i, i + chunkSize);
         const placeholders = chunk.map(() => '?').join(',');
-        const rows = prepared(db, queryBuilder(placeholders)).all(...chunk) as T[];
+        const rows = db.prepare(queryBuilder(placeholders)).all(...chunk) as T[];
         results.push(...rows);
     }
     return results;
@@ -878,7 +878,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
         }
-        return prepared(db, sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
     // The one pass with a bound (PostFilter.measureAtMost): the matching posts (in the radius's box, if it has one) are
@@ -917,7 +917,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             sql += " LIMIT ? OFFSET ?";
             params.push(limit, skip);
         }
-        return prepared(db, sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
+        return db.prepare(sql).all(...params) as Array<{ id: string; distance_km: number | null }>;
     };
 
     let ranked: Array<{ id: string; distance_km: number | null }> | undefined;
@@ -1015,7 +1015,7 @@ function postRowsForHeal(db: Db, where: string, whereParams: unknown[], heal: Ph
     // One more than the page, to know whether a listing with a photo comes after it.
     sql += ' ORDER BY photo DESC, live DESC, upd DESC, cre DESC, id DESC LIMIT ?';
     params.push(limit + 1);
-    const ranked = prepared(db, sql).all(...params) as Array<{ id: string; photo: number; live: number; upd: string; cre: string }>;
+    const ranked = db.prepare(sql).all(...params) as Array<{ id: string; photo: number; live: number; upd: string; cre: string }>;
     const page = ranked.slice(0, limit);
     const beyond = ranked[limit];
     const last = page[page.length - 1];
@@ -1196,7 +1196,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             query += " LIMIT ? OFFSET ?";
             params.push(filter.limit, filter.offset || 0);
         }
-        rows = prepared(db, query).all(...params) as any[];
+        rows = db.prepare(query).all(...params) as any[];
     }
     const postIds = rows.map(r => r.id);
 

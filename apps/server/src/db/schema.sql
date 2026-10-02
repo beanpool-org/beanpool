@@ -1952,7 +1952,12 @@ CREATE TABLE IF NOT EXISTS groups (
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
-    avatar_url TEXT,
+    -- The group's own picture is in group_pictures (#1486), as a member's photo is in member_photos: this row keeps only
+    -- its reference (@beanpool/core avatarRefOf: its version, or a shipped picture's name), which its URL is made from,
+    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture). db.ts
+    -- moveGroupPicturesOutOfRows moved the pictures out of the old `avatar_url` column.
+    avatar_ref TEXT,
+    avatar_bytes INTEGER,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
     created_by TEXT NOT NULL REFERENCES members(public_key),
     -- The LEAD convenor (2026-09-23). One per group: the creator to begin with, and it moves only by hand-over,
@@ -1969,6 +1974,15 @@ CREATE TABLE IF NOT EXISTS groups (
 CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
 CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
 CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
+
+-- A group's own picture, exactly as it was set (a data URL, bare base64 or a shipped `bundled://` name), out of its row
+-- so no read of groups reads it (#1486; a list of 100 groups with a 1.84 MB picture each ran a 256 MB heap out of
+-- memory). Served by GET /api/groups/:id/picture to a URL carrying its key; travels to a standby in its group's row
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_pictures (
+    group_id TEXT PRIMARY KEY,
+    picture TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS group_members (
     group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,

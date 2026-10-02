@@ -235,6 +235,7 @@ export const SUITES = [
     'test-members-contact-visibility',
     'test-members-directory-cost',
     'test-member-photos-out-of-rows',
+    'test-group-rosters-photo-urls',
     'test-contact-trade-partners',
     'test-sync-signature',
     'test-trust-value-curve',

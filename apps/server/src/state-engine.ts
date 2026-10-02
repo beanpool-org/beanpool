@@ -5747,12 +5747,13 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
             buyer: {
                 pubkey: r.buyer_pubkey,
                 callsign: r.buyer_callsign || 'Anonymous',
-                avatarUrl: r.buyer_avatar_url || null
+                // Each party's photo as its URL, never the photo (#1478): a page of disputes reads none.
+                avatarUrl: avatarUrlOf(r.buyer_pubkey, r.buyer_avatar_ref)
             },
             seller: {
                 pubkey: r.seller_pubkey,
                 callsign: r.seller_callsign || 'Anonymous',
-                avatarUrl: r.seller_avatar_url || null
+                avatarUrl: avatarUrlOf(r.seller_pubkey, r.seller_avatar_ref)
             }
         },
         chat,
@@ -5772,9 +5773,9 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               (SELECT photo FROM member_photos WHERE public_key = buyer.public_key) AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               (SELECT photo FROM member_photos WHERE public_key = seller.public_key) AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
@@ -5819,9 +5820,9 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                p.author_pubkey AS post_author_pubkey,
                p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               (SELECT photo FROM member_photos WHERE public_key = buyer.public_key) AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               (SELECT photo FROM member_photos WHERE public_key = seller.public_key) AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key

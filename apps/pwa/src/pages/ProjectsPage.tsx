@@ -16,6 +16,7 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
+import { pledgeClosedLine } from '../lib/enterprise-pledge';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -712,8 +713,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 />
                                             </div>
 
-                                            {/* Primary CTA if has goal and not funded */}
-                                            {!isFunded && (
+                                            {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
+                                            {!isFunded && !pledgeClosedLine(t.status) && (
                                                 <div
                                                     aria-hidden="true"
                                                     className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"

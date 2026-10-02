@@ -5,7 +5,8 @@
  * Every routine that clears the account's storage ends the epoch first ({@link endAccountEpoch}):
  *   - 'signed-out': the account leaves this browser. Sign Out (Device Only) and the delete at the last community
  *     (lib/device-prefs.ts `clearAccountStorage`). A page that started before it writes nothing more for that account,
- *     ever: its pages drop what they hold and stop reading as it, until the page is loaded again.
+ *     ever: its pages drop what they hold and stop reading as it, until the page is loaded again, or an account is
+ *     signed in in it ({@link beginAccountEpoch}: a page that held none when it heard the end, such as the welcome page).
  *   - 'cleared': the account stays, what was kept of it goes. Leaving a community the web app was pointed at, and Force
  *     Clear & Re-Sync (lib/home-cache.ts `clearHomeCache`). A read or a save started before it ({@link accountEpoch}) is
  *     dropped when it lands, and Home reads afresh.
@@ -118,6 +119,19 @@ export function endAccountEpoch(end: AccountEpochEnd): string {
     try { openChannel()?.postMessage(raw); } catch { /* the storage event tells the other tabs */ }
     notice(raw);
     return raw;
+}
+
+/**
+ * A fresh sign-in in this page, with no reload (WelcomePage's and GuestLobby's `onComplete`, through App): the account
+ * just saved is this page's own, under the epoch storage holds now, as for a page loaded now. Whatever end this page
+ * heard, or has yet to take in, while it held no account (the welcome page, the lobby) was never this account's, so it
+ * is not signed out (PR #1479's review, round 3: a restore in a page that had heard another tab's sign-out read nothing
+ * and saved nothing).
+ */
+export function beginAccountEpoch(): void {
+    const kept = parse(stored());
+    if (kept && kept.n >= held.n) held = kept;
+    signedOut = false;
 }
 
 /** Told of every end this page takes in, its own included. Returns the unsubscribe. */

@@ -783,3 +783,125 @@ describe('Sign Out in another tab: this tab drops her Home, reads nothing more a
         await waitFor(() => expect(kept()?.etag).toBe('W/"home-fresh"'));
     });
 });
+
+describe('a clear this tab is the first to hear of, inside its own next call: nothing it held is kept or sent (PR #1479 review, round 3)', () => {
+    const idb = () => globalThis.indexedDB as unknown as MemoryIndexedDB;
+    /** The web app pointed at community X (Settings → Sovereign Node Connection); the page's own node is P. */
+    const X = 'https://x.example.org';
+    const P = window.location.origin;
+    const kept = (node: string) => idb().peek('beanpool-home', 'answers', `${node}|${ME.publicKey}`) as { answer?: HomeAnswer; etag?: string | null } | undefined;
+    const keptText = (node: string) => JSON.stringify(kept(node)?.answer ?? null);
+    /** Her Home at X: what the reviewer found written back after the delete there (her balance, Kofi's message). */
+    const atX = () => answer({}, {
+        needs: { items: [{ kind: 'message', count: 1, accent: false, label: 'Unread message from Kofi', target: { to: 'unread-messages' } }] },
+        community: { name: 'Kept only at X', members: 12 },
+    });
+    const atP = () => answer({}, { community: { name: 'Read at P', members: 81 } });
+    const settle = () => act(async () => { await new Promise(r => setTimeout(r, 30)); });
+    /** The node's next read, held until `answerNode` is called: what a Home re-read afresh would get. */
+    function holdNextRead() {
+        let answerNode!: (r: HomeRead) => void;
+        vi.mocked(api.getHome).mockReturnValueOnce(new Promise(r => { answerNode = r; }));
+        return (r: HomeRead) => act(async () => { answerNode(r); });
+    }
+    function hide(card: string) {
+        const el = screen.getByTestId(`home-card-${card}`);
+        fireEvent.click(within(el).getByRole('button', { name: /^Card options for / }));
+        fireEvent.click(within(el).getByRole('button', { name: 'Hide' }));
+    }
+
+    beforeEach(() => {
+        // As lib/api.ts reads it: the node Settings points the web app at, else the page's own.
+        vi.mocked(api.getNodeApiUrl).mockImplementation(() => localStorage.getItem('bp_node_url') ?? '');
+    });
+    afterEach(() => {
+        vi.mocked(api.getNodeApiUrl).mockImplementation(() => '');
+    });
+
+    /** Her Home at X, kept in this browser, in a tab that will hear nothing of the delete there. */
+    async function onHomeAtX() {
+        localStorage.setItem('bp_node_url', X);
+        vi.mocked(api.getHome).mockResolvedValue(fresh(atX(), 'W/"home-x"'));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByText('Kept only at X');
+        await waitFor(() => expect(kept(X)).toBeDefined());
+        vi.mocked(api.saveHomePreferences).mockClear();
+    }
+
+    it('Force Clear in a tab this one never hears, then a Hide here: the answer from before the clear is not put back, and Home is read afresh', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(answer({}, { community: { name: 'Read before the clear', members: 81 } }), 'W/"home-before"'));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByText('Read before the clear');
+        await waitFor(() => expect(kept(P)).toBeDefined());
+        vi.mocked(api.saveHomePreferences).mockClear();
+        const callsBefore = vi.mocked(api.getHome).mock.calls.length;
+        await act(async () => { await clearInAnotherTab({ heard: false }); });
+        expect(kept(P)).toBeUndefined();
+        // This tab heard nothing: it still draws what it read before.
+        expect(screen.getByText('Read before the clear')).toBeInTheDocument();
+        const afresh = holdNextRead();
+        hide('pulse');
+        await settle();
+        // The Hide was the first to hear of it: the answer and the layout it was made on are gone, kept and sent nowhere.
+        expect(kept(P)).toBeUndefined();
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        expect(screen.queryByText('Read before the clear')).toBeNull();
+        // Read afresh, with no tag, and that answer is the one kept.
+        expect(vi.mocked(api.getHome).mock.calls.length).toBe(callsBefore + 1);
+        expect(vi.mocked(api.getHome).mock.calls.at(-1)![1]).toBeNull();
+        await afresh(fresh(answer({}, { community: { name: 'Read afresh', members: 82 } }), 'W/"home-afresh"'));
+        expect(await screen.findByText('Read afresh')).toBeInTheDocument();
+        await waitFor(() => expect(kept(P)?.etag).toBe('W/"home-afresh"'));
+        expect(keptText(P)).not.toContain('Read before the clear');
+    });
+
+    it('the delete at community X (the web app pointed there) in a tab this one never hears, then a Hide here: nothing of her Home at X is put back under X', async () => {
+        await onHomeAtX();
+        await act(async () => { await clearInAnotherTab({ heard: false, leaving: true }); });
+        expect(kept(X)).toBeUndefined();
+        const atPage = holdNextRead();
+        hide('pulse');
+        await settle();
+        expect(kept(X)).toBeUndefined();
+        // Nor is X's layout sent to her account at P, where the web app now talks.
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        expect(screen.queryByText(/Unread message from Kofi/)).toBeNull();
+        // She is still this browser's, at P: Home is read there afresh and kept there.
+        await atPage(fresh(atP(), 'W/"home-p"'));
+        expect(await screen.findByText('Read at P')).toBeInTheDocument();
+        await waitFor(() => expect(kept(P)?.etag).toBe('W/"home-p"'));
+        await settle();
+        expect(kept(X)).toBeUndefined();
+    });
+
+    it('the same delete, then a doorbell here: P\'s answer is kept under P, never under X\'s key', async () => {
+        await onHomeAtX();
+        await act(async () => { await clearInAnotherTab({ heard: false, leaving: true }); });
+        vi.mocked(api.getHome).mockResolvedValue(fresh(atP(), 'W/"home-p"'));
+        const callsBefore = vi.mocked(api.getHome).mock.calls.length;
+        vi.useFakeTimers();
+        hooks.sync.forEach(cb => cb());
+        await vi.advanceTimersByTimeAsync(3_100);
+        vi.useRealTimers();
+        expect(await screen.findByText('Read at P')).toBeInTheDocument();
+        await waitFor(() => expect(kept(P)?.etag).toBe('W/"home-p"'));
+        await settle();
+        expect(kept(X)).toBeUndefined();
+        // One read, afresh (no tag), as the page landing again makes it.
+        expect(vi.mocked(api.getHome).mock.calls.length).toBe(callsBefore + 1);
+        expect(vi.mocked(api.getHome).mock.calls.at(-1)![1]).toBeNull();
+    });
+
+    it('the same delete, then a chip tap here: X\'s interests are neither kept as this browser\'s nor sent to her account at P', async () => {
+        await onHomeAtX();
+        localStorage.removeItem('bp_fav_categories');
+        await act(async () => { await clearInAnotherTab({ heard: false, leaving: true }); });
+        holdNextRead();
+        fireEvent.click(within(screen.getByTestId('home-card-market')).getByRole('button', { name: /Tune/ }));
+        fireEvent.click(await screen.findByTestId('home-interest-food'));
+        await settle();
+        expect(api.saveHomePreferences).not.toHaveBeenCalled();
+        expect(localStorage.getItem('bp_fav_categories')).toBeNull();
+        expect(Object.keys(localStorage).filter(k => k.includes(ME.publicKey))).toEqual([]);
+    });
+});

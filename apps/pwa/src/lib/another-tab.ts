@@ -32,25 +32,37 @@ async function emptyHomeStore(): Promise<void> {
 }
 
 /**
+ * How this tab meets another tab's sign-out or clear. `heard: false`: as a tab that hears nothing of it (no `storage`
+ * event, no channel message; a frozen or busy tab may miss both), which finds out only when it next checks, inside its
+ * own next read or write (lib/account-epoch.ts).
+ */
+export interface AnotherTab { heard?: boolean }
+
+/**
  * Only the epoch's end, as this tab hears it: for a test that times it against something of this tab's own. A sign-out
  * there wipes localStorage too (the new epoch kept).
  */
-export function epochEndsInAnotherTab(end: 'signed-out' | 'cleared'): void {
+export function epochEndsInAnotherTab(end: 'signed-out' | 'cleared', { heard = true }: AnotherTab = {}): void {
     const raw = nextEpoch(end);
     if (end === 'signed-out') localStorage.clear();
     localStorage.setItem(ACCOUNT_EPOCH_KEY, raw);
-    window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_EPOCH_KEY, newValue: raw }));
+    if (heard) window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_EPOCH_KEY, newValue: raw }));
 }
 
 /** Sign Out (Device Only) in another tab: localStorage wiped (the new epoch kept), the event sent, Home's store emptied. */
-export async function signOutInAnotherTab(): Promise<void> {
-    epochEndsInAnotherTab('signed-out');
+export async function signOutInAnotherTab(tab: AnotherTab = {}): Promise<void> {
+    epochEndsInAnotherTab('signed-out', tab);
     await emptyHomeStore();
 }
 
-/** Force Clear & Re-Sync, or leaving a community, in another tab: the account stays, Home's kept copy goes. */
-export async function clearInAnotherTab(): Promise<void> {
-    epochEndsInAnotherTab('cleared');
+/**
+ * Force Clear & Re-Sync, or leaving a community, in another tab: the account stays, Home's kept copy goes. `leaving`:
+ * the delete at the community the web app was pointed at (lib/delete-here.ts leaveThisCommunity), which first sends the
+ * web app back to the page's own node (`bp_node_url` goes).
+ */
+export async function clearInAnotherTab({ leaving = false, ...tab }: AnotherTab & { leaving?: boolean } = {}): Promise<void> {
+    if (leaving) localStorage.removeItem('bp_node_url');
+    epochEndsInAnotherTab('cleared', tab);
     await emptyHomeStore();
 }
 

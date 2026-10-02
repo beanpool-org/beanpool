@@ -9,6 +9,7 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { loadIdentity, type BeanPoolIdentity } from './lib/identity';
+import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
@@ -571,14 +572,20 @@ export function App() {
 
     // First-run gate: the global lobby for a visitor with no key, where the node shows visitors its listings (G9b).
     if (!identity) {
+        // Signed in here, with no reload: the account is this page's own from now (lib/account-epoch.ts), whatever
+        // sign-out in another tab this page heard while it held no account.
+        const signedInHere = (signedIn: BeanPoolIdentity) => {
+            beginAccountEpoch();
+            setIdentity(signedIn);
+        };
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} onComplete={setIdentity} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+            return <GuestLobby info={visitorView.info} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
             <>
                 <FormerAddressBanner />
-                <WelcomePage onComplete={setIdentity} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
+                <WelcomePage onComplete={signedInHere} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
             </>
         );
     }

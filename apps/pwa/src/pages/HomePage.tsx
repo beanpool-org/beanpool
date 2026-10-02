@@ -12,7 +12,9 @@
  *   wasn't built for (made here, or the account's newer layout arriving in an answer), and a 120 s safety poll while the
  *   tab is in front. Never a per-card timer.
  * - **Sign-out in another tab** (lib/account-epoch.ts): this page drops the member's Home at once, reads nothing more as
- *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh.
+ *   them and writes nothing back; a clear that keeps the account (Force Clear, leaving a community) is read afresh. A
+ *   tab that missed the news finds it at the start of its next read or write, and that call stops there: what the page
+ *   held went with the news, so nothing of it is kept or sent (PR #1479's review, round 3).
  * - **Tailoring** (§4): "…" on a card (Hide · Move up · Move down) and Edit home (components/HomeEditDialog.tsx); the
  *   layout is saved on the account (`home.layout`, H1) with this browser's copy, last write wins. The rules are
  *   lib/home-cards.ts.
@@ -154,26 +156,46 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const focusAfterHide = useRef<HomeCardId[] | null>(null);
     // The next landing comes after a clear: the kept copy is gone (or going), so the node is asked afresh.
     const skipCopy = useRef(false);
+    // The epoch this page last landed under (lib/account-epoch.ts accountEpoch); null until it lands, and from the news of
+    // a sign-out or a clear until it lands again.
+    const landedUnder = useRef<number | null>(null);
+    // How many ends this page has heard: a landing that is itself the first to hear one leaves the reading to the next.
+    const endsHeard = useRef(0);
 
     useEffect(() => {
         mounted.current = true;
         return () => { mounted.current = false; };
     }, []);
 
+    /*
+     * The first step of every read and every write this page makes: the epoch, if it is still the one the page landed
+     * under (and, for a member, still signed in here); null otherwise, and the call stops there. Taking the epoch takes in
+     * any news this tab missed (the channel, the storage event), and the news has the page drop what it held at once (the
+     * listener below), so a call that is the first to hear of a clear never carries on with the old render's answer,
+     * layout or community (PR #1479's review, round 3: a Hide put back the answer from before Force Clear, or a deleted
+     * account's Home under the community it was deleted at). The page's next landing reads as the current account.
+     */
+    const landedEpoch = useCallback((): number | null => {
+        const epoch = accountEpoch();
+        if (epoch !== landedUnder.current) return null;
+        return !publicKey || accountEpochHolds(epoch) ? epoch : null;
+    }, [publicKey]);
+
     // Whether what was read or started under `epoch` may still be drawn and kept (lib/account-epoch.ts): nothing cleared
     // since, and for a member, still signed in here. The lobby's visitor holds no account.
     const holds = useCallback((epoch: number) => (publicKey ? accountEpochHolds(epoch) : epoch === accountEpoch()), [publicKey]);
 
-    // Kept only while it may be (writeCachedHome checks the epoch, `epoch` being the one the answer was read under).
-    const keep = useCallback((a: HomeAnswer, l: HomeLayout | null, epoch: number = accountEpoch()) => {
+    // Kept only while it may be (writeCachedHome checks the epoch, `epoch` being the one the answer was read under, from
+    // landedEpoch: never one taken after the answer was).
+    const keep = useCallback((a: HomeAnswer, l: HomeLayout | null, epoch: number) => {
         void writeCachedHome(cacheKey, { answer: a, asked: builtForRef.current, etag: etagRef.current, layout: l, layoutUnsaved: unsavedRef.current, savedAt: Date.now() }, epoch);
     }, [cacheKey]);
 
     const saveLayout = useCallback((next: HomeLayout) => {
-        // Signed out, here or in another tab: nothing more is sent as that account.
-        if (!publicKey || !accountEpochHolds()) return;
+        // Signed out or cleared, here or in another tab: nothing more is sent as that account.
+        const epoch = landedEpoch();
+        if (!publicKey || epoch === null) return;
         const seq = ++layoutSeq.current;
-        const epoch = accountEpoch();
         savingLayout.current += 1;
         saveHomePreferences(publicKey, { 'home.layout': next })
             .finally(() => { savingLayout.current -= 1; })
@@ -189,22 +211,16 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 if (answerRef.current) keep(answerRef.current, layoutRef.current, epoch);
             })
             .catch(() => { /* kept in this browser, sent again after the next read */ });
-    }, [publicKey, keep, holds]);
-
-    // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
-    // and sent again after the next read, whichever page made it.
-    const saveInterests = useCallback((next: string[]) => {
-        if (!publicKey) return;
-        void shareInterests(publicKey, next);
-    }, [publicKey]);
+    }, [publicKey, keep, holds, landedEpoch]);
 
     const fetchHome = useCallback(async (why: 'landing' | 'doorbell' | 'poll' | 'return' | 'retry' | 'point' | 'layout') => {
-        // Signed out, here or in another tab: nothing more is read as that account.
-        if (publicKey && !accountEpochHolds()) return;
+        // Signed out, here or in another tab: nothing more is read as that account. Cleared since the page landed: it
+        // lands again (the news has it do so), and that landing reads afresh, as the current account.
+        const epoch = landedEpoch();
+        if (epoch === null) return;
         if (inFlight.current) { again.current = true; return; }
         inFlight.current = true;
         lastStart.current = Date.now();
-        const epoch = accountEpoch();
         try {
             const p = pointRef.current;
             const sent = askedCards(layoutRef.current, answerRef.current);
@@ -280,7 +296,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 void fetchHomeRef.current?.('doorbell');
             }
         }
-    }, [keep, saveLayout, publicKey, holds]);
+    }, [keep, saveLayout, publicKey, holds, landedEpoch]);
     const fetchHomeRef = useRef(fetchHome);
     fetchHomeRef.current = fetchHome;
 
@@ -292,6 +308,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         layoutRef.current = null;
         builtForRef.current = null;
         setAnswer(null);
+        // What this landing's reads and writes are under: news after this is a reason to land again (landedEpoch). News
+        // taken in by this very call has the page land again at once, and that landing, with the community as it is
+        // now, is the one that reads.
+        const heard = endsHeard.current;
+        const epoch = accountEpoch();
+        if (endsHeard.current !== heard) return;
+        landedUnder.current = epoch;
         // Signed out (here or in another tab) since this page loaded: nothing of the member's is read or drawn.
         if (publicKey && !accountEpochHolds()) {
             statusRef.current = 'signed-out';
@@ -304,6 +327,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         skipCopy.current = false;
         (afterClear ? Promise.resolve(null) : readCachedHome(cacheKey)).then((cached) => {
             if (cancelled || !mounted.current) return;
+            // A sign-out or a clear came while the copy was read: what it read is from before, and the page lands again.
+            if (landedEpoch() === null) return;
             if (cached && !answerRef.current) {
                 answerRef.current = cached.answer;
                 builtForRef.current = cached.asked ?? null;
@@ -322,6 +347,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // A sign-out or a clear, here or in another tab (lib/account-epoch.ts): what this page holds goes at once, and it
     // lands again, which reads nothing as a member who signed out, and reads afresh after a clear.
     useEffect(() => onAccountEpochEnd((end) => {
+        // Nothing this page started or holds is current until it has landed again.
+        endsHeard.current += 1;
+        landedUnder.current = null;
         answerRef.current = null;
         etagRef.current = null;
         layoutRef.current = null;
@@ -385,7 +413,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
 
     // The one-time reveal and hint (§6.2), for a member, once their Home has something to show.
     useEffect(() => {
-        if (!publicKey || !answer || answer.welcome) return;
+        if (!publicKey || !answer || answer.welcome || landedEpoch() === null) return;
         if (!readFlag(revealKey(publicKey))) {
             writeFlag(revealKey(publicKey));
             if (!reducedMotion()) setReveal(true);
@@ -401,17 +429,26 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         if (shown.includes('interests') && !interestsOpen) setInterestsOpen(true);
     }, [shown.includes('interests')]);
 
-    function changeLayout(next: HomeLayout) {
+    /**
+     * A layout change made here (a card's "…", Edit home). Returns false when it was made on a Home this page no longer
+     * holds: a sign-out or a clear this call was the first to hear of (landedEpoch). The change goes with what the page
+     * held, drawn, kept and sent nowhere, and the page lands again.
+     */
+    function changeLayout(make: (current: HomeLayout | null) => HomeLayout): boolean {
+        const epoch = landedEpoch();
+        if (epoch === null) return false;
         const prev = layoutRef.current;
+        const next = make(prev);
         unsavedRef.current = true;
         layoutRef.current = next;
         setLayout(next);
-        if (answerRef.current) keep(answerRef.current, next);
+        if (answerRef.current) keep(answerRef.current, next, epoch);
         saveLayout(next);
         // Show, or Reset to defaults, brought back a card the answer in hand wasn't built for (a hidden card is left out
         // of `cards=`, and the node builds only what it is asked for): read Home again with the new `cards=`, now.
         // Nothing else needs a read: a Hide or a move is drawn from the answer in hand.
         if (answerRef.current && layoutNeedsRead(prev, next, answerRef.current, builtForRef.current)) void fetchHomeRef.current('layout');
+        return true;
     }
 
     // After a Hide, focus goes to the nearest card left (its "…", else its heading; Edit home on the community card),
@@ -430,11 +467,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         }
     }, [layout]);
 
+    // On the account and in this browser's Market (lib/home-interests.ts); a save that fails is marked in this browser
+    // and sent again after the next read, whichever page made it. Never from a Home the page no longer holds (a chip on
+    // another community's Home, deleted in a tab this one never heard).
     function toggleChip(id: string) {
+        if (!publicKey || landedEpoch() === null) return;
         const next = toggleInterest(myInterests, id);
         setInterests(next);
         setInterestsOpen(true);
-        saveInterests(next);
+        void shareInterests(publicKey, next);
     }
 
     function openTune() {
@@ -499,12 +540,13 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
             canMoveDown: i >= 0 && i < movable.length - 1,
             onHide: () => {
                 const at = shown.indexOf(id);
+                if (!changeLayout((l) => hideCard(l, id))) return;
+                // Read once the layout has been drawn (the effect below), so set in the same turn as the change.
                 focusAfterHide.current = [...shown.slice(at + 1), ...shown.slice(0, Math.max(at, 0)).reverse()];
                 setLive(hiddenWords(cardTitle(id, a)));
                 if (id === 'interests') setInterestsOpen(false);
-                changeLayout(hideCard(layoutRef.current, id));
             },
-            onMove: (d: 'up' | 'down') => changeLayout(moveCard(layoutRef.current, id, d, movable)),
+            onMove: (d: 'up' | 'down') => { changeLayout((l) => moveCard(l, id, d, movable)); },
         };
     }
 
@@ -818,7 +860,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                         <p className="m-0 text-sm font-semibold text-nature-900 dark:text-white break-words">{n.first.title}</p>
                         {n.first.line && <p className="m-0 text-sm text-nature-700 dark:text-nature-200 break-words">{n.first.line}</p>}
                         {n.unseen > 1 && <p className="m-0 mt-1 text-xs text-nature-600 dark:text-nature-300">and {n.unseen - 1} more</p>}
-                        <HomeMore onClick={() => { void markNoticesSeen([n.first.id]).catch(() => { /* still unseen: the card stays */ }); }} testId="home-notice-seen">Mark as read</HomeMore>
+                        <HomeMore onClick={() => {
+                            // Never a notice of a Home this page no longer holds (another community's, in a tab that missed the news).
+                            if (landedEpoch() === null) return;
+                            void markNoticesSeen([n.first.id]).catch(() => { /* still unseen: the card stays */ });
+                        }} testId="home-notice-seen">Mark as read</HomeMore>
                     </HomeCard>
                 );
             }
@@ -870,7 +916,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     {i === 0 && hintOpen && !isVisitor && (
                         <p data-testid="home-hint" className="-mt-1 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 text-sm text-nature-800 dark:text-nature-100">
                             <span className="min-w-0 flex-1 break-words">{HOME_HINT}</span>
-                            <button type="button" aria-label="Close this tip" onClick={() => { setHintOpen(false); if (publicKey) writeFlag(hintKey(publicKey)); }}
+                            <button type="button" aria-label="Close this tip" onClick={() => { setHintOpen(false); if (publicKey && landedEpoch() !== null) writeFlag(hintKey(publicKey)); }}
                                 className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-nature-500 dark:text-nature-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                                 ✕
                             </button>
@@ -883,9 +929,9 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                     answer={a}
                     shown={editable.shown}
                     hidden={editable.hidden}
-                    onToggle={(id, show) => changeLayout(show ? showCard(layoutRef.current, id) : hideCard(layoutRef.current, id))}
-                    onMove={(id, d) => changeLayout(moveCard(layoutRef.current, id, d, editable.shown))}
-                    onReset={() => changeLayout(resetLayout(layoutRef.current))}
+                    onToggle={(id, show) => { changeLayout((l) => (show ? showCard(l, id) : hideCard(l, id))); }}
+                    onMove={(id, d) => { changeLayout((l) => moveCard(l, id, d, editable.shown)); }}
+                    onReset={() => { changeLayout(resetLayout); }}
                     onClose={() => setEditOpen(false)}
                 />
             )}

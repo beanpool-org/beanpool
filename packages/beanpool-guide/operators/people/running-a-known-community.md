@@ -56,7 +56,7 @@ If you scan a phone whose key isn't the one the server lists for that admin, the
 
 The app reads and writes nothing whenever it can't check what the server says, and tells you why:
 
-- **A key made by someone no admin your phone trusts has checked.** Meet that admin, or an admin whose phone already opens the list, and check each other's phones.
+- **A key made by someone no admin your phone trusts has checked.** Meet that admin, or an admin whose phone already opens the list, and check each other's phones. If your phone had removed that admin's key, checking their phone admits them again; checking another admin's phone doesn't, and your phone then makes a new key without them before it writes. Where nobody can be reached, tap **Follow the server's history**: your phone takes the key for its place only, trusts nobody new, and before it writes makes a new key without any admin it had removed.
 - **The server offers an older key history than your phone has.** A server put back to an older copy does that, a standby that took over from an older copy too. Tap **Put the key history back**: your phone sends the history back to the server. Names written since that copy are gone from the server: the app says how many, and your paper copy is how they come back.
 - **The server shows a key history your phone didn't take.** A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Ask your admins what happened. Tap **Follow the server's history**: your phone keeps the other history's keys, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin your phone had removed stays removed: before it writes, it makes a new key without them.
 - **Part of the key history is missing on the server.** Ask whoever runs the server, or an admin.
@@ -85,7 +85,9 @@ Your server writes the log itself, each time a phone fetches the list, so a phon
 
 ## A standby, and a take-over
 
-A standby server copies the names list as it is: sealed entries, the key history, the sealed keys the admins sent each other, and the log, nothing it can read. The list opens on your main server only, because opening it writes the log there. If a standby takes over, it serves the list to the same admins' phones, which open it as before. If the standby's copy was older than the main server's, the phones say so and can put the key history back. If an admin's phone made a new key on the standby first, the other phones say the server shows a different key history and offer to follow it (see When the app refuses).
+A standby server copies the names list as it is: sealed entries, the key history, the sealed keys the admins sent each other, and the log, nothing it can read. The list opens on your main server only, because opening it writes the log there. If a standby takes over, it serves the list to the same admins' phones, which open it as before. If the standby's copy was older than the main server's, the phones say how many names are missing; if the key history is older too, they say so and can put it back. If an admin's phone made a new key on the standby first, the other phones say the server shows a different key history and offer to follow it (see When the app refuses).
+
+Whenever a phone opens the list and names it saw before are no longer there, with no admin having deleted them, it says how many. A server put back to an older copy does that, and so does a standby that took over from one, whether or not a key changed in between. The missing names are sealed rows that may still be on the other copy: whoever runs the servers can copy them back, and the admins' phones still hold the keys they were written under, so they open again. Otherwise, the paper copy.
 
 ## Real names are personal data
 

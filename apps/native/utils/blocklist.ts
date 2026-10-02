@@ -247,8 +247,13 @@ export async function blockUser(
                     try {
                         if (!(await sendReport(report))) await queueReportForRetry(report);
                     } catch (err) {
-                        console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
-                        await queueReportForRetry(report);
+                        if (isFinalReportRefusal(err)) {
+                            // Refused for good (a post no longer there): the block stands, nothing is queued.
+                            console.warn('[blocklist] The community refused the report sent with the block; not retrying:', err);
+                        } else {
+                            console.warn('[blocklist] Failed to send reportAbuse to server on block, queuing for retry:', err);
+                            await queueReportForRetry(report);
+                        }
                     }
                 }
             }
@@ -358,8 +363,26 @@ async function sendReport(report: PendingReport): Promise<boolean> {
         targetPostId: report.postId,
     };
     const res = await withTimeout(signedPost(report.community, REPORTS_PATH, body, signer), REPORT_TIMEOUT_MS);
-    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    if (!res.ok) throw new ReportRefused(res.status);
     return true;
+}
+
+/** The community answered the report, and not with a yes: `status` says whether asking again could change that. */
+class ReportRefused extends Error {
+    constructor(readonly status: number) {
+        super(`Server returned ${status}`);
+    }
+}
+
+/**
+ * Whether the community refused this report for good, so asking again changes nothing: any 4xx but a signature it
+ * couldn't check (401, a phone clock that is off), a timeout (408, 425) and its hourly limit (429). A 404 is the one a
+ * block on a post meets when the post is no longer at the community: the block itself stays, and the report is not
+ * kept to be sent again every start for 7 days. A 5xx, or no answer, is worth another try.
+ */
+export function isFinalReportRefusal(err: unknown): boolean {
+    if (!(err instanceof ReportRefused)) return false;
+    return err.status >= 400 && err.status < 500 && ![401, 408, 425, 429].includes(err.status);
 }
 
 /**
@@ -434,8 +457,9 @@ export async function retryPendingReports(): Promise<void> {
             try {
                 // False when the account changed while the queue was being sent: the report waits for its account.
                 if (!(await sendReport(item))) remaining.push(item);
-            } catch {
-                remaining.push(item);
+            } catch (err) {
+                // Refused for good (a post no longer there): dropped, not sent again at every start for 7 days.
+                if (!isFinalReportRefusal(err)) remaining.push(item);
             }
         }
 

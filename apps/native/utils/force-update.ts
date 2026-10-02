@@ -80,6 +80,12 @@ export interface ForceUpdateGateDeps {
     appLockPromptOpen?(): boolean;
     /** Resolves once no App Lock prompt is open (LocalAuth.whenAppLockPromptsClose). Absent: at once. */
     whenAppLockPromptsClose?(): Promise<void>;
+    /**
+     * The phone's lock prompts opened so far for a door (anything but App Lock's unlock: the words, a payment), and
+     * whether one is open now (LocalAuth.doorPrompts). Each is a leave, whatever AppState did: see createForceUpdateGate.
+     * Absent: none. A throw is a doubt, and a doubt never puts the block up.
+     */
+    doorPrompts?(): { opened: number; open: boolean };
 }
 
 export interface ForceUpdateGate {
@@ -111,6 +117,12 @@ export interface ForceUpdateGate {
  * A door's prompt (the member's words, a payment) is not App Lock's, and still counts as leaving: the block never lands
  * in the middle of what the member started.
  *
+ * A door's prompt is counted from LocalAuth itself (doorPrompts), not only from AppState: on Android 11 and later (and
+ * with a fingerprint on 8-10) the phone's prompt is a system window over the app, which never changes AppState, so a
+ * block answer landed over the words just confirmed or behind a payment's open prompt (#1415's third deciding review).
+ * Now a "block" answer is dropped if a door's prompt opened since its safe moment or is open when it lands, on every
+ * phone, and the next safe moment asks anew. A block held through App Lock's prompt is dropped the same way.
+ *
  * Leaving counts from the safe moment to the answer, not only at the answer: a door's prompt that opened and closed
  * before a slow answer landed is a leave all the same, and the app back in front by then does not make the answer's
  * moment safe again (#1415's re-review: the block landed on the words just confirmed, and mid-payment). So each ordinary
@@ -128,12 +140,26 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
     /** Ordinary leaves so far (not App Lock's prompt): a safe moment's answer stands only if none came since it. */
     let leaves = 0;
     let asks = 0;
-    /** A block decided at a safe moment while App Lock's prompt was up: it goes up once the prompt has closed. */
-    let held: { version: string } | null = null;
+    /**
+     * A block decided at a safe moment while App Lock's prompt was up: it goes up once the prompt has closed. `doorsAt`:
+     * the door prompts opened by that safe moment.
+     */
+    let held: { version: string; doorsAt: number } | null = null;
 
     const promptOpen = () => {
         try { return deps.appLockPromptOpen?.() === true; } catch { return false; }
     };
+
+    /** Door prompts opened so far: NaN when LocalAuth can't say, which never equals itself, so it never blocks. */
+    const doorsOpened = () => {
+        try {
+            const d = deps.doorPrompts?.();
+            if (!d) return 0;
+            return d.open === true || typeof d.opened !== 'number' ? Number.NaN : d.opened;
+        } catch { return Number.NaN; }
+    };
+    /** A door's prompt opened since `doorsAt`, or is open now: the member is in the middle of something. */
+    const doorSince = (doorsAt: number) => doorsOpened() !== doorsAt;
 
     const show = (next: { version: string } | null) => {
         held = null;
@@ -142,9 +168,14 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         deps.show(next);
     };
 
-    /** Shows a held block if the app is in front with no App Lock prompt open now. */
+    /**
+     * Shows a held block if the app is in front with no App Lock prompt open now, and drops it if a door's prompt opened
+     * since its safe moment or is open now.
+     */
     const showHeld = () => {
-        if (held && inFront && !promptAway && !promptOpen()) show(held);
+        if (!held) return;
+        if (doorSince(held.doorsAt)) { held = null; return; }
+        if (inFront && !promptAway && !promptOpen()) show({ version: held.version });
     };
 
     /** Once App Lock's prompts have closed: show what was held, or start the leave the prompt was covering. */
@@ -169,6 +200,7 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         held = null;
         const at = deps.now();
         const leavesAt = leaves;
+        const doorsAt = doorsOpened();
         let decision: ForceUpdateDecision;
         try { decision = await deps.check(); } catch { decision = { kind: 'unknown' }; }
         // A later ask has the newer answer.
@@ -183,8 +215,10 @@ export function createForceUpdateGate(deps: ForceUpdateGateDeps): ForceUpdateGat
         // leave, however short, counted since `at`) and the answer came in time. NaN is not.
         const took = deps.now() - at;
         if (!inFront || leaves !== leavesAt || !(took <= DECIDE_WITHIN_MS)) return;
+        // A door's prompt since the safe moment, or open now, is a leave too, whatever AppState did.
+        if (doorSince(doorsAt)) return;
         if (promptAway || promptOpen()) {
-            held = { version: decision.version };
+            held = { version: decision.version, doorsAt };
             afterPrompt();
             return;
         }

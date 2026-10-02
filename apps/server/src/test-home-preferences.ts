@@ -20,6 +20,10 @@
  *     through the same checks, never served raw.
  *  7. The cost, as the design's §5 asks: one signed request to read and one to write; the most a layout can hold stays
  *     under 1 KB, and the whole own read with it under 2 KB.
+ *  8. The interests carry the node's own stamp (`interestsUpdatedAt`, PR #1479 round 2), in the save's answer and the own
+ *     read: set when the list changes, left alone by a save of the same list, always later than the one before it (a
+ *     clock behind a kept stamp included); interests kept before the stamp read as 1970; none kept, none served; never
+ *     served to another reader; and an app can't send it.
  *
  * Run (read auth on, the default; the opt-out is a second registered run):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-home-preferences.ts
@@ -219,9 +223,9 @@ async function main(): Promise<void> {
         assert(bobReadsAnn.status === 403 && !JSON.stringify(bobReadsAnn.body).includes('events'), `Bob's read of Ann's preferences is refused (${show(bobReadsAnn)})`);
         assert(unsignedRead.status === 401, `an unsigned read is refused (${unsignedRead.status})`);
     } else {
-        assert(bobReadsAnn.status === 200 && !('home.layout' in bobReadsAnn.body) && !('interests' in bobReadsAnn.body),
+        assert(bobReadsAnn.status === 200 && !('home.layout' in bobReadsAnn.body) && !('interests' in bobReadsAnn.body) && !('interestsUpdatedAt' in bobReadsAnn.body),
             `with read auth opted out, Bob's read of Ann's preferences serves neither Home key (${Object.keys(bobReadsAnn.body ?? {}).sort().join(',')})`);
-        assert(unsignedRead.status === 200 && !('home.layout' in unsignedRead.body) && !('interests' in unsignedRead.body),
+        assert(unsignedRead.status === 200 && !('home.layout' in unsignedRead.body) && !('interests' in unsignedRead.body) && !('interestsUpdatedAt' in unsignedRead.body),
             `and nor does an unsigned read (${Object.keys(unsignedRead.body ?? {}).sort().join(',')})`);
         const own = await read(ann);
         assert(own.status === 200 && JSON.stringify(own.body?.['home.layout']?.order) === '["events"]', `while Ann's own read still serves hers (${show(own)})`);
@@ -284,6 +288,52 @@ async function main(): Promise<void> {
     assert(fullRead.status === 200 && fullRead.bytes < 2048,
         `the whole own read with both is one signed GET of ${fullRead.bytes} bytes (${plain.bytes} without them; under 2 KB), and a save one signed POST answering ${fullSave.bytes} bytes`);
     console.log(`  measured: read ${plain.bytes} B → ${fullRead.bytes} B with the fullest Home; stored layout ${layoutBytes} B, interests ${interestBytes} B; save answer ${fullSave.bytes} B`);
+
+    // ── 8. The interests' stamp ──
+    console.log('\n— 8. the node stamps the interests when they change —');
+    const fay = makeMember('Fay');
+    const none = await read(fay);
+    assert(none.status === 200 && !('interestsUpdatedAt' in none.body), `none kept, no stamp served (${Object.keys(none.body ?? {}).sort().join(',')})`);
+    const before = Date.now();
+    const first = await save(fay, { interests: ['food'] });
+    const s1 = first.body?.interestsUpdatedAt;
+    assert(first.status === 200 && typeof s1 === 'string' && Date.parse(s1) >= before - 1 && Date.parse(s1) <= Date.now() + 1,
+        `a first save is stamped, and the answer says when (${show(first)})`);
+    assert((await read(fay)).body?.interestsUpdatedAt === s1, 'and her own read serves the same stamp');
+    await new Promise((r) => setTimeout(r, 5));
+    const sameList = await save(fay, { interests: ['food'] });
+    assert(sameList.body?.interestsUpdatedAt === s1, `a save of the same list leaves the stamp (${sameList.body?.interestsUpdatedAt})`);
+    const layoutOnly = await save(fay, { 'home.layout': { v: 1, order: ['beans'] } });
+    assert(layoutOnly.status === 200 && !('interestsUpdatedAt' in layoutOnly.body) && (await read(fay)).body?.interestsUpdatedAt === s1,
+        `a layout save neither names nor moves it (${show(layoutOnly)})`);
+    const changed = await save(fay, { interests: ['food', 'garden'] });
+    const s2 = changed.body?.interestsUpdatedAt;
+    assert(typeof s2 === 'string' && Date.parse(s2) > Date.parse(s1), `a changed list moves it on (${s1} → ${s2})`);
+    // A stamp kept ahead of the node's clock (a standby that took over from a server running fast): the next is still later.
+    const stampAhead = new Date(Date.now() + 60_000).toISOString();
+    db.prepare(`UPDATE member_preferences SET pref_value = ? WHERE public_key = ? AND pref_key = 'interests.updatedAt'`).run(stampAhead, fay.pk);
+    const later = await save(fay, { interests: ['garden'] });
+    assert(later.body?.interestsUpdatedAt === new Date(Date.parse(stampAhead) + 1).toISOString(),
+        `always later than the one before, even with a clock behind it (${stampAhead} → ${later.body?.interestsUpdatedAt})`);
+    const cleared = await save(fay, { interests: [] });
+    assert(JSON.stringify(cleared.body?.interests) === '[]' && Date.parse(cleared.body?.interestsUpdatedAt) > Date.parse(stampAhead),
+        `clearing them is a change like any other: stamped, and served (${show(cleared)})`);
+    const gus = makeMember('Gus');
+    db.prepare('INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)').run(gus.pk, 'interests', JSON.stringify(['tools']));
+    assert((await read(gus)).body?.interestsUpdatedAt === new Date(0).toISOString(),
+        `interests kept before the node stamped them read as stamped at 1970 (${(await read(gus)).body?.interestsUpdatedAt})`);
+    const gusSaves = await save(gus, { interests: ['tools'] });
+    assert(Date.parse(gusSaves.body?.interestsUpdatedAt) >= before, `and the next save stamps them, the list unchanged (${gusSaves.body?.interestsUpdatedAt})`);
+    const fayRows = rowsOf(fay.pk);
+    const sent = await save(fay, { interests: ['arts'], 'interests.updatedAt': '2099-01-01T00:00:00.000Z' });
+    assert(sent.status === 400 && rowsOf(fay.pk) === fayRows, `an app can't send the stamp: the body is refused whole (${show(sent)})`);
+    if (READ_AUTH) {
+        const bobReadsFay = await read(fay, bob);
+        assert(bobReadsFay.status === 403, `another member's read of hers is refused (${bobReadsFay.status})`);
+    } else {
+        const bobReadsFay = await read(fay, bob);
+        assert(bobReadsFay.status === 200 && !('interestsUpdatedAt' in bobReadsFay.body), `another member's read never carries it (${Object.keys(bobReadsFay.body ?? {}).sort().join(',')})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

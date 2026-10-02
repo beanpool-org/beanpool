@@ -64,6 +64,17 @@ function mintGoogle(aud, nonce, sub) {
 
 // ---------- the node ----------
 
+/** The node's socket guard holds on every way Node opens a socket (its own --self-check, TEST-NET-1, a recorder). */
+async function checkSocketGuard() {
+    const child = spawn(process.execPath, ['--import', 'tsx', 'src/loopback-guard-test-harness.ts', '--self-check'], { cwd: SERVER_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (d) => { out += d; });
+    const code = await new Promise((resolve) => child.on('exit', resolve));
+    const line = out.trim().split('\n').pop() || '';
+    if (code !== 0) throw new Failure(`the node's socket guard lets connections out: ${line}`);
+    return JSON.parse(line);
+}
+
 async function startNode(root, dataDir) {
     const child = spawn(process.execPath, ['--import', 'tsx', 'src/global-door-web-test-harness.ts'], {
         cwd: SERVER_DIR,
@@ -399,6 +410,47 @@ async function keyLetGo(browser, origin, node, seen) {
     }
 }
 
+/** The header's Settings button (the sidebar's is hidden at 320 px). */
+const settingsButton = (page) => page.locator('button[aria-label="Settings"]:visible').first();
+const WORDS_ON_SCREEN = 'Anyone with these words can control your account.';
+
+async function settingsOpensOnMenu(page, how) {
+    await settingsButton(page).click();
+    await page.getByText('View Recovery Phrase').or(page.getByText(WORDS_ON_SCREEN)).first().waitFor({ timeout: 10_000 });
+    if (await page.getByText(WORDS_ON_SCREEN).count()) throw new Failure(`Settings opened from the header (${how}) on the 12 words, not the menu`);
+}
+
+async function seeWordsThenSettings(browser, origin, node, seen) {
+    const { context, page } = await openPage(browser, origin, seen);
+    try {
+        await toTheDoors(page, origin, 'Sage');
+        await page.getByTestId('join-words').click();
+        await page.getByText(/Choose your look/).waitFor({ timeout: 60_000 });
+        await page.getByTitle('Green Bean').click();
+        await page.getByRole('button', { name: 'Next →' }).click();
+        await page.getByText('Your Safety Backup').waitFor();
+        await page.getByRole('button', { name: 'Next →' }).click();
+        await page.getByRole('button', { name: "Let's Begin! 🚀" }).click();
+        await page.getByTestId('one-way-back-words').waitFor({ timeout: 30_000 });
+        await scaleText(page);
+        await page.getByTestId('one-way-back-words').click();
+        await page.getByText(WORDS_ON_SCREEN).waitFor({ timeout: 10_000 });
+        // Closed with Settings' own ← Back, then opened from the header: the menu.
+        await page.getByRole('button', { name: '← Back', exact: true }).first().click();
+        await page.getByText('View Recovery Phrase').waitFor({ state: 'detached', timeout: 10_000 });
+        await settingsOpensOnMenu(page, "after Settings' ← Back");
+        // Closed by going to the Map tab, then opened again: the menu.
+        await page.getByTestId('mobile-bottom-nav').getByRole('button', { name: /Map/ }).click();
+        await page.getByText('View Recovery Phrase').waitFor({ state: 'detached', timeout: 10_000 });
+        await settingsOpensOnMenu(page, 'after the Map tab');
+        await noSideScroll(page, 'Settings, opened from the header');
+        await shot(page, '7-settings-menu');
+        console.log('  ✓ "See my 12 words" opens the words once; Settings opened from the header afterwards shows the menu (after Settings\' ← Back, and after the Map tab)');
+    } finally {
+        await context.close();
+    }
+}
+
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-global-door-'));
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-global-door-data-'));
@@ -406,6 +458,13 @@ async function main() {
     let browser;
     let failed = false;
     try {
+        try {
+            const guard = await checkSocketGuard();
+            console.log(`The node's socket guard: ${Object.keys(guard.results).length} ways to open a socket to 192.0.2.1, all refused; loopback goes through.`);
+        } catch (e) {
+            failed = true;
+            console.error(`✗ ${e instanceof Failure ? e.message : e.stack || e}`);
+        }
         await build({ root: PWA_DIR, logLevel: 'warn', build: { outDir: path.join(root, 'public'), emptyOutDir: true } });
         node = await startNode(root, dataDir);
         const origin = `https://localhost:${node.port}`;
@@ -417,6 +476,7 @@ async function main() {
             ['the busy level', busyLevel],
             ['"Setting up your account…" and the way back', settingUpWayBack],
             ['a key let go by ← Back', keyLetGo],
+            ['"See my 12 words", then Settings from the header', seeWordsThenSettings],
         ];
         for (const [name, run] of scenarios) {
             if (process.env.GLOBAL_DOOR_ONLY && !name.includes(process.env.GLOBAL_DOOR_ONLY)) continue;

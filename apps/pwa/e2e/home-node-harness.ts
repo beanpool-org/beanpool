@@ -65,6 +65,8 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('../../server/src/auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('../../server/src/gateway-rate-limit.js');
     const { lockedDm } = await import('../../server/src/dm-test-payload.js');
+    // The engine the server runs (the same file through the workspace link): faces live in member_photos since #1475.
+    const { setMemberPhoto } = await import('../../../packages/beanpool-engine/dist/index.js');
 
     await initTls();
     se.initStateEngine();
@@ -76,9 +78,10 @@ async function main(): Promise<void> {
     se.seedGenesisMember(owner, 'Olive');
     db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(ago(120), owner);
     const member = (pk: string, callsign: string, joinedDaysAgo: number, opts: { avatar?: boolean; area?: { lat: number; lng: number } } = {}) => {
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url, area_lat, area_lng)
-                    VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)`)
-            .run(pk, callsign, ago(joinedDaysAgo), owner, `INV-${callsign.toUpperCase()}`, opts.avatar ? TINY_PNG : null, opts.area?.lat ?? null, opts.area?.lng ?? null);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, area_lat, area_lng)
+                    VALUES (?, ?, 'active', ?, ?, ?, ?, ?)`)
+            .run(pk, callsign, ago(joinedDaysAgo), owner, `INV-${callsign.toUpperCase()}`, opts.area?.lat ?? null, opts.area?.lng ?? null);
+        if (opts.avatar) setMemberPhoto(db, pk, TINY_PNG);
         db.prepare('INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return pk;
     };

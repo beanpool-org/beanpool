@@ -36,6 +36,8 @@ export interface DmLineVector {
     messageId: string;
     part: 'body' | 'attachment';
     after: string | null;
+    /** A reply: the message it answers, as its metadata names it (bound into the associated data). */
+    replyToId?: string;
     text: string;
     nonce: Uint8Array;
     /** The frozen sealed line. */
@@ -72,6 +74,15 @@ export const DM_LINE_VECTORS: DmLineVector[] = [
         },
     },
     {
+        label: 'format 3: Ben\'s reply to Ana\'s line',
+        from: 'ben', format: 3, messageId: '3d2c1b0a-9f8e-4d7c-b6a5-948372615f4e', part: 'body',
+        after: '0c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b10', replyToId: '0c9a6b1e-2f3d-4e5a-8b7c-6d5e4f3a2b10', text: 'Yes', nonce: nonceOf(5),
+        payload: {
+            ciphertext: 'LGwOkxLk9ofGoO4HhNWz4PmmLRhzAWiqryFh0y8MKabOGJcKDvJBNLC5OmIsnZzF0GovYX2Eyvwo',
+            nonce: 'x25519-xc20p-v2:DWwW3W+AojGmnThKDGlsY+3tuTvnE0/1',
+        },
+    },
+    {
         label: 'format 2: an old line of Ben\'s (the history every member already has)',
         from: 'ben', format: 2, messageId: 'old-line-1', part: 'body',
         after: null, text: 'see you then', nonce: nonceOf(4),
@@ -84,7 +95,7 @@ export const DM_LINE_VECTORS: DmLineVector[] = [
 
 /** The parts of an app's e2e-crypto module the vectors exercise. */
 export interface DmLineApi {
-    sealDmLine(text: string, ctx: DmKeyContext, line: DmLineBinding & { after?: string | null }, nonceForVectors?: Uint8Array): DmPayload;
+    sealDmLine(text: string, ctx: DmKeyContext, line: DmLineBinding & { after?: string | null; replyToId?: string | null }, nonceForVectors?: Uint8Array): DmPayload;
     encryptDmFormat2(text: string, ctx: DmKeyContext, nonceForVectors?: Uint8Array): DmPayload;
     openDmLine(payload: DmPayload, keys: DmKeys, line: DmLineRef, formats?: ReadonlyArray<2 | 3>): OpenedDmLine;
 }
@@ -100,7 +111,11 @@ function keysOf(me: 'ana' | 'ben', pkcs8 = false): DmKeys {
 }
 
 function refOf(v: DmLineVector, over: Partial<DmLineRef> = {}): DmLineRef {
-    return { conversationId: DM_VECTOR_CONVERSATION, senderPubHex: DM_VECTOR_PEOPLE[v.from].publicKey, messageId: v.messageId, part: v.part, ...over };
+    return {
+        conversationId: DM_VECTOR_CONVERSATION, senderPubHex: DM_VECTOR_PEOPLE[v.from].publicKey, messageId: v.messageId, part: v.part,
+        ...(v.replyToId ? { metadata: JSON.stringify({ replyToId: v.replyToId }) } : {}),
+        ...over,
+    };
 }
 
 function refused(api: DmLineApi, v: DmLineVector, keys: DmKeys, over: Partial<DmLineRef>, what: string): void {
@@ -115,7 +130,7 @@ export function checkDmLineVectors(api: DmLineApi): void {
         for (const pkcs8 of [false, true]) {
             const ctx: DmKeyContext = { ...keysOf(v.from, pkcs8), conversationId: DM_VECTOR_CONVERSATION };
             const sealed = v.format === 3
-                ? api.sealDmLine(v.text, ctx, { senderPubHex: DM_VECTOR_PEOPLE[v.from].publicKey, messageId: v.messageId, part: v.part, after: v.after }, v.nonce)
+                ? api.sealDmLine(v.text, ctx, { senderPubHex: DM_VECTOR_PEOPLE[v.from].publicKey, messageId: v.messageId, part: v.part, after: v.after, replyToId: v.replyToId }, v.nonce)
                 : api.encryptDmFormat2(v.text, ctx, v.nonce);
             if (sealed.ciphertext !== v.payload.ciphertext || sealed.nonce !== v.payload.nonce) {
                 fail(`${v.label}: sealed with ${pkcs8 ? 'a PKCS8' : 'a bare-seed'} key, the bytes differ from the frozen line`);
@@ -134,6 +149,10 @@ export function checkDmLineVectors(api: DmLineApi): void {
         refused(api, v, ben, { messageId: '11111111-2222-4333-8444-555555555555' }, 'under another message id');
         refused(api, v, ben, { conversationId: '00000000-0000-4000-8000-000000000000' }, 'in another conversation');
         refused(api, v, ben, { part: v.part === 'body' ? 'attachment' : 'body' }, 'as the other part of its message');
+        // What a reply answers is the node's to read, not to change: pointed elsewhere, dropped, or added to a line that
+        // answered nothing, it doesn't open.
+        refused(api, v, ben, { metadata: JSON.stringify({ replyToId: '22222222-3333-4444-8555-666666666666' }) }, 'as an answer to another message');
+        if (v.replyToId) refused(api, v, ben, { metadata: null }, 'as a line that answers nothing');
         let asFormat2: OpenedDmLine | null = null;
         try { asFormat2 = api.openDmLine(v.payload, ben, refOf(v), [2]); } catch { /* as it should */ }
         if (asFormat2) fail(`${v.label}: opened as a format-2 line`);

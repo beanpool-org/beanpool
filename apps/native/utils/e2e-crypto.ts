@@ -13,7 +13,7 @@
  *                  M F2, 2026-10-02). Lines from before (format 2: the conversation id alone) still open.
  *
  * Wire format, unchanged: ciphertext = base64(AEAD output); nonce column = "x25519-xc20p-v2:" + base64(nonce).
- * Legacy messages keep nonce "plaintext-v1" and stay readable (see db.ts). Only static identity keys are used, so there
+ * A DM row that isn't an encrypted line is never shown as anyone's words (core dmLineKind; see db.ts). Only static identity keys are used, so there
  * is no forward secrecy yet (a ratchet is future work).
  */
 export {
@@ -24,9 +24,17 @@ export {
     checkDmThread,
     dmAfterReference,
     dmLineMarkText,
+    dmLineShownText,
+    dmLineIsUnattributed,
+    dmLineKind,
+    dmReplyToOf,
+    dmThreadInShownOrder,
     encryptDmFormat2,
     decryptDmFormat2,
     DM_LINE_NOT_VERIFIED_TEXT,
+    DM_LINE_NOT_ENCRYPTED_TEXT,
+    DM_LINE_DELETED_TEXT,
+    DM_FROM_ADMINS_KEY,
     DmLineNotVerifiedError,
     type DmKeyContext as DMKeyContext,
     type DmLineView,

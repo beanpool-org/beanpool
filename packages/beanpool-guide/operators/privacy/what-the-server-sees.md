@@ -9,7 +9,10 @@ Running the server means holding your neighbours' information. Know what you can
 
 ## Private even from you
 
-- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. Each one is also locked to its sender, its message id and its chat: an app refuses one the server shows as the other person's, stores again under a new id, or moves to another chat, and marks one shown out of order. Keep every message's id, author and stored text exactly as they are. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it. Messages an older app sent without the lock, before this update, stay readable as they were stored.
+- **Direct messages** between two members, their edits, and the photos in them, are encrypted on their phones. The server stores them but cannot read them. Neither can you. Each one is also locked to its sender, its message id, its chat and, for a reply, the message it answers: an app refuses one the server shows as the other person's, stores again under a new id, or points at another message; refuses or marks one moved to another chat (marked when it carries the chat it came from, as joining two chats into one leaves it); and marks one shown out of order. Keep every message's id, author, metadata and stored text exactly as they are. An app that cannot lock a message does not send it, and the server refuses a direct message that is not locked, whichever app sent it.
+- Anything in a direct message that is not locked shows in both apps as nobody's words, never as a member's. The message you send a member from the admin page is not locked, by design: they see it marked as from the community's admins and readable by the server, never as a private message.
+- Messages an older app sent before this update still open, and every one is marked as sent from an older version of the app, since nothing in them proves who wrote them. Those sent without the lock stay readable as they were stored.
+- What the server can still do to a direct message: hold it back, deliver it late, or make it read "This message was deleted"; show an edit's earlier words; and add its own notices to the chat, which show as notices.
 
 ## What the server holds in the clear
 
@@ -18,7 +21,8 @@ Anyone with the server's files can read these, and so can anyone who can open a 
 - members' names, profiles, posts, photos, deals, balances and every trade;
 - **group chats, event chats and enterprise chats**: these are not encrypted;
 - the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
-- who messaged whom, and when, and their emoji reactions, even for direct messages;
+- who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;
+- the messages you send members from the admin page;
 - **how each member voted**.
 
 ## Secret ballots

@@ -40,7 +40,12 @@ vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
 }));
 
-vi.mock('../lib/e2e-crypto', () => ({
+vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
+    // The thread's order is the real one: by the node's timestamps (core dmThreadInShownOrder).
+    dmThreadInShownOrder: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmThreadInShownOrder,
+    dmLineShownText: vi.fn((v: { text: string | null } | undefined) => v?.text ?? ''),
+    dmLineIsUnattributed: vi.fn(() => false),
+    dmReplyToOf: vi.fn(() => null),
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
     sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),

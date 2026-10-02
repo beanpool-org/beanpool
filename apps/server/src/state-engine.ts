@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
-import { pushNoticeWords, PUSH_NOTICE_KINDS } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
@@ -7645,10 +7645,12 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
     const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
     // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
-    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts).
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts). Marked so (core
+    // dm-crypto DM_FROM_ADMINS_KEY): both apps show it as the community admins' message, which the server can read, and
+    // never as a private one; a readable line in a DM without the mark is shown as nobody's words.
     if (conv) {
         sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
-            'text', undefined, undefined, undefined, { nodeAuthored: true });
+            'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
     }
 }
 

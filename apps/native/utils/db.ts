@@ -6,7 +6,8 @@ import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders,
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
-    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_VERIFIED_TEXT,
+    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
@@ -1066,28 +1067,28 @@ export async function getConversations(myPubkey: string) {
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
-        if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
+        // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
+        // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
+        // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
+        // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
+        const lastView = row.lastId && !isNodeReadableChatType(row.convType)
+            ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
+                previewIdentity?.privateKey && row.otherPubkey ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: row.otherPubkey } : null, row.id).get(row.lastId)
+            : undefined;
+        if (lastView) {
+            if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
+            else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
+            else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
+            else if (lastView.mark === 'from-admins') displayMsg = `From your community's admins: ${lastView.text}`;
+            else displayMsg = dmLineShownText(lastView);
+        } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
                 displayMsg = decodeUtf8(decodeBase64(row.lastMessage));
             } catch {
                 displayMsg = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.lastNonce)) {
-            // An encrypted DM line — only ever set on dm threads, so otherPubkey is THE peer. Opened bound to the author
-            // and id the node stores it under (format 3), or as an old line (format 2), under this conversation's id or
-            // one its metadata names (folded threads); anything else stays locked.
-            if (previewIdentity?.privateKey && row.otherPubkey) {
-                try {
-                    displayMsg = openDmLine({ ciphertext: row.lastMessage, nonce: row.lastNonce }, {
-                        myEdPrivHex: previewIdentity.privateKey,
-                        peerEdPubHex: row.otherPubkey,
-                    }, { conversationId: row.id, senderPubHex: row.lastAuthor, messageId: row.lastId, part: 'body', metadata: row.lastMetadata }).text;
-                } catch {
-                    displayMsg = '🔒 Encrypted message';
-                }
-            } else {
-                displayMsg = '🔒 Encrypted message';
-            }
+            displayMsg = '🔒 Encrypted message';
         } else if (row.lastNonce === '00000') {
             displayMsg = formatSystemMessage(row.lastSysType, row.lastMetadata, myPubkey, {
                 postAuthor: row.postAuthor,
@@ -3774,6 +3775,8 @@ interface DmLineToSeal {
     messageId: string;
     part?: DmPart;
     after?: string | null;
+    /** The message a reply answers (its metadata's replyToId), which the node can read but not change unnoticed. */
+    replyToId?: string | null;
 }
 
 function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
@@ -3809,21 +3812,31 @@ async function lineToWriteAfter(conversationId: string, exceptId?: string): Prom
     return dmAfterReference(newestFirst.reverse().map((r: any) => ({ id: r.id, nonce: r.nonce, pending: isUndeliveredRow(r.metadata) })));
 }
 
-/** The line one of mine was written after, for its edit to keep (an edit stays where its line is). */
-async function afterOfLine(conversationId: string, messageId: string): Promise<string | null> {
+/**
+ * What one of my lines was sealed to besides its id, for its edit to keep: the line it was written after (an edit stays
+ * where its line is) and the message it answers (its metadata's replyToId, which the line is bound to).
+ */
+async function sealOfLine(conversationId: string, messageId: string): Promise<{ after: string | null; replyToId: string | null }> {
     const database = await getDb();
     const row = await database.getFirstAsync<any>(
         'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
     ).catch(() => null);
-    if (!row || !isEncryptedNonce(row.nonce)) return null;
+    const replyToId = replyToIdOf(row?.metadata);
+    if (!row || !isEncryptedNonce(row.nonce)) return { after: null, replyToId };
     const ctx = await getDmKeyContext(conversationId).catch(() => null);
-    if (!ctx) return null;
+    if (!ctx) return { after: null, replyToId };
     try {
-        return openDmLine({ ciphertext: row.ciphertext, nonce: row.nonce }, ctx,
+        const after = openDmLine({ ciphertext: row.ciphertext, nonce: row.nonce }, ctx,
             { conversationId, senderPubHex: row.author_pubkey, messageId, part: 'body', metadata: row.metadata }).after;
+        return { after, replyToId };
     } catch {
-        return null;
+        return { after: null, replyToId };
     }
+}
+
+/** The message a line answers, from metadata as a send carries it (a JSON string): sealed into the line. */
+function replyToIdOf(metadata: string | null | undefined): string | null {
+    return dmReplyToOf(metadata ?? null) ?? null;
 }
 
 async function isNodeReadableConversation(conversationId: string): Promise<boolean> {
@@ -3872,6 +3885,13 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // Load the DM key context once so v2-encrypted rows can be decrypted in the map below.
     let dmCtx: DMKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }
+    // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
+    // the thread check below, whether or not this phone has the other person's key yet.
+    let isDm = !!dmCtx;
+    try {
+        const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        isDm = isDm || (!!convRow && !isNodeReadableChatType(convRow.type));
+    } catch {}
     // Read receipts: my pubkey (to flag outgoing) + the peer's read cursor.
     let myPubkey: string | null = null;
     let peerLastReadAt: string | null = null;
@@ -3909,17 +3929,30 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
     } catch {}
 
-    // Every encrypted line opened at once, bound to the author and id this phone holds it under, and checked against the
-    // rest of the thread in the order it is shown (e2e-crypto checkDmThread): a line that doesn't open is never shown as
-    // anyone's words, and one the node moved, reordered or sent again from the old format is marked.
-    const lineViews = dmCtx
-        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, metadata: r.metadata })), dmCtx, conversationId)
+    // Every line of a DM judged at once, in the order it is shown (by the node's timestamps, as selected above), by
+    // e2e-crypto checkDmThread: an encrypted line is opened bound to the author and id this phone holds it under, and one
+    // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
+    // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
+    // as the community admins'. Only the node's own notices are left to the system formatting below.
+    const lineViews = isDm
+        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId)
         : null;
 
     return rows.map(row => {
         let displayTxt = row.ciphertext;
         let integrityNote: string | null = null;
-        if (row.nonce === '00000') {
+        let unattributed = false;
+        const view = lineViews?.get(row.id);
+        if (view) {
+            displayTxt = view.mark === 'not-verified' && !dmCtx && isEncryptedNonce(row.nonce)
+                ? '[Encrypted — update your app to read]'
+                : dmLineShownText(view);
+            // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
+            // not had it, so it is never marked (a clock behind the node's would sort it before the line it follows).
+            integrityNote = isUndeliveredRow(row.metadata) ? null : dmLineMarkText(view.mark);
+            // Shown in the middle of the chat as nobody's, never in its named author's bubble.
+            unattributed = dmLineIsUnattributed(view);
+        } else if (row.nonce === '00000') {
             displayTxt = formatSystemMessage(row.system_type, row.metadata, myPubkey, {
                 ...fallbackInfo,
                 defaultText: row.ciphertext
@@ -3931,15 +3964,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
                 displayTxt = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.nonce)) {
-            if (lineViews) {
-                const view = lineViews.get(row.id);
-                displayTxt = view?.text ?? DM_LINE_NOT_VERIFIED_TEXT;
-                // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
-                // not had it, so it is never marked (a clock behind the node's would sort it before the line it follows).
-                integrityNote = isUndeliveredRow(row.metadata) ? null : dmLineMarkText(view?.mark);
-            } else {
-                displayTxt = '[Encrypted — update your app to read]';
-            }
+            displayTxt = '[Encrypted — update your app to read]';
         }
         const outgoing = !!myPubkey && row.author_pubkey === myPubkey;
         const readByPeer = outgoing && !!peerLastReadAt &&
@@ -3969,8 +3994,10 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Raw edit timestamp: pins the text content for cheap change detection
             // (chat screen compares (id, editedAt) instead of the decrypted text).
             editedAt: row.edited_at ?? null,
-            // One line under a DM message the node moved, reordered or sent again in the old format; null otherwise.
+            // One line under a DM message the node moved or reordered, an old-format line, or the admin page's message.
             integrityNote,
+            // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
+            unattributed,
             rawTimestamp: row.timestamp,
             timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
@@ -3996,6 +4023,7 @@ export async function insertMessage(conversationId: string, authorPubkey: string
         senderPubHex: authorPubkey,
         messageId: tempId,
         after: await lineToWriteAfter(conversationId, reuseId),
+        replyToId: replyToIdOf(metadata),
     });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -4119,7 +4147,7 @@ export async function editMessage(conversationId: string, messageId: string, new
     const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
         senderPubHex: identity?.publicKey ?? '',
         messageId,
-        after: await afterOfLine(conversationId, messageId),
+        ...(await sealOfLine(conversationId, messageId)),
     });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -4158,7 +4186,7 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
     const dmCtx = await requireDmKeyContext(conversationId);
     const identity = await loadIdentity();
     const messageId = Crypto.randomUUID().toLowerCase();
-    const line = { senderPubHex: identity?.publicKey ?? '', messageId };
+    const line = { senderPubHex: identity?.publicKey ?? '', messageId, replyToId: replyToIdOf(metadata) };
 
     const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
     const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
@@ -4199,22 +4227,13 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
  */
 export async function getDecryptedAttachment(conversationId: string, messageId: string): Promise<string | null> {
     try {
-        // 1. Local cache first. Lives in the filesystem (survives a DB wipe-and-fetch), so an
-        //    image is downloaded+decrypted at most once per device and re-opens instantly/offline.
-        const cachePath = `${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`;
-        const cached = await FileSystem.getInfoAsync(cachePath);
-        if (cached.exists) return cachePath;
-
-        // 2. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk).
+        // 1. The words first, always: the photo is part of its message, never on its own. They are opened bound to the
+        //    author and id this phone holds the message under, in the conversation it is shown in (a local row, cheap).
+        //    Words that don't open leave the photo locked, the cached copy included: the cache is keyed by message id
+        //    alone and survives a wipe-and-fetch, so a photo opened once would otherwise show again under a line the node
+        //    has since re-attributed or moved.
         const dmCtx = await getDmKeyContext(conversationId);
         if (!dmCtx) return null;
-        const res = await signedGet(`/api/messages/${messageId}/attachment`);
-        if (!res.ok) return null;
-        const { data, nonce } = await res.json();
-
-        // The photo is opened as part of its message, never on its own: bound to the author and id this phone holds the
-        // message under, and in the format its words opened in, so neither a photo from another line nor an old-format
-        // picture can stand in for this one. Words that don't open leave the photo locked too.
         const database = await getDb();
         const msgRow = await database.getFirstAsync<any>(
             'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
@@ -4222,9 +4241,21 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return null;
         const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
         const words = openDmLine({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
+
+        // 2. Local cache next. Lives in the filesystem (survives a DB wipe-and-fetch), so an
+        //    image is downloaded+decrypted at most once per device and re-opens instantly/offline.
+        const cachePath = `${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`;
+        const cached = await FileSystem.getInfoAsync(cachePath);
+        if (cached.exists) return cachePath;
+
+        // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
+        //    in the format they opened in, so neither a photo from another line nor an old-format picture can stand in.
+        const res = await signedGet(`/api/messages/${messageId}/attachment`);
+        if (!res.ok) return null;
+        const { data, nonce } = await res.json();
         const decrypted = openDmLine({ ciphertext: data, nonce }, dmCtx, { ...ref, part: 'attachment' }, [words.format]).text;
 
-        // 3. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
+        // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline
         //    data URI if it isn't a recognised image payload (don't cache an unknown shape).
         const m = decrypted.match(/^data:image\/\w+;base64,(.*)$/);

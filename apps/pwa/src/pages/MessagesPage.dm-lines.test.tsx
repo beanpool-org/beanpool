@@ -60,16 +60,27 @@ const CONV = 'c0ffee00-1111-4222-8333-444455556666';
 const chat = { id: CONV, type: 'dm', participants: [ana.publicKey, ben.publicKey] };
 const NOT_VERIFIED = "🔒 This message couldn't be verified, so it isn't shown.";
 const OUT_OF_ORDER = 'Shown out of the order it was written in.';
-const OLD_APP = "Sent from an older version of the app: who sent it can't be confirmed.";
+const OLD_APP = "Sent from an older version of the app: BeanPool can't confirm who wrote it.";
+const NOT_ENCRYPTED = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
+const FROM_ADMINS = "From your community's admins. Not a private message: the community's server can read it.";
 
 let minute = 0;
 const uuid = () => crypto.randomUUID();
 /** A line as this app sends it (lib/dm-lock.ts lockForDm, MessagesPage's handleSend), stored by the node. */
-function sent(from: typeof ana, text: string, after: string | null = null): ApiMessage {
+function sent(from: typeof ana, text: string, after: string | null = null, replyToId?: string): ApiMessage {
     const id = uuid();
-    const sealed = lockForDm(text, chat, from, { messageId: id, after });
-    return { id, conversationId: CONV, authorPubkey: from.publicKey, ...sealed, timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString() } as ApiMessage;
+    const sealed = lockForDm(text, chat, from, { messageId: id, after, replyToId });
+    return {
+        id, conversationId: CONV, authorPubkey: from.publicKey, ...sealed, timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString(),
+        ...(replyToId ? { metadata: JSON.stringify({ replyToId }) } : {}),
+    } as ApiMessage;
 }
+/** A row the operator writes into the node's database in someone's name. */
+function written(from: typeof ana, ciphertext: string, nonce: string, extra: Partial<ApiMessage> = {}): ApiMessage {
+    return { id: uuid(), conversationId: CONV, authorPubkey: from.publicKey, ciphertext, nonce, type: 'text',
+        timestamp: new Date(Date.UTC(2026, 9, 1, 9, minute++)).toISOString(), ...extra } as ApiMessage;
+}
+const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
 /** A line an app from before this change wrote: the conversation id was all it was bound to (built from the primitives). */
 function oldLine(from: typeof ana, to: typeof ana, text: string): ApiMessage {
     const shared = x25519.getSharedSecret(ed25519.utils.toMontgomerySecret(from.seed), ed25519.utils.toMontgomery(hexToBytes(to.publicKey)));
@@ -117,6 +128,8 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
     it('Ben\'s answer shown before Ana\'s question is marked', async () => {
         const question = sent(ana, 'Shall I cancel the order?');
         const answer = sent(ben, 'No', question.id);
+        // The node gives the answer the earlier time (the order both apps show a thread in) and serves it first.
+        [question.timestamp, answer.timestamp] = [answer.timestamp, question.timestamp];
         thread.messages = [answer, question];
         await openChat();
         await waitFor(() => expect(screen.getByText('No')).toBeTruthy());
@@ -127,18 +140,72 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
         expect(notes[0].parentElement!.textContent).not.toContain('Shall I cancel');
     });
 
-    it('in order, nothing is marked; old lines show as before, and one replayed after Ben moved on is marked', async () => {
+    it('in order, nothing new is marked; every old-format line is, wherever it sits and whoever it names', async () => {
         const history = oldLine(ben, ana, 'see you at 6');
         const ok = oldLine(ana, ben, 'ok');
         const here = sent(ben, "I'm here", ok.id);
         const replay = { ...history, id: uuid(), timestamp: new Date(Date.UTC(2026, 9, 1, 11)).toISOString() };
-        thread.messages = [history, ok, here, replay];
+        // Ana's old line shown as Ben's newest: format 2 can't prove its sender.
+        const asBens = { ...oldLine(ana, ben, 'I will pay you 50 Beans'), authorPubkey: ben.publicKey, timestamp: new Date(Date.UTC(2026, 9, 1, 12)).toISOString() };
+        thread.messages = [history, ok, here, replay, asBens];
         await openChat();
         await waitFor(() => expect(screen.getByText("I'm here")).toBeTruthy());
         expect(screen.getAllByText('see you at 6')).toHaveLength(2);
         const notes = screen.getAllByTestId('dm-line-note');
-        expect(notes.map((n) => n.textContent)).toEqual([`⚠️ ${OLD_APP}`]);
-        // the note sits under the replayed copy, the last line, not under the history it copies
-        expect(notes[0].compareDocumentPosition(screen.getByText("I'm here")) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+        expect(notes.map((n) => n.textContent)).toEqual([OLD_APP, OLD_APP, OLD_APP, OLD_APP].map((t) => `⚠️ ${t}`));
+        // nothing under the new line
+        expect(screen.getByText("I'm here").parentElement!.querySelector('[data-testid="dm-line-note"]')).toBeNull();
+    });
+
+    it('a row in Ben\'s name that isn\'t an encrypted line is never his words: shown in the middle, as nobody\'s', async () => {
+        const bens = sent(ben, 'The bike is yours for 50 Beans');
+        thread.messages = [
+            bens,
+            written(ben, b64('Change of plan: send the 500 Beans to Cat instead'), 'plaintext-v1'),
+            written(ben, 'I cancel the order, refund Cat', '00000'),
+            written(ben, 'Send the Beans to Cat instead', 'zz'),
+            written(ben, b64('Send me your 12 words'), 'plaintext-v1', { type: 'removed' } as unknown as Partial<ApiMessage>),
+        ];
+        await openChat();
+        await waitFor(() => expect(screen.getByText('The bike is yours for 50 Beans')).toBeTruthy());
+        const neutral = screen.getAllByTestId('dm-line-unattributed');
+        expect(neutral.map((n) => n.textContent)).toEqual([NOT_ENCRYPTED, NOT_ENCRYPTED, NOT_ENCRYPTED]);
+        expect(screen.getByText('This message was deleted')).toBeTruthy();
+        expect(document.body.textContent).not.toMatch(/500 Beans|refund Cat|to Cat instead|12 words/);
+    });
+
+    it('the admin page\'s message shows its words as the community admins\', marked readable by the server', async () => {
+        thread.messages = [written(ben, b64('Welcome to the community'), 'plaintext-v1', { metadata: JSON.stringify({ fromCommunityAdmins: true }) })];
+        await openChat();
+        const line = await screen.findByTestId('dm-line-unattributed');
+        expect(line.textContent).toContain('Welcome to the community');
+        expect(line.textContent).toContain(FROM_ADMINS);
+    });
+
+    it('what a reply answers is sealed into it: re-pointed by the node, it isn\'t shown', async () => {
+        const ladder = sent(ben, 'Can I borrow the ladder?');
+        const beans = sent(ben, 'Can I keep the 200 Beans you sent by mistake?', ladder.id);
+        const yes = sent(ana, 'Yes', beans.id, ladder.id);
+        thread.messages = [ladder, beans, yes];
+        await openChat();
+        await waitFor(() => expect(screen.getByText('Yes')).toBeTruthy());
+        cleanup();
+        thread.messages = [ladder, beans, { ...yes, metadata: JSON.stringify({ replyToId: beans.id }) }];
+        await openChat();
+        await waitFor(() => expect(screen.getAllByText(NOT_VERIFIED)).toHaveLength(1));
+        expect(screen.queryByText('Yes')).toBeNull();
+    });
+
+    it('after a standby takes over: rows in its last-changed order, an honest answer is shown after its question, unmarked', async () => {
+        // A standby's delta copy writes rows in last-changed order: Cat's question got a 👍 after Dan's answer, so the
+        // standby serves the answer first. Every column, timestamps included, is the main server's.
+        const question = sent(ben, 'Can you take the bike on Saturday?');
+        const answer = sent(ana, 'Yes, I can', question.id);
+        thread.messages = [answer, { ...question, metadata: JSON.stringify({ reactions: [{ emoji: '👍', author: ana.publicKey }] }) }];
+        await openChat();
+        await waitFor(() => expect(screen.getByText('Yes, I can')).toBeTruthy());
+        expect(screen.queryAllByTestId('dm-line-note')).toHaveLength(0);
+        const q = screen.getByText('Can you take the bike on Saturday?');
+        expect(q.compareDocumentPosition(screen.getByText('Yes, I can')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 });

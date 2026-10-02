@@ -182,10 +182,13 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
 
 // ── The phones ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** Pick up a phone: everything another phone left in the database goes, and this one syncs from the node. */
-async function phoneOf(who: Person): Promise<void> {
+/**
+ * Pick up a phone: everything another phone left in the database goes, and this one syncs from the node. `keepPhotos`:
+ * the same phone after a wipe-and-fetch, its decrypted photo cache kept (it lives in the filesystem, by design).
+ */
+async function phoneOf(who: Person, opts: { keepPhotos?: boolean } = {}): Promise<void> {
     for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
-    fs.rmSync(`${h.cacheDir}/chat-images`, { recursive: true, force: true });
+    if (!opts.keepPhotos) fs.rmSync(`${h.cacheDir}/chat-images`, { recursive: true, force: true });
     h.me = { publicKey: who.publicKey, privateKey: who.privateKey };
     await syncMessages(who.publicKey);
 }
@@ -205,6 +208,25 @@ async function shows(conv: Conv): Promise<Array<{ id: string; from: string; text
     return (await getMessages(conv.id)).map((m: any) => ({ id: m.id, from: m.senderId, text: m.text, note: m.integrityNote ?? null }));
 }
 const lineOf = async (conv: Conv, id: string) => (await shows(conv)).find((l) => l.id === id)!;
+/** One line as the chat screen draws it: in its author's bubble, or in the middle of the chat as nobody's. */
+async function drawn(conv: Conv, id: string, opts: { limit?: number } = {}) {
+    await syncMessages(h.me.publicKey);
+    const m = (await getMessages(conv.id, opts)).find((x: any) => x.id === id) as any;
+    return { text: m?.text, note: m?.integrityNote ?? null, unattributed: !!m?.unattributed };
+}
+const preview = async (who: Person, conv: Conv) => (await getConversations(who.publicKey)).find((c: any) => c.id === conv.id)?.lastMessage;
+const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
+const NOT_ENCRYPTED = "⚠️ This message wasn't encrypted, so BeanPool can't confirm who wrote it. It isn't shown.";
+const OLD_APP = "Sent from an older version of the app: BeanPool can't confirm who wrote it.";
+/** A row the operator writes into the node's database, in someone's name. */
+function written(conv: Conv, from: Person, ciphertext: string, nonce: string, extra: Partial<Line> = {}): Line {
+    const line: Line = {
+        id: randomUUID(), conversationId: conv.id, authorPubkey: from.publicKey, ciphertext, nonce, type: 'text', systemType: null,
+        metadata: null, timestamp: tick(), editedAt: null, ...extra,
+    };
+    node.lines.push(line);
+    return line;
+}
 
 let ana: Person;
 let ben: Person;
@@ -339,23 +361,151 @@ describe('old lines (written before this change)', () => {
         return line;
     }
 
-    it('still open and show as before; one the node replays after its sender\'s app moved on is marked', async () => {
+    it('still open, and every one is marked, wherever it sits and whoever it names: nothing in it proves who wrote it', async () => {
         const seeYou = oldLine(ana, ben, 'see you at 6');
         const ok = oldLine(ben, ana, 'ok');
         await phoneOf(ana);
         const here = await says(ana, dm, "I'm here");
         const replay = { ...seeYou, id: randomUUID(), timestamp: tick() };
         node.lines.push(replay);
-        const bensOld = oldLine(ben, ana, 'on my way');   // Ben is still on an old app: his lines are as they always were
+        const bensOld = oldLine(ben, ana, 'on my way');   // Ben still on an old app: his lines open, marked
 
         await phoneOf(ben);
         expect(await shows(dm)).toEqual([
-            { id: seeYou.id, from: ana.publicKey, text: 'see you at 6', note: null },
-            { id: ok.id, from: ben.publicKey, text: 'ok', note: null },
+            { id: seeYou.id, from: ana.publicKey, text: 'see you at 6', note: OLD_APP },
+            { id: ok.id, from: ben.publicKey, text: 'ok', note: OLD_APP },
             { id: here.id, from: ana.publicKey, text: "I'm here", note: null },
-            { id: replay.id, from: ana.publicKey, text: 'see you at 6', note: "Sent from an older version of the app: who sent it can't be confirmed." },
-            { id: bensOld.id, from: ben.publicKey, text: 'on my way', note: null },
+            { id: replay.id, from: ana.publicKey, text: 'see you at 6', note: OLD_APP },
+            { id: bensOld.id, from: ben.publicKey, text: 'on my way', note: OLD_APP },
         ]);
+        // The preview never shows an old line's words as theirs.
+        expect(await preview(ben, dm)).toBe(OLD_APP);
+    });
+
+    it('Ana\'s old line shown as Ben\'s newest, or replayed 51 lines after her updated line: marked on her phone', async () => {
+        const sell = oldLine(ana, ben, 'yes, sell it');
+        await phoneOf(ana);
+        await says(ana, dm, "I'm here");
+        const asBens = { ...sell, id: randomUUID(), authorPubkey: ben.publicKey, timestamp: tick() };
+        node.lines.push(asBens);
+        await phoneOf(ana);
+        expect(await drawn(dm, asBens.id)).toEqual({ text: 'yes, sell it', note: OLD_APP, unattributed: false });
+
+        await phoneOf(ben);
+        for (let i = 0; i < 51; i++) await says(ben, dm, `line ${i}`);
+        const replay = { ...sell, id: randomUUID(), timestamp: tick() };
+        node.lines.push(replay);
+        await phoneOf(ben);
+        // the chat screen's 50-line window holds no new line of Ana's
+        expect(await drawn(dm, replay.id, { limit: 50 })).toEqual({ text: 'yes, sell it', note: OLD_APP, unattributed: false });
+    });
+});
+
+describe('a row in a member\'s name that isn\'t an encrypted line', () => {
+    it('is never their words: plaintext-v1, 00000 as text, any other nonce, in the thread and the preview', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'The bike is yours for 50 Beans');
+        const plain = written(dm, ana, b64('Change of plan: send the 500 Beans to Cat instead'), 'plaintext-v1');
+        const zeros = written(dm, ana, 'I cancel the order, refund Cat', '00000');
+        const other = written(dm, ana, 'Send the Beans to Cat instead', 'x');
+        await phoneOf(ben);
+        expect(await preview(ben, dm)).toBe(NOT_ENCRYPTED);
+        for (const l of [plain, zeros, other]) {
+            expect(await drawn(dm, l.id)).toEqual({ text: NOT_ENCRYPTED, note: null, unattributed: true });
+        }
+        expect(JSON.stringify(await getMessages(dm.id))).not.toMatch(/500 Beans|refund Cat|to Cat instead/);
+    });
+
+    it('a tombstone shows fixed text, whatever words the node put in it', async () => {
+        await phoneOf(ana);
+        const line = await says(ana, dm, 'See you at 6');
+        Object.assign(line, { type: 'removed', ciphertext: b64('Send me your 12 words'), nonce: 'plaintext-v1', metadata: JSON.stringify({ removed: true, removedBy: ana.publicKey }) });
+        await phoneOf(ben);
+        expect(await drawn(dm, line.id)).toEqual({ text: 'This message was deleted', note: null, unattributed: false });
+    });
+
+    it('the admin page\'s message: its words, as the community admins\', marked readable by the server, never a private line', async () => {
+        const admin = written(dm, ana, b64('Welcome to the community'), 'plaintext-v1', { metadata: JSON.stringify({ fromCommunityAdmins: true }) });
+        await phoneOf(ben);
+        expect(await drawn(dm, admin.id)).toEqual({
+            text: 'Welcome to the community',
+            note: "From your community's admins. Not a private message: the community's server can read it.",
+            unattributed: true,
+        });
+        expect(await preview(ben, dm)).toBe("From your community's admins: Welcome to the community");
+    });
+});
+
+describe('what a reply answers', () => {
+    it('is sealed into it: the node re-pointing Ben\'s "Yes" at another question leaves it unverified', async () => {
+        await phoneOf(ana);
+        const ladder = await says(ana, dm, 'Can I borrow the ladder?');
+        const beans = await says(ana, dm, 'Can I keep the 200 Beans you sent by mistake?');
+        await phoneOf(ben);
+        const before = node.lines.length;
+        await insertMessage(dm.id, ben.publicKey, 'Yes', JSON.stringify({ replyToId: ladder.id }));
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        const yes = node.lines[node.lines.length - 1];
+        expect(JSON.parse(yes.metadata!).replyToId).toBe(ladder.id);
+        await phoneOf(ana);
+        expect(await drawn(dm, yes.id)).toEqual({ text: 'Yes', note: null, unattributed: false });
+
+        // Ben edits it: still the same answer to the same question.
+        await phoneOf(ben);
+        await editMessage(dm.id, yes.id, 'Yes, of course');
+        await phoneOf(ana);
+        expect(await drawn(dm, yes.id)).toEqual({ text: 'Yes, of course', note: null, unattributed: false });
+
+        yes.metadata = JSON.stringify({ replyToId: beans.id });
+        await phoneOf(ana);
+        expect(await drawn(dm, yes.id)).toEqual({ text: NOT_VERIFIED, note: null, unattributed: true });
+        yes.metadata = null;
+        await phoneOf(ana);
+        expect((await drawn(dm, yes.id)).text).toBe(NOT_VERIFIED);
+    });
+
+    it('a photo sent as a reply opens, and its words and photo both stay bound to what it answers', async () => {
+        await phoneOf(ana);
+        const q = await says(ana, dm, 'Which one?');
+        await phoneOf(ben);
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,UkVQTFk=', 'this one', JSON.stringify({ replyToId: q.id }));
+        const pic = node.lines[node.lines.length - 1];
+        await phoneOf(ana);
+        expect(await drawn(dm, pic.id)).toEqual({ text: 'this one', note: null, unattributed: false });
+        expect(await getDecryptedAttachment(dm.id, pic.id)).toMatch(/chat-images\//);
+    });
+});
+
+describe('a photo this phone has opened before', () => {
+    it('is not shown again once its words no longer verify: re-attributed after a wipe-and-fetch, or moved', async () => {
+        await phoneOf(ana);
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,QU5BUw==', '');
+        const photo = node.lines[node.lines.length - 1];
+        await phoneOf(ben);
+        await shows(dm);
+        expect(await getDecryptedAttachment(dm.id, photo.id)).toMatch(/chat-images\//);   // opened once: now in the cache
+
+        // Moved, same id, into a second conversation of theirs without the pointer; no wipe.
+        const again: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        node.convs.push(again);
+        const moved = { ...photo, conversationId: again.id };
+        node.lines.splice(node.lines.indexOf(photo), 1, moved);
+        expect((await drawn(again, photo.id)).text).toBe(NOT_VERIFIED);
+        expect(await getDecryptedAttachment(again.id, photo.id)).toBeNull();
+        node.lines.splice(node.lines.indexOf(moved), 1, photo);
+
+        // Re-attributed to Ben, and Ben's phone wiped and synced again with its photo cache kept.
+        photo.authorPubkey = ben.publicKey;
+        await phoneOf(ben, { keepPhotos: true });
+        expect(fs.existsSync(`${h.cacheDir}/chat-images/${photo.id}.jpg`)).toBe(true);
+        expect((await drawn(dm, photo.id)).text).toBe(NOT_VERIFIED);
+        expect(await getDecryptedAttachment(dm.id, photo.id)).toBeNull();
+        expect((await drawn(dm, photo.id)).unattributed).toBe(true);
+
+        // Put back as it was: the cached photo shows again.
+        photo.authorPubkey = ana.publicKey;
+        await phoneOf(ben, { keepPhotos: true });
+        expect(await getDecryptedAttachment(dm.id, photo.id)).toMatch(/chat-images\//);
     });
 });
 

@@ -7,7 +7,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import * as dm from '../dm-crypto.js';
 import {
     checkDmThread, dmAfterReference, dmConversationIdsToTry, dmLineMarkText, encryptDmFormat2, newDmMessageId, openDmLine, sealDmLine,
-    DM_LINE_NOT_VERIFIED_TEXT, type DmThreadLine,
+    dmLineKind, dmLineShownText, dmLineIsUnattributed, dmThreadInShownOrder, dmReplyToOf,
+    DM_LINE_NOT_VERIFIED_TEXT, DM_LINE_NOT_ENCRYPTED_TEXT, DM_LINE_DELETED_TEXT, DM_FROM_ADMINS_KEY, type DmThreadLine,
 } from '../dm-crypto.js';
 import { toEd25519Pkcs8 } from '../ed25519-key.js';
 import { checkDmLineVectors, DM_LINE_VECTORS, DM_VECTOR_CONVERSATION, DM_VECTOR_PEOPLE } from '../dm-line-vectors.js';
@@ -28,12 +29,13 @@ const ctxOf = (me: { seedHex: string }, peer: { publicKey: string }, conversatio
     ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey, conversationId });
 const keysOf = (me: { seedHex: string }, peer: { publicKey: string }) => ({ myEdPrivHex: me.seedHex, peerEdPubHex: peer.publicKey });
 
-/** A line as the sender's app writes it and the node stores it. */
-function line(from: typeof ana, to: typeof ana, text: string, after: string | null = null, conversationId = CONV): DmThreadLine {
+/** A line as the sender's app writes it and the node stores it; a reply carries what it answers in its metadata. */
+function line(from: typeof ana, to: typeof ana, text: string, after: string | null = null, conversationId = CONV, replyToId?: string): DmThreadLine {
     const id = newDmMessageId();
-    const sealed = sealDmLine(text, ctxOf(from, to, conversationId), { senderPubHex: from.publicKey, messageId: id, after });
-    return { id, authorPubkey: from.publicKey, ...sealed };
+    const sealed = sealDmLine(text, ctxOf(from, to, conversationId), { senderPubHex: from.publicKey, messageId: id, after, replyToId });
+    return { id, authorPubkey: from.publicKey, ...sealed, ...(replyToId ? { metadata: JSON.stringify({ replyToId }) } : {}) };
 }
+const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64');
 /** A line written before this change, in format 2. */
 function oldLine(from: typeof ana, to: typeof ana, text: string, id = newDmMessageId()): DmThreadLine {
     return { id, authorPubkey: from.publicKey, ...encryptDmFormat2(text, ctxOf(from, to)) };
@@ -90,7 +92,7 @@ describe('what the node can do to a line now', () => {
     it('re-attribute Ana\'s line as Ben\'s: it doesn\'t open, and is never shown as his words', () => {
         const l = line(ana, ben, 'I will pay you 50 Beans');
         const asBens = { ...l, authorPubkey: ben.publicKey };
-        expect(benReads([asBens]).get(l.id)).toEqual({ text: null, format: null, after: null, mark: null });
+        expect(benReads([asBens]).get(l.id)).toEqual({ text: null, format: null, after: null, mark: 'not-verified' });
         // Ana's own phone refuses it too: it would show it as the other person's words.
         expect(checkDmThread([asBens], keysOf(ana, ben), CONV).get(l.id)?.text).toBeNull();
         // And as a third person's: no line of this pair names anyone else.
@@ -157,44 +159,127 @@ describe('what the node can do to a line now', () => {
 });
 
 describe('old lines (format 2)', () => {
-    it('still open and show as before: nobody loses their history, folded threads included', () => {
+    it('still open, so nobody loses their history, folded threads included; each one marked, as nothing in it proves who wrote it', () => {
         const h1 = oldLine(ana, ben, 'hello from before');
         const h2 = oldLine(ben, ana, 'hi!');
         const views = benReads([h1, h2]);
-        expect(views.get(h1.id)).toEqual({ text: 'hello from before', format: 2, after: null, mark: null });
-        expect(views.get(h2.id)).toEqual({ text: 'hi!', format: 2, after: null, mark: null });
-        // A line folded in from an old per-listing thread opens under the id its metadata names, unmarked, as before.
+        expect(views.get(h1.id)).toEqual({ text: 'hello from before', format: 2, after: null, mark: 'old-app' });
+        expect(views.get(h2.id)).toEqual({ text: 'hi!', format: 2, after: null, mark: 'old-app' });
+        // A line folded in from an old per-listing thread opens under the id its metadata names, marked the same way.
         const OLD = 'post-thread-1';
         const folded = {
             id: newDmMessageId(), authorPubkey: ana.publicKey, metadata: JSON.stringify({ originalConversationIds: ['x', OLD] }),
             ...encryptDmFormat2('about the bike', ctxOf(ana, ben, OLD)),
         };
-        expect(benReads([folded]).get(folded.id)).toMatchObject({ text: 'about the bike', format: 2, mark: null });
+        expect(benReads([folded]).get(folded.id)).toMatchObject({ text: 'about the bike', format: 2, mark: 'old-app' });
+        expect(dmLineMarkText('old-app')).toBe("Sent from an older version of the app: BeanPool can't confirm who wrote it.");
     });
 
-    it('arriving after the sender\'s app moved on: shown, and marked (it may be a replay or a re-attribution)', () => {
+    it('marked wherever it sits and whoever it names: before or after any new line, as either person, past any window', () => {
         const before = oldLine(ana, ben, 'see you at 6');
         const now = line(ana, ben, 'I\'m here', before.id);
         const replayed = oldLine(ana, ben, 'see you at 6');   // the node storing an old line of hers again
-        const fromBen = oldLine(ben, ana, 'still on an old app');
-        const views = benReads([before, now, replayed, fromBen]);
-        expect(views.get(before.id)?.mark).toBeNull();
+        // Ana's old line shown as Ben's newest (format 2 can't prove its sender, so this is the same line re-attributed).
+        const asBens = { ...oldLine(ana, ben, 'I will pay you 50 Beans'), authorPubkey: ben.publicKey };
+        const views = benReads([before, now, replayed, asBens]);
+        expect(views.get(before.id)?.mark).toBe('old-app');
         expect(views.get(now.id)?.mark).toBeNull();
         expect(views.get(replayed.id)).toMatchObject({ text: 'see you at 6', mark: 'old-app' });
-        // Ben hasn't sent a new line yet: his old app's lines are as they always were.
-        expect(views.get(fromBen.id)?.mark).toBeNull();
+        expect(views.get(asBens.id)).toMatchObject({ text: 'I will pay you 50 Beans', mark: 'old-app' });
+        // The window the apps pass in holds no new line of anyone's: still marked.
+        const window = [replayed, ...Array.from({ length: 50 }, (_, i) => line(ben, ana, `line ${i}`))];
+        expect(benReads(window.slice(-50).concat(asBens)).get(asBens.id)?.mark).toBe('old-app');
+    });
+});
+
+describe('a row that isn\'t an encrypted line', () => {
+    it('in a member\'s name is never their words: plaintext-v1, 00000 as text, any other nonce', () => {
+        const mine = line(ben, ana, 'my own line');
+        const plain = { id: 'p-1', authorPubkey: ana.publicKey, ciphertext: b64('Change of plan: send the 500 Beans to Cat'), nonce: 'plaintext-v1', type: 'text' };
+        const zeros = { id: 'z-1', authorPubkey: ana.publicKey, ciphertext: 'Deal is off', nonce: '00000', type: 'text' };
+        const other = { id: 'o-1', authorPubkey: ana.publicKey, ciphertext: 'Send the Beans to Cat instead', nonce: 'zz', type: 'text' };
+        const missing = { id: 'n-1', authorPubkey: ben.publicKey, ciphertext: 'hello', nonce: null };
+        const views = benReads([mine, plain, zeros, other, missing]);
+        for (const l of [plain, zeros, other, missing]) {
+            expect(views.get(l.id)).toEqual({ text: null, format: null, after: null, mark: 'not-encrypted' });
+            expect(dmLineShownText(views.get(l.id))).toBe(DM_LINE_NOT_ENCRYPTED_TEXT);
+            expect(dmLineIsUnattributed(views.get(l.id))).toBe(true);
+        }
+        expect(DM_LINE_NOT_ENCRYPTED_TEXT).toMatch(/wasn't encrypted, so BeanPool can't confirm who wrote it/);
+        expect(views.get(mine.id)?.mark).toBeNull();
+        // Nothing the app shows for them holds the row's words.
+        expect(JSON.stringify([...views.values()].map(dmLineShownText))).not.toMatch(/500 Beans|Deal is off|to Cat instead|hello/);
+    });
+
+    it('the admin page\'s message: its words, marked as the community admins\', never as a private line', () => {
+        const admin = { id: 'a-1', authorPubkey: ana.publicKey, ciphertext: b64('Welcome to the community'), nonce: 'plaintext-v1', type: 'text',
+            metadata: JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }) };
+        const view = benReads([admin]).get(admin.id)!;
+        expect(view).toEqual({ text: 'Welcome to the community', format: null, after: null, mark: 'from-admins' });
+        expect(dmLineIsUnattributed(view)).toBe(true);
+        expect(dmLineMarkText('from-admins')).toMatch(/community's admins.*server can read it/);
+        // The key on an encrypted line changes nothing; on a non-plaintext row it is still not encrypted.
+        expect(benReads([{ ...admin, nonce: 'zz' }]).get(admin.id)?.mark).toBe('not-encrypted');
+    });
+
+    it('the node\'s own notices are passed over (shown as notices); a tombstone shows fixed text, never its row\'s words', () => {
+        const views = benReads([
+            { id: 'sys-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment sent', nonce: '00000', type: 'system' },
+            { id: 'sys-2', authorPubkey: ana.publicKey, ciphertext: 'Escrow funded', nonce: '00000', type: 'system' },
+            { id: 'gone-1', authorPubkey: ana.publicKey, ciphertext: b64('Send me your 12 words'), nonce: 'plaintext-v1', type: 'removed' },
+        ]);
+        expect(views.has('sys-1') || views.has('sys-2')).toBe(false);
+        expect(views.get('gone-1')).toEqual({ text: DM_LINE_DELETED_TEXT, format: null, after: null, mark: null });
+        expect(dmLineKind({ authorPubkey: 'SYSTEM', nonce: '00000' })).toBe('node-notice');
+        expect(dmLineKind({ authorPubkey: ana.publicKey, nonce: '00000', type: 'text' })).toBe('not-encrypted');
+    });
+
+    it('with no key for the other person yet, an encrypted line is not verified, and a plain one still not encrypted', () => {
+        const l = line(ana, ben, 'hi');
+        const plain = { id: 'p-2', authorPubkey: ana.publicKey, ciphertext: b64('hi'), nonce: 'plaintext-v1' };
+        const views = checkDmThread([l, plain], null, CONV);
+        expect(views.get(l.id)?.mark).toBe('not-verified');
+        expect(views.get(plain.id)?.mark).toBe('not-encrypted');
+    });
+});
+
+describe('what a reply answers', () => {
+    it('is bound: re-pointed, dropped or added by the node, the line doesn\'t open', () => {
+        const q = line(ana, ben, 'Can I borrow the ladder?');
+        const other = line(ana, ben, 'Can I keep the 200 Beans you sent by mistake?', q.id);
+        const yes = line(ben, ana, 'Yes', other.id, CONV, q.id);
+        const anaReads = (lines: DmThreadLine[]) => checkDmThread(lines, keysOf(ana, ben), CONV);
+        expect(anaReads([q, other, yes]).get(yes.id)).toMatchObject({ text: 'Yes', format: 3, mark: null });
+        const repointed = { ...yes, metadata: JSON.stringify({ replyToId: other.id }) };
+        expect(anaReads([q, other, repointed]).get(yes.id)?.mark).toBe('not-verified');
+        expect(anaReads([q, other, { ...yes, metadata: null }]).get(yes.id)?.mark).toBe('not-verified');
+        expect(anaReads([q, other, { ...yes, metadata: JSON.stringify({ replyToId: 7 }) }]).get(yes.id)?.mark).toBe('not-verified');
+        const plainLine = line(ana, ben, 'Not a reply');
+        expect(benReads([{ ...plainLine, metadata: JSON.stringify({ replyToId: q.id }) }]).get(plainLine.id)?.mark).toBe('not-verified');
+        // Reactions and a fold's pointer beside it change nothing.
+        const reacted = { ...yes, metadata: JSON.stringify({ replyToId: q.id, reactions: { '👍': [ana.publicKey] } }) };
+        expect(anaReads([q, other, reacted]).get(yes.id)?.text).toBe('Yes');
+        expect(dmReplyToOf('{"replyToId":""}')).toBeUndefined();
+        expect(dmReplyToOf(null)).toBeNull();
+    });
+});
+
+describe('the order a thread is shown and judged in', () => {
+    it('is the node\'s timestamps, then the order given: a standby\'s last-changed row order marks nothing', () => {
+        const q = { ...line(ana, ben, 'Can you take the bike on Saturday?'), timestamp: '2026-10-02T09:00:00.000Z' };
+        const a = { ...line(ben, ana, 'Yes, I can', q.id), timestamp: '2026-10-02T09:01:00.000Z' };
+        const rowOrder = [a, q];   // the question got a reaction after the answer, so a delta copy wrote it last
+        expect(benReads(rowOrder).get(a.id)?.mark).toBe('out-of-order');
+        const shown = dmThreadInShownOrder(rowOrder);
+        expect(shown.map(l => l.id)).toEqual([q.id, a.id]);
+        expect(benReads(shown).get(a.id)?.mark).toBeNull();
+        // Equal times keep the order given; a missing time sorts last.
+        const t = '2026-10-02T10:00:00.000Z';
+        expect(dmThreadInShownOrder([{ id: 'x', timestamp: t }, { id: 'y', timestamp: null }, { id: 'z', timestamp: t }]).map(l => l.id)).toEqual(['x', 'z', 'y']);
     });
 });
 
 describe('the rest of the thread', () => {
-    it('passes over what isn\'t an encrypted line: the node\'s own notices and tombstones', () => {
-        const views = benReads([
-            { id: 'sys-1', authorPubkey: 'SYSTEM', ciphertext: 'Payment sent', nonce: '00000' },
-            { id: 'gone-1', authorPubkey: ana.publicKey, ciphertext: 'cmVtb3ZlZA==', nonce: 'plaintext-v1' },
-        ]);
-        expect(views.size).toBe(0);
-    });
-
     it('a line that doesn\'t open has one text in both apps, and each mark one line', () => {
         expect(DM_LINE_NOT_VERIFIED_TEXT).toMatch(/couldn't be verified/);
         expect(dmLineMarkText('old-app')).toMatch(/older version of the app/);

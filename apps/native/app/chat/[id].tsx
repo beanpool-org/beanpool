@@ -479,7 +479,7 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? '', m.unattributed ? 1 : 0].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -965,8 +965,27 @@ function ChatScreen() {
         );
     };
 
+    // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row in a member's name
+    // that wasn't encrypted, or the admin page's message. In the middle of the chat, never in its named author's bubble,
+    // and with no actions: there is nobody's line to answer or react to.
+    const renderUnattributedLine = (item: any) => (
+        <View style={[chat.systemMessageContainer, { marginTop: 12, marginBottom: 12 }]} testID="dm-line-unattributed">
+            <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
+                <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
+                <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
+                    {item.text}
+                </Text>
+            </View>
+            {item.integrityNote ? (
+                <Text style={[chat.systemTimestamp, { fontSize: 12, fontStyle: 'italic', textAlign: 'center', maxWidth: '90%' }]}>{item.integrityNote}</Text>
+            ) : null}
+            <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
+        </View>
+    );
+
     const renderMessage = (item: any) => {
         if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
+        if (item.unattributed) return renderUnattributedLine(item);
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
@@ -1098,7 +1117,7 @@ function ChatScreen() {
                                 )}
                             </View>
                         ) : null}
-                        {/* A line the node moved, reordered or sent again in the old format (e2e-crypto checkDmThread). */}
+                        {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
                         {item.integrityNote ? (
                             <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
                                 ⚠️ {item.integrityNote}

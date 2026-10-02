@@ -15,10 +15,10 @@ import {
     type Conversation, type ApiMessage, type Member, type MarketplaceTransaction,
 } from '../lib/api';
 import {
-    decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, newDmMessageId, isEncryptedNonce,
-    DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
+    decodePlaintext, checkDmThread, openDmLine, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    dmThreadInShownOrder, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
-import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, type DmLineSeal } from '../lib/dm-lock';
+import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
@@ -192,15 +192,21 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     // ⚡ Bolt: O(1) Map lookups for member details and completed transactions in conversation list and chat views
     const membersByPublicKey = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
-    // Every encrypted line of the open DM, opened bound to the author and id the node shows it under and checked against
-    // the thread in the order it is shown (e2e-crypto checkDmThread): a line that doesn't open is never shown as anyone's
-    // words, and one the node moved, reordered or sent again in the old format is marked.
+    // The open DM in the order it is shown and judged: by the node's timestamps, as the phone shows it, never by the
+    // node's row order alone (after a standby takes over, its delta copy has written rows in last-changed order).
+    const isDmThread = !!activeConv && !isNodeReadableChat(activeConv);
+    const shownMessages = useMemo(() => (isDmThread ? dmThreadInShownOrder(messages) : messages), [messages, isDmThread]);
+    // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
+    // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
+    // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
+    // the admin page's message shown as the community admins'. Only the node's own notices are left out.
     const lineViews = useMemo(() => {
+        if (!activeConv || !isDmThread) return null;
         const ctx = dmKeyContext(activeConv, identity);
-        if (!ctx) return null;
-        return checkDmThread(messages.map(m => ({ id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, metadata: m.metadata })),
-            ctx, ctx.conversationId);
-    }, [messages, activeConv, identity]);
+        return checkDmThread(shownMessages.map(m => ({
+            id: m.id, authorPubkey: m.authorPubkey, ciphertext: m.ciphertext, nonce: m.nonce, type: m.type, metadata: m.metadata, timestamp: m.timestamp,
+        })), ctx ? { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: ctx.peerEdPubHex } : null, ctx?.conversationId ?? activeConv.id);
+    }, [shownMessages, activeConv, identity, isDmThread]);
     const userTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -616,8 +622,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             // message id (a new one, sent with it; an edit's own) and to the line it was written after: the newest the
             // node has given us, or for an edit the one its line was written after.
             const line: DmLineSeal = wasEditing
-                ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null }
-                : { messageId: newDmMessageId(), after: dmAfterReference(messages) };
+                ? { messageId: wasEditing.id, after: lineViews?.get(wasEditing.id)?.after ?? null, replyToId: dmReplyToOf(wasEditing.metadata) ?? null }
+                : { messageId: newDmMessageId(), after: dmAfterReference(shownMessages), replyToId: replyToMessage?.id ?? null };
             const { ciphertext, nonce } = await payloadFor(draft.trim(), activeConv, line);
 
             if (wasEditing) {
@@ -677,8 +683,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             const conv = dmCtxFor(activeConv) ? activeConv : await freshConversation(activeConv);
             // Both sealed to the message's own id, each as its own part, so neither can stand in for the other.
             const messageId = newDmMessageId();
-            const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment' });       // big blob -> lazy attachment
-            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(messages) });   // caption (often empty) -> message body
+            const replyToId = replyToMessage?.id ?? null;   // sealed into both parts, as the metadata below names it
+            const encImg = lockForDm(dataUri, conv, identity, { messageId, part: 'attachment', replyToId });       // big blob -> lazy attachment
+            const encCap = lockForDm(caption, conv, identity, { messageId, part: 'body', after: dmAfterReference(shownMessages), replyToId });   // caption (often empty) -> message body
             let metadata: string | undefined = undefined;
             if (replyToMessage) {
                 metadata = JSON.stringify({ replyToId: replyToMessage.id });
@@ -797,12 +804,16 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
     function decryptMessage(msg: ApiMessage): string {
         try {
+            // A DM's line, as the thread check judged it: never a row's words unless they opened.
+            const view = lineViews?.get(msg.id);
+            if (view) {
+                if (view.mark === 'not-verified' && isEncryptedNonce(msg.nonce) && !dmCtxFor(activeConv)) return '[Encrypted — update your app to read]';
+                return dmLineShownText(view);
+            }
             if (msg.nonce === '00000') return msg.ciphertext;
             if (isEncryptedNonce(msg.nonce)) {
                 const ctx = dmCtxFor(activeConv);
                 if (!ctx) return '[Encrypted — update your app to read]';
-                const view = lineViews?.get(msg.id);
-                if (view) return view.text ?? DM_LINE_NOT_VERIFIED_TEXT;
                 // A line outside the loaded thread (a quoted one): opened on its own, bound the same way.
                 try {
                     return openDmLine({ ciphertext: msg.ciphertext, nonce: msg.nonce }, ctx,
@@ -1203,8 +1214,32 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             No messages yet. Say hello! 👋
                         </p>
                     )}
-                    {messages.map((msg, index) => {
+                    {shownMessages.map((msg, index) => {
                         const isSystem = msg.type === 'system' || msg.authorPubkey === 'SYSTEM';
+                        const lineView = lineViews?.get(msg.id);
+                        if (!isSystem && dmLineIsUnattributed(lineView)) {
+                            // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row
+                            // in a member's name that wasn't encrypted, or the admin page's message. In the middle of the
+                            // chat, never in its named author's bubble, and with no actions.
+                            const note = dmLineMarkText(lineView?.mark);
+                            return (
+                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="dm-line-unattributed" style={{
+                                    alignSelf: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '0.5rem 0', maxWidth: '90%',
+                                }}>
+                                    <div style={{
+                                        background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '16px', padding: '0.4rem 0.8rem',
+                                        fontSize: '0.8rem', fontWeight: 500, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'center',
+                                    }}>
+                                        {note ? '📣 ' : ''}{decryptMessage(msg)}
+                                    </div>
+                                    {note && (
+                                        <div data-testid="dm-line-note" style={{ fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, textAlign: 'center' }}>
+                                            {note}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }
                         
                         if (isSystem) {
                             let icon = 'ℹ️';
@@ -1453,7 +1488,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                                         conversationId={ctx.conversationId}
                                                         authorPubkey={msg.authorPubkey}
                                                         metadata={msg.metadata}
-                                                        bodyFormat={lineViews?.get(msg.id)?.format ?? null}
+                                                        bodyFormat={lineView?.format ?? null}
                                                         peerPubHex={ctx.peerEdPubHex}
                                                         myPrivHex={ctx.myEdPrivHex}
                                                     />
@@ -1467,8 +1502,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         })() : decryptMessage(msg)}
                                     </div>
                                     {(() => {
-                                        // A line the node moved, reordered or sent again in the old format (checkDmThread).
-                                        const note = dmLineMarkText(lineViews?.get(msg.id)?.mark);
+                                        // A line the node moved or reordered, or an old-format line (checkDmThread).
+                                        const note = dmLineMarkText(lineView?.mark);
                                         return note ? (
                                             <div data-testid="dm-line-note" style={{ display: 'block', fontSize: '0.75rem', fontStyle: 'italic', marginTop: '4px', opacity: 0.85, whiteSpace: 'normal' }}>
                                                 ⚠️ {note}

@@ -49,13 +49,15 @@ export function dmKeyContext(conv: ChatLike | null | undefined, me: Me): DMKeyCo
 
 /**
  * What a DM line is sealed to besides its conversation and its sender (e2e-crypto, format 3): the id the node will store
- * the message under (sent with it), which part of the message it is, and the line it was written after (an edit keeps
- * its line's own).
+ * the message under (sent with it), which part of the message it is, the line it was written after (an edit keeps its
+ * line's own), and for a reply the message it answers.
  */
 export interface DmLineSeal {
     messageId: string;
     part?: DmPart;
     after?: string | null;
+    /** The message a reply answers, exactly as its metadata's replyToId names it (both parts of a photo carry it). */
+    replyToId?: string | null;
 }
 
 /**
@@ -67,7 +69,7 @@ export function lockForDm(text: string, conv: ChatLike | null | undefined, me: M
     const ctx = dmKeyContext(conv, me);
     if (!ctx) throw new DmNotLockedError();
     try {
-        return sealDmLine(text, ctx, { senderPubHex: me.publicKey, messageId: line.messageId, part: line.part, after: line.after });
+        return sealDmLine(text, ctx, { senderPubHex: me.publicKey, messageId: line.messageId, part: line.part, after: line.after, replyToId: line.replyToId });
     } catch {
         throw new DmNotLockedError();
     }

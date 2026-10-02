@@ -24,7 +24,6 @@ import {
     completePendingJoin,
     generateIdentity,
     lastSentAt,
-    loadIdentity,
     loadPendingJoin,
     markPendingJoinSent,
     pendingJoinSent,
@@ -40,9 +39,13 @@ import {
     type JoinProvider,
     type NodeRefusedJoin,
     type PendingJoin,
+    NO_STORAGE_SENTENCE,
+    STORE_WOULD_NOT_OPEN_SENTENCE,
+    loadIdentityStrict,
+    IdentityStoreUnavailableError,
 } from '../lib/identity';
 import {
-    browserCanHoldKey,
+    browserKeyProblem,
     NONCE_FRESH_MS,
     captureAuthReturn,
     checkCallsign,
@@ -193,6 +196,10 @@ export type Notice = { tone: 'error' | 'info'; text: string } | null;
 export const UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
 const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
+/** The one sentence for a browser that can't hold a key: its storage is missing or blocked, or it is too old. */
+export function keyProblemSentence(problem: 'storage' | 'reload' | 'old' | null): string {
+    return problem === 'storage' ? NO_STORAGE_SENTENCE : problem === 'reload' ? STORE_WOULD_NOT_OPEN_SENTENCE : TOO_OLD;
+}
 /**
  * What joining takes, said on the door's first screen (here, and the global lobby's Join card): both doors where the
  * node takes 12 words alone (two-doors design §2.6), one sign-in where it does not.
@@ -216,7 +223,7 @@ function restoredPending(r: BeanPoolIdentity): PendingJoin {
  * goes, so a second tab never makes a second member (review 4106962020); completePendingJoin refuses the rest.
  */
 async function accountHeldElsewhere(p: PendingJoin | null): Promise<BeanPoolIdentity | null> {
-    const held = await loadIdentity();
+    const held = await loadIdentityStrict();
     return held?.publicKey && held.publicKey !== p?.identity.publicKey ? held : null;
 }
 
@@ -322,6 +329,8 @@ export function WebJoin({
     const [nameCheck, setNameCheck] = useState<CallsignCheck | null>(null);
     const [busy, setBusy] = useState(false);
     const [canHoldKey, setCanHoldKey] = useState<boolean | null>(null);
+    // Why it can't, in the words for it: no place to keep an account (an in-app browser, a blocked profile) or too old.
+    const [keyProblemText, setKeyProblemText] = useState(TOO_OLD);
     const [nonceHeld, setNonceHeld] = useState<{ value: JoinNonce; at: number } | null>(null);
     const nonce = nonceHeld?.value ?? null;
     const [nonceProblem, setNonceProblem] = useState<string | null>(null);
@@ -652,10 +661,14 @@ export function WebJoin({
             try {
                 sent = await markPendingJoinSent({ ...from, nonce: null, door: 'sign-in' }, Date.now(), { refuseWhileInviteKept: true });
             } catch (e) {
+                // Another account is held here (a store that failed to open once, a tab that saved meanwhile): nothing is sent.
+                if (e instanceof IdentityHeldError) return await showTaken(e.held, from, false);
                 console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
                 return toProviders(from, {
                     tone: 'error',
-                    text: e instanceof PendingJoinHeldError
+                    text: e instanceof IdentityStoreUnavailableError
+                        ? e.message
+                        : e instanceof PendingJoinHeldError
                         ? 'An earlier join from this browser is still being checked. Reload the page to finish it.'
                         : e instanceof InviteSentHeldError
                             ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
@@ -894,10 +907,13 @@ export function WebJoin({
                 sent = await markPendingJoinSent({ ...p, provider: null, nonce: null, door: 'words' }, Date.now(), { refuseWhileInviteKept: true });
             } catch (e) {
                 if (e instanceof PendingJoinHeldError) return await settleSent(e.held);
+                if (e instanceof IdentityHeldError) return await showTaken(e.held, p, false);
                 console.error('[WebJoin] the join could not be marked sent, so it was not sent:', e);
                 return toProviders(p, {
                     tone: 'error',
-                    text: e instanceof InviteSentHeldError
+                    text: e instanceof IdentityStoreUnavailableError
+                        ? e.message
+                        : e instanceof InviteSentHeldError
                         ? 'An invite sent from this browser is still being checked, so nothing was sent. Reload the page to finish it.'
                         : "This browser couldn't save your account, so nothing was sent. Try again, or try another browser.",
                 });
@@ -989,7 +1005,11 @@ export function WebJoin({
 
     useEffect(() => {
         let cancelled = false;
-        browserCanHoldKey().then((ok) => { if (!cancelled) setCanHoldKey(ok); });
+        browserKeyProblem().then((problem) => {
+            if (cancelled) return;
+            setKeyProblemText(keyProblemSentence(problem));
+            setCanHoldKey(problem === null);
+        });
         (async () => {
             // Settling only: a sign-in that came back is not sent (the door isn't open), as WelcomePage drops one.
             const ret = settleOnlyRef.current ? null : authReturn !== undefined ? authReturn : captureAuthReturn();
@@ -1241,7 +1261,7 @@ export function WebJoin({
                     </p>
                     <NoticeLine notice={notice} />
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="join-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="join-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <button type="button" data-testid="join-start" style={primaryButton} disabled={canHoldKey === null}
                             onClick={() => { setNotice(null); setScreen({ name: 'guard' }); }}>
@@ -1268,7 +1288,7 @@ export function WebJoin({
                     {/* Opened straight from the global lobby's Join, this screen is the first to need a key, so a
                         browser that can't hold one hears it here, as the lobby's Join says it. */}
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
                             <p style={lede}>One person, one account. If you already have one, bring it here instead of making another.</p>
@@ -1298,7 +1318,7 @@ export function WebJoin({
                     {/* Every way back ends with this browser holding the key, so a browser that can't hold one hears
                         that here, as the lobby's Join does, instead of "can't reach the community" (review 4109643191). */}
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
                             <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>

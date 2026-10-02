@@ -24,6 +24,10 @@
  *     delta lands, fetching only the rest. (Before: swept, and every one fetched again.)
  *  4. A routine whole copy that needs a photo S lost, broken on M: it waits from the routine interval again (a whole copy
  *     landed in step 2, so the count started over), twice as long each time, while every delta meanwhile lands.
+ *  5. A new standby's first copy refused at its photos (one whose bytes come wrong every time), the review's own F5 case: it
+ *     waits RESYNC_RETRY_MS, the same after the next refusal (N2: the same rows would be refused again; a refusal is not
+ *     what grows), Settings saying it was refused; what it fetched is kept through an orphan sweep past the sweep's hour of
+ *     grace, and the copy that lands once the photo comes right fetches only the rest.
  *
  * Run:
  *   ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-standby-copy-retries.ts
@@ -89,16 +93,20 @@ const first = (xs: unknown[]) => (xs.length === 0 ? 'none' : `${xs.length}: ${xs
 /** The wait S draws for the `n`-th failed copy in a row from `base`, before its jitter (services/backup-puller.ts). */
 const schedule = (base: number, n: number) => Math.min(Math.max(CAP_MS, base), base * 2 ** (n - 1));
 
-/** The proxy S reaches M through. `broken`: objects answered 503 here, as a main server whose store refuses them. */
+/**
+ * The proxy S reaches M through. `broken`: objects answered 503 here, as a main server whose store refuses them.
+ * `corrupt`: objects whose bytes are changed on their way, every time.
+ */
 interface Proxy {
     url: string;
     opened: { id: string; at: number; delta: boolean }[];
     objectGets: string[];
     broken: Set<string>;
+    corrupt: Set<string>;
     close: () => void;
 }
 async function startProxy(target: string): Promise<Proxy> {
-    const px: Proxy = { url: '', opened: [], objectGets: [], broken: new Set(), close: () => {} };
+    const px: Proxy = { url: '', opened: [], objectGets: [], broken: new Set(), corrupt: new Set(), close: () => {} };
     const server = http.createServer((req, res) => {
         void (async () => {
             const chunks: Buffer[] = [];
@@ -125,7 +133,13 @@ async function startProxy(target: string): Promise<Proxy> {
                     raw = Buffer.from(JSON.stringify({ error: 'the main server is not answering' }));
                 }
             }
-            if (object && status === 200) px.objectGets.push(object);
+            if (object && status === 200) {
+                px.objectGets.push(object);
+                if (px.corrupt.has(object) && raw.length > 0) {
+                    raw = Buffer.from(raw);
+                    raw[0] ^= 0xff;
+                }
+            }
             if (opening && status === 200) {
                 try {
                     const parsed = JSON.parse(raw.toString('utf-8'));
@@ -374,6 +388,55 @@ async function main(): Promise<void> {
             const deltas = between.filter((b) => b.opened);
             assert(deltas.length > 0 && deltas.every((b) => b.ok && b.mode === 'delta'),
                 `every pull between them is a delta, and lands (${deltas.length}: ${first(deltas.filter((b) => !b.ok || b.mode !== 'delta'))})`);
+        });
+
+        await step('5. a new standby\'s first copy refused at a photo: N2\'s wait each time, no longer; what it fetched stays, and the copy that lands fetches the rest', async () => {
+            fs.mkdirSync(dir('standby-2'), { recursive: true });
+            fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby-2'), 'genesis.json'));
+            const s2 = await spawnNode(SCRIPT, dir('standby-2'), envS);
+            nodes.push(s2);
+            await s2.send('setup-standby', { primaryUrl: px.url, replicationToken, primaryPeerId: main.ready.peerId });
+            const bad = made[5];
+            px.corrupt.add(bad.sha256);
+            // Every photo M holds now, step 3's too: the objects a first copy needs.
+            const mRows = (await photosOf(main)).filter((r) => r.sha256 && r.storage_key);
+            const need = new Set(mRows.map((r) => r.sha256!));
+            const others = (from: number) => px.objectGets.slice(from).filter((x) => x !== bad.sha256);
+            const refusedOnce = async () => {
+                const r = await s2.send('pull', {});
+                const answeredAt = Date.now();
+                const st = await s2.send('status');
+                return { r, wait: (st.resyncRetryAt ?? 0) - answeredAt, st };
+            };
+            const g0 = px.objectGets.length;
+            const a = await refusedOnce();
+            const fetched = new Set(others(g0));
+            require_(a.r.ok === false && /bytes its row doesn't name/.test(a.r.error ?? '') && fetched.size > 0,
+                `the new standby's first copy is refused at the photo whose bytes come wrong, having fetched ${fetched.size} others (${a.r.error?.slice(0, 160)})`);
+            assert(a.wait <= RETRY_MS && a.wait >= RETRY_MS - SLACK_MS && a.st.copyWait?.cause === 'refused' && a.st.copyWait?.tries === null
+                && a.st.copyWait?.keptObjects === fetched.size && /was not taken/.test(a.st.copyWait?.waitingOn ?? ''),
+                `it waits RESYNC_RETRY_MS (${a.wait} ms), and Settings says it was refused, with the ${fetched.size} photos kept (${JSON.stringify(a.st.copyWait)})`);
+            const swept = await s2.send('sweep-orphans', { aheadMs: ORPHAN_GRACE_MS + 60_000 });
+            const held: number = await s2.send('has-objects', { groups: mRows.filter((r) => fetched.has(r.sha256!)).map((r) => [r.storage_key!]) });
+            assert(held === fetched.size,
+                `the ${fetched.size} objects the refused copy fetched are kept through an orphan sweep an hour and a minute on (${held} held; ${JSON.stringify(swept)})`);
+            await sleep(Math.max(0, a.wait + 150));
+            const g1 = px.objectGets.length;
+            const b = await refusedOnce();
+            assert(b.r.ok === false && b.wait <= RETRY_MS && b.wait >= RETRY_MS - SLACK_MS && others(g1).every((x) => !fetched.has(x)),
+                `refused again, it waits RESYNC_RETRY_MS again, no longer (${b.wait} ms), and fetched nothing fetched before (${others(g1).filter((x) => fetched.has(x)).length} again)`);
+            for (const x of others(g1)) fetched.add(x);
+            px.corrupt.delete(bad.sha256);
+            await sleep(Math.max(0, b.wait + 150));
+            const g2 = px.objectGets.length;
+            const before = s2.swaps();
+            const c = await s2.send('pull', {});
+            if (c.staged) await until('the new standby to start again on its copy', () => s2.swaps() > before, 60_000);
+            const got = px.objectGets.slice(g2);
+            assert(c.ok === true && c.staged === true && got.every((x) => !fetched.has(x)) && got.length === need.size - fetched.size
+                && (await s2.send('kept')) === null,
+                `once the photo comes right the copy lands, fetching only the ${need.size - fetched.size} it lacked (${got.length} fetched, `
+                + `${got.filter((x) => fetched.has(x)).length} again), and keeps nothing more (${JSON.stringify(c)})`);
         });
     } finally {
         proxy?.close();

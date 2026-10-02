@@ -129,7 +129,8 @@ export function persistDecayAndCommons(): void {
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
  *
- * A Commons pot in memory that is not a finite number (its `COMMONS_POOL` row ±9e999, restored at boot) can't be
+ * A Commons pot in memory that is not a finite number (its `COMMONS_POOL` row ±9e999, restored at boot, or NaN, the
+ * unknown pot a row holding text or NULL gives at boot: state-engine.ts initStateEngine, #1445 confirmation NB-1) can't be
  * written (persistCommonsBalance refuses it), and the flush used to throw here before anything was counted: a
  * take-over's audit then never recorded and the take-over stalled at `restarting`, and the operator's audit answered
  * 500 (#1445 re-review, BLOCKING 1). Now the flush is skipped, nothing is written, and the pot is counted as a balance

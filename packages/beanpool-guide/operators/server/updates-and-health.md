@@ -86,6 +86,8 @@ Only an owner can write off an escrow, and only on the main server. A standby pi
 
 Every balance should be a number of Beans. If one isn't (it holds Infinity, text, or nothing at all), the total can't add up, and the audit says how many "balances that are not a number" it found. Nothing in Settings mends one, and the server never guesses a value for it. A take-over still finishes on such a ledger, and its last screen says the ledger doesn't add up.
 
+That includes the Commons pot's own row, COMMONS_POOL. If it holds no number when the server starts, the server treats the pot as unknown: it never writes 0 or anything else over the row, it pays nothing out of the Commons, and it leaves the dust of finished deals where it is, until you mend the row as below.
+
 The audit's own answer names each one: POST /api/local/admin/ledger-audit lists the account, the member's or enterprise's name, and what it holds, under brokenBalances. The Commons pot shows as COMMONS_POOL. Setting a new baseline is refused while any balance isn't a number, and the refusal names them too.
 
 To mend one:

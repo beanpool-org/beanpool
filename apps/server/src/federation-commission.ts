@@ -129,7 +129,9 @@ function capacityFor(link: FederationLink): CommissionCapacity {
 export type CommissionRefusal =
     | { ok: false; reason: 'no_link'; message: string }
     | { ok: false; reason: 'over_allowance'; allowance: number; needed: number; message: string }
-    | { ok: false; reason: 'commons_short'; shortfall: number; commonsBalance: number; message: string };
+    | { ok: false; reason: 'commons_short'; shortfall: number; commonsBalance: number; message: string }
+    // The pot's balance is not a finite number (its row held none at boot, or ±Infinity): nothing can be drawn from it.
+    | { ok: false; reason: 'commons_not_a_number'; shortfall: number; message: string };
 
 export type CommissionFunding =
     | { ok: true; total: number; amount: number; fee: number; drawnFromCommons: number; capacity: CommissionCapacity }
@@ -213,6 +215,16 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
 
     // What the enterprise still needs on top of what it already holds.
     const shortfall = round4(Math.max(0, total - link.treasuryBalance));
+    // A pot that isn't a finite number compares false with anything, so the test below let it through to payFromCommons
+    // (#1445 confirmation, NB-3). Refused here, in words, before anything moves; payFromCommons refuses it too.
+    if (shortfall > 0 && !Number.isFinite(getCommonsBalanceExact())) {
+        return {
+            ok: false,
+            reason: 'commons_not_a_number',
+            shortfall: round2(shortfall),
+            message: `${link.name} needs ${round2(shortfall)} from the Commons pot, and the pot's balance is not a number just now, so nothing can be drawn from it. Nothing has been moved. The operator mends it (operator manual, "A balance that isn't a number").`,
+        };
+    }
     if (shortfall > 0 && shortfall > round4(getCommonsBalanceExact())) {
         return {
             ok: false,

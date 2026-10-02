@@ -83,6 +83,7 @@ export const SUITES = [
     'test-global-directory',
     'test-knock',
     'test-commons-conservation',
+    'test-commons-pot-edges',
     'test-ledger-rollback',
     'test-treasury-keepership',
     'test-treasury-eggs',

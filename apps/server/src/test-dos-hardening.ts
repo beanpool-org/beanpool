@@ -54,6 +54,7 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import WebSocket from 'ws';
 import { lockedDm } from './dm-test-payload.js';
+import { localFetch } from './keepalive-test-fetch.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -175,7 +176,7 @@ async function main() {
     const cy = member('DosCy');
 
     const call = async (method: string, path: string, ip: string, headers: Record<string, string> = {}, body?: string) => {
-        const r = await fetch(`${BASE}${path}`, { method, headers: { ...via(ip), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers }, body });
+        const r = await localFetch(`${BASE}${path}`, { method, headers: { ...via(ip), ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers }, body });
         const text = await r.text();
         let json: any = null;
         try { json = JSON.parse(text); } catch { /* not JSON */ }

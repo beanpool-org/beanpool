@@ -438,6 +438,23 @@ async function main(): Promise<void> {
             assert(p12b.ok === true && p12b.staged === true, `the key gone, the next lands (${JSON.stringify(p12b)})`);
         });
 
+        await step('12b. the open door\'s numbers (doorNumbers.*) are this server\'s own: a standby holding one still takes a whole copy, and the row is never copied', async () => {
+            const val = async (n: any, key: string) => n.send('rows', { sql: `SELECT value FROM node_config WHERE key = '${key}'` });
+            await standby.send('sql', { sql: `INSERT OR REPLACE INTO node_config (key, value) VALUES ('doorNumbers.wordsPerHour', '123')` });
+            await main.send('sql', { sql: `INSERT OR REPLACE INTO node_config (key, value) VALUES ('doorNumbers.wordsPerHour', '999')` });
+            await main.send('sql', { sql: `INSERT OR REPLACE INTO node_config (key, value) VALUES ('doorNumbers.networkSteps', '5,6')` });
+            await standby.send('checkpoint');
+            await main.send('checkpoint');
+            const p = await wholeCopy();
+            assert(p.ok === true && p.staged === true, `the copy lands with the standby holding doorNumbers.wordsPerHour (${JSON.stringify(p)})`);
+            const mine = JSON.stringify(await val(standby, 'doorNumbers.wordsPerHour'));
+            const theirs = JSON.stringify(await val(standby, 'doorNumbers.networkSteps'));
+            assert(/123/.test(mine) && !/999/.test(mine), `the standby's own row is as it was, not its main server's (${mine})`);
+            assert(!/5,6/.test(theirs), `the main server's other row didn't come across (${theirs})`);
+            await standby.send('sql', { sql: `DELETE FROM node_config WHERE key = 'doorNumbers.wordsPerHour'` });
+            await main.send('sql', { sql: `DELETE FROM node_config WHERE key LIKE 'doorNumbers.%'` });
+        });
+
         await step('13. the routine whole copy\'s cadence: daily after a copy of many pages, every interval after one of one page', async () => {
             await standby.send('set-env', { vars: { BACKUP_RECONCILE_EVERY_MS: '2000' } });
             await sleep(2100);

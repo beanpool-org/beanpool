@@ -15,12 +15,12 @@
  *   refuses a tar without state.db, and anything without a code stanza);
  * - a failing node is backed off, not pulled every minute; an old node's readable archive is kept, pulled once.
  * - a readable backup is kept WHOLE at every hop (round 3): the `images/` the archive carries survives the pull,
- *   the daily copy (hard-linked), the seal-old envelope and the fleet manager's two downloads, and what comes
- *   back out is byte-identical to what the node sent. A SHORT backup's `missing-images.json` rides along with
+ *   the daily copy (hard-linked) and the seal-old envelope, and what comes back out is byte-identical to what the
+ *   node sent. (The fleet manager's downloads of these copies were deleted with its routes, 2026-10-02.) A SHORT backup's `missing-images.json` rides along with
  *   it, because the manifest's presence is the label that outlives the response headers.
  * - a node that has lost an object it references: it answers with the most complete backup it can, labelled
  *   short, on the FIRST pull and every pull (round 4 — there is no opt-in to wait for any more). The harvester
- *   keeps it, keeps saying it is short, and the shortfall survives to the manager's download. A node whose
+ *   keeps it, keeps saying it is short, and the manifest that says so is kept beside every copy. A node whose
  *   backups are whole is never marked.
  * - a readable backup from a server older than this one, whose database names internet addresses (its copy-access
  *   record, and main's log at its 2,500-line cap): kept without them, in the file's bytes too, with every entry and log
@@ -49,7 +49,6 @@ import {
 } from './services/harvester.js';
 import { sealFileVerified, MISSING_MEMBER } from './services/sealed-backup.js';
 import { writeDbSnapshot } from './services/snapshot-scheduler.js';
-import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { attachmentKey, getImageStore, postPhotoKey, sha256Hex } from './storage/image-store.js';
 import { ensureGenesis } from './genesis.js';
 import { makeRecoveryCode } from './services/takeover-envelope.js';
@@ -127,16 +126,6 @@ function sameTree(a: Record<string, Buffer>, b: Record<string, Buffer>): boolean
     const kb = Object.keys(b).sort();
     if (ka.length === 0 || ka.join('|') !== kb.join('|')) return false;
     return ka.every(k => a[k].equals(b[k]));
-}
-
-/** Extract a backup tar into a fresh directory and hand back its path. */
-function openArchive(bytes: Buffer, tag: string): string {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `harvest-${tag}-`));
-    const file = path.join(dir, 'x.tar.gz');
-    fs.writeFileSync(file, bytes);
-    execFileSync('tar', ['-xzf', file, '-C', dir]);
-    fs.rmSync(file);
-    return dir;
 }
 
 /** Harvest a node served in-process over local HTTP, the way the harvester reaches a real one. */
@@ -294,9 +283,6 @@ async function harvestLocalNode(): Promise<void> {
         await next();
     });
     app.use(createBackupRoutes(deps).routes());
-    // The fleet manager's own routes, so `download-db` and `download-history` are exercised as the dashboard
-    // calls them rather than by reading the files off the disk the harvester just wrote.
-    app.use(createManagerBackupsRoutes(deps).routes());
     const server = http.createServer(app.callback());
     await new Promise<void>(r => server.listen(0, '127.0.0.1', () => r()));
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -567,32 +553,7 @@ async function harvestLocalNode(): Promise<void> {
         assert(hist.length === 1 && hist[0].file === `beanpool-${today}.db`,
             `kept whole: the images directory is not mistaken for a backup (${hist.map(h => h.file).join(', ')})`);
 
-        // 4. the fleet manager's two downloads, over HTTP, as the dashboard calls them
-        const managerGet = async (route: string, query: Record<string, string>) => {
-            const qs = new URLSearchParams(query).toString();
-            const r = await fetch(`${url}/api/manager/backups/${route}?${qs}`, { headers: { 'X-Admin-Password': PW } });
-            return { res: r, bytes: Buffer.from(await r.arrayBuffer()) };
-        };
-        resetAdminAuthTarpit();
-        const dl = await managerGet('download-db', { nodeId: oldNode.id });
-        assert(dl.res.ok && /filename="[^"]+\.tar\.gz"/.test(dl.res.headers.get('content-disposition') || ''),
-            `manager download-db: a restorable archive, named .tar.gz (${dl.res.status}, ${dl.res.headers.get('content-disposition')})`);
-        const dlDir = openArchive(dl.bytes, 'dl');
-        assert(fs.readFileSync(path.join(dlDir, 'state.db')).equals(oldStateDb)
-            && sameTree(treeOf(path.join(dlDir, 'images')), sent),
-            'manager download-db: the operator gets state.db AND every image object, byte for byte');
-        fs.rmSync(dlDir, { recursive: true, force: true });
-
-        resetAdminAuthTarpit();
-        const dlHist = await managerGet('download-history', { nodeId: oldNode.id, filename: `beanpool-${today}.db` });
-        assert(dlHist.res.ok, `manager download-history: served (${dlHist.res.status})`);
-        const histDir = openArchive(dlHist.bytes, 'dlhist');
-        assert(fs.readFileSync(path.join(histDir, 'state.db')).equals(oldStateDb)
-            && sameTree(treeOf(path.join(histDir, 'images')), sent),
-            'manager download-history: a day out of the history is whole too');
-        fs.rmSync(histDir, { recursive: true, force: true });
-
-        // 5. a pull that comes back complete clears a manifest an earlier short pull left beside the database
+        // 4. a pull that comes back complete clears a manifest an earlier short pull left beside the database
         const staleManifest = missingManifestFor(path.join(oldDir, 'state.db'));
         fs.writeFileSync(staleManifest, '{"missing":["posts/gone/0-dead.jpg"]}');
         hits.old = 0;
@@ -638,16 +599,6 @@ async function harvestLocalNode(): Promise<void> {
         assert(fs.existsSync(missingManifestFor(shortDaily))
             && sameTree(treeOf(imagesDirFor(shortDaily)), shortSent),
             'short: the daily copy is labelled short too, and holds the same two objects');
-        resetAdminAuthTarpit();
-        const shortDl = await fetch(`${url}/api/manager/backups/download-db?nodeId=${shortNode.id}`,
-            { headers: { 'X-Admin-Password': PW } });
-        assert(shortDl.headers.get('x-backup-contents') === 'database+images-partial',
-            `short: the manager's download says so on the wire (${shortDl.headers.get('x-backup-contents')})`);
-        const shortDir2 = openArchive(Buffer.from(await shortDl.arrayBuffer()), 'short');
-        assert(fs.existsSync(path.join(shortDir2, MISSING_MEMBER))
-            && sameTree(treeOf(path.join(shortDir2, 'images')), shortSent),
-            'short: …and the downloaded archive carries the manifest, so a restore from it can say so');
-        fs.rmSync(shortDir2, { recursive: true, force: true });
 
         // A node whose backups are whole is never marked short.
         assert(!(await harvestNode(oldNodeForCheck, true)).shortImages,

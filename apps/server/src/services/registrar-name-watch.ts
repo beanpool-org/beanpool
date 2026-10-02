@@ -276,8 +276,11 @@ async function ask(url: string, timeoutMs: number): Promise<Answer | null> {
     }
 }
 
-/** An attestation (registrar-client.ts buildAttestation) and whether it is valid over `nonce`, or null for anything else. */
-function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: boolean } | null {
+/**
+ * An attestation (registrar-client.ts buildAttestation) and whether it is valid over `nonce`, or null for anything else.
+ * Valid means strict RFC 8032, as every other verifier here: noble's default (ZIP-215) takes non-canonical encodings.
+ */
+export function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: boolean } | null {
     const b = body as Record<string, unknown> | null;
     if (!b || typeof b !== 'object' || typeof b.pubkey !== 'string' || typeof b.signature !== 'string') return null;
     const pubkey = b.pubkey.toLowerCase();
@@ -288,7 +291,7 @@ function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: b
         const ts = b.timestamp;
         if (b.nonce === nonce && (typeof ts === 'number' || typeof ts === 'string') && typeof proto === 'string'
             && Object.hasOwn(PROTOCOLS, proto) && /^[0-9a-f]{128}$/i.test(b.signature)) {
-            valid = ed25519.verify(Buffer.from(b.signature, 'hex'), new TextEncoder().encode(attestMessage(proto, nonce, ts)), Buffer.from(pubkey, 'hex'));
+            valid = ed25519.verify(Buffer.from(b.signature, 'hex'), new TextEncoder().encode(attestMessage(proto, nonce, ts)), Buffer.from(pubkey, 'hex'), { zip215: false });
         }
     } catch {
         valid = false;

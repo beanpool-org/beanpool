@@ -13,7 +13,7 @@
  * I. otpauth URI formatting preserves unencoded colon label separator (#135 CR2)
  */
 import assert from 'node:assert';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
 import { initStateEngine } from './state-engine.js';
@@ -148,6 +148,7 @@ resetAdminAuthTarpit();
     // active totpEnabled must still be true and active secret must still be required for auth
     const currentActiveCode = generateTotpCode(secret);
     resetAdminAuthTarpit();
+    forgetUsedTotpCodesForTests(); // E used this step's code: A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
     const ctxPendingCheck = mockCtx({ 'x-admin-password': testPass, 'x-admin-totp': currentActiveCode });
     const okPendingCheck = await checkAdminAuth(ctxPendingCheck);
     assert.strictEqual(okPendingCheck, true, 'H. Active secret must still authenticate while a new setup is pending');

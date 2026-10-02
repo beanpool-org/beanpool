@@ -97,9 +97,11 @@ export function HomeCard({ caption, colors, onMenu, menuRef, right, children, te
 }
 
 /** One line of a card: one target, the whole width, its whole text for the screen reader (§10 "One target per line"). */
-export function HomeRow({ text, sub, a11y, onPress, left, right, colors, lines = 2, strong, testID }: {
+export function HomeRow({ text, sub, subBadge, a11y, onPress, left, right, colors, lines = 2, strong, testID }: {
     text: string;
     sub?: string | null;
+    /** Drawn at the start of the second line (a listing's OFFER/NEED), so the first line keeps the row's width. */
+    subBadge?: React.ReactNode;
     a11y: string;
     onPress?: () => void;
     left?: React.ReactNode;
@@ -115,7 +117,12 @@ export function HomeRow({ text, sub, a11y, onPress, left, right, colors, lines =
             {left}
             <View style={s.rowText}>
                 <Text style={[s.rowLine, strong && s.rowStrong]} numberOfLines={lines}>{text}</Text>
-                {!!sub && <Text style={s.rowSub} numberOfLines={2}>{sub}</Text>}
+                {subBadge ? (
+                    <View style={s.subRow}>
+                        {subBadge}
+                        {!!sub && <Text style={[s.rowSub, s.subBeside]} numberOfLines={2}>{sub}</Text>}
+                    </View>
+                ) : !!sub && <Text style={s.rowSub} numberOfLines={2}>{sub}</Text>}
             </View>
             {right}
         </>
@@ -206,6 +213,8 @@ function make(colors: AppColors) {
         rowLine: { fontSize: 15, lineHeight: 20, color: colors.text.body },
         rowStrong: { fontWeight: '700', color: colors.text.heading },
         rowSub: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: 1 },
+        subRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+        subBeside: { flexShrink: 1, marginTop: 0 },
         link: { minHeight: HOME_TARGET_DP, alignItems: 'flex-end', justifyContent: 'center' },
         linkText: { fontSize: 14, fontWeight: '700', color: colors.text.link },
         buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, marginBottom: 4 },

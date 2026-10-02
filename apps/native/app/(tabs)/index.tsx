@@ -79,6 +79,8 @@ export default function HomeScreen() {
     const [status, setStatus] = useState<Status>('loading');
     const [layout, setLayout] = useState<HomeLayout | null>(null);
     const [interests, setInterests] = useState<string[]>([]);
+    // The interests card stays while Home is in front once it is up (opened from "Tune", or shown because nothing was
+    // starred): the first star must not take away the card the member is picking "a few" on. It goes on leaving Home.
     const [tuneOpen, setTuneOpen] = useState(false);
     const [safetyUp, setSafetyUp] = useState(false);
     const [local, setLocal] = useState<LocalNeeds | null>(null);
@@ -231,7 +233,7 @@ export default function HomeScreen() {
         focused.current = true;
         void refreshRef.current('focus');
         const poll = setInterval(() => { if (AppState.currentState === 'active') void refreshRef.current('poll'); }, HOME_SAFETY_POLL_MS);
-        return () => { focused.current = false; clearInterval(poll); };
+        return () => { focused.current = false; clearInterval(poll); setTuneOpen(false); };
     }, []));
 
     // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst).
@@ -325,6 +327,8 @@ export default function HomeScreen() {
     const now = Date.now();
     const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now) : [];
     const drawn = answer ? cardsToDraw(answer, layout, { interests, tuneOpen, safetyUp, needs: needsEntries.length }) : [];
+    const interestsUp = drawn.includes('interests');
+    useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
     const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
     const homeWord = word && stored ? { url: stored.url, standing: word } : null;
     const profile = answer?.profile ?? 'local';
@@ -450,7 +454,7 @@ export default function HomeScreen() {
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
                     testID="home-scroll"
                 >
-                    <PageTitle title="Home" testID="home-title" />
+                    <PageTitle title="Home" testID="page-title-home" />
                     {offlineNote && (
                         <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
                             Couldn't reach your community; showing what we had.

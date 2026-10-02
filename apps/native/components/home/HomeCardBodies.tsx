@@ -192,7 +192,7 @@ export function MarketBody({ items, examples, nodeUrl, showsBeans, colors, onSee
                         a11y={`${p.type === 'need' ? 'Need' : 'Offer'}: ${p.title}. ${facts ? `${facts}. ` : ''}${categoryLabel(p.category)}. Opens the listing.`}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: p.id } })}
                         left={<Thumb uri={onNode(nodeUrl, p.photoUrl)} emoji={categoryEmoji(p.category)} colors={colors} />}
-                        right={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
+                        subBadge={<View style={[s.badge, { backgroundColor: type.bg }]}><Text style={[s.badgeText, { color: type.fg }]} maxFontSizeMultiplier={1.2}>{word}</Text></View>}
                         testID={`home-market-${p.id}`}
                     />
                 );

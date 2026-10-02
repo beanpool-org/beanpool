@@ -37,17 +37,17 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
         const canDown = on && at >= 0 && at < shown.length - 1;
         const idle = on && !drawnNow.includes(id);
         return (
-            <View key={id} style={[s.row, { borderBottomColor: colors.border.default }]} testID={`edit-home-${id}`}>
-                <View style={s.rowText}>
-                    <Text style={[s.name, { color: on ? colors.text.heading : colors.text.muted }]} numberOfLines={2}>{name(id)}</Text>
-                    {idle && <Text style={[s.sub, { color: colors.text.secondary }]}>Nothing to show now</Text>}
+            <View key={id} style={[editHomeStyles.row, { borderBottomColor: colors.border.default }]} testID={`edit-home-${id}`}>
+                <View style={editHomeStyles.rowText}>
+                    <Text style={[editHomeStyles.name, { color: on ? colors.text.heading : colors.text.muted }]} numberOfLines={2}>{name(id)}</Text>
+                    {idle && <Text style={[editHomeStyles.sub, { color: colors.text.secondary }]}>Nothing to show now</Text>}
                 </View>
                 {on && (
                     <>
                         <Pressable
                             disabled={!canUp}
                             onPress={() => apply(moveCard(layout, id, 'up', shown, Date.now()))}
-                            style={s.arrow}
+                            style={editHomeStyles.arrow}
                             accessibilityRole="button"
                             accessibilityLabel={`Move ${name(id)} up`}
                             accessibilityState={{ disabled: !canUp }}
@@ -58,7 +58,7 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
                         <Pressable
                             disabled={!canDown}
                             onPress={() => apply(moveCard(layout, id, 'down', shown, Date.now()))}
-                            style={s.arrow}
+                            style={editHomeStyles.arrow}
                             accessibilityRole="button"
                             accessibilityLabel={`Move ${name(id)} down`}
                             accessibilityState={{ disabled: !canDown }}
@@ -81,31 +81,31 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
 
     return (
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose} statusBarTranslucent>
-            <View style={s.backdrop}>
-                <View style={[s.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]}>
-                    <View style={s.head}>
-                        <Text style={[s.title, { color: colors.text.heading }]} accessibilityRole="header">Edit home</Text>
-                        <Pressable onPress={onClose} style={s.done} accessibilityRole="button" accessibilityLabel="Done editing Home" testID="edit-home-done">
-                            <Text style={[s.doneText, { color: colors.text.link }]}>Done</Text>
+            <View style={editHomeStyles.backdrop}>
+                <View style={[editHomeStyles.sheet, { backgroundColor: colors.surface.card, paddingBottom: 12 + insets.bottom, marginTop: insets.top + 24 }]}>
+                    <View style={editHomeStyles.head}>
+                        <Text style={[editHomeStyles.title, { color: colors.text.heading }]} accessibilityRole="header">Edit home</Text>
+                        <Pressable onPress={onClose} style={editHomeStyles.done} accessibilityRole="button" accessibilityLabel="Done editing Home" testID="edit-home-done">
+                            <Text style={[editHomeStyles.doneText, { color: colors.text.link }]}>Done</Text>
                         </Pressable>
                     </View>
-                    <ScrollView contentContainerStyle={s.list}>
-                        <Text style={[s.note, { color: colors.text.secondary }]}>
+                    <ScrollView contentContainerStyle={editHomeStyles.list}>
+                        <Text style={[editHomeStyles.note, { color: colors.text.secondary }]}>
                             Needs you stays at the top, and your community's card at the bottom.
                         </Text>
                         {shown.map(id => row(id, true))}
                         {hidden.length > 0 && (
-                            <Text style={[s.section, { color: colors.text.secondary }]} accessibilityRole="header">Hidden</Text>
+                            <Text style={[editHomeStyles.section, { color: colors.text.secondary }]} accessibilityRole="header">Hidden</Text>
                         )}
                         {hidden.map(id => row(id, false))}
                         <Pressable
                             onPress={() => onChange(resetLayout(layout, Date.now()))}
-                            style={[s.reset, { borderColor: colors.border.strong }]}
+                            style={[editHomeStyles.reset, { borderColor: colors.border.strong }]}
                             accessibilityRole="button"
                             accessibilityLabel="Reset Home to its default cards and order"
                             testID="edit-home-reset"
                         >
-                            <Text style={[s.resetText, { color: colors.text.body }]}>Reset to defaults</Text>
+                            <Text style={[editHomeStyles.resetText, { color: colors.text.body }]}>Reset to defaults</Text>
                         </Pressable>
                     </ScrollView>
                 </View>
@@ -114,7 +114,8 @@ export function EditHomeSheet({ visible, layout, profile, drawnNow, colors, onCh
     );
 }
 
-const s = StyleSheet.create({
+/** Exported for the layout checks at 320dp (utils/__tests__/home-layout-320.test.ts). */
+export const editHomeStyles = StyleSheet.create({
     backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
     sheet: { flexShrink: 1, borderTopLeftRadius: 18, borderTopRightRadius: 18 },
     head: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 4, minHeight: HOME_TARGET_DP + 8 },

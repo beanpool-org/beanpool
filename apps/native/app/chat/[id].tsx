@@ -11,7 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
@@ -99,6 +99,17 @@ export default function ChatRoute() {
         group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
     );
 
+    // A DM stays a DM (utils/db.ts, the DM guard): a conversation this phone has seen as a DM, or that holds an encrypted
+    // line, opens only in the DM screen below, whatever type the node now gives it or a link says. Asked before any
+    // node-readable view opens; null while asking.
+    const [knownDm, setKnownDm] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!id) return;
+        let alive = true;
+        isKnownDmConversation(String(id)).then(k => { if (alive) setKnownDm(k); }, () => { if (alive) setKnownDm(false); });
+        return () => { alive = false; };
+    }, [id]);
+
     useEffect(() => {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
@@ -111,6 +122,8 @@ export default function ChatRoute() {
         return () => { alive = false; };
     }, [id, isEventChat, threadKind]);
 
+    if (knownDm) return <ChatScreen />;
+    if ((isEventChat || threadKind) && knownDm === null) return null;
     if (isEventChat && id) return <EventChatView eventId={String(id)} />;
     if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} />;
     return <ChatScreen />;

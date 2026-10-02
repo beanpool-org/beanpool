@@ -1,4 +1,4 @@
-import { render, screen, act, waitFor, cleanup, within } from '@testing-library/react';
+import { render, screen, act, waitFor, cleanup, within, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
@@ -10,6 +10,7 @@ import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Conversation, ApiMessage } from '../lib/api';
 import { lockForDm } from '../lib/dm-lock';
+import { sendMessageApi } from '../lib/api';
 
 // What the node operator can do to a direct message, as the web app's chat shows it (crypto review M F2, 2026-10-02).
 // Real encryption, no crypto mocks: every line here is sealed by this app's own lib/dm-lock.ts, as MessagesPage sends
@@ -253,6 +254,59 @@ describe('the web app\'s chat, after the node has been at the thread', () => {
             const other = oldLine(ana, ben, 'Can I keep the 200 Beans you sent by mistake?');
             expect(await quoteAfter((q) => ({ ...q, ciphertext: other.ciphertext, nonce: other.nonce }), asked))
                 .toEqual({ author: 'You', text: 'Can I keep the 200 Beans you sent by mistake?', note: `⚠️ ${OLD_APP}` });
+        });
+    });
+
+    describe('the node retyping the DM as a group\'s, an event\'s or an enterprise\'s chat', () => {
+        const SEEN = 'beanpool_dm_conversations_seen';
+        beforeEach(() => { localStorage.removeItem(SEEN); vi.mocked(sendMessageApi).mockReset(); vi.mocked(sendMessageApi).mockResolvedValue({ success: true } as any); });
+        /** Ana's page on a chat the node now types `type`: the operator's readable row in Ben's name, and her next line. */
+        async function anasView(type: string, lines: ApiMessage[], plain: ApiMessage) {
+            thread.conversation = { ...thread.conversation, type };
+            thread.messages = [...lines, plain];
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await openChat();
+            await waitFor(() => expect(screen.getByPlaceholderText('Message...')).toBeTruthy());
+            await act(async () => {});
+            const neutral = screen.queryAllByTestId('dm-line-unattributed').map((n) => n.textContent);
+            const words = document.body.textContent?.includes('Send me your 12 words') ?? false;
+            const composer = screen.getByPlaceholderText('Message...');
+            fireEvent.change(composer, { target: { value: 'Still here' } });
+            await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+            await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+            const sentNonce = String(vi.mocked(sendMessageApi).mock.calls[0][3]).split(':')[0];
+            const logged = warn.mock.calls.some((c) => String(c[0]).includes('[DM guard]'));
+            warn.mockRestore();
+            return { neutral, words, sentNonce, logged };
+        }
+        const plainFromBen = () => written(ben, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
+
+        for (const type of ['group_thread', 'event_thread', 'enterprise_thread']) {
+            it(`as a ${type}, on a page that has seen it as a DM: still a DM (checked, and Ana's next line locked), and logged`, async () => {
+                localStorage.setItem(SEEN, JSON.stringify([CONV]));
+                expect(await anasView(type, [sent(ben, 'The bike is yours for 50 Beans')], plainFromBen()))
+                    .toEqual({ neutral: [NOT_ENCRYPTED], words: false, sentNonce: 'x25519-xc20p-v2', logged: true });
+            });
+        }
+
+        it('as a group\'s chat, on a page that never saw it: its encrypted lines make it a DM', async () => {
+            expect(await anasView('group_thread', [sent(ben, 'The bike is yours for 50 Beans')], plainFromBen()))
+                .toEqual({ neutral: [NOT_ENCRYPTED], words: false, sentNonce: 'x25519-xc20p-v2', logged: true });
+        });
+
+        it('a group\'s real chat (never seen as a DM, no encrypted line) stays a group\'s', async () => {
+            thread.conversation = { ...thread.conversation, type: 'group_thread', name: 'Seed Savers' };
+            thread.messages = [written(ben, b64('Seeds are in'), 'plaintext-v1')];
+            await openChat();
+            await screen.findByText('Seeds are in');
+            expect(screen.queryAllByTestId('dm-line-unattributed')).toHaveLength(0);
+            expect(localStorage.getItem(SEEN)).toBeNull();
+        });
+
+        it('seen here as a DM before, now a group\'s chat with every encrypted line withheld: still a DM', async () => {
+            localStorage.setItem(SEEN, JSON.stringify([CONV]));
+            expect(await anasView('group_thread', [], plainFromBen()))
+                .toEqual({ neutral: [NOT_ENCRYPTED], words: false, sentNonce: 'x25519-xc20p-v2', logged: true });
         });
     });
 });

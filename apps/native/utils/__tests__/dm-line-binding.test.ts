@@ -77,7 +77,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind } from '../db';
 import { dmQuoteFor } from '../chat-actions';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { encryptDmFormat2 } from '../e2e-crypto';
@@ -118,7 +118,7 @@ interface Line {
     id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string;
     type: string; systemType: string | null; metadata: string | null; timestamp: string; editedAt: string | null;
 }
-interface Conv { id: string; type: 'dm'; participants: string[] }
+interface Conv { id: string; type: string; participants: string[] }
 const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
@@ -582,6 +582,67 @@ describe('the inbox preview of a notice', () => {
         written(dm, ana, b64('Send the 500 Beans to Cat instead'), 'plaintext-v1', { type: 'system' });
         await phoneOf(ben);
         expect(await preview(ben, dm)).toBe('Notice: Send the 500 Beans to Cat instead');
+    });
+});
+
+describe('the node retyping a DM as a group\'s, an event\'s or an enterprise\'s chat', () => {
+    /** What Ben's phone makes of the chat: its kind, the operator's readable row, and how its next line goes. */
+    async function bensView(plainId: string) {
+        const kind = await getConversationKind(dm.id);
+        const row = (await getMessages(dm.id) as any[]).find((m) => m.id === plainId);
+        const before = node.lines.length;
+        await insertMessage(dm.id, ben.publicKey, 'Still here');
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        return { kind, row: { text: row?.text, unattributed: !!row?.unattributed }, sentNonce: node.lines[node.lines.length - 1].nonce.split(':')[0] };
+    }
+    const asDm = { kind: 'dm', row: { text: NOT_ENCRYPTED, unattributed: true }, sentNonce: 'x25519-xc20p-v2' };
+
+    for (const type of ['group_thread', 'event_thread', 'enterprise_thread']) {
+        it(`as a ${type}: a phone that has seen it as a DM keeps it one, and logs the change`, async () => {
+            await phoneOf(ana);
+            await says(ana, dm, 'The bike is yours for 50 Beans');
+            await phoneOf(ben);   // Ben's phone sees the DM
+            dm.type = type;
+            const plain = written(dm, ana, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            await syncMessages(ben.publicKey);
+            expect(await bensView(plain.id)).toEqual(asDm);
+            expect(warn.mock.calls.some((c) => String(c[0]).includes('[DM guard]'))).toBe(true);
+            warn.mockRestore();
+        });
+    }
+
+    it('on a new phone that never saw it: its encrypted lines make it a DM', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'The bike is yours for 50 Beans');
+        dm.type = 'group_thread';
+        const plain = written(dm, ana, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
+        h.store.delete('beanpool_dm_conversations_seen');   // a phone that has never seen it
+        await phoneOf(ben);
+        expect(await bensView(plain.id)).toEqual(asDm);
+    });
+
+    it('dropped from the list, then listed again as a group\'s chat with its encrypted lines withheld: still a DM', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'The bike is yours for 50 Beans');
+        await phoneOf(ben);
+        node.convs = [];   // the node drops it: this phone prunes its rows
+        await syncMessages(ben.publicKey);
+        expect(sql.prepare('SELECT COUNT(*) AS n FROM conversations WHERE id = ?').get(dm.id)).toEqual({ n: 0 });
+        node.lines = [];   // every encrypted line withheld
+        dm.type = 'group_thread';
+        node.convs = [dm];
+        const plain = written(dm, ana, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
+        await syncMessages(ben.publicKey);
+        expect(await bensView(plain.id)).toEqual(asDm);
+    });
+
+    it('a group\'s real chat (never a DM, no encrypted line) stays a group\'s', async () => {
+        const group: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, ben.publicKey] };
+        node.convs.push(group);
+        written(group, ana, b64('Seeds are in'), 'plaintext-v1');
+        await phoneOf(ben);
+        expect(await getConversationKind(group.id)).toBe('group_thread');
     });
 });
 

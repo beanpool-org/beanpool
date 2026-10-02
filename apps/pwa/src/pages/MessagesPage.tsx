@@ -19,6 +19,7 @@ import {
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
+import { heldConversation } from '../lib/dm-guard';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { onSyncActivity } from '../lib/sync';
@@ -376,8 +377,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
     async function loadConversations() {
         try {
             const result = await getConversations(identity.publicKey);
+            // A DM stays a DM, whatever type the node gives it now (lib/dm-guard.ts).
+            const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
             const blocked = new Set(getBlockedUsers());
-            const filtered = (result.conversations || []).filter((c: Conversation) => {
+            const filtered = held.filter((c: Conversation) => {
                 if (c.type === 'dm') {
                     const peer = (c.participants || []).find(p => p !== identity.publicKey);
                     if (peer && blocked.has(peer)) return false;
@@ -394,7 +397,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             setUserTransactions(txs);
             setActiveConv(prev => {
                 if (!prev) return null;
-                const fresh = result.conversations.find(c => c.id === prev.id);
+                const fresh = held.find(c => c.id === prev.id);
                 return fresh ? { ...prev, ...fresh } : prev;
             });
         } catch { /* offline */ }
@@ -406,9 +409,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         loadConversations().then(() => {
             // Find the conversation and open it
             getConversations(identity.publicKey).then(async result => {
-                let conv = result.conversations.find((c: Conversation) => c.id === openConversationId);
+                const held = (result.conversations || []).map((c: Conversation) => heldConversation(c));
+                let conv = held.find((c: Conversation) => c.id === openConversationId);
                 if (!conv) {
-                    conv = result.conversations.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
+                    conv = held.find((c: Conversation) => c.type === 'dm' && c.participants.includes(openConversationId));
                 }
                 // Only a public key can start a DM. An event chat is opened by the event's id, which is a
                 // UUID, and a host who has not tapped Going has no conversation row yet — opening one must
@@ -416,7 +420,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 if (!conv && /^[0-9a-f]{64}$/i.test(openConversationId)) {
                     try {
                         const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
-                        conv = created.conversation;
+                        // Asked for a DM: it is one, whatever type the answer names.
+                        conv = created.conversation && heldConversation({ ...created.conversation, type: 'dm' as const });
                         await loadConversations();
                     } catch (e) {
                         // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
@@ -466,18 +471,20 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 markConversationReadApi(identity.publicKey, convId).catch(() => {});
                 setConversations(prev => prev.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
             }
-            if (result.conversation) {
-                const isDm = result.conversation.type === 'dm';
-                const peerCursor = isDm ? (result.conversation as any).readCursors?.find(
+            // A DM stays a DM: one seen as one here, or whose lines are encrypted (lib/dm-guard.ts).
+            const heldConv = result.conversation ? heldConversation(result.conversation, uniqueMessages) : null;
+            if (heldConv) {
+                const isDm = heldConv.type === 'dm';
+                const peerCursor = isDm ? (heldConv as any).readCursors?.find(
                     (rc: any) => rc.publicKey !== identity.publicKey
                 ) : null;
                 setActiveConv(prev => {
                     if (!prev || prev.id !== convId) return prev;
                     return {
                         ...prev,
-                        ...result.conversation,
+                        ...heldConv,
                         peerLastReadAt: isDm
-                            ? (peerCursor?.lastReadAt ?? (result.conversation as any).peerLastReadAt ?? prev.peerLastReadAt)
+                            ? (peerCursor?.lastReadAt ?? (heldConv as any).peerLastReadAt ?? prev.peerLastReadAt)
                             : null,
                     };
                 });
@@ -565,7 +572,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 [identity.publicKey, memberPubkey],
                 identity.publicKey,
             );
-            setActiveConv(result.conversation);
+            // Asked for a DM: it is one, whatever type the answer names.
+            setActiveConv(heldConversation({ ...result.conversation, type: 'dm' as const }));
             setShowNewDm(false);
             setChatRefusal(null);
             await loadConversations();
@@ -592,8 +600,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         try {
             const result = await getConversationMessages(conv.id);
             if (!result.conversation) return conv;
-            setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...result.conversation } : prev));
-            return { ...conv, ...result.conversation };
+            const held = heldConversation(result.conversation, result.messages);
+            setActiveConv(prev => (prev && prev.id === conv.id ? { ...prev, ...held } : prev));
+            return { ...conv, ...held };
         } catch {
             return conv;
         }

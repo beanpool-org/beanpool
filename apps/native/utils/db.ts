@@ -2363,11 +2363,89 @@ export async function removeEventChatMessage(postId: string, messageId: string):
 }
 
 /** The local conversation's kind, so /chat/:id can hand an event chat to its own screen. */
+// ── A DM stays a DM ─────────────────────────────────────────────────────────────────────────────────────────────
+// The node says what type a conversation is, and a group's, an event's and an enterprise's chats are node-readable by
+// design: shown in their own views, their lines plaintext-v1, and this phone sends plaintext into them. So the node
+// retyping a DM as one of those would show its unencrypted lines as members' words, and make this phone send the next
+// line readable. A conversation this phone has ever seen as a DM, or that holds an encrypted line (no node-readable
+// chat ever does: the node refuses one), stays a DM here whatever the node says: it opens only in the DM view, with
+// the DM checks, and is locked when sent to. A type change from the node is ignored, and logged. The ids seen as DMs
+// are kept in AsyncStorage, so a database wipe-and-fetch, or the node dropping the chat for a while, forgets none.
+
+const DM_SEEN_KEY = 'beanpool_dm_conversations_seen';
+
+async function dmConversationsSeen(): Promise<Set<string>> {
+    try {
+        const raw = JSON.parse((await AsyncStorage.getItem(DM_SEEN_KEY)) || '[]');
+        return new Set(Array.isArray(raw) ? raw.filter((x: unknown) => typeof x === 'string') : []);
+    } catch {
+        return new Set();
+    }
+}
+
+/** Remember conversations seen as DMs (never forgotten; ids are UUIDs, so one list serves every community). */
+async function rememberDmConversations(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const seen = await dmConversationsSeen();
+    const before = seen.size;
+    for (const id of ids) if (typeof id === 'string' && id) seen.add(id);
+    if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
+}
+
+/** True for a conversation this phone has seen as a DM, or that holds an encrypted line. */
+export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
+    if (!conversationId) return false;
+    if ((await dmConversationsSeen()).has(conversationId)) return true;
+    try {
+        const database = await getDb();
+        const row = await database.getFirstAsync<any>(
+            "SELECT 1 AS y FROM messages WHERE conversation_id = ? AND nonce LIKE ? LIMIT 1", [conversationId, `${V2_NONCE_PREFIX}%`]);
+        if (row) return true;
+        const conv = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        return conv?.type === 'dm';
+    } catch {
+        return false;
+    }
+}
+
+/** The type this phone keeps for a conversation the node calls `nodeType`: a known DM stays one. */
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined): Promise<string> {
+    const t = nodeType || 'dm';
+    if (t === 'dm') {
+        await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    if (await isKnownDmConversation(conversationId)) {
+        console.warn(`[DM guard] the node calls DM ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a DM`);
+        await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    return t;
+}
+
+/** Any conversation this phone holds under another type that is a known DM goes back to being one (logged). */
+async function holdDmTypes(): Promise<void> {
+    try {
+        const database = await getDb();
+        const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        for (const r of rows || []) {
+            if (r?.id && await isKnownDmConversation(r.id)) {
+                console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
+                await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
+                await rememberDmConversations([r.id]);
+            }
+        }
+    } catch {}
+}
+
 export async function getConversationKind(conversationId: string): Promise<string | null> {
     try {
         const database = await getDb();
         const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return row?.type ?? null;
+        const type = row?.type ?? null;
+        // A known DM is a DM, whatever type its row says (the DM guard above).
+        if (type && type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
+        return type;
     } catch {
         return null;
     }
@@ -3363,7 +3441,11 @@ export async function syncMessages(publicKey: string) {
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
+                if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
+                    console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
+                }
                 if (!localConv) {
                     needsConvWrite = true;
                 } else if (
@@ -3396,6 +3478,8 @@ export async function syncMessages(publicKey: string) {
                 needsConvWrite = true; // on any doubt, fall through to the write path
             }
 
+            // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten.
+            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type) : (conv.type || 'dm');
             if (needsConvWrite) {
             await acquireSyncLock();
             try {
@@ -3407,7 +3491,7 @@ export async function syncMessages(publicKey: string) {
                             'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             [
                                 conv.id,
-                                conv.type || 'dm',
+                                heldType,
                                 conv.postId || conv.post_id || null,
                                 conv.name || null,
                                 conv.createdBy || '',
@@ -3530,6 +3614,11 @@ export async function syncMessages(publicKey: string) {
             console.error('[Sync] Failed to prune legacy conversations:', pruneErr);
         }
 
+        // The DM guard: every conversation the node lists as a DM is remembered as one, and any held under another type
+        // that is a known DM (seen as one, or holding an encrypted line) goes back to being one.
+        await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id));
+        await holdDmTypes();
+
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
     } catch (err) {
@@ -3647,6 +3736,9 @@ export async function syncSingleConversation(conversationId: string) {
         } finally {
             releaseSyncLock();
         }
+        // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it.
+        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId]);
+        await holdDmTypes();
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -3745,7 +3837,7 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
         const database = await getDb();
         await database.runAsync(
             'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [conv.id, conv.type, conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
+            [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
         );
         for (const pk of Array.isArray(conv.participants) ? conv.participants : []) {
             if (typeof pk === 'string' && pk) {
@@ -3852,6 +3944,8 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
         await refreshConversationFromNode(conversationId);
         row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
     }
+    // A known DM is locked whatever type its row says (the DM guard): the node can't make this phone send it readable.
+    if (isNodeReadableChatType(row?.type) && await isKnownDmConversation(conversationId)) return false;
     return isNodeReadableChatType(row?.type);
 }
 
@@ -3897,7 +3991,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     let isDm = true;
     try {
         const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        isDm = !!dmCtx || !convRow || !isNodeReadableChatType(convRow.type);
+        isDm = !!dmCtx || !convRow || !isNodeReadableChatType(convRow.type) || await isKnownDmConversation(conversationId);
     } catch {}
     // Read receipts: my pubkey (to flag outgoing) + the peer's read cursor.
     let myPubkey: string | null = null;
@@ -4321,7 +4415,9 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
             let postCredits: number | null = null;
-            const convType = conv.type || type;
+            // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
+            const convType = await heldConversationType(conv.id, type);
+            if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {

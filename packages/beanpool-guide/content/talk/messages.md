@@ -68,7 +68,8 @@ Tap **⋮** at the top right, then **Mute notifications**: **For 8 hours**, **Fo
 - A message that cannot be locked is not sent. If the app cannot find the other person's key yet, or locking fails, your words stay in the message box with a line saying so. Send again in a moment. Your community's server also refuses a message between two people that is not locked.
 - The notices BeanPool adds to a chat about a deal are not encrypted: beans held for the trade, paid out, or given back when it is cancelled, the amount, and how an admin settled a stuck trade and why. The people who run your community's server can read them.
 - The server also knows who messaged whom, and when, which message each one answers, and sees the emoji reactions. A message an older version of the app sent without the lock stays readable on the server.
-- Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them.
+- Group, enterprise and event chats are not encrypted. The people who run your community's server can read all of them, and the server could write in them in anyone's name.
+- A chat between two people can never be turned into one of those. Once your app has seen a chat as one between two people, or it holds an encrypted message, it stays one, whatever the server says: it opens only as that chat, with all the checks above, and what you send in it is always locked.
 - Deleting a message asks your community's server to replace it. It cannot reach a copy someone has already read, or a screenshot.
 - Deleting your account does the same to every message you wrote, in every kind of chat, and deletes the photos you sent. See "Leaving or deleting your account".
 - A group's chat can also be read by the group's members.

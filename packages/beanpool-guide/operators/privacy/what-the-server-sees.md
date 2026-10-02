@@ -13,6 +13,7 @@ Running the server means holding your neighbours' information. Know what you can
 - Anything in a direct message that is not locked shows in both apps as nobody's words, never as a member's: in the chat, in a reply's quote of it and in the chat list. The message you send a member from the admin page is not locked, by design: they see it marked as from the community's admins and readable by the server, never as a private message, and a reply quotes it as from the admins.
 - Messages an older app sent before this update still open, and every one is marked as sent from an older version of the app, since nothing in them proves who wrote them, and so is a reply's quote of one. Those sent without the lock stay readable as they were stored.
 - What the server can still do to a direct message: hold it back, deliver it late, or make it read "This message was deleted"; show an edit's earlier words; and add its own notices to the chat, which show as notices (in the chat, in a reply's quote and in the chat list), never as a member's words.
+- A direct message can't be turned into a group's, an event's or an enterprise's chat: an app that has seen it as a direct message, or holds an encrypted line of it, keeps it one whatever type the server gives it, and ignores the change.
 - All of this rests on the apps having each member's real key, which they get from this server.
 
 ## What the server holds in the clear
@@ -20,7 +21,7 @@ Running the server means holding your neighbours' information. Know what you can
 Anyone with the server's files can read these, and so can anyone who can open a backup. Once the server has a printed recovery code its backups are locked, and whoever holds the code can open them (any owner too, once opening with a phone arrives). A backup from a server with no recovery code, and any backup made before this update, is not locked: anyone who has it can read it:
 
 - members' names, profiles, posts, photos, deals, balances and every trade;
-- **group chats, event chats and enterprise chats**: these are not encrypted;
+- **group chats, event chats and enterprise chats**: these are not encrypted, and the server could write in them in anyone's name;
 - the notices the server adds to a direct message about a deal: Beans placed in escrow, released, or refunded when a deal is cancelled, the amount, and how a dispute was settled and why;
 - who messaged whom, and when, which message each one answers, and their emoji reactions, even for direct messages;
 - the messages you send members from the admin page;

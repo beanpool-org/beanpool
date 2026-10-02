@@ -144,7 +144,8 @@ export function verifyEpochStatement(body: unknown, identity: NodeIdentity): Epo
     const statement: EpochStatement = { v: 1, peerId: s.peerId, communityId: s.communityId, epoch: s.epoch as number, since: s.since };
     let valid = false;
     try {
-        valid = ed25519.verify(Buffer.from(b.sig, 'base64'), canonical(statement), ed25519.getPublicKey(identity.seed));
+        // Strict RFC 8032, as every other verifier here: noble's default (ZIP-215) takes non-canonical encodings.
+        valid = ed25519.verify(Buffer.from(b.sig, 'base64'), canonical(statement), ed25519.getPublicKey(identity.seed), { zip215: false });
     } catch {
         valid = false;
     }

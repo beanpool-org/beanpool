@@ -49,6 +49,7 @@ import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
 import { moveMemberKeyRows } from './key-move.js';
+import { escapeLike } from '@beanpool/engine';
 
 // ===================== TYPES =====================
 
@@ -520,10 +521,10 @@ function getPreviousOffboardResult(
             WHERE category = 'ADMIN'
               AND (
                   json_extract(metadata, '$.memberPubkey') = ?
-                  OR message LIKE ?
+                  OR message LIKE ? ESCAPE '\\'
               )
             ORDER BY timestamp DESC LIMIT 1
-        `).get(cleanPub, `%Member ${callsign}%offboarded%`) as { metadata?: string } | undefined;
+        `).get(cleanPub, `%Member ${escapeLike(callsign)}%offboarded%`) as { metadata?: string } | undefined;
 
         if (row?.metadata) {
             const meta = JSON.parse(row.metadata);

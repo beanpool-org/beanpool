@@ -45,7 +45,7 @@ import {
     getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
 } from '../config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from '../totp.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -85,6 +85,7 @@ import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -162,7 +163,9 @@ router.post('/api/local/verify-password', async (ctx) => {
             return;
         }
         const cleanCode = String(totpCode).trim();
-        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, config.totpSecret);
+        let totpValid = totpUse === 'ok';
 
         // Check backup codes if TOTP didn't match
         const backupHashes = config.totpBackupCodesHashes || [];
@@ -179,7 +182,7 @@ router.post('/api/local/verify-password', async (ctx) => {
         if (!totpValid) {
             notePasswordFailure(clientLimiterKey(ctx));
             ctx.status = 401;
-            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
             return;
         }
         notePasswordSuccess(clientLimiterKey(ctx));
@@ -1297,7 +1300,7 @@ router.post('/api/member/purge', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to purge account' };
+        ctx.body = { error: memberErrorText(e, 'Failed to purge account') };
     }
 });
 
@@ -1354,7 +1357,7 @@ router.post('/api/member/re-enroll', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to complete re-enrolment' };
+        ctx.body = { error: memberErrorText(e, 'Failed to complete re-enrolment') };
     }
 });
 
@@ -1494,7 +1497,7 @@ router.post('/api/profile/vouch', async (ctx) => {
         ctx.body = { success: true, level: lvl };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Vouch failed' };
+        ctx.body = { error: memberErrorText(e, 'Vouch failed') };
     }
 });
 
@@ -1519,7 +1522,7 @@ router.post('/api/profile/unvouch', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Withdraw failed' };
+        ctx.body = { error: memberErrorText(e, 'Withdraw failed') };
     }
 });
 
@@ -1606,7 +1609,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
         // A visitor's row sends Beans only to a key that has a row here (transfer()): refused as the act test refuses.
         if (e?.code !== NOT_A_MEMBER_CODE) throw e;
         ctx.status = 403;
-        ctx.body = { error: e.message, code: e.code };
+        ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT), code: e.code };
         return;
     }
     if (!txn) {
@@ -1851,7 +1854,7 @@ router.post('/api/members/preferences', async (ctx) => {
         ctx.body = { success };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update preferences' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update preferences') };
     }
 });
 
@@ -1870,7 +1873,7 @@ router.post('/api/members/holiday', async (ctx) => {
         ctx.body = { success: true, enabled: !!enabled, openTrades: result.openTrades };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update holiday mode', openTrades: e?.openTrades };
+        ctx.body = { error: memberErrorText(e, 'Failed to update holiday mode'), openTrades: e?.openTrades };
     }
 });
 
@@ -1909,7 +1912,7 @@ router.post('/api/ratings', async (ctx) => {
     } catch (err: any) {
         console.error('❌ Server Error adding rating:', err);
         ctx.status = 500;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 

@@ -307,6 +307,7 @@ export const SUITES = [
     'test-blocks-on-beans',
     'test-polls',
     'test-poll-voters-members-only',
+    'test-poll-vote-origins',
     'test-suspended-and-visitor-reads',
     'test-visitors-cant-act',
     'test-doors-key-case',

@@ -33,6 +33,7 @@
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
  * member wrote, so a restore, a standby or a take-over carries it with them, and there is nothing to keep in step.
  */
+import { configurePollVoteOrigins } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { nodeRoleOf } from './node-roles.js';
@@ -133,6 +134,63 @@ export function keptPostCount(pubkey: string): number {
             AND removed_by_moderator_at IS NULL AND hidden_by_reports_at IS NULL`
     ).get(pubkey) as { c: number };
     return row.c;
+}
+
+/**
+ * Where the votes on the public board's polls came from (FABLE-sec-global-abuse LOW-7: many cheap accounts voting): per
+ * poll and option, the votes of members who are new or came in with 12 words. New is on probation now (`probationState`):
+ * the first 72 hours, or fewer than 3 kept posts. 12 words is an `open_joins` row of provider `words` (no sign-in added),
+ * however long ago, because such an account cost nothing to make and a patient person can age a thousand of them. A node
+ * role (owner, admin, moderator) is neither, as for probation. Read at the time of the read, as a report is weighed:
+ * a vote from someone who has since settled in stops being counted here.
+ *
+ * Every vote still counts in the poll's totals: this only says how many came from such accounts, never whose. A new
+ * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing).
+ *
+ * One query per 500 polls, with the same rules as `probationState` (the suite checks each voter against it): a node
+ * role that acts (node-roles.ts NODE_ROLE_ACTS), a join time that can't be read counts as old, kept posts as
+ * `keptPostCount`. Null where the node's probation switch is off (every local community): nobody is new there.
+ */
+export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[], now: number = Date.now()): Map<string, Map<string, number>> | null {
+    if (!getProfileSwitches().probation) return null;
+    const youngSince = iso(now - PROBATION.hours * HOUR_MS);
+    const out = new Map<string, Map<string, number>>();
+    for (let i = 0; i < pollIds.length; i += 500) {
+        const chunk = pollIds.slice(i, i + 500);
+        const rows = conn.prepare(pollVoteOriginsSql(chunk.length))
+            .all(...chunk, youngSince, PROBATION.keptPosts, PROBATION.keptPosts) as { post_id: string; option_id: string; c: number }[];
+        for (const r of rows) {
+            let byOption = out.get(r.post_id);
+            if (!byOption) out.set(r.post_id, byOption = new Map());
+            byOption.set(r.option_id, r.c);
+        }
+    }
+    return out;
+}
+
+/**
+ * The query pollVotesFromNewOrWords runs for `polls` poll ids; its parameters are the ids, then when the first 72 hours
+ * began, then the kept posts needed twice. Each voter is found by key, and each of their rows by index (the suite reads
+ * the plan).
+ */
+export function pollVoteOriginsSql(polls: number): string {
+    return `SELECT pv.post_id, pv.option_id, COUNT(*) AS c
+              FROM poll_votes pv
+              JOIN members m ON m.public_key = pv.voter_pubkey
+             WHERE pv.post_id IN (${Array.from({ length: polls }, () => '?').join(',')})
+               AND NOT (m.status = 'active' AND m.is_visitor = 0
+                        AND EXISTS (SELECT 1 FROM node_roles nr WHERE nr.member_pubkey = m.public_key))
+               AND (EXISTS (SELECT 1 FROM open_joins oj WHERE oj.member_pubkey = m.public_key AND oj.provider = 'words')
+                    OR julianday(m.joined_at) > julianday(?)
+                    OR (SELECT COUNT(*) FROM (SELECT 1 FROM posts p
+                          WHERE p.author_pubkey = m.public_key AND p.origin_node IS NULL
+                            AND p.removed_by_moderator_at IS NULL AND p.hidden_by_reports_at IS NULL LIMIT ?)) < ?)
+             GROUP BY pv.post_id, pv.option_id`;
+}
+
+/** Each public poll says where its votes came from, where the node's probation switch is on (pollVotesFromNewOrWords). */
+export function installPollVoteOriginsAtBoot(): void {
+    configurePollVoteOrigins((conn, pollIds) => pollVotesFromNewOrWords(conn, pollIds));
 }
 
 export function probationState(pubkey: string, now: number = Date.now()): ProbationState {

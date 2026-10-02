@@ -18,6 +18,7 @@ import { installCommunitySettingsAtBoot } from './config/community-settings.js';
 import { getDoor, mayInviteHere, type Door } from './config/door.js';
 import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
 import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
+import { installPollVoteOriginsAtBoot } from './engine/probation.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
@@ -631,6 +632,9 @@ export function initStateEngine(): void {
     // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
     // here, once, as the faces are.
     installPhotoKeysAtBoot(READ_AUTH_ON);
+    // Each poll on the public board says how many of its votes came from new or 12-word accounts, where the node has
+    // probation (the global profile; engine/probation.ts pollVotesFromNewOrWords). Read with the poll, never stored.
+    installPollVoteOriginsAtBoot();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.

@@ -1711,9 +1711,11 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 router.post('/api/local/admin/decisions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
+    // The subject's name only: getMember read their photo too, once a Decision (#1478).
+    const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
     ctx.body = {
         decisions: actionable.map(d => {
-            const subject = d.subject ? getMember(d.subject) : null;
+            const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
             return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
         }),
     };

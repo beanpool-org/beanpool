@@ -139,7 +139,9 @@ async function serve(): Promise<void> {
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
-    if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
+    // A photo a message quotes (a failing run's answer) is cut to its start.
+    const said = msg.replace(/(data:image\/[a-z]+;base64,[A-Za-z0-9+/]{24})[A-Za-z0-9+/=]+/gi, '$1…');
+    if (cond) { passed++; console.log(`✓ ${said}`); } else console.error(`✗ ${said}`);
 }
 
 /** The server in this process, for the sections that check answers rather than the heap. */
@@ -253,10 +255,13 @@ async function rulesOnGlobal(): Promise<void> {
     // Each URL opens the face it names, and only with its key (the member list's rule, engine/avatar-keys.ts).
     for (const [name, k] of [['the convenor', C], ['a request', P], ['an invitation', I]] as [string, Key][]) {
         const url = urlOf(k.pk)!;
+        const photo = Buffer.from(photos.get(k.pk)!.split(',')[1], 'base64');
         const face = await call(base, 'GET', url, null);
+        // What the phone asks for: the same URL with its own cache-buster after it (apps/native utils/image-processing.ts avatarUri).
+        const phone = await call(base, 'GET', `${url}&_v=${k.pk.slice(0, 8)}`, null);
         const keyless = await call(base, 'GET', url.replace(/&k=[^&]+$/, ''), null);
-        assert(face.status === 200 && face.bytes.equals(Buffer.from(photos.get(k.pk)!.split(',')[1], 'base64')) && keyless.status === 404,
-            `${name}'s URL opens their photo (${face.status}, ${face.bytes.length} bytes) and, without its key, nothing (${keyless.status})`);
+        assert(face.status === 200 && face.bytes.equals(photo) && phone.status === 200 && phone.bytes.equals(photo) && keyless.status === 404,
+            `${name}'s URL opens their photo, as the web app and the phone ask for it (${face.status}, ${phone.status}, ${face.bytes.length} bytes), and without its key nothing (${keyless.status})`);
     }
 
     // A photo removed: the roster has no URL for it, and the old URL opens nothing.

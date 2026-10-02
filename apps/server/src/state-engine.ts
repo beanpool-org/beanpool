@@ -8181,10 +8181,12 @@ export function getAllProjects(): CommunityProject[] {
             WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
               AND m.public_key NOT IN (SELECT id FROM projects)
         `).all() as any[];
+        // The proposer's name only: getMember read their photo too, once a project (#1478).
+        const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
 
         for (const e of enterprises) {
             const lead = e.lead_keeper || e.any_keeper || e.public_key;
-            const leadMember = getMember(lead);
+            const leadMember = callsignOfKey.get(lead) as { callsign: string } | undefined;
             const existing = blobProjects.find(p => p.id === e.public_key);
             if (existing) {
                 // Keep live values from members table so blob doesn't shadow SQL

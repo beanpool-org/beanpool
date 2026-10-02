@@ -78,12 +78,11 @@ export interface NodeHarvestState {
     /**
      * The node's latest backup came back SHORT: it carried fewer image objects than its own database
      * references, and named the missing keys inside the archive. Not a failure — the file was kept, and it is
-     * the most complete backup that node can make. Kept in harvester-state.json, and in the
-     * `/api/manager/backups/status` payload, until a pull comes back whole; cleared by any complete pull.
+     * the most complete backup that node can make. Kept in harvester-state.json until a pull comes back whole;
+     * cleared by any complete pull.
      *
-     * No dashboard view renders it yet. What tells an operator today is the SHORT line
-     * {@link pullBackupForNode} logs on every such pull, and the alert the manager's download of the kept copy
-     * raises from its `X-Backup-Images` / `X-Backup-Missing-Images` headers.
+     * No dashboard view renders it (the fleet manager's routes were deleted 2026-10-02). What tells an operator is the
+     * SHORT line {@link pullBackupForNode} logs on every such pull, and the manifest kept beside the copy.
      */
     shortImages?: { missing: number; note: string; since: string };
     /** The node key the seal-old pass trusts, and where it came from. */

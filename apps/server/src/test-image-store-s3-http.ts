@@ -195,6 +195,7 @@ async function main(): Promise<void> {
     const { getStorageCleanPreview, sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
     const { createSnapshot, snapshotImagesDir, SNAPSHOTS_DIR } = await import('./services/snapshot-scheduler.js');
     const { pullBackupForNode, inBucketLabelFor, imagesDirFor } = await import('./services/harvester.js');
+    const { readInBucketMember } = await import('./services/sealed-backup.js');
     const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
 
     await initTls();
@@ -468,8 +469,10 @@ async function main(): Promise<void> {
             'its download carries the in-bucket label and the bucket\'s shortfall');
     }
 
-    // ── 9. the harvester and the manager ───────────────────────────────────────────────────────
-    console.log('\n--- 9. The harvester\'s kept copy and the manager\'s download of it ---');
+    // ── 9. the harvester ───────────────────────────────────────────────────────────────────────
+    // (The fleet manager's download of this kept copy went with its routes, 2026-10-02: what it said on the wire is what
+    // the kept label says, checked here where it is kept.)
+    console.log('\n--- 9. The harvester\'s kept copy ---');
     {
         const node = { id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw };
         resetAdminAuthTarpit();
@@ -478,31 +481,9 @@ async function main(): Promise<void> {
         const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
         assert(fs.existsSync(kept) && fs.existsSync(inBucketLabelFor(kept)), 'it kept the database AND the in-bucket label beside it');
         assert(listFiles(imagesDirFor(kept)).length === 0, 'with no images beside it, by design');
-        const res = await adminFetch('/api/manager/backups/download-db?nodeId=local-node');
-        const file = path.join(work, 'manager-copy.tar.gz');
-        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-        assert(res.status === 200 && res.headers.get('x-backup-images') === 'in-bucket'
-            && res.headers.get('x-backup-contents') === 'database+images-in-bucket',
-            'the manager\'s download of the kept copy says the photos are in the bucket — not "short by every photo"');
-        const x = untar(file);
-        assert(fs.existsSync(path.join(x, 'images-in-bucket.json')), 'and the archive it serves carries the label');
-        fs.rmSync(x, { recursive: true, force: true });
-        // The same headers the node's own download sends, so the manager's notice names the bucket, counts
-        // against what the database references, and never drops "the bucket could not be checked".
-        const h = res.headers;
-        assert(h.get('x-backup-images-bucket') === fake.bucket && h.get('x-backup-images-referenced') === String(referenced)
-            && h.get('x-backup-images-checked') === 'yes' && h.get('x-backup-missing-images') === '1',
-            `the manager's download names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing`);
-        const labelPath = inBucketLabelFor(kept);
-        const keptLabel = JSON.parse(fs.readFileSync(labelPath, 'utf8'));
-        fs.writeFileSync(labelPath, JSON.stringify({ ...keptLabel, checked: false, missingFromBucket: null, bucket: 'not a bucket\r\nX-Injected: 1' }));
-        const unchecked = await adminFetch('/api/manager/backups/download-db?nodeId=local-node');
-        await unchecked.arrayBuffer();
-        assert(unchecked.status === 200 && unchecked.headers.get('x-backup-images-checked') === 'no',
-            'a copy whose bucket could not be listed when it was taken says so: X-Backup-Images-Checked: no');
-        assert(!unchecked.headers.get('x-backup-images-bucket') && !unchecked.headers.get('x-injected'),
-            'and a label naming something that is not a bucket name puts no bucket (and nothing else) in the headers');
-        fs.writeFileSync(labelPath, JSON.stringify(keptLabel));
+        const label = readInBucketMember(path.dirname(kept), path.basename(inBucketLabelFor(kept)));
+        assert(label?.bucket === fake.bucket && label.referenced === referenced && label.checked === true && label.missingFromBucket === 1,
+            `the kept label names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing (${JSON.stringify(label)})`);
     }
 
     // ── 10. restore ────────────────────────────────────────────────────────────────────────────

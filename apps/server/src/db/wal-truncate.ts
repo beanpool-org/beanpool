@@ -3,7 +3,7 @@
  * it lies in state.db, but state.db-wal still holds the pages as they were — the delete's own "before" and every earlier
  * write's — until a checkpoint folds the WAL back AND later writes happen to cover those frames: on a quiet node, days. A
  * truncating checkpoint empties the file at once. The WAL is what an operator, a host or a tarred copy of the data
- * directory takes with state.db (routes/manager-backups.ts).
+ * directory takes with state.db.
  *
  * Never inside a transaction (the caller's commits first), and never waiting. A reader holding the WAL — a copy being
  * served to a standby in pages (engine/open-copies.ts) — makes a truncating checkpoint wait the whole busy timeout with the

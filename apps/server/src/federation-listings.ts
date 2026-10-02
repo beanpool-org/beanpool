@@ -16,7 +16,10 @@
 
 import type { Libp2p } from 'libp2p';
 import { db } from './db/db.js';
-import { reachAdmitsPeer, parseReachPeers, isSyntheticAccount } from '@beanpool/core';
+import {
+    reachAdmitsPeer, parseReachPeers, isSyntheticAccount, cutToLimit, fitsTextLimit,
+    LISTING_CATEGORY_LIMIT, LISTING_DESCRIPTION_LIMIT, LISTING_TITLE_LIMIT,
+} from '@beanpool/core';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CONNECTORS } from './connector-manager.js';
 import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion, ringListingDoorbell } from './state-engine.js';
 import { logger } from './logger.js';
@@ -200,9 +203,12 @@ export function cacheRemoteListings(
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', 0, ?, '', ?, 'local')`).run(
                     localId,
                     l.type,
-                    typeof l.category === 'string' && l.category ? l.category : 'other',
-                    l.title,
-                    typeof l.description === 'string' ? l.description : '',
+                    // A peer's listing is a copy this node shows and never edits, held to the limits a member's is (#1493):
+                    // a title or description past its limit is kept cut to it, ending "…", and a category past its limit
+                    // is no category this node knows.
+                    typeof l.category === 'string' && l.category && fitsTextLimit(l.category, LISTING_CATEGORY_LIMIT) ? l.category : 'other',
+                    cutToLimit(l.title, LISTING_TITLE_LIMIT),
+                    typeof l.description === 'string' ? cutToLimit(l.description, LISTING_DESCRIPTION_LIMIT) : '',
                     Number(l.credits),
                     typeof l.priceType === 'string' ? l.priceType : 'fixed',
                     l.authorPublicKey,

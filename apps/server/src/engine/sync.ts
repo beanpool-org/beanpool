@@ -35,6 +35,7 @@ import {
 import {
     exportSyncState as exportSyncStateEngine,
     clearEnterpriseFloorCache,
+    groupDescriptionAsCopied,
     setGroupPicture,
     setMemberPhoto,
     isWellFormedKey,
@@ -2597,6 +2598,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // erasing it, so a replica that has run the backfill is not un-backfilled by an old primary.
                 // The picture is not a column here (#1486): a row written takes the picture the copy carries in it
                 // (@beanpool/engine sync.ts groupsWithPictures) by its one writer (importGroupPicture).
+                // The description as the main node holds it (#1493, groupDescriptionAsCopied): the limit is on a member's
+                // new words, so one stored before it, longer, is copied unchanged and its row is never dropped.
                 const importGroup = db.prepare(`INSERT INTO groups
                     (id, name, slug, description, category, created_by, lead_pubkey, join_policy, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2613,7 +2616,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 for (const g of remote.groups) {
                     if (!g?.id || !g.name || !g.slug || !g.createdBy) { conflictsSkipped++; continue; }
                     const res = importGroup.run(
-                        g.id, g.name, g.slug, g.description ?? null, g.category || 'general',
+                        g.id, g.name, g.slug, groupDescriptionAsCopied(g.description), g.category || 'general',
                         g.createdBy, g.leadPubkey ?? null, g.joinPolicy || 'open', g.createdAt, g.updatedAt || g.createdAt,
                     );
                     if (res.changes > 0) {

@@ -309,6 +309,7 @@ import {
     approveGroupMember as approveGroupMemberEngine,
     inviteGroupMember as inviteGroupMemberEngine,
     deleteGroupPost as deleteGroupPostEngine,
+    groupAsListed,
     type Group,
     type GroupMember,
     type GroupRole,
@@ -338,7 +339,7 @@ import {
     assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
-import { assertPostFields, type PostFieldsIn } from './engine/post-fields.js';
+import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -4758,9 +4759,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
-    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is read or
-    // written: a price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured).
-    assertPostFields(updates as PostFieldsIn, 'edit');
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
+    // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
+    // sent back unchanged, is not held to a length limit it was stored before (#1493).
+    const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -9126,11 +9129,12 @@ export function createGroup(params: CreateGroupParams): Group {
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
+    // As a list sends it (#1493): a description stored before its limit goes to every socket as its preview, never whole.
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_created', group: res });
+        broadcast({ type: 'group_created', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
-        broadcast({ type: 'group_created', group: res }, recipients);
+        broadcast({ type: 'group_created', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9200,7 +9204,7 @@ export function handOverGroupLead(groupId: string, leadPubkey: string, targetPub
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     const group = getGroupEngine(db, groupId);
-    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
     return res;
 }
 
@@ -9287,10 +9291,10 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -9303,10 +9307,10 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }

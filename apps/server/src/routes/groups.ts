@@ -225,7 +225,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const group = createGroup({
                 name: name.trim(),
                 slug: slug?.trim(),
-                description: description?.trim(),
+                description,
                 avatarUrl,
                 category,
                 joinPolicy,

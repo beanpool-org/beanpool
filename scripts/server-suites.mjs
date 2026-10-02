@@ -367,6 +367,7 @@ export const SUITES = [
     'test-group-existence-leaks',
     'test-group-existence-leaks-http',
     'test-groups-patch-http',
+    'test-group-description-limit',
     'test-groups-sync-and-removal',
     'test-groups-chat',
     'test-chat-parity',

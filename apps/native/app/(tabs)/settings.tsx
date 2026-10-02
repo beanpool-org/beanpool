@@ -57,7 +57,7 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -2214,6 +2214,8 @@ export default function SettingsScreen() {
                         style={styles.input}
                         value={contact}
                         onChangeText={setContact}
+                        // The node refuses a longer one (#1493), and a refused save would keep the background profile sync retrying.
+                        maxLength={CONTACT_VALUE_LIMIT.chars}
                         placeholder="Phone, email, or WhatsApp"
                         placeholderTextColor={colors.text.secondary}
                         accessibilityLabel="Contact details"

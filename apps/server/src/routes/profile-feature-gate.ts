@@ -27,6 +27,7 @@ import { ProbationLimitError } from '../engine/probation.js';
 import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
 import { DoorClosedError } from '../config/door.js';
+import { BEANS_NOTE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -204,4 +205,19 @@ export function respondIfMuted(ctx: { status: number; body: unknown }, pubkey: s
  */
 export function isNote(memo: unknown): boolean {
     return memo != null && String(memo).trim() !== '';
+}
+
+/** The refusal of a note over BEANS_NOTE_LIMIT, in the words both apps show. */
+export const BEANS_NOTE_TOO_LONG = textTooLongMessage('A note with Beans', BEANS_NOTE_LIMIT);
+
+/**
+ * For the three routes that take a note with Beans or a pledge: answers 400 when the note is over BEANS_NOTE_LIMIT (#1493).
+ * The note is the ledger line's memo, which the payer's and the payee's ledger lists send whole on every line, and the
+ * request body (2 MB) was its only bound. True when it did. Before anything moves.
+ */
+export function respondIfNoteTooLong(ctx: { status: number; body: unknown }, memo: unknown): boolean {
+    if (!isNote(memo) || fitsTextLimit(String(memo), BEANS_NOTE_LIMIT)) return false;
+    ctx.status = 400;
+    ctx.body = { error: BEANS_NOTE_TOO_LONG };
+    return true;
 }

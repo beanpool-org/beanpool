@@ -228,7 +228,19 @@ export function WebRestore({ onRestored, onHeld, onExisting, onBack, onOtherWay,
             return backToSignIns(s, { tone: 'error', text: UNREACHABLE });
         }
         if ('answer' in fetched) {
+            if (fetched.answer.status === 400) {
+                // The session ended between the release and the fetch (its owner stopped it, moved the copy, or it ran
+                // out): the node hands nothing over from a dead session. From the name again.
+                setSession(null);
+                setNotice({ tone: 'error', text: 'That restore was stopped on the community, or has ended. Start again.' });
+                setScreen({ name: 'name' });
+                return;
+            }
             return backToSignIns(s, { tone: 'error', text: releaseRefusalMessage(fetched.answer, proof.provider, s.account.callsign) });
+        }
+        if ('unopened' in fetched) {
+            setScreen({ name: 'no_copy', message: `The community's copy of ${s.account.callsign} didn't open in this browser, so nothing was changed. Start again, or use your 12 words.` });
+            return;
         }
         if (!fetched.copy) {
             setScreen({ name: 'no_copy', message: `The community has no ${label} copy of ${s.account.callsign} to open.` });

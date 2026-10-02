@@ -1374,7 +1374,11 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
     // Same audience as removePost: a group or direct post's removal goes to the people who could see it.
     const audienceRow = db.prepare('SELECT audience_scope, target_group_id, author_pubkey, target_pubkey, assigned_to FROM posts WHERE id = ?').get(postId) as any;
-    const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    // The conservingTransaction only when a pending deal's escrow may be refunded: that is the one Bean move here. A
+    // listing with none is rows alone, so a moderator can take it down while the Commons pot is unknown, when every
+    // conservingTransaction refuses at its pre-flush (#1465 re-review, NB-3). One with a held deal still refuses then.
+    const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
+    const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];

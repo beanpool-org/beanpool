@@ -122,6 +122,7 @@ import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { scrubServerFaults } from './routes/member-error-text.js';
+import { CommonsPotUnknownError } from './engine/audit.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
@@ -1092,6 +1093,18 @@ export async function startHttpsServer(port: number): Promise<number> {
     // A database, network or bug's text in an answer outside the operator's routes is a server fault: replaced by fixed
     // words and answered 500, over every route and gate below (routes/member-error-text.ts).
     app.use(scrubServerFaults());
+
+    // A Commons pot that isn't a number pauses every Bean move (engine/audit.ts CommonsPotUnknownError). A route that lets
+    // that refusal through is answered in its plain words with 503, not Koa's "Internal Server Error" (#1465 review).
+    app.use(async (ctx, next) => {
+        try {
+            await next();
+        } catch (e) {
+            if (!(e instanceof CommonsPotUnknownError)) throw e;
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: e.code };
+        }
+    });
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)
     app.use(federationCors());

@@ -31,6 +31,7 @@ import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { answerPotPaused } from '../engine/audit.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -225,6 +226,8 @@ router.post('/api/commons/decisions', async (ctx) => {
         // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor). Formal Decisions
         // switched off: 404 feature_off, as the feature gate in front of this route answers.
         if (respondProfileRefusal(ctx, err)) return;
+        // A grant proposed while the Commons pot is unknown: 503, in the pause words (assertGrantWithinCap).
+        if (answerPotPaused(ctx, err)) return;
         ctx.status = 400;
         ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }

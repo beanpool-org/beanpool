@@ -816,3 +816,152 @@ export function openRewrappedShare(
     const key = agreeKey(myX, senderX, HKDF_INFO_REWRAP, 'The key that opens this released fragment');
     return open(key, { ...sealed, kdfParams: '' }, AAD_REWRAP);
 }
+
+// ─── A released copy, sealed to the recovering device ─────────────────────────────────────────
+//
+// A sign-in copy (K3) is the client's own ciphertext under scrypt(provider:sub), and a Google or Facebook `sub` is not a
+// secret: every other app the member signed into with that account holds the same id. So a copy the node handed over
+// as it was stored was only as secret as the connection it crossed: anyone who got the bytes (a debug log, a proxy that
+// ends TLS, a backup of the recovering phone) and the member's id could open it. The hub's copy (K2) is in the clear by
+// design.
+//
+// So the node seals each released copy to the throwaway key the recovering device signs its session with
+// (`requester_ephemeral_pubkey`) on the way out of `POST /api/recovery/collect/fragments`, when the device asks for it
+// (`seal: KEEPER_ALG_RELEASE` in the signed request). Opening one takes that key's private half, which never leaves the
+// device, and then the sign-in, as before. Defence review 2026-10-01 (FABLE-sec-sso) finding 2.
+//
+// What it does not change: the node opens the copy to seal it, and the operator, who sees `sub` at every sign-in, can
+// open every copy anyway (that review's finding 1, accepted).
+
+/** The scheme a node seals a released copy under, to the recovering device's throwaway key. */
+export const KEEPER_ALG_RELEASE = 'x25519-xc20p-release-v1';
+const HKDF_INFO_RELEASE = utf8ToBytes('beanpool-keeper-release');
+
+/** A released copy as the node keeps it: the client's deposited bytes, opened later with the sign-in (or read, for K2). */
+export interface ReleasedCopy {
+    encryptedShare: string;
+    shareIv: string;
+    shareTag: string;
+    kdfParams: string | null;
+}
+
+/** Which session and which keeper the sealed copy is for: bound into the AEAD, so a copy can't be moved to another. */
+export interface ReleaseBinding {
+    collectionId: string;
+    holderType: string;
+}
+
+function releaseAad(binding: ReleaseBinding): Uint8Array {
+    if (typeof binding?.collectionId !== 'string' || !binding.collectionId
+        || typeof binding.holderType !== 'string' || !binding.holderType) {
+        throw new KeeperCryptoError('A released copy is bound to a session and a keeper type, and one is missing.');
+    }
+    return utf8ToBytes(`beanpool-keeper-release-v1\n${binding.collectionId}\n${binding.holderType}`);
+}
+
+/**
+ * Seal a released copy to the recovering device (the node, at `POST /api/recovery/collect/fragments`).
+ *
+ * @param devicePublicKey the session's `requester_ephemeral_pubkey`: the Ed25519 key that signs the device's requests
+ */
+export function sealReleaseToDevice(copy: ReleasedCopy, devicePublicKey: string | Uint8Array, binding: ReleaseBinding): SealedShare {
+    // Arrives from an unauthenticated device (it opened the session), as at rewrapShareToDevice.
+    const deviceX = toX25519Public(requirePublicKey(devicePublicKey, 'devicePublicKey'), "The recovering device's key");
+    const aad = releaseAad(binding);
+    const eph = ephemeralKeypair();
+    const key = agreeKey(eph.secret, deviceX, HKDF_INFO_RELEASE, 'A key with the recovering device');
+    const inner = JSON.stringify({
+        encryptedShare: copy.encryptedShare,
+        shareIv: copy.shareIv,
+        shareTag: copy.shareTag,
+        kdfParams: copy.kdfParams ?? null,
+    });
+    return {
+        ...seal(key, utf8ToBytes(inner), aad),
+        ephemeralPubkey: b64(eph.publicKey),
+        kdfParams: JSON.stringify({ alg: KEEPER_ALG_RELEASE }),
+    };
+}
+
+/**
+ * Open a released copy on the device, with the throwaway key it signed the session with. Throws
+ * {@link KeeperCryptoError} when it does not open: another key, another session, or altered.
+ *
+ * @param ephemeralPrivateKey the throwaway key's private half: raw seed (the phone) or PKCS8 (the web), hex or bytes
+ */
+export function openReleaseOnDevice(
+    sealed: Pick<SealedShare, 'encryptedShare' | 'shareIv' | 'shareTag' | 'ephemeralPubkey' | 'kdfParams'>,
+    ephemeralPrivateKey: string | Uint8Array,
+    binding: ReleaseBinding,
+): ReleasedCopy {
+    parseAlg(sealed.kdfParams, KEEPER_ALG_RELEASE);
+    if (!sealed.ephemeralPubkey) {
+        throw new KeeperCryptoError('A released copy is missing the ephemeral public key that opens it.');
+    }
+    const aad = releaseAad(binding);
+    const seed = toEd25519Seed(asBytes(ephemeralPrivateKey, 'ephemeralPrivateKey'));
+    const myX = ed25519.utils.toMontgomerySecret(seed);
+    const senderX = requirePublicKey(unb64(sealed.ephemeralPubkey, 'ephemeralPubkey'), 'ephemeralPubkey');
+    const key = agreeKey(myX, senderX, HKDF_INFO_RELEASE, 'The key that opens this released copy');
+    const inner = open(key, sealed as SealedShare, aad);
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(Buffer.from(inner).toString('utf8'));
+    } catch {
+        throw new KeeperCryptoError('A released copy opened, but what it holds is unreadable.');
+    }
+    const c = parsed as Record<string, unknown> | null;
+    if (!c || typeof c.encryptedShare !== 'string' || typeof c.shareIv !== 'string' || typeof c.shareTag !== 'string'
+        || (c.kdfParams !== null && typeof c.kdfParams !== 'string')) {
+        throw new KeeperCryptoError('A released copy opened, but what it holds is not a copy.');
+    }
+    return { encryptedShare: c.encryptedShare, shareIv: c.shareIv, shareTag: c.shareTag, kdfParams: c.kdfParams as string | null };
+}
+
+/** One fragment as `POST /api/recovery/collect/fragments` lists it. */
+export interface ListedFragment {
+    holderType: string;
+    payload: string;
+    payloadIv: string;
+    payloadTag: string;
+    ephemeralPubkey?: string | null;
+    kdfParams?: string | null;
+}
+
+/** Whether a listed fragment is sealed to the recovering device ({@link sealReleaseToDevice}). */
+export function isSealedToDevice(kdfParams: string | null | undefined): boolean {
+    if (!kdfParams) return false;
+    try {
+        return JSON.parse(kdfParams)?.alg === KEEPER_ALG_RELEASE;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * A listed fragment as the client deposited it, for both apps' restores. One sealed to the device is opened with the
+ * throwaway key; one that is not came from a node from before the seal (it ignores the request) and is returned as it
+ * came. A sealed one that does not open throws {@link KeeperCryptoError}, and nothing of it is returned.
+ */
+export function openListedFragment<T extends ListedFragment>(fragment: T, ephemeralPrivateKey: string | Uint8Array, collectionId: string): T {
+    if (!isSealedToDevice(fragment.kdfParams)) return fragment;
+    const copy = openReleaseOnDevice(
+        {
+            encryptedShare: fragment.payload,
+            shareIv: fragment.payloadIv,
+            shareTag: fragment.payloadTag,
+            ephemeralPubkey: fragment.ephemeralPubkey ?? undefined,
+            kdfParams: fragment.kdfParams ?? '',
+        },
+        ephemeralPrivateKey,
+        { collectionId, holderType: fragment.holderType },
+    );
+    return {
+        ...fragment,
+        payload: copy.encryptedShare,
+        payloadIv: copy.shareIv,
+        payloadTag: copy.shareTag,
+        ephemeralPubkey: null,
+        kdfParams: copy.kdfParams,
+    };
+}

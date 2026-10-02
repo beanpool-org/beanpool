@@ -56,7 +56,7 @@ vi.mock('./lib/api', () => ({
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.26' })),
-    getMyActiveRecoveryCollections: vi.fn(async () => []),
+    getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getCommunityMe: vi.fn(),
     getUnseenNotices: vi.fn(),
     markNoticesSeen: vi.fn(),

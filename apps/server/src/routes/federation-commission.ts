@@ -40,6 +40,7 @@ import { commissionCapacity, checkCommissionAllowance, fundCommission, originOfC
 import { settlementStartedBy, recordSettlementKeeper, type MoneyActHold } from '../engine/money-limits.js';
 import { checkMoneyLimits } from './money-limits-gate.js';
 import type { RouteDeps } from './types.js';
+import { answerPotPaused } from '../engine/audit.js';
 
 /** What a key with no row here is told, and a visitor's row made here (getActingMember) with it. */
 const NOT_OUR_MEMBER_COMMISSION_ERROR = 'Only a member of this community can commission across a boundary';
@@ -266,7 +267,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
         //     either is short.
         const funding = fundCommission(peerId, amount);
         if (!funding.ok) {
-            ctx.status = funding.reason === 'no_link' ? 404 : 409;
+            // A pot that isn't a number pauses every Bean move: 503, in the same words as everywhere else.
+            ctx.status = funding.reason === 'no_link' ? 404 : funding.reason === 'commons_not_a_number' ? 503 : 409;
             // Spread first: the refusal already carries `reason` and its own per-case fields (allowance,
             // shortfall, commonsBalance), and re-stating `reason` after the spread silently overwrites it
             // with the same value while reading as if it were the authority. `ok` is dropped — the HTTP
@@ -313,6 +315,8 @@ export function createFederationCommissionRoutes(_deps: RouteDeps): Router {
             const parked = 'The beans stay with the link and will be spent by the next commission.';
             // No settlement, no payment: neither the enterprise's count (its settlements) nor the keeper's has it.
             if (counted && !settlementStartedBy(key, link.treasuryPubkey)) counted.release();
+            // The Commons pot is unknown: every Bean move is paused, said in its plain words (503).
+            if (answerPotPaused(ctx, e)) return;
             if (e instanceof SettlementError) {
                 ctx.status = 400;
                 ctx.body = { error: `${e.message} ${parked}`, reason: e.reason, key };

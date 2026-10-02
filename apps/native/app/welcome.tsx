@@ -1396,6 +1396,8 @@ export default function WelcomeScreen() {
             }
             setDoorSignIn(result.signin);
             setDoorWay('sign-in');
+            // Signed in: the 12-words work stops (the phone's battery); "Choose another way" starts it again.
+            doorWork.stop('words');
             // The sign-in door asks for work only from the 30th join an hour from one network: asked now, while the
             // member types their name, so a busy network costs them nothing extra (a door with the 12-words door only:
             // one from before it has no work to give).

@@ -188,6 +188,8 @@ export default function JoinGlobalScreen() {
             }
             setSignin(result.signin);
             setWay('sign-in');
+            // Signed in: the 12-words work stops (the phone's battery); "Choose another way" starts it again.
+            doorWork.stop('words');
             // From the 30th join an hour from one network the sign-in door asks for work too: asked now, while the name
             // is typed (only at a door with the 12-words door; one from before it has none to give).
             if (wordsDoor) doorWork.start(GLOBAL_NODE_URL, account.identity, 'sign-in');

@@ -34,7 +34,17 @@ export function useDoorWork() {
         const held = runs.current.get(door);
         if (held && held.publicKey === identity.publicKey && held.state().phase !== 'cancelled') return held;
         held?.cancel();
-        const run = startDoorWork({ url, identity, door, onChange: (state) => setStates(s => (runs.current.get(door) === run ? { ...s, [door]: state } : s)) });
+        // The run reports its first state before startDoorWork returns, so it is named only once it exists: a state from a
+        // run that has since been replaced is dropped.
+        let made: DoorWorkRun | null = null;
+        const run = startDoorWork({
+            url, identity, door,
+            onChange: (state) => {
+                const mine = made;
+                setStates(s => (mine && runs.current.get(door) !== mine ? s : { ...s, [door]: state }));
+            },
+        });
+        made = run;
         runs.current.set(door, run);
         setStates(s => ({ ...s, [door]: run.state() }));
         return run;

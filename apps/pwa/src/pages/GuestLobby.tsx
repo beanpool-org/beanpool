@@ -16,11 +16,11 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { CommunityInfo } from '../lib/api';
 import { connectToAnchor, reconnectToAnchor } from '../lib/sync';
-import { browserCanHoldKey } from '../lib/web-join';
+import { browserKeyProblem } from '../lib/web-join';
 import { beansOn, keepLinkedPost } from '../lib/visitor-lobby';
 import { MarketplacePage } from './MarketplacePage';
 import { WelcomePage } from './WelcomePage';
-import { TOO_OLD } from '../components/WebJoin';
+import { keyProblemSentence } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
@@ -52,9 +52,14 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
     // Every way in ends with this browser holding a key (G11-d's check): Join waits for the answer, and a browser that
     // can't hold one is told so instead of being offered a Join that can't finish.
     const [canHoldKey, setCanHoldKey] = useState<boolean | null>(null);
+    const [keyProblemText, setKeyProblemText] = useState(keyProblemSentence('old'));
     useEffect(() => {
         let cancelled = false;
-        browserCanHoldKey().then((ok) => { if (!cancelled) setCanHoldKey(ok); });
+        browserKeyProblem().then((problem) => {
+            if (cancelled) return;
+            setKeyProblemText(keyProblemSentence(problem));
+            setCanHoldKey(problem === null);
+        });
         return () => { cancelled = true; };
     }, []);
 
@@ -109,7 +114,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     : 'This community takes new members with an invite from one of them.'}
             </p>
             {canHoldKey === false ? (
-                <p role="alert" data-testid="lobby-too-old" className="m-0 mb-2 text-sm font-semibold text-nature-900 dark:text-white">{TOO_OLD}</p>
+                <p role="alert" data-testid="lobby-too-old" className="m-0 mb-2 text-sm font-semibold text-nature-900 dark:text-white">{keyProblemText}</p>
             ) : (
                 <button type="button" data-testid="lobby-join" disabled={canHoldKey === null} onClick={() => openJoin('guard')}
                     className="w-full min-h-[48px] rounded-xl border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold text-base cursor-pointer">

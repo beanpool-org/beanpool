@@ -32,15 +32,59 @@ export interface BeanPoolIdentity {
  * settle: a join the node has said yes to would sit on "Joining…" instead of saying it could not be saved.
  */
 
+/** What a person is told when this browser has nowhere to keep an account. One sentence, and the error's own message. */
+export const NO_STORAGE_SENTENCE =
+    "This browser can't keep your account, so open the site in your phone's normal browser, or use the BeanPool app.";
+
+/**
+ * This browser's identity store can't be opened: no IndexedDB (some in-app browsers, older private modes), or a profile
+ * that blocks it. Reading says there is no account here (loadIdentity and the load* readers return null); anything
+ * that would have to keep a key or a slot refuses with this, never a false success.
+ */
+export class IdentityStoreUnavailableError extends Error {
+    constructor() {
+        super(NO_STORAGE_SENTENCE);
+        this.name = 'IdentityStoreUnavailableError';
+    }
+}
+
 function openDb(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
+        let req: IDBOpenDBRequest;
+        try {
+            if (typeof indexedDB === 'undefined' || !indexedDB) throw new Error('no indexedDB');
+            req = indexedDB.open(DB_NAME, 1);
+        } catch {
+            reject(new IdentityStoreUnavailableError());
+            return;
+        }
         req.onupgradeneeded = () => {
             req.result.createObjectStore(STORE_NAME);
         };
         req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        req.onerror = () => reject(new IdentityStoreUnavailableError());
+        req.onblocked = () => reject(new IdentityStoreUnavailableError());
     });
+}
+
+/** True when this browser's identity store opens, false when it can't (see IdentityStoreUnavailableError). */
+export async function identityStoreAvailable(): Promise<boolean> {
+    try {
+        (await openDb()).close();
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** A reader's answer when the store can't be opened: none. Any other failure is still the reader's to throw. */
+async function noneIfStoreUnavailable<T>(read: () => Promise<T | null>): Promise<T | null> {
+    try {
+        return await read();
+    } catch (e) {
+        if (e instanceof IdentityStoreUnavailableError) return null;
+        throw e;
+    }
 }
 
 /** What the four slots hold, read inside the transaction that may write them. */
@@ -162,13 +206,15 @@ function identityToWrite(stored: BeanPoolIdentity | undefined, incoming: BeanPoo
  * Load the existing identity from IndexedDB, or return null.
  */
 export async function loadIdentity(): Promise<BeanPoolIdentity | null> {
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.get(KEY_ID);
-        req.onsuccess = () => resolve(req.result ?? null);
-        req.onerror = () => reject(req.error);
+    return noneIfStoreUnavailable(async () => {
+        const db = await openDb();
+        return new Promise<BeanPoolIdentity | null>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(KEY_ID);
+            req.onsuccess = () => resolve(req.result ?? null);
+            req.onerror = () => reject(req.error);
+        });
     });
 }
 
@@ -519,13 +565,15 @@ export async function markPendingJoinSent(pending: PendingJoin, at: number = Dat
  * the same transaction, so a join another tab has just sent is never dropped on this tab's clock.
  */
 export async function loadPendingJoin(now: number = Date.now()): Promise<PendingJoin | null> {
-    return withStoredPendingJoin<PendingJoin | null>((current) => {
-        if (!current) return { result: null };
-        // No key in it: nothing to lose.
-        if (!current.identity?.privateKey) return { write: 'delete', result: null };
-        if (pendingJoinSent(current)) return { result: current };
-        if (!(typeof current.expiresAt === 'number' && current.expiresAt > now)) return { write: 'delete', result: null };
-        return { result: current };
+    return noneIfStoreUnavailable(() => {
+        return withStoredPendingJoin<PendingJoin | null>((current) => {
+            if (!current) return { result: null };
+            // No key in it: nothing to lose.
+            if (!current.identity?.privateKey) return { write: 'delete', result: null };
+            if (pendingJoinSent(current)) return { result: current };
+            if (!(typeof current.expiresAt === 'number' && current.expiresAt > now)) return { write: 'delete', result: null };
+            return { result: current };
+        });
     });
 }
 
@@ -657,9 +705,11 @@ export async function savePendingRestore(restore: PendingRestore): Promise<void>
 
 /** The pending restore, or null. One past its `expiresAt`, or not whole, is dropped on sight and never returned. */
 export async function loadPendingRestore(now: number = Date.now()): Promise<PendingRestore | null> {
-    return withStoredSlots(({ restore }) => {
-        const r = pendingRestoreAsStored(restore, now);
-        return { restore: r.drop ? 'delete' : undefined, result: r.restore };
+    return noneIfStoreUnavailable(() => {
+        return withStoredSlots(({ restore }) => {
+            const r = pendingRestoreAsStored(restore, now);
+            return { restore: r.drop ? 'delete' : undefined, result: r.restore };
+        });
     });
 }
 
@@ -746,10 +796,12 @@ export class InviteSentHeldError extends Error {
 
 /** The key an invite was sent with, or null. A record holding no key is dropped on sight. */
 export async function loadInviteSent(): Promise<InviteSent | null> {
-    return withStoredSlots<InviteSent | null>(({ inviteSent }) => {
-        if (inviteSent === undefined) return { result: null };
-        const stored = asInviteSent(inviteSent);
-        return stored ? { result: stored } : { inviteSent: 'delete', result: null };
+    return noneIfStoreUnavailable(() => {
+        return withStoredSlots<InviteSent | null>(({ inviteSent }) => {
+            if (inviteSent === undefined) return { result: null };
+            const stored = asInviteSent(inviteSent);
+            return stored ? { result: stored } : { inviteSent: 'delete', result: null };
+        });
     });
 }
 

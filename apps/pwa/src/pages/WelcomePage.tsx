@@ -14,7 +14,7 @@ import {
     checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
     importIdentity, loadInviteSent, markInviteSent, releaseInviteSent, settleRefusedInviteSend, updateCallsign, getMnemonic, hasMnemonic,
     loadPendingJoin, loadPendingRestore, pendingJoinSent, seedViewedKey, IdentityHeldError, InviteSentHeldError, SentJoinWaitingError,
-    INVITE_SEND_CAN_LAND_MS, type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
+    INVITE_SEND_CAN_LAND_MS, IdentityStoreUnavailableError, NO_STORAGE_SENTENCE, type BeanPoolIdentity, type JoinProvider, type SaveIdentityOptions,
 } from '../lib/identity';
 import { validateMnemonic } from '../lib/mnemonic';
 
@@ -856,6 +856,11 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 const kept = await loadInviteSent().catch(() => null);
                 const mine = kept && kept.identity.publicKey === inviteKey.current?.publicKey ? kept.identity : null;
                 showHeld(err.held, mine ? { identity: mine, joined: taken } : null);
+                return;
+            }
+            if (err instanceof IdentityStoreUnavailableError) {
+                // No place in this browser to keep the account: said once, plainly, with nothing sent.
+                setError(NO_STORAGE_SENTENCE);
                 return;
             }
             setError('Failed to generate identity. Please try again.');

@@ -46,6 +46,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { getNodeApiUrl, signedFetchWithKey } from './api';
 import {
+    identityStoreAvailable,
     isDefiniteJoinRefusal,
     isJoinProvider,
     lastSentAt,
@@ -608,12 +609,22 @@ export async function suggestCallsigns(base: string, exclude?: string, count = 3
  * made, so an older browser is told plainly instead of failing halfway through a join.
  */
 export async function browserCanHoldKey(): Promise<boolean> {
+    return (await browserKeyProblem()) === null;
+}
+
+/**
+ * Why this browser can't hold a key, or null when it can: 'storage' when it has nowhere to keep one (no IndexedDB, or a
+ * profile that blocks it: an in-app browser, an older private mode), 'old' when it lacks WebCrypto Ed25519. The screens
+ * say each in its own words.
+ */
+export async function browserKeyProblem(): Promise<'storage' | 'old' | null> {
     try {
-        if (!globalThis.crypto?.subtle || typeof globalThis.indexedDB === 'undefined') return false;
+        if (!(await identityStoreAvailable())) return 'storage';
+        if (!globalThis.crypto?.subtle) return 'old';
         await globalThis.crypto.subtle.generateKey({ name: 'Ed25519' } as unknown as AlgorithmIdentifier, false, ['sign', 'verify']);
-        return true;
+        return null;
     } catch {
-        return false;
+        return 'old';
     }
 }
 

@@ -30,9 +30,10 @@ import {
     type JoinProvider,
     type NodeRefusedJoin,
     type PendingJoin,
+    NO_STORAGE_SENTENCE,
 } from '../lib/identity';
 import {
-    browserCanHoldKey,
+    browserKeyProblem,
     captureAuthReturn,
     checkCallsign,
     checkSentJoin,
@@ -159,6 +160,11 @@ const WENT_WRONG = 'Something went wrong on this page. Reload it to try again.';
 const WENT_WRONG_KEPT = "Something went wrong on this page before we could finish. Your join is kept on this device: reload the page and it will check whether you're in.";
 /** A nonce lives ten minutes on the node; one older than this is fetched again before it is sent to a provider. */
 const NONCE_FRESH_MS = 5 * 60 * 1000;
+/** The one sentence for a browser that can't hold a key: its storage is missing or blocked, or it is too old. */
+export function keyProblemSentence(problem: 'storage' | 'old' | null): string {
+    return problem === 'storage' ? NO_STORAGE_SENTENCE : TOO_OLD;
+}
+
 export const TOO_OLD = 'This browser is too old to hold a BeanPool account. Try an up-to-date Chrome, Firefox, Safari or Edge.';
 /** After the node's sign-up refusal: the limit is counted per network, so a class or a meetup joining together meets it. */
 const SHARED_NETWORK = "Everyone joining from the same network counts together: at a campus, an office or a meetup it may be other people joining, not you.";
@@ -239,6 +245,8 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
     const [nameCheck, setNameCheck] = useState<CallsignCheck | null>(null);
     const [busy, setBusy] = useState(false);
     const [canHoldKey, setCanHoldKey] = useState<boolean | null>(null);
+    // Why it can't, in the words for it: no place to keep an account (an in-app browser, a blocked profile) or too old.
+    const [keyProblemText, setKeyProblemText] = useState(TOO_OLD);
     const [nonceHeld, setNonceHeld] = useState<{ value: JoinNonce; at: number } | null>(null);
     const nonce = nonceHeld?.value ?? null;
     const [nonceProblem, setNonceProblem] = useState<string | null>(null);
@@ -665,7 +673,11 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
 
     useEffect(() => {
         let cancelled = false;
-        browserCanHoldKey().then((ok) => { if (!cancelled) setCanHoldKey(ok); });
+        browserKeyProblem().then((problem) => {
+            if (cancelled) return;
+            setKeyProblemText(keyProblemSentence(problem));
+            setCanHoldKey(problem === null);
+        });
         (async () => {
             // Settling only: a sign-in that came back is not sent (the door isn't open), as WelcomePage drops one.
             const ret = settleOnlyRef.current ? null : authReturn !== undefined ? authReturn : captureAuthReturn();
@@ -893,7 +905,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     </p>
                     <NoticeLine notice={notice} />
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="join-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="join-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <button type="button" data-testid="join-start" style={primaryButton} disabled={canHoldKey === null}
                             onClick={() => { setNotice(null); setScreen({ name: 'guard' }); }}>
@@ -920,7 +932,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     {/* Opened straight from the global lobby's Join, this screen is the first to need a key, so a
                         browser that can't hold one hears it here, as the lobby's Join says it. */}
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="guard-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
                             <p style={lede}>One person, one account. If you already have one, bring it here instead of making another.</p>
@@ -950,7 +962,7 @@ export function WebJoin({ onJoined, onRestore, restored = null, settleOnly = fal
                     {/* Every way back ends with this browser holding the key, so a browser that can't hold one hears
                         that here, as the lobby's Join does, instead of "can't reach the community" (review 4109643191). */}
                     {canHoldKey === false ? (
-                        <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{TOO_OLD}</p>
+                        <p role="alert" data-testid="restore-too-old" style={{ ...lede, color: 'var(--text-primary)' }}>{keyProblemText}</p>
                     ) : (
                         <>
                             <p style={lede}>Use the sign-in you joined with, the phone app, or your 12 words.</p>

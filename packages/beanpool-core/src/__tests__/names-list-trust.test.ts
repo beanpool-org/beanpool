@@ -7,7 +7,7 @@
  *
  * Every case is named by its id in §10's matrix.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from '@noble/hashes/utils.js';
 import { sha512 } from '@noble/hashes/sha2.js';
@@ -22,6 +22,10 @@ import {
 import { namesBoxDigest, newNamesListKey, sealNamesRing, openNamesEntry, sealNamesEntry, newNamesEntryId } from '../names-list-crypto.js';
 
 const CID = 'a1b2c3d4e5f60718';
+
+// Vitest doesn't yield between synchronous tests: on a slow CI runner this file's run holds the worker long enough to miss
+// its own RPC deadline ("Timeout calling onTaskUpdate"). A macrotask between tests lets it report (round 9).
+afterEach(() => new Promise<void>((r) => setTimeout(r, 0)));
 
 interface Admin extends NamesSigner { publicKey: string; privateKey: string; name: string }
 function admin(name: string): Admin {
@@ -1002,7 +1006,7 @@ function forkWorld() {
 const sharesTo = (world: World, to: string, from?: string) => [...world.shares.values()].filter((x) => x.to === to && (!from || x.from === from));
 
 describe('H. Re-admission by id, abandoned keys, the removal check (design Addendum 2, 2026-10-02)', () => {
-    it("H1 (the re-review's :628) Take @Cy's history: Cy's header re-admits nobody; the phone makes a key without Abe before it writes; nothing ever goes to Abe from it; Cy takes that key and sends Abe nothing more", () => {
+    it("H1 (the re-review's :628) Follow the server's history onto Cy's branch: Cy's header re-admits nobody; the phone makes a key without Abe before it writes; nothing ever goes to Abe from it; Cy takes that key and sends Abe nothing more", () => {
         const { world, bea, cy, abe, one, two, twoPP, view } = forkWorld();
         expect(bea.sync(world.stateFor(bea.pk, view)).plan).toEqual({ kind: 'refused', reason: 'different_history', canFollow: true });
         // Bea's last box to Abe is from before the removal (key 1 only): it must stay the last.

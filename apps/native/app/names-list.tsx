@@ -555,7 +555,11 @@ export default function NamesListScreen() {
                         ) : (
                             <>
                                 <Text style={styles.entryNote}>{COPY.toCheck(a.callsign)}</Text>
-                                <View style={styles.buttonRow}>{btn(COPY.checkButton(a.callsign), () => startCheck({ pubkey: a.pubkey, callsign: a.callsign }), 'small')}</View>
+                                {/* Remove works for any admin the server lists, checked here or not (design Addendum 2, ruling 4). */}
+                                <View style={styles.buttonRow}>
+                                    {btn(COPY.checkButton(a.callsign), () => startCheck({ pubkey: a.pubkey, callsign: a.callsign }), 'small')}
+                                    {btn(COPY.removeKeyButton(a.callsign), () => removeKey(a), 'small')}
+                                </View>
                             </>
                         )}
                     </View>

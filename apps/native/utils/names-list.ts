@@ -346,6 +346,7 @@ export function noticeWords(notices: NamesNotice[], state: Pick<NamesState, 'cal
         else if (n.kind === 'other_history') out.push(NAMES_COPY.otherHistory(callsignIn(state, n.who)));
         else if (n.kind === 'dropped') out.push(NAMES_COPY.newKeyBy(callsignIn(state, n.maker), n.keys.map((k) => callsignIn(state, k))));
         else if (n.kind === 'too_many') out.push(NAMES_COPY.tooMany);
+        else if (n.kind === 'check_again') out.push(NAMES_COPY.checkAgain(callsignIn(state, n.who), n.n));
     }
     return [...new Set(out)];
 }
@@ -410,6 +411,7 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
     if (!l.value.kept) return NOT_KEPT;
     const notices: NamesNotice[] = [...l.value.notices];
     let made: string[] | null = null;
+    let carried: string[] = [];
     const pend = l.value.pin.pending;
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
@@ -421,6 +423,10 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         notices.push(...l.value.notices);
     } else if (l.value.plan.kind === 'make_first' || l.value.plan.kind === 'make_new') {
         const drops = l.value.plan.kind === 'make_new' ? l.value.plan.drops : [];
+        // Drops this phone stands by that the history it took hadn't made (their statement is abandoned).
+        const before = l.value.pin;
+        const chainIds = new Set(before.chain.map((x) => x.id));
+        carried = drops.filter((k) => k in before.dropped && !chainIds.has(before.dropped[k]));
         const sent = await makeAndSend(anchor, identity, store, l.value, drops);
         if (!sent.ok && (sent.status === 0 || sent.code === 'not_kept')) return sent;
         if (sent.ok && l.value.plan.kind === 'make_new') made = drops;
@@ -450,10 +456,14 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
         // "No longer an admin" only for keys the node no longer lists; a key removed by hand gets the Remove words. "Has
         // sent" only for the admins the key reached; the rest get it on the next open.
         const listed = new Set(state.admins.map((a) => a.pubkey.toLowerCase()));
-        const gone = made.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
-        const byHand = made.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
+        const rest = made.filter((k) => !carried.includes(k));
+        const gone = rest.filter((k) => !listed.has(k)).map((k) => callsignIn(state, k));
+        const byHand = rest.filter((k) => listed.has(k)).map((k) => callsignIn(state, k));
         const sending = NAMES_COPY.newKeySent(sentTo.map((k) => callsignIn(state, k)), due.filter((k) => !sentTo.includes(k)).map((k) => callsignIn(state, k)));
-        words.unshift(...[gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending].filter((w) => w));
+        words.unshift(...[
+            carried.length ? NAMES_COPY.newKeyCarried(carried.map((k) => callsignIn(state, k))) : '',
+            gone.length ? NAMES_COPY.newKeyMade(gone) : '', byHand.length ? NAMES_COPY.newKeyRemoved(byHand) : '', sending,
+        ].filter((w) => w));
     }
     if (plan.kind === 'refused' && plan.reason === 'rolled_back') {
         const lost = Math.max(0, pin.lastCount - (state.counts?.entries ?? 0));
@@ -778,8 +788,10 @@ export const NAMES_COPY = {
         + 'were checked in person, by you or by an admin you trust, and takes a new key only from them. What it can’t protect: '
         + 'a check made with the wrong person, a phone someone else gets into, a lost phone until an admin removes its key, and an '
         + 'admin’s phone that the server keeps from learning of a removal: what that phone writes until it learns, the removed admin’s '
-        + 'keys can read. Each admin’s phone learns of a removal when it opens the list, unless the server hides it. To be sure, '
-        + 'meet another admin and compare the list key your phones show.',
+        + 'keys can read. Each admin’s phone learns of a removal when it opens the list, unless the server hides it. '
+        // Addendum 2 (§3): the removal check is Remove by hand, not a comparison.
+        + 'After an admin is removed, look at this phone’s admins: if it still shows them, tap Remove @X’s old key. Whatever the '
+        + 'server says, this phone then makes a key without them or writes nothing.',
     // The design addendum's (e) (the fifth deciding review's BLOCKING finding): what the new key protects is this phone's writes.
     newKeyMade: (who: string[]) => `The list has a new key because ${both(who)} ${who.length > 1 ? 'are' : 'is'} no longer ${who.length > 1 ? 'admins' : 'an admin'}. `
         + `Nothing this phone writes from now on can be read with the keys ${both(who)} had.`,
@@ -795,6 +807,11 @@ export const NAMES_COPY = {
             ? `This phone has sent the new key to ${both(sent)}. It will send it to ${both(unsent)} ${later}`
             : `This phone will send the new key to ${both(unsent)} ${later}`;
     },
+    /** A key this phone had removed, carried into the history it took (Addendum 2, ruling 2): the forced drop landed. */
+    newKeyCarried: (who: string[]) => `The list has a new key without ${both(who)}: this phone had removed their key, and the history it took hadn’t.`,
+    /** The walk dropped a key this phone trusted that the server still lists (Addendum 2, ruling 5). */
+    checkAgain: (who: string, n: number) => `Key ${n} removed ${at(who)}’s key. If ${at(who)} is an admin again, check each other’s phones again: `
+        + `a check made before this phone took key ${n} doesn’t count past it.`,
     listKey: (n: number, code: string) => `This phone adds names under list key ${n}, code ${code}.`,
     compareListKey: 'When you check each other, compare this line too. If it differs, open the list again on both phones. '
         + 'If it still differs, the server is showing your phones different things: add no names until it matches, and tell your admins.',
@@ -855,8 +872,9 @@ export const NAMES_COPY = {
     makeNewTitle: 'Make a new key?',
     takeHistoryButton: (who: string) => `Take ${at(who)}’s history`,
     takeHistoryTitle: (who: string) => `Take ${at(who)}’s history?`,
-    takeHistory: (who: string) => `This phone follows the key history ${at(who)}’s phone has, from the last key both share. The keys it holds `
-        + 'from the other history stay on this phone, for reading only.',
+    takeHistory: (who: string) => `This phone follows the key history ${at(who)}’s phone has, from the last key both share. It keeps the `
+        + 'other history’s keys for reading and passes them on with the rest, but never writes under them again. An admin this phone had '
+        + 'removed stays removed: before it writes, it makes a key without them.',
     sendAgainButton: (who: string) => `Send the keys to ${at(who)} again`,
     myKeyTitle: 'Your phone’s key',
     myKey: 'The other admin scans this QR code, or compares the 20 digits with what their phone shows. Show it only to someone you’re with.',

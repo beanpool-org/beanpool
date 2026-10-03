@@ -20,6 +20,23 @@ describe('PublicAddressPanel Component', () => {
         vi.clearAllMocks();
     });
 
+    it('an admin, who is not shown the tunnel token, is told only an owner can see it', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const body = String(url).includes('/api/local/admin/public-address/status')
+                ? { success: true, status: 'live', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', tunnelTokenOwnerOnly: true }
+                : { success: true, logs: [] };
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('cairns.beanpool.org')).toBeInTheDocument();
+        });
+        expect(screen.getByTestId('public-address-token-owner-only')).toHaveTextContent('Only an owner can see the tunnel token.');
+        expect(screen.queryByLabelText(/Tunnel Token/i)).not.toBeInTheDocument();
+    });
+
     it('renders with a real payload (status live, tunnel token, and live logs)', async () => {
         const realPayload = {
             success: true,

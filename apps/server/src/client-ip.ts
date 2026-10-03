@@ -185,6 +185,23 @@ export function isSharedSourceKey(key: string, now = Date.now()): boolean {
     return seen !== undefined && now - seen <= FORWARDER_MEMORY_MS;
 }
 
+/**
+ * Whether `addr` may stand for many people rather than one client: not an address, loopback, private or link-local,
+ * one of our trusted proxies (one that sent no forwarding header), or a peer that has recently forwarded for others
+ * without being trusted (isSharedSourceKey). Two requests from such an address say nothing about one network.
+ */
+export function standsForMany(addr: string | undefined | null): boolean {
+    const ip = normalizeIp(addr);
+    if (!net.isIP(ip)) return true;
+    if (net.isIPv4(ip)) {
+        const [o1, o2] = ip.split('.').map(Number);
+        if (o1 === 127 || (o1 === 169 && o2 === 254)) return true;
+    } else if (ip === '::1' || /^fe[89ab][0-9a-f]:/i.test(ip)) {
+        return true;
+    }
+    return isPrivate(ip) || isTrustedProxy(ip) || isSharedSourceKey(limiterKeyForIp(ip));
+}
+
 /** Tests only. */
 export function resetUntrustedForwardersForTests(): void {
     untrustedForwarders.clear();

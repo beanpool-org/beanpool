@@ -29,6 +29,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
+import { resolveClientIp, setTrustConfigForTests } from './client-ip.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
@@ -37,6 +38,7 @@ import {
     approvePairing,
     confirmPairing,
     createPairing,
+    describePairing,
     redeemPairing,
     pairingMessage,
     bindingCookieName,
@@ -396,6 +398,30 @@ async function main() {
         const other = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(freshIp()) });
         assert(other.status === 200 && other.body.sameNetwork === false && other.body.fromAddress === b.ip,
             'a phone somewhere else is not told "same network", and still sees the computer\'s address');
+
+        // An address that stands for many people says nothing about one network (4171995134).
+        const local = await call('POST', '/api/local/admin/auth/pairing', { body: {} });
+        const fromLoopback = await call('GET', `/api/local/admin/auth/pairing/${local.body.pairingId}`);
+        assert(local.status === 200 && fromLoopback.status === 200 && fromLoopback.body.sameNetwork === false,
+            `a computer and a phone that both reach the node as its local proxy (no forwarding header) are not told "same network" (${fromLoopback.body?.sameNetwork})`);
+        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        try {
+            const proxied = await call('POST', '/api/local/admin/auth/pairing', { body: {}, headers: { 'x-forwarded-for': '203.0.113.66' } });
+            const look = await call('GET', `/api/local/admin/auth/pairing/${proxied.body.pairingId}`, { headers: { 'x-forwarded-for': '192.0.2.9' } });
+            assert(proxied.status === 200 && look.status === 200 && look.body.sameNetwork === false,
+                `behind a reverse proxy the node doesn't trust, the attacker's computer and the admin's phone are not told "same network" (${look.body?.sameNetwork})`);
+        } finally { setTrustConfigForTests(undefined); }
+        const forwarder = '198.51.100.20';
+        resolveClientIp(forwarder, { 'x-forwarded-for': '203.0.113.66' }); // a peer that forwards for others, untrusted
+        const viaForwarder = createPairing({ clientKey: 'k-forwarder', requesterAddress: forwarder });
+        const seen = viaForwarder.ok ? describePairing(viaForwarder.pairingId, Date.now(), forwarder) : null;
+        assert(!!seen && seen.ok && seen.sameNetwork === false,
+            'a public address that has forwarded for others (an untrusted proxy) is never "same network"');
+        for (const [computer, phone] of [['10.0.0.5', '10.0.0.5'], ['192.168.1.20', '192.168.1.20'], ['169.254.1.1', '169.254.1.1'], ['::1', '::1']]) {
+            const p = createPairing({ clientKey: `k-${computer}`, requesterAddress: computer });
+            const d = p.ok ? describePairing(p.pairingId, Date.now(), phone) : null;
+            assert(!!d && d.ok && d.sameNetwork === false, `a private, link-local or loopback address (${computer}) is never "same network"`);
+        }
     }
 
     // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──

@@ -41,7 +41,7 @@ import {
 } from './admin-key-auth.js';
 import { settingsSigninText, verifyStatementSignature } from './engine/member-signature.js';
 import { logger } from './logger.js';
-import { limiterKeyForIp } from './client-ip.js';
+import { limiterKeyForIp, standsForMany } from './client-ip.js';
 
 export const PAIRING_TTL_MS = 2 * 60_000;
 /** Live pairings across the whole node. A page holds one; this only stops a flood. */
@@ -210,7 +210,10 @@ export interface PairingDescription {
     askedSecondsAgo: number;
     /** The address the computer asked from, as this node saw it. Learned from the node, never from the QR. */
     fromAddress: string;
-    /** The phone looking it up is on the computer's network (same address, or the same IPv6 /64). */
+    /**
+     * The phone looking it up is on the computer's network (same address, or the same IPv6 /64). Never for an address
+     * that stands for many people (standsForMany: a proxy the node can't see past, loopback, a private address).
+     */
     sameNetwork: boolean;
 }
 
@@ -225,7 +228,6 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
     if (!p) return { ok: false, status: 404, error: 'That code is not known here. Get a new code on the computer.' };
     if (expired(p, now)) return { ok: false, status: 410, error: 'That code has expired. Get a new code on the computer.' };
     if (p.status !== 'waiting') return { ok: false, status: 410, error: 'That code was already used. Get a new code on the computer.' };
-    const known = p.requesterAddress !== 'unknown';
     return {
         ok: true,
         shortCode: p.shortCode,
@@ -234,7 +236,8 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
         expiresInSeconds: Math.max(0, Math.round((p.expiresAt - now) / 1000)),
         askedSecondsAgo: Math.max(0, Math.round((now - p.createdAt) / 1000)),
         fromAddress: p.requesterAddress,
-        sameNetwork: known && !!viewerAddress && limiterKeyForIp(viewerAddress) === limiterKeyForIp(p.requesterAddress),
+        sameNetwork: !!viewerAddress && !standsForMany(viewerAddress) && !standsForMany(p.requesterAddress)
+            && limiterKeyForIp(viewerAddress) === limiterKeyForIp(p.requesterAddress),
     };
 }
 

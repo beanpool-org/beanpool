@@ -31,6 +31,7 @@ import {
     readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest, signinMessage,
     approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
+    DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
 } from '../settings-signin';
 import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
 
@@ -291,5 +292,19 @@ describe('what the approval screen says', () => {
 
     it('tells the owner which two digits to type on the computer', () => {
         expect(confirmDigitsLine('47')).toBe('On the computer, type 47');
+    });
+
+    it('says never to read the digits to anyone: only type them yourself, on the computer you just opened (4171995285)', () => {
+        expect(DIGITS_PRIVATE).toMatch(/never read them out or send them to anyone/i);
+        expect(DIGITS_PRIVATE).toMatch(/type them yourself/i);
+    });
+
+    it("keeps the digits up until the computer's 30 seconds have run out: Done waits, and says how long", () => {
+        expect(DIGITS_SHOWN_MS).toBe(30_000);
+        expect(digitsDone(DIGITS_SHOWN_MS)).toEqual({ enabled: false, label: 'Done (0:30)' });
+        expect(digitsDone(12_400)).toEqual({ enabled: false, label: 'Done (0:13)' });
+        expect(digitsDone(1)).toEqual({ enabled: false, label: 'Done (0:01)' });
+        expect(digitsDone(0)).toEqual({ enabled: true, label: 'Done' });
+        expect(digitsDone(-5_000)).toEqual({ enabled: true, label: 'Done' });
     });
 });

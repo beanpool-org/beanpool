@@ -17,6 +17,7 @@ import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
     SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
+    DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
     type ApproveOutcome, type PairingLookup,
 } from '../utils/settings-signin';
 import type { SettingsSigninQr } from '@beanpool/core';
@@ -39,6 +40,8 @@ export default function SettingsSigninScreen() {
     const [done, setDone] = useState(false);
     /** The two digits the computer must type (a node with number matching), shown once approved. */
     const [confirmCode, setConfirmCode] = useState<string | null>(null);
+    /** When the computer's 30 seconds to type them run out, by this phone's clock (a little after the node's). */
+    const [digitsUntil, setDigitsUntil] = useState(0);
     const [now, setNow] = useState(() => Date.now());
     const [totp, setTotp] = useState<{ continueWith: (code: string) => Promise<ApproveOutcome>; wrongCode: boolean } | null>(null);
     const [code, setCode] = useState('');
@@ -77,11 +80,12 @@ export default function SettingsSigninScreen() {
     };
 
     useEffect(() => {
-        if (!found || done) return;
+        if (!found || (done && !confirmCode)) return;
         setNow(Date.now());
         const t = setInterval(() => setNow(Date.now()), 1000);
         return () => clearInterval(t);
-    }, [found, done]);
+    }, [found, done, confirmCode]);
+    const digitsDoneButton = digitsDone(digitsUntil - now);
     const openSeconds = found ? Math.max(0, Math.floor((now - found.openedAt) / 1000)) : 0;
 
     const handle = (out: ApproveOutcome) => {
@@ -90,6 +94,8 @@ export default function SettingsSigninScreen() {
                 setTotp(null);
                 setCode('');
                 setConfirmCode(out.confirmCode ?? null);
+                setDigitsUntil(Date.now() + DIGITS_SHOWN_MS);
+                setNow(Date.now());
                 setDone(true);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                 return;
@@ -202,7 +208,7 @@ export default function SettingsSigninScreen() {
                     )}
             </View>
 
-            <Modal visible={!!found} transparent animationType="slide" onRequestClose={busy ? () => {} : resumeScanning}>
+            <Modal visible={!!found} transparent animationType="slide" onRequestClose={busy || (done && confirmCode && !digitsDoneButton.enabled) ? () => {} : resumeScanning}>
                 <View style={styles.sheetBackdrop}>
                     <ScrollView
                         style={[styles.sheet, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}
@@ -219,8 +225,15 @@ export default function SettingsSigninScreen() {
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
                                     The computer opens {communityName}'s Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.
                                 </Text>
-                                <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.back()} accessibilityRole="button">
-                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>Done</Text>
+                                <Text style={[styles.body, { color: colors.text.heading, fontWeight: '700' }]}>{DIGITS_PRIVATE}</Text>
+                                <Pressable
+                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: digitsDoneButton.enabled ? 1 : 0.5 }]}
+                                    onPress={() => router.back()}
+                                    disabled={!digitsDoneButton.enabled}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ disabled: !digitsDoneButton.enabled }}
+                                >
+                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{digitsDoneButton.label}</Text>
                                 </Pressable>
                             </View>
                         ) : done ? (

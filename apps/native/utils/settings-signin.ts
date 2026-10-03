@@ -153,6 +153,18 @@ export function confirmDigitsLine(code: string): string {
     return `On the computer, type ${code}`;
 }
 
+/** Under the digits: the one move left to someone who sent the QR is to ask for them (4171995285). */
+export const DIGITS_PRIVATE = 'Never read them out or send them to anyone: type them yourself, on the computer you just opened.';
+
+/** How long the computer has to type the digits (PAIRING_CONFIRM_TTL_MS on the node), counted from the approval. */
+export const DIGITS_SHOWN_MS = 30_000;
+
+/** The digits' Done button: held until the computer's time is up, so a habit tap can't hide them before they're typed. */
+export function digitsDone(msLeft: number): { enabled: boolean; label: string } {
+    if (msLeft <= 0) return { enabled: true, label: 'Done' };
+    return { enabled: false, label: `Done (0:${String(Math.ceil(msLeft / 1000)).padStart(2, '0')})` };
+}
+
 /** The old text, for a node older than request binding. Must match its pairingMessage() in settings-signin-pairing.ts. */
 export function signinMessage(action: 'approve' | 'decline', qr: SettingsSigninQr): string {
     return oldPairingText(action, qr.pairingId, qr.shortCode);

@@ -550,11 +550,14 @@ export async function saveNamesCopiesBeforeLeaving(
             const kept = await readKeptPin(store, identity.publicKey, anchor);
             if (kept.kind !== 'pin') return null;
             const head = kept.pin.chain[kept.pin.chain.length - 1];
-            if (left() <= 0) return { anchor, onlyKey: null };
-            const s = await fetchNamesState(anchor, identity, left());
             const me = identity.publicKey.toLowerCase();
+            // The node's holder list unread (no time left, or the state failed): decided from the pin, so a sole admin is
+            // never told another admin will send the keys.
+            const pinOnly = head && !kept.pin.trusted.some((k) => k !== me && !(k in kept.pin.dropped)) ? head.n : null;
+            if (left() <= 0) return { anchor, onlyKey: pinOnly };
+            const s = await fetchNamesState(anchor, identity, left());
             const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
-            const onlyKey = head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
+            const onlyKey = !s.ok ? pinOnly : head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
             if (!s.ok || s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
             const saved = await saveCopy(anchor, identity, store, kept.pin, s.value, left);
             if (!saved.ok) return { anchor, onlyKey };

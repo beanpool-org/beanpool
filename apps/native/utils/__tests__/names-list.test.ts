@@ -2948,12 +2948,23 @@ describe('§8 23. Sign Out saves the copy first; what it says when the node didn
         expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
     });
 
-    it('the state can\'t be read: not confirmed, with the general words, and no copy is sent', async () => {
+    it('the state can\'t be read, a sole admin with no copy on the node: decided from the pin, the only-copy words and the PDF', async () => {
         const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('the state can\'t be read, another admin trusted on the pin: the general words, and no copy is sent', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
         answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
         const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
         expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
-        expect(namesSignOutWords(out)!.pdf).toBe(false);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
     });
 
@@ -3086,7 +3097,7 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         return r;
     }
 
-    it('a node that never answers the state: not confirmed at 10 s (not 120 s), with the general words', async () => {
+    it('a node that never answers the state: not confirmed at 10 s (not 120 s); a sole admin gets the only-copy words', async () => {
         const { phones: [owen] } = await community(['Owen'], true);
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
         hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
@@ -3095,8 +3106,8 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         expect(r.at).toBeNull();
         await vi.advanceTimersByTimeAsync(1);
         expect(r.at).toBe(NAMES_SIGN_OUT_REQUEST_MS);
-        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
-        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
     });
 
     it('the state comes, the copy\'s PUT never answers: not confirmed 10 s later, with the only-holder words', async () => {

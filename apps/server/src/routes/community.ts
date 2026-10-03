@@ -87,7 +87,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
-import { membersSnapshotKey, sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
+import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -2163,8 +2163,9 @@ router.get('/api/members', async (ctx) => {
         }
     }
     if (ready) {
-        // Under the cap too, weighed at what a send holds (a window of the shared bytes), and cut off at its deadline.
-        await heavyRead(ctx, 'members-snapshot', () => sendMembersSnapshot(ctx, ready), SNAPSHOT_SEND_WEIGHT);
+        // Under the cap too, weighed at what a send holds (a window of the shared bytes, and the bytes themselves while no
+        // other send in flight holds them), and cut off at its deadline.
+        await heavyRead(ctx, 'members-snapshot', () => sendMembersSnapshot(ctx, ready), () => snapshotSendWeight(ctx, ready));
         return;
     }
 

@@ -400,6 +400,52 @@ export async function setAppLockEnabled(enabled: boolean): Promise<void> {
     }
 }
 
+/** Set once App Lock has been turned on (or found on) for a role holder, so that turning it off afterwards sticks. */
+const APP_LOCK_ROLE_DEFAULT_KEY = 'beanpool_app_lock_role_default';
+
+export type RoleAppLockResult = 'turned-on' | 'already-on' | 'left-off' | 'no-screen-lock' | 'failed';
+
+/**
+ * App Lock on by default for anyone holding a role on their community: owner, admin or moderator (decision D3,
+ * 2026-10-03). Key sign-ins no longer ask for the node's 6-digit code (D2): the phone's own lock is a role holder's
+ * second factor, and App Lock puts it in front of the app as well as in front of Manage. Once only: whoever turns it
+ * off afterwards keeps it off ('left-off'). A phone with no screen lock, or one that can't say, is left alone (App Lock
+ * would ask nothing) and is turned on at a later call once it has one. Never a gate, and never a false 'turned-on': a
+ * setting that can't be saved answers 'failed' and leaves the once-only mark unset.
+ */
+export async function turnAppLockOnForRole(): Promise<RoleAppLockResult> {
+    try {
+        const done = isWeb ? localStorage.getItem(APP_LOCK_ROLE_DEFAULT_KEY) : await SecureStore.getItemAsync(APP_LOCK_ROLE_DEFAULT_KEY);
+        const on = await readAppLockSetting();
+        const markDone = () => isWeb
+            ? Promise.resolve(localStorage.setItem(APP_LOCK_ROLE_DEFAULT_KEY, 'true'))
+            : SecureStore.setItemAsync(APP_LOCK_ROLE_DEFAULT_KEY, 'true');
+        if (on) {
+            if (done !== 'true') await markDone();
+            return 'already-on';
+        }
+        if (done === 'true') return 'left-off';
+        const level = await LocalAuthentication.getEnrolledLevelAsync();
+        if (level === LocalAuthentication.SecurityLevel.NONE) return 'no-screen-lock';
+        if (isWeb) {
+            localStorage.setItem(APP_LOCK_KEY, 'true');
+        } else {
+            await SecureStore.setItemAsync(APP_LOCK_KEY, 'true');
+        }
+        appLockLastKnown = true;
+        await markDone();
+        return 'turned-on';
+    } catch {
+        return 'failed';
+    }
+}
+
+/** What the app says when {@link turnAppLockOnForRole} turned App Lock on. */
+export const APP_LOCK_ON_FOR_ROLE = (communityName: string) =>
+    `App Lock is on. You help run ${communityName}, so BeanPool now asks for your phone's own lock (fingerprint, face or PIN) when it ` +
+    'opens. Your phone\'s lock is what keeps your role safe if someone else picks it up. You can turn it off in ' +
+    'Settings → App Lock.';
+
 /** Settings' App Lock, turned on on a phone with no screen lock: it would ask nothing, so it stays off and says why. */
 export const APP_LOCK_NEEDS_SCREEN_LOCK =
     "App Lock asks for your phone's own screen lock (a PIN, pattern, password, fingerprint or face) when BeanPool " +

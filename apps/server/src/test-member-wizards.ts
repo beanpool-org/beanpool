@@ -538,16 +538,35 @@ async function main() {
     db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(oldCarolKey);
     db.prepare(`INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
                 VALUES ('carol-keep', ?, 'admin', '2026-01-01T00:00:00.000Z', ?, 2, NULL)`).run(oldCarolKey, operatorPubkey);
-    const carolCode = issueRekeyCode(oldCarolKey, operatorPubkey).code;
+    // An admin may not re-key an owner or admin (a held-aside role counts): it moves the role. The password (owner level) may.
+    throws(() => issueRekeyCode(oldCarolKey, operatorPubkey), /Only an owner can re-key an owner or admin/, 'an admin is refused a code for a suspended admin');
+    assert(!db.prepare('SELECT 1 FROM rekey_requests WHERE old_pubkey = ?').get(oldCarolKey) && !isKeyInvalidated(oldCarolKey),
+        '…before any write: no code, the key still works');
+    const carolCode = issueRekeyCode(oldCarolKey, 'owner:password').code;
+    throws(() => completeRekey(oldCarolKey, generateValidPubkey(), carolCode, operatorPubkey), /Only an owner can re-key an owner or admin/,
+        'an admin is refused completing an admin\'s re-key that an owner issued');
     assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(oldCarolKey) as any)?.status === 'disabled',
         'issuing a re-key code leaves a suspended member suspended');
     const newCarolKey = generateValidPubkey();
-    completeRekey(oldCarolKey, newCarolKey, carolCode, operatorPubkey);
+    completeRekey(oldCarolKey, newCarolKey, carolCode, 'owner:password');
     const carolHeld = db.prepare('SELECT member_pubkey, role, session_epoch FROM suspended_node_roles WHERE decision_id = ?').get('carol-keep') as any;
     assert(carolHeld?.member_pubkey === newCarolKey && carolHeld.role === 'admin' && carolHeld.session_epoch === 2,
         `the held admin role moves to the new key (got ${JSON.stringify(carolHeld)})`);
     assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(newCarolKey) as any)?.status === 'disabled',
         'and the member is still suspended under the new key');
+
+    // Re-keying yourself stays yours, an owner's and an admin's alike. Completion names the operator who issued the code
+    // (routes/community.ts), here the old key, by then suspended and no longer owner level: it must still go through.
+    for (const role of ['owner', 'admin'] as const) {
+        const selfOld = generateValidPubkey();
+        makeMember(`self_${role}`, selfOld);
+        db.prepare("INSERT OR REPLACE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, ?, 'genesis')").run(selfOld, role);
+        const selfCode = issueRekeyCode(selfOld, selfOld).code;
+        const selfNew = generateValidPubkey();
+        completeRekey(selfOld, selfNew, selfCode, selfOld);
+        assert((db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(selfNew) as any)?.role === role,
+            `an ${role} re-keys their own key and keeps the ${role} role`);
+    }
 
     // =========================================================================
     // PART 2: OFFBOARDING WIZARD & TWO-PERSON RULE ENFORCEMENT

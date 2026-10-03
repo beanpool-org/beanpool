@@ -1190,6 +1190,8 @@ async function main(): Promise<void> {
             // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
             'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
                 signedFor: 'localhost', signature: 'AAAA' },
+            // The QR sign-in's two digits, typed by a browser that holds no binding cookie for the pairing.
+            'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1261,7 +1263,7 @@ async function main(): Promise<void> {
             'GET /api/local/admin/auth/break-glass/status', 'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',
             'POST /api/local/admin/auth/enrol', 'POST /api/local/admin/auth/exchange', 'POST /api/local/admin/auth/logout',
             'POST /api/local/admin/auth/pairing', 'GET /api/local/admin/auth/pairing/:id', 'POST /api/local/admin/auth/pairing/:id/approve',
-            'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/password',
+            'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/password',
             'POST /api/local/admin/auth/revoke-all',
             'GET /api/local/admin/auth/session', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/backup',
             'POST /api/local/admin/backup-config', 'GET /api/local/admin/backup-enroll', 'POST /api/local/admin/backup-status',

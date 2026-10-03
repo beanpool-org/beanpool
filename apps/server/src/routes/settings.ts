@@ -327,7 +327,9 @@ router.post('/api/local/admin/node/config', async (ctx) => {
     // the member count the community had turned off. Settings sends every field (null clears the service area).
     const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours })
         .filter(([, v]) => v !== undefined));
-    ctx.body = withKnockSetting(updateNodeConfig(sent));
+    // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
+    // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.
+    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent)));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {

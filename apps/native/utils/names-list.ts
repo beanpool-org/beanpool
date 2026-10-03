@@ -399,14 +399,17 @@ const copyFailure = (code: string, message: string): NamesFailure => ({ ok: fals
  * Saves this pin's locked copy on the node, unless the node already confirmed this very copy (on the pin's chain; the
  * caller holds it). The pin with its copy number moved on is kept on this phone first, so a retry reuses the number and
  * the same copy (`exists`); a 409 `stale_copy` moves past the node's number once. A failure is returned, never thrown:
- * the caller then sends neither the generation nor the shares that depend on it (design §9.4). Returns the pin as kept.
+ * the caller then sends neither the generation nor the shares that depend on it (design §9.4). Returns the pin as kept,
+ * and the node's copy as it now stands (`mine`), for a later step of the same request to pass on.
  */
-async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<{ ok: true; pin: NamesPin } | NamesFailure> {
-    if (state.myCopy === undefined) return { ok: true, pin };
+async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<{ ok: true; pin: NamesPin; mine: NamesMyCopy | null | undefined } | NamesFailure> {
+    if (state.myCopy === undefined) return { ok: true, pin, mine: undefined };
     const label = namesTrustStoreKey(identity.publicKey, anchor);
     const part = copiedPart(pin);
     const last = await lastCopied(store, identity.publicKey, anchor);
-    if (last && last.seq === pin.copy.seq && last.part === part) return { ok: true, pin };
+    // Already there: the node's own word matches the copy this phone last saw confirmed, and the pin is unchanged since.
+    const mine = state.myCopy;
+    if (last && mine && last.seq === pin.copy.seq && last.part === part && mine.seq === last.seq && mine.digest === last.digest) return { ok: true, pin, mine };
     // A newer copy on the node is another phone's (design §3, "higher seq"): never written over before stage 3b's merge.
     if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNewer);
     if ((copiesPausedUntil.get(label) ?? 0) > Date.now()) return copyFailure('too_many_copies', NAMES_COPY.copyNotSaved);
@@ -432,7 +435,7 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
         if (put.ok) {
             copiesInFlight.delete(label);
             await keepCopied(store, identity.publicKey, anchor, { seq: copy.seq, part, digest: copy.boxDigest });
-            return { ok: true, pin: now };
+            return { ok: true, pin: now, mine: { seq: copy.seq, headN: copy.headN, headId: copy.headId, savedAt: copy.savedAt, digest: copy.boxDigest } };
         }
         if (put.code === 'too_many_copies') copiesPausedUntil.set(label, Date.now() + COPY_HOUR_MS);
         if (!(put.code === 'stale_copy' && typeof put.seq === 'number' && round === 0)) return put;
@@ -814,7 +817,7 @@ async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: Na
     // sent no header since isn't one, and its own new key is refused (409 `ask_for_share`). It says so by sending its
     // signed header to the admins it trusts (never to a key this statement drops), then sends the statement once more.
     const claim = first.code === 'ask_for_share' ? await claimHeldKey(anchor, identity, synced, drops) : false;
-    if (claim === true) return sendGeneration(anchor, identity, store, copied.pin, made.generation, synced.state);
+    if (claim === true) return sendGeneration(anchor, identity, store, copied.pin, made.generation, { myCopy: copied.mine });
     if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...copied.pin, pending: null });
     // A claim that ran out of time (round 15, :574): the open stops on it, as on a statement's own (one limit per open).
     return claim === false ? first : claim;

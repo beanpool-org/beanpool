@@ -570,6 +570,8 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
  * Does NOT disarm existing active 2FA or overwrite totpSecret until verified via /2fa/verify.
  */
 router.post('/api/local/admin/2fa/setup', async (ctx) => {
+    // First, so a refusal is never cached either: the answer carries the new secret and backup codes (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can set up 2FA')) return;
     const config = getLocalConfig();
@@ -729,6 +731,8 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
  * is not taken here. Stored as SHA-256 hashes like every backup code; the log line never carries a code.
  */
 router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can see new 2FA backup codes')) return;
@@ -751,7 +755,6 @@ router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
     updateLocalConfig({ totpBackupCodesHashes: backupCodes.map(hashBackupCode) });
     const by = (ctx.state as any).isKeySession ? `owner ${String((ctx.state as any).actor).slice(0, 12)}…` : 'the admin password';
     logger.security('AUTH', `New 2FA backup codes were made by ${by}; the old ones no longer work`);
-    ctx.set('Cache-Control', 'no-store');
     ctx.body = { success: true, backupCodes };
 });
 

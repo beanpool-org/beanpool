@@ -74,6 +74,7 @@ import {
     revokeAdminSession,
     enrolAdminOwnerKey,
     issueBreakGlassCode,
+    retireBreakGlassCode,
     createPasswordSession,
     setAdminSessionCookie,
     clearAdminSessionCookie,
@@ -301,12 +302,15 @@ const revocationNonces = new NonceStore(60_000);
 router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     let targetPubkey = body.memberPubkey || body.pubkey;
+    // The caller's own key, from their authentication alone (a key session, or the app's signature), never the body.
+    let selfPubkey = '';
 
     // Check if called with an active admin session or password auth
     const isAuthed = await checkAdminAuth(ctx as any);
     if (isAuthed) {
         const callerPubkey = (ctx.state as any)?.actor;
         const callerRole = (ctx.state as any)?.adminRole;
+        if ((ctx.state as any)?.isKeySession && typeof callerPubkey === 'string') selfPubkey = callerPubkey;
         if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
             ctx.status = 403;
             ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
@@ -342,6 +346,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
+                selfPubkey = verdict.signer;
             } else {
                 ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
                 ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
@@ -362,12 +367,18 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     }
 
     const newEpoch = revokeAllMemberSessions(targetPubkey);
+    // An owner signing out their OWN sessions everywhere (a key session naming itself or nobody, or the app's signed
+    // request) also retires their break-glass code (#1531), so a code a stolen session made does not outlive it. Signing
+    // someone else out leaves their code alone, as does the password, which is nobody's own session.
+    const breakGlassCodeRetired = !!selfPubkey && selfPubkey === targetPubkey && nodeRoleOf(targetPubkey) === 'owner'
+        && retireBreakGlassCode(targetPubkey);
     clearAdminSessionCookie(ctx);
     ctx.status = 200;
     ctx.body = {
         success: true,
         memberPubkey: targetPubkey,
         sessionEpoch: newEpoch,
+        breakGlassCodeRetired,
     };
 });
 
@@ -488,6 +499,8 @@ function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: strin
 }
 
 const handleEnrol = async (ctx: any) => {
+    // First, so a refusal is never cached either: a new owner's answer carries their break-glass code (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
@@ -525,6 +538,7 @@ const handleEnrol = async (ctx: any) => {
             actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
             isBreakGlass,
             role: requestedRole,
+            madeBy: (ctx.state as any)?.isKeySession ? 'key-session' : isBreakGlass ? 'break-glass' : 'password',
         });
         ctx.body = {
             success: true,
@@ -554,6 +568,8 @@ router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
  * password, as it does every route but enrolment.
  */
 router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
@@ -580,8 +596,8 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
         }
     }
     try {
-        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password');
-        ctx.set('Cache-Control', 'no-store');
+        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
+            state.isKeySession ? 'key-session' : 'password');
         ctx.body = {
             success: true,
             memberPubkey: target,

@@ -1436,6 +1436,12 @@ export interface NodeRoleRecord {
     granted_at: string;
     granted_by: string | null;
     callsign?: string;
+    /** Whether this owner holds a break-glass code now. */
+    has_break_glass?: boolean;
+    /** When their code was last made (null: no code, or made before nodes recorded it; absent from an older node). */
+    break_glass_made_at?: string | null;
+    /** From which kind of session: 'key-session' | 'app' | 'password' | 'break-glass' | 'recover'. */
+    break_glass_made_by?: string | null;
 }
 
 export async function fetchNodeRoles(

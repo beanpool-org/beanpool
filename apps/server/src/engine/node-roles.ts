@@ -13,8 +13,24 @@ export interface NodeRoleRecord {
     granted_by: string | null;
     session_epoch?: number;
     has_break_glass?: boolean;
+    /** When the owner's break-glass code was last made; null with no code, or for one made before this was recorded. */
+    break_glass_made_at?: string | null;
+    /** From which kind of session it was made (BreakGlassMadeBy); null as break_glass_made_at is. */
+    break_glass_made_by?: BreakGlassMadeBy | null;
     callsign?: string;
 }
+
+/**
+ * The kind of session an owner's break-glass code was made from, shown in Settings beside each owner (#1531), so an owner
+ * who signed out everywhere can see whether a code made since was theirs:
+ *   - 'key-session': a key session in Settings (a computer's, or the phone's Manage hand-off): "Make a break-glass code",
+ *     or the enrolment that made them owner
+ *   - 'app': the app's own "Break-glass code" row, signed with the member key (routes/node-admin.ts)
+ *   - 'password': the admin password
+ *   - 'break-glass': an enrolment opened with another owner's break-glass code
+ *   - 'recover': `beanpool recover` on the server (recover-command.ts)
+ */
+export type BreakGlassMadeBy = 'key-session' | 'app' | 'password' | 'break-glass' | 'recover';
 
 /**
  * The rows whose node role acts: an active member's, not a visitor's (members.is_visitor). A visitor's row never joined,
@@ -122,7 +138,10 @@ export function getFirstNodeAdminPubkey(): string {
 export function listNodeRoles(): NodeRoleRecord[] {
     const rows = db.prepare(
         `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, nr.session_epoch,
-                (nr.break_glass_hash IS NOT NULL) as has_break_glass, m.callsign
+                (nr.break_glass_hash IS NOT NULL) as has_break_glass,
+                CASE WHEN nr.break_glass_hash IS NOT NULL THEN nr.break_glass_made_at END AS break_glass_made_at,
+                CASE WHEN nr.break_glass_hash IS NOT NULL THEN nr.break_glass_made_by END AS break_glass_made_by,
+                m.callsign
          FROM node_roles nr
          CROSS JOIN members m ON nr.member_pubkey = m.public_key
          WHERE m.status = 'active'
@@ -239,7 +258,8 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             (!!actorPubkey && isNodeOwner(actorPubkey));
 
         // Read inside the transaction, BEFORE the guard: the admin rule below depends on it.
-        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
+        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash, break_glass_made_at, break_glass_made_by FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as
+            { role: string; session_epoch: number; break_glass_hash: string | null; break_glass_made_at: string | null; break_glass_made_by: string | null } | undefined;
         const currentRole = existing?.role ?? null;
 
         if (role === 'owner') {
@@ -282,12 +302,15 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         }
         const epoch = existing ? (existing.role !== role ? existing.session_epoch + 1 : existing.session_epoch) : 0;
         const breakGlass = role === 'owner' ? (existing?.break_glass_hash || null) : null;
+        // When and from what the kept code was made travels with it (#1531); gone with it.
+        const madeAt = breakGlass ? (existing?.break_glass_made_at ?? null) : null;
+        const madeBy = breakGlass ? (existing?.break_glass_made_by ?? null) : null;
 
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(targetPubkey);
         db.prepare(
-            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
-             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)`
-        ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass);
+            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash, break_glass_made_at, break_glass_made_by)
+             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?)`
+        ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass, madeAt, madeBy);
         if (currentRole !== role) noteRoleChanged(targetPubkey);
     })();
     bumpMembersVersion();
@@ -372,11 +395,17 @@ export function bumpNodeRoleSessionEpoch(pubkey: string): number {
 }
 
 /**
- * Sets or clears the break_glass_hash for an owner in node_roles.
+ * Sets or clears the break_glass_hash for an owner in node_roles. A new hash is stamped with now and `madeBy` (the kind
+ * of session that made it, shown in Settings: BreakGlassMadeBy); clearing it clears both.
  */
-export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null): void {
+export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null, madeBy: BreakGlassMadeBy | null = null): void {
     if (!pubkey) return;
-    db.prepare("UPDATE node_roles SET break_glass_hash = ? WHERE member_pubkey = ?").run(hash, pubkey);
+    db.prepare(
+        `UPDATE node_roles SET break_glass_hash = ?,
+             break_glass_made_at = CASE WHEN ? IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END,
+             break_glass_made_by = CASE WHEN ? IS NULL THEN NULL ELSE ? END
+         WHERE member_pubkey = ?`
+    ).run(hash, hash, hash, madeBy, pubkey);
     noteTakeoverInputsChanged('break-glass code changed');
 }
 

@@ -145,11 +145,19 @@ export function ApplianceSection({
     const [changingPwd, setChangingPwd] = useState(false);
 
     // 2FA state
-    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string } | null>(null);
+    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string; backupCodesRemaining?: number } | null>(null);
     const [totpVerifyCode, setTotpVerifyCode] = useState('');
     // Turning 2FA off asks for a code from the authenticator (or a backup code) right now: the node refuses it on
     // the strength of an earlier sign-in alone.
     const [totpDisableCode, setTotpDisableCode] = useState('');
+    // Codes shown once (break-glass, 2FA backup): held in this component's state only, never stored, gone on Done.
+    const [breakGlassOwnerKey, setBreakGlassOwnerKey] = useState('');
+    const [breakGlassShown, setBreakGlassShown] = useState<string | null>(null);
+    const [breakGlassMessage, setBreakGlassMessage] = useState('');
+    const [backupCodesTotp, setBackupCodesTotp] = useState('');
+    const [backupCodesShown, setBackupCodesShown] = useState<string[] | null>(null);
+    const [backupCodesMessage, setBackupCodesMessage] = useState('');
+    const isOwnerViewer = rolesViewer.kind === 'password' || rolesViewer.role === 'owner';
     const [tfaMessage, setTfaMessage] = useState<string | null>(null);
 
     // Update check state
@@ -541,6 +549,60 @@ export function ApplianceSection({
             }
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : String(e));
+        }
+    };
+
+    // A key session makes a code for its own key; the password names the owner (the node refuses a key without the role).
+    const handleIssueBreakGlass = async () => {
+        setBreakGlassMessage('');
+        const memberPubkey = breakGlassOwnerKey.trim();
+        if (rolesViewer.kind === 'password' && !memberPubkey) {
+            setBreakGlassMessage("Paste the owner's member key the code is for.");
+            return;
+        }
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/break-glass/issue');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify(rolesViewer.kind === 'password' ? { memberPubkey } : {}),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.breakGlassCode) {
+                setBreakGlassShown(data.breakGlassCode);
+                setBreakGlassOwnerKey('');
+            } else {
+                setBreakGlassMessage(`No code was made: ${data.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            setBreakGlassMessage(e instanceof Error ? e.message : String(e));
+        }
+    };
+
+    const handleShowBackupCodes = async () => {
+        setBackupCodesMessage('');
+        const code = backupCodesTotp.trim();
+        if (!/^\d{6}$/.test(code)) {
+            setBackupCodesMessage('Enter the 6-digit code your authenticator app shows now.');
+            return;
+        }
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/backup-codes');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ code }),
+            });
+            const data = await res.json().catch(() => ({}));
+            setBackupCodesTotp('');
+            if (res.ok && Array.isArray(data.backupCodes)) {
+                setBackupCodesShown(data.backupCodes);
+                await load2faStatus();
+            } else {
+                setBackupCodesMessage(`No new codes: ${data.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            setBackupCodesMessage(e instanceof Error ? e.message : String(e));
         }
     };
 
@@ -1482,6 +1544,52 @@ export function ApplianceSection({
                                 </button>
                             </div>
                         )}
+                        {tfaStatus?.enabled && isOwnerViewer && (
+                            // New backup codes need the authenticator's current code, never a backup code; shown once.
+                            <div className="pt-3 border-t border-nature-800 space-y-2">
+                                {backupCodesShown ? (
+                                    <>
+                                        <p className="text-[11px] text-nature-300 m-0">
+                                            Your new backup codes. Each works once; the old ones no longer work. They are shown only now.
+                                        </p>
+                                        <ul className="grid grid-cols-2 gap-1 font-mono text-sm text-white list-none p-0 m-0 select-all" data-testid="backup-codes">
+                                            {backupCodesShown.map(c => <li key={c}>{c}</li>)}
+                                        </ul>
+                                        <button
+                                            type="button"
+                                            onClick={() => setBackupCodesShown(null)}
+                                            className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                        >
+                                            I have kept them safe
+                                        </button>
+                                    </>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                        <label htmlFor="tfa-backup-codes-code" className="w-full text-xs text-nature-400">
+                                            New backup codes ({tfaStatus?.backupCodesRemaining ?? 0} left): the 6-digit code your authenticator shows now
+                                        </label>
+                                        <input
+                                            id="tfa-backup-codes-code"
+                                            type="text"
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            value={backupCodesTotp}
+                                            onChange={(e) => setBackupCodesTotp(e.target.value)}
+                                            placeholder="123456"
+                                            className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleShowBackupCodes}
+                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                        >
+                                            Show new backup codes
+                                        </button>
+                                    </div>
+                                )}
+                                {backupCodesMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{backupCodesMessage}</p>}
+                            </div>
+                        )}
                     </div>
 
                     {/* Break-Glass Emergency Recovery Card (per admin-surface §2.2) */}
@@ -1520,23 +1628,54 @@ export function ApplianceSection({
                         </div>
 
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold text-nature-300">Enrol New Admin Key</span>
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-nature-800 text-nature-400 font-mono">
-                                    Non-functional placeholder
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-nature-400 m-0">
-                                Key-based cryptographic admin auth enrolment ships in Phase 3. Today, password authentication
-                                acts as interim owner action per admin-surface §2.5.
-                            </p>
-                            <button
-                                type="button"
-                                disabled
-                                className="w-full py-2.5 rounded-xl bg-nature-800 text-xs font-bold text-nature-500 border border-nature-700/50 cursor-not-allowed"
-                            >
-                                Enrol Device Key via Break-Glass (Unavailable in Phase 2)
-                            </button>
+                            <span className="text-xs font-semibold text-nature-300">Your break-glass code</span>
+                            {breakGlassShown ? (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-nature-300 m-0">
+                                        Write this down and keep it offline. It is shown once; any earlier code no longer works.
+                                    </p>
+                                    <p className="font-mono text-base text-white break-all select-all m-0" data-testid="break-glass-code">{breakGlassShown}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setBreakGlassShown(null)}
+                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                    >
+                                        I have kept it safe
+                                    </button>
+                                </div>
+                            ) : isOwnerViewer ? (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-nature-400 m-0">
+                                        {rolesViewer.kind === 'key'
+                                            ? 'Makes a new code for your own key. Any code you had before stops working.'
+                                            : "Signed in with the password: paste the member key of the owner the code is for. Any code they had before stops working. An owner can also make their own from the app's Manage screen."}
+                                    </p>
+                                    {rolesViewer.kind === 'password' && (
+                                        <>
+                                            <label htmlFor="break-glass-owner-key" className="block text-xs text-nature-400">Owner's member key</label>
+                                            <input
+                                                id="break-glass-owner-key"
+                                                type="text"
+                                                autoCapitalize="none"
+                                                spellCheck={false}
+                                                value={breakGlassOwnerKey}
+                                                onChange={(e) => setBreakGlassOwnerKey(e.target.value)}
+                                                className="w-full min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                                            />
+                                        </>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleIssueBreakGlass}
+                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                    >
+                                        Make a break-glass code
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-nature-400 m-0">Only an owner has a break-glass code.</p>
+                            )}
+                            {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>
 

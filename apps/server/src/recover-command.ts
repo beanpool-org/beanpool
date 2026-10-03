@@ -35,6 +35,8 @@ interface RecoverNotice {
     callsign: string;
     alreadyOwner: boolean;
     at: string;
+    /** Left by `beanpool claim --key` (claim-shell-owner.ts): the claim code it used up. */
+    claimId?: string;
 }
 
 export type RecoverResult =
@@ -107,6 +109,8 @@ export interface DeliverDeps {
     log: (message: string) => void;
     /** The node's caches that follow node_roles (member listings, the take-over inputs). */
     changed?: () => void;
+    /** A notice from `beanpool claim --key`: burn that claim code as the HTTP claim does (claim-code.ts burnClaimFromShell). */
+    burnClaim?: (claimId: string, pubkey: string) => void;
 }
 
 /** Each notice the command left: the announcement and the log line, once. Returns how many were delivered. Never throws. */
@@ -132,7 +136,12 @@ export function deliverRecoverNotices(deps: DeliverDeps, dir = dataDir()): numbe
         }
         if (!notice || typeof notice.pubkey !== 'string') continue;
         const who = `@${notice.callsign}`;
-        const body = notice.alreadyOwner
+        if (typeof notice.claimId === 'string') {
+            try { deps.burnClaim?.(notice.claimId, notice.pubkey); } catch { /* the owner row already closed the claim */ }
+        }
+        const body = typeof notice.claimId === 'string'
+            ? `Someone with access to this community's server ran "beanpool claim" and made ${who} its owner, with its one-time claim code ${notice.claimId}.`
+            : notice.alreadyOwner
             ? `Someone with access to this community's server ran "beanpool recover" and gave ${who}, an owner, a new break-glass code.`
             : `Someone with access to this community's server ran "beanpool recover" and made ${who} an owner of this community.`;
         try {

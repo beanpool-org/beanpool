@@ -25,7 +25,7 @@ const CLAIM_CODE = 'claim-1111-2222-3333-4444'; // what the server holds; must n
 
 type Answer = { status: number; body?: unknown } | 'network-error' | 'not-json' | 'hang';
 
-function stubNode(answers: Answer[]) {
+function stubNode(answers: Answer[], opts: { communityInfo?: { primaryAddress?: string | null; addresses?: string[] } } = {}) {
     const claimCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
     let i = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -46,6 +46,13 @@ function stubNode(answers: Answer[]) {
                 ok: answer.status >= 200 && answer.status < 300,
                 status: answer.status,
                 json: async () => answer.body,
+            } as Response;
+        }
+        if (url.endsWith('/api/community/info')) {
+            return {
+                ok: true,
+                status: 200,
+                json: async () => opts.communityInfo ?? { addresses: [], primaryAddress: null },
             } as Response;
         }
         throw new Error(`unexpected request ${url}`);
@@ -79,11 +86,12 @@ describe('AdminLoginCard: the unclaimed card', () => {
         vi.restoreAllMocks();
     });
 
-    function renderCard() {
+    function renderCard(nodeUrl = window.location.origin) {
         return render(
-            <AdminLoginCard nodeUrl={window.location.origin} onPasswordSession={onPasswordSession} onKeySession={onKeySession} />,
+            <AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={onPasswordSession} onKeySession={onKeySession} />,
         );
     }
+
 
     it('asks the claim route with no cookie and, while the node is unclaimed, shows the card instead of the form', async () => {
         const { claimCalls } = stubNode([unclaimed()]);
@@ -130,6 +138,43 @@ describe('AdminLoginCard: the unclaimed card', () => {
         await screen.findByTestId('claim-qr');
         expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}`);
     });
+
+    it('draws a QR using the node\'s own https address when the node has an address and the page is opened at that address', async () => {
+        const address = 'https://town.beanpool.org';
+        const origLocation = window.location;
+        const win = window as unknown as { location: Location };
+        delete (window as { location?: Location }).location;
+        win.location = new URL(address) as unknown as Location;
+        try {
+            stubNode([unclaimed({ address, addresses: ['town.beanpool.org'] })]);
+            renderCard(address);
+            await screen.findByTestId('claim-qr');
+            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(address)}&id=${CODE_ID}`);
+            expect(screen.getByTestId('claim-origin')).toHaveTextContent(address);
+        } finally {
+            win.location = origLocation;
+        }
+
+
+    });
+
+    it('falls back to the page\'s origin when the address field is hostile', async () => {
+        stubNode([unclaimed({ address: 'javascript:alert(1)' })]);
+        renderCard();
+        await screen.findByTestId('claim-qr');
+        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
+        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+    });
+
+    it('shows one line "Open this page at <address> to scan" instead of a QR when opened at an unlisted address', async () => {
+        stubNode([unclaimed({ address: 'https://town.beanpool.org', addresses: ['town.beanpool.org'] })]);
+        renderCard(); // opened at window.location.origin (http://localhost:3000, not town.beanpool.org)
+        const notice = await screen.findByTestId('claim-unlisted-notice');
+        expect(notice).toHaveTextContent('Open this page at https://town.beanpool.org to scan');
+        expect(screen.queryByTestId('claim-qr')).toBeNull();
+    });
+
+
 
     it('shows the sign-in form when the node has an owner', async () => {
         const { claimCalls } = stubNode([claimed]);

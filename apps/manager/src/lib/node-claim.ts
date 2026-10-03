@@ -9,6 +9,8 @@
  * never stand between an operator and the password.
  */
 
+import { audienceOf } from '@beanpool/core';
+
 export const CLAIM_PATH = '/api/local/claim';
 /** How often the unclaimed card asks again, so it turns into the sign-in the moment a phone claims the node. */
 export const CLAIM_POLL_MS = 5_000;
@@ -21,10 +23,48 @@ export type ClaimState =
     | { kind: 'unknown' }
     | { kind: 'claimed' }
     /** `password: false` once the node has no admin password (stage C); any other answer keeps the password's fold. */
-    | { kind: 'unclaimed'; codeId: string | null; communityName: string | null; password: boolean };
+    | {
+        kind: 'unclaimed';
+        codeId: string | null;
+        communityName: string | null;
+        password: boolean;
+        address: string | null;
+        addresses: string[];
+    };
 
 /** A claim code's public id: 8 lower-case hex digits (apps/server/src/claim-code.ts isClaimCodeId). */
 const CODE_ID = /^[0-9a-f]{8}$/;
+
+/**
+ * Sanitizes a node address into a valid https origin (e.g. `https://yourtown.beanpool.org`).
+ * Only https origins are ever used; any non-https scheme or hostile input returns null.
+ */
+export function sanitizeNodeAddress(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const s = raw.trim();
+    if (!s) return null;
+    try {
+        if (/^https:\/\//i.test(s)) {
+            const u = new URL(s);
+            if (u.protocol !== 'https:') return null;
+            if (u.username || u.password) return null;
+            if ((u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
+            if (!audienceOf(u.origin)) return null;
+            return u.origin;
+        }
+        if (/^[a-z][a-z0-9+.-]*:[^0-9]/i.test(s) || s.startsWith('//')) {
+            return null;
+        }
+        const u = new URL(`https://${s}`);
+        if (u.protocol !== 'https:') return null;
+        if (u.username || u.password) return null;
+        if ((u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
+        if (!audienceOf(u.origin)) return null;
+        return u.origin;
+    } catch {
+        return null;
+    }
+}
 
 export async function fetchClaimState(url: string, signal?: AbortSignal): Promise<ClaimState> {
     const ctl = new AbortController();
@@ -40,12 +80,53 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         const b = body as Record<string, unknown>;
         if (b.unclaimed === false) return { kind: 'claimed' };
         if (b.unclaimed !== true) return { kind: 'unknown' };
+
+        let rawAddress: unknown = b.address ?? b.primaryAddress ?? null;
+        let rawAddresses: unknown = Array.isArray(b.addresses) ? b.addresses : null;
+
+        if (!rawAddress) {
+            try {
+                const infoUrl = url.replace(/\/api\/local\/claim(\?.*)?$/, '/api/community/info$1');
+                if (infoUrl !== url) {
+                    const infoRes = await fetch(infoUrl, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: ctl.signal });
+                    if (infoRes.ok) {
+                        const infoBody = (await infoRes.json().catch(() => null)) as Record<string, unknown> | null;
+                        if (infoBody && typeof infoBody === 'object') {
+                            rawAddress = infoBody.primaryAddress ?? infoBody.address ?? null;
+                            if (!rawAddresses && Array.isArray(infoBody.addresses)) {
+                                rawAddresses = infoBody.addresses;
+                            }
+                        }
+
+                    }
+                }
+            } catch {
+                // Ignore failure on community-info, fallback to null
+            }
+        }
+
+        const addresses: string[] = [];
+        if (Array.isArray(rawAddresses)) {
+            for (const item of rawAddresses) {
+                if (typeof item === 'string' && item.trim()) {
+                    addresses.push(item.trim());
+                }
+            }
+        }
+
+        let address = sanitizeNodeAddress(rawAddress);
+        if (!address && addresses.length > 0) {
+            address = addresses.map(sanitizeNodeAddress).find((a): a is string => Boolean(a)) ?? null;
+        }
+
         return {
             kind: 'unclaimed',
             // Only something shaped like an id ever reaches the QR.
             codeId: typeof b.codeId === 'string' && CODE_ID.test(b.codeId) ? b.codeId : null,
             communityName: typeof b.communityName === 'string' && b.communityName.trim() ? b.communityName.trim() : null,
             password: b.password !== false,
+            address,
+            addresses,
         };
     } catch {
         return { kind: 'unknown' };
@@ -54,6 +135,7 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         signal?.removeEventListener('abort', onAbort);
     }
 }
+
 
 /**
  * The text of the card's QR: `beanpool://claim?node=<origin>&id=<codeId>`, the node URL-encoded as the settings

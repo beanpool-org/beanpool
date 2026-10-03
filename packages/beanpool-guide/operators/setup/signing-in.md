@@ -7,6 +7,10 @@ related: access-and-security, roles, first-time-setup, rate-limits
 
 There are three ways into Settings. The password is one shared secret for the whole server. The app's Manage button, and a computer you sign in by scanning a code with the app, sign in a named person with their own key.
 
+## Before the community has an owner
+
+On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then on your phone open BeanPool and choose **Claim a community**, or scan the QR code on the page. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in whenever it cannot ask the server. A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup.
+
 ## With the admin password
 
 Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Until then, tools that send the password with every request still work without a code (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.

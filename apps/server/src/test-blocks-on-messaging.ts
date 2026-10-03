@@ -51,6 +51,7 @@ import {
     createConversation, sendMessage, transfer, getAdminPubkey, runMarketplaceHygiene,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -615,12 +616,15 @@ async function main(): Promise<void> {
     assert(pushesTo(mo).length === 1 && pushesTo(mo)[0]?.data?.k === 'group.lead', `as one by someone they never blocked does (${pushesTo(mo).length})`);
 
     // The admin page's message: the node's words, sent under the operator's member key, which Ann has blocked.
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the message is sent with an owner's
+    // automation token, made before the operator is looked up (its owner may be the operator).
+    const ownerToken = ownerTokenHeaders('admin');
     const operator = getFirstNodeAdminPubkey() || getAdminPubkey();
     const annBlocksOp = await call('POST', ann, '/api/blocks', { targetPubkey: operator });
     pushes.length = 0;
     resetGatewayRateLimit();
     const adminRes = await realFetch(`${BASE}/api/local/admin/inbox/send`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': PW },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...ownerToken },
         body: JSON.stringify({ targetPubkey: ann.pk, message: 'The node will be down for an hour on Sunday.' }),
     });
     await sleep(50);

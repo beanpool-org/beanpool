@@ -5,7 +5,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
-import { guardTokenFetch, tokenCannotReach, knownTokenScope, OWNER_PHONE_EVENT, OWNER_PHONE_MESSAGE } from './token-guard';
+import { guardTokenFetch, tokenCannotReach, knownTokenScope, OWNER_PHONE_EVENT, OWNER_PHONE_MESSAGE, TOKEN_REPLACE_ADVICE } from './token-guard';
 import { forgetStandby, freezeNodeUser, fetchNodeData, buildAdminHeaders } from './node-client';
 import { OwnerPhoneBanner } from '../components/auth/OwnerPhoneBanner';
 
@@ -75,6 +75,35 @@ describe('a token never goes to the dashboard\'s own origin', () => {
         }
         expect(inner).not.toHaveBeenCalled();
         expect(events).toHaveLength(0);
+    });
+});
+
+describe('a 401 the node gives a token (revoked, expired or wrong)', () => {
+    const NODE_WORDS = 'Invalid, revoked or expired automation token';
+
+    it('says the node\'s own words and to make a new token from the phone, never a password', async () => {
+        inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: NODE_WORDS }), { status: 401, statusText: 'Unauthorized' }));
+        const res = await fetch(`${NODE}/api/local/admin/diagnostics`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+        expect(res.status).toBe(401);
+        expect(res.statusText).toBe(NODE_WORDS);
+        const body = await res.json() as { error: string };
+        expect(body.error).toContain(NODE_WORDS);
+        expect(body.error).toContain(TOKEN_REPLACE_ADVICE);
+        expect(TOKEN_REPLACE_ADVICE).toBe('Make a new token from your phone (Settings → Automation tokens)');
+        expect(JSON.stringify(body)).not.toMatch(/password/i);
+        expect(inner).toHaveBeenCalledTimes(1);
+        expect(events).toHaveLength(0);
+    });
+
+    it('a caller that shows the status line shows the node\'s words, not "Unauthorized"', async () => {
+        inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: NODE_WORDS }), { status: 401, statusText: 'Unauthorized' }));
+        await expect(fetchNodeData(NODE, TOKEN)).rejects.toThrow(NODE_WORDS);
+    });
+
+    it('a password\'s 401 is left as the node said it', async () => {
+        inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, statusText: 'Unauthorized' }));
+        const res = await fetch(`${NODE}/api/local/admin/diagnostics`, { headers: buildAdminHeaders(PASSWORD) });
+        expect(res.statusText).toBe('Unauthorized');
     });
 });
 

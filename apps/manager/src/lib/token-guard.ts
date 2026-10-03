@@ -8,6 +8,7 @@
  *   - a route on OWNER_ONLY_FOR_TOKENS is answered here with a 403 that says an owner's phone is needed, and nothing is
  *     sent to the node;
  *   - a request to the dashboard's own /api/manager routes is not sent at all: a token goes only to its own node;
+ *   - a 401 for a token (revoked, expired or wrong) keeps the node's words and says to make a new token on the phone;
  *   - a 403 from the node with code `token_not_allowed` (a route this list missed, a conditional owner-only change, or a
  *     read token asked to write) is given the same words.
  * Either way OWNER_PHONE_EVENT tells the page, which offers the phone sign-in (scan the code). A request without a token
@@ -20,6 +21,9 @@ export const OWNER_PHONE_MESSAGE = "This needs an owner's phone: sign in with yo
 /** The server's code on a token's 403 (admin-auth.ts TOKEN_REFUSED_CODE). */
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
 export const OWNER_PHONE_EVENT = 'bp:owner-phone-needed';
+/** What to do about a token the node refused (revoked, expired or wrong): never a password, which isn't sent. */
+export const TOKEN_REPLACE_ADVICE = 'Make a new token from your phone (Settings → Automation tokens)';
+const TOKEN_REFUSED_WORDS = 'The node refused this automation token';
 
 /**
  * Routes no token reaches. Each is owner-only on the server for every scope, or refused to every token; a backups
@@ -87,6 +91,22 @@ function ownerPhoneResponse(extra: Record<string, unknown> = {}): Response {
     });
 }
 
+/**
+ * A token's 401: the node's own words, in the status line too (many callers show `HTTP 401: <statusText>`), and in the
+ * body with what to do. It stays a 401, so the page's auth handling stops polling; no password is offered or sent.
+ */
+async function tokenRefusedResponse(res: Response): Promise<Response> {
+    const body = await res.clone().json().catch(() => null) as { error?: unknown } | null;
+    const said = typeof body?.error === 'string' && body.error.trim() ? body.error.trim().slice(0, 200) : TOKEN_REFUSED_WORDS;
+    // A status line holds Latin-1 only; anything else in the node's words is dropped there (the body keeps them).
+    const statusText = said.replace(/[^\x20-\x7e\xa0-\xff]/g, '').trim() || TOKEN_REFUSED_WORDS;
+    return new Response(JSON.stringify({ error: `${said}. ${TOKEN_REPLACE_ADVICE}`, tokenRefused: true }), {
+        status: 401,
+        statusText,
+        headers: { 'Content-Type': 'application/json' },
+    });
+}
+
 export function guardTokenFetch(fetchImpl: typeof fetch): typeof fetch {
     return async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
         const token = bearerOf(input, init);
@@ -107,6 +127,7 @@ export function guardTokenFetch(fetchImpl: typeof fetch): typeof fetch {
         const res = await fetchImpl(input, init);
         const said = res.headers.get('x-automation-token-scope');
         if (said) noteScope(token, said);
+        if (res.status === 401) return tokenRefusedResponse(res);
         if (res.status !== 403) return res;
         const body = await res.clone().json().catch(() => null) as { code?: unknown; scope?: unknown } | null;
         if (body?.code !== TOKEN_REFUSED_CODE) return res;

@@ -56,6 +56,8 @@ jobs:
         with:
           path: ${{ runner.temp }}/image-cache
           key: vault-image-${{ hashFiles('apps/vault/image/pins.env', 'apps/vault/image/mkosi/mkosi.conf') }}
+      - name: The --network setting's parsing (no build; both builds below stay dhcp, the default)
+        run: pnpm --filter @beanpool/vault exec vitest run src/__tests__/image-settings.test.ts
       - name: First build
         run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
       - name: Second build

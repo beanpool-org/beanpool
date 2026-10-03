@@ -191,7 +191,8 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
 
 ## The image (`image/`; host design §5.1 items 5 and 6)
 
-`image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir>` builds it with mkosi in a pinned container:
+`image/build.sh --custodian-keys <file> --version <x.y.z> --out <dir> [--network <setting>]` builds it with mkosi in a
+pinned container (`--network`: below):
 
 - Debian 13 from snapshot.debian.org at the time in `image/pins.env` (security updates from the same snapshot), the
   official Node build (SHA-256 pinned), the esbuild bundles of the keyholder, launcher and API, Caddy.
@@ -234,9 +235,21 @@ gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-releas
   `mlockall` is not used (Node has no call for it and the vault ships no native module): no swap is what keeps the
   keys off disk. `image/.../check-hygiene` checks all of this at every boot and prints it on the console.
 
-**Checking a build.** Build it yourself with the release's custodian keys and version, and compare: `image.json`
-(`{version, ukiSha256, roothash, imageHash}`) must be the release's `image` and `imageHash`, and every file the same
-bytes. `root-files.txt`, `uki-sections.txt`, `initrd-files.txt`, `esp-files.txt` and `partitions.txt` list every file
+**The host's network** (`build.sh --network`). The image's `etc/systemd/network/80-wan.network` takes its address by
+DHCP, with IPv6 router advertisements: the default, `--network dhcp`. A host that hands out no address (1984 VPS #1:
+measured 2026-10-03, no DHCP lease; its Debian has a static address) is built with
+`--network static:<ipv4>/<prefix>,<gateway>`: that file is written instead with the address and gateway (router
+advertisements kept, no DHCP sections; `image/image-settings.mjs`). The value is checked strictly (an IPv4 address,
+a prefix of 1 to 32, a gateway inside it that is neither the address nor the network or broadcast address) and
+anything else refuses to build. It is public and part of the reproducible build: it changes the image and its hash,
+and `image.json` records it as `"network": "static:…"` (a dhcp build's `image.json` has no `network` field, as
+before). The firewall's DHCP rules stay in both forms: with a static address networkd sends nothing to the DHCP
+ports, so they are harmless.
+
+**Checking a build.** Build it yourself with the release's custodian keys and version, and the same `--network` as
+the release's `image.json` (none there means dhcp, the default), and compare: `image.json`
+(`{version, ukiSha256, roothash, imageHash}`, and `network` when it is not dhcp) must be the release's `image` and
+`imageHash`, and every file the same bytes. `root-files.txt`, `uki-sections.txt`, `initrd-files.txt`, `esp-files.txt` and `partitions.txt` list every file
 of the system tree, the UKI and its initrd, the ESP and the install image's partitions with their hashes, to find
 where two builds differ.
 

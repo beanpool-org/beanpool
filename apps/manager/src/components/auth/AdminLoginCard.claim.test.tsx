@@ -27,6 +27,7 @@ type Answer = { status: number; body?: unknown } | 'network-error' | 'not-json' 
 
 function stubNode(answers: Answer[], opts: { communityInfo?: { primaryAddress?: string | null; addresses?: string[] } } = {}) {
     const claimCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const infoCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
     let i = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -49,6 +50,7 @@ function stubNode(answers: Answer[], opts: { communityInfo?: { primaryAddress?: 
             } as Response;
         }
         if (url.endsWith('/api/community/info')) {
+            infoCalls.push({ url, init });
             return {
                 ok: true,
                 status: 200,
@@ -58,7 +60,7 @@ function stubNode(answers: Answer[], opts: { communityInfo?: { primaryAddress?: 
         throw new Error(`unexpected request ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    return { fetchMock, claimCalls };
+    return { fetchMock, claimCalls, infoCalls };
 }
 
 const unclaimed = (extra: Record<string, unknown> = {}): Answer => ({
@@ -139,39 +141,103 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}`);
     });
 
-    it('draws a QR using the node\'s own https address when the node has an address and the page is opened at that address', async () => {
-        const address = 'https://town.beanpool.org';
+    it('reads community info once across several polls', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: false });
+        const { claimCalls, infoCalls } = stubNode(
+            [unclaimed(), unclaimed(), unclaimed(), unclaimed()],
+            { communityInfo: { primaryAddress: 'town.beanpool.org', addresses: ['town.beanpool.org'] } },
+        );
+        renderCard('https://town.beanpool.org');
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(claimCalls).toHaveLength(1);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(2);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(3);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(4);
+        expect(infoCalls).toHaveLength(1);
+    });
+
+    it('keeps http and port in the QR when opened at an http LAN page origin with a matching listed host', async () => {
+        const lanOrigin = 'http://192.168.1.100:8080';
         const origLocation = window.location;
         const win = window as unknown as { location: Location };
         delete (window as { location?: Location }).location;
-        win.location = new URL(address) as unknown as Location;
+        win.location = new URL(lanOrigin) as unknown as Location;
         try {
-            stubNode([unclaimed({ address, addresses: ['town.beanpool.org'] })]);
-            renderCard(address);
+            stubNode([unclaimed()], {
+                communityInfo: { primaryAddress: '192.168.1.100', addresses: ['192.168.1.100'] },
+            });
+            renderCard(lanOrigin);
             await screen.findByTestId('claim-qr');
-            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(address)}&id=${CODE_ID}`);
-            expect(screen.getByTestId('claim-origin')).toHaveTextContent(address);
+            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(lanOrigin)}&id=${CODE_ID}`);
+            expect(screen.getByTestId('claim-origin')).toHaveTextContent(lanOrigin);
+            expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
         } finally {
             win.location = origLocation;
         }
-
-
     });
 
-    it('falls back to the page\'s origin when the address field is hostile', async () => {
-        stubNode([unclaimed({ address: 'javascript:alert(1)' })]);
-        renderCard();
-        await screen.findByTestId('claim-qr');
-        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
-        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+    it('keeps :8443 in the QR for page on https://town.example.org:8443 listed as town.example.org', async () => {
+        const portOrigin = 'https://town.example.org:8443';
+        const origLocation = window.location;
+        const win = window as unknown as { location: Location };
+        delete (window as { location?: Location }).location;
+        win.location = new URL(portOrigin) as unknown as Location;
+        try {
+            stubNode([unclaimed()], {
+                communityInfo: { primaryAddress: 'town.example.org', addresses: ['town.example.org'] },
+            });
+            renderCard(portOrigin);
+            await screen.findByTestId('claim-qr');
+            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(portOrigin)}&id=${CODE_ID}`);
+            expect(screen.getByTestId('claim-origin')).toHaveTextContent(portOrigin);
+            expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+        } finally {
+            win.location = origLocation;
+        }
     });
 
-    it('shows one line "Open this page at <address> to scan" instead of a QR when opened at an unlisted address', async () => {
-        stubNode([unclaimed({ address: 'https://town.beanpool.org', addresses: ['town.beanpool.org'] })]);
+    it('shows the line "Open this page at ... to scan" instead of the QR when page host is unlisted with a listed name', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: { primaryAddress: 'town.beanpool.org', addresses: ['town.beanpool.org'] },
+        });
         renderCard(); // opened at window.location.origin (http://localhost:3000, not town.beanpool.org)
         const notice = await screen.findByTestId('claim-unlisted-notice');
         expect(notice).toHaveTextContent('Open this page at https://town.beanpool.org to scan');
         expect(screen.queryByTestId('claim-qr')).toBeNull();
+    });
+
+    it('draws QR with page origin and no line when listed names all fail sanitising', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: {
+                primaryAddress: 'javascript:alert(1)',
+                addresses: ['javascript:alert(1)', 'ftp://files.example.com', '//hostile.example.com'],
+            },
+        });
+        renderCard();
+        await screen.findByTestId('claim-qr');
+        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
+        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+        expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+    });
+
+    it('draws QR with page origin when community addresses list is empty', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: { primaryAddress: null, addresses: [] },
+        });
+        renderCard();
+        await screen.findByTestId('claim-qr');
+        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
+        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+        expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
     });
 
 

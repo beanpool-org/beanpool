@@ -186,14 +186,16 @@ async function main(): Promise<void> {
         assert(who.body?.authenticated === true && who.body?.isPasswordSession === true && who.body?.isKeySession === false
             && who.body?.role === 'owner' && who.body?.memberPubkey === null,
             `after a reload the cookie still says who: a password session, owner, no member (${who.text})`);
-        const diag = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(a.sessionId) });
+        // With 2FA off a password session opens the 2FA card's routes only (step 6, test-password-totp-gate.ts), so
+        // the read and the change here are that card's.
+        const diag = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(a.sessionId) });
         assert(diag.status === 200, `the cookie alone opens an admin read, no password sent (${diag.status})`);
-        const noCsrf = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId) });
+        const noCsrf = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId) });
         assert(noCsrf.status === 403, `a change on the cookie without the CSRF token → 403 (${show(noCsrf)})`);
-        const withCsrf = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId, csrfA) });
-        assert(withCsrf.status === 200 && typeof withCsrf.body?.ticket === 'string', `with its CSRF token → 200 (${show(withCsrf)})`);
+        const withCsrf = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId, csrfA) });
+        assert(withCsrf.status === 200 && typeof withCsrf.body?.secret === 'string', `with its CSRF token → 200 (${show(withCsrf)})`);
         const fresh = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: asCookie(a.sessionId) });
-        const withFresh = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(a.sessionId, fresh.body?.csrfToken) });
+        const withFresh = await call('POST', '/api/local/admin/2fa/setup', { body: {}, headers: asCookie(a.sessionId, fresh.body?.csrfToken) });
         assert(fresh.status === 200 && withFresh.status === 200, `a reload's fresh CSRF token works too (${fresh.status}, ${withFresh.status})`);
 
         const again = await signIn(PW, undefined, asCookie(a.sessionId));
@@ -222,15 +224,18 @@ async function main(): Promise<void> {
         assert(t1Read.status === 200, `the session then needs no code per request (${t1Read.status})`);
         const t2 = await signIn(PW, generateTotpCode(SECRET));
         const off = await call('POST', '/api/local/admin/2fa/disable', { body: { code: generateTotpCode(SECRET) }, headers: asCookie(t1.sessionId, t1.body?.csrfToken) });
-        const t1AfterOff = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(t1.sessionId) });
-        const t2AfterOff = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(t2.sessionId) });
+        // 2FA off again: the session that turned it off is held to the 2FA card (step 6), which it still opens.
+        const t1AfterOff = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(t1.sessionId) });
+        const t2AfterOff = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(t2.sessionId) });
         assert(off.status === 200 && t1AfterOff.status === 200 && t2AfterOff.status === 401,
             `turning 2FA off keeps the session that did it and ends the others (${show(off)}; it ${t1AfterOff.status}, another ${t2AfterOff.status})`);
 
         // The password changed: the session that changed it carries on, every other one ends.
+        // With 2FA on: a password session on a node with 2FA off opens nothing but the 2FA card (step 6).
         resetAdminAuthTarpit();
-        const p1 = await signIn(PW);
-        const p2 = await signIn(PW);
+        set2fa(true);
+        const p1 = await signIn(PW, generateTotpCode(SECRET));
+        const p2 = await signIn(PW, generateTotpCode(SECRET));
         const changed = await call('POST', '/api/local/change-password', {
             body: { currentPassword: PW, newPassword: NEW_PW }, headers: asCookie(p1.sessionId, p1.body?.csrfToken),
         });
@@ -238,10 +243,11 @@ async function main(): Promise<void> {
         const p2After = await call('GET', '/api/local/admin/diagnostics', { headers: asCookie(p2.sessionId) });
         assert(changed.status === 200 && p1After.status === 200 && p2After.status === 401,
             `a password change keeps the session that made it and ends the others (${show(changed)}; it ${p1After.status}, another ${p2After.status})`);
-        const oldPw = await signIn(PW);
-        const newPw = await signIn(NEW_PW);
+        const oldPw = await signIn(PW, generateTotpCode(SECRET));
+        const newPw = await signIn(NEW_PW, generateTotpCode(SECRET));
         assert(oldPw.status === 401 && newPw.status === 200, `the old password signs in no more, the new one does (${oldPw.status}, ${newPw.status})`);
         setPassword(PW);
+        set2fa(false);
 
         // Break-glass mode: the password reaches key enrolment only, so it opens no session and an open one ends.
         resetAdminAuthTarpit();

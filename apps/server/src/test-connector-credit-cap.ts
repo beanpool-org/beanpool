@@ -25,10 +25,14 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const PW = 'TestAdmin123!';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
+// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
 
 // A multiaddr with a peer id, because that is the shape a real connector carries and `peerIdFromAddress`
 // reads the last /p2p/ component out of it.
@@ -41,9 +45,10 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; json: any }> {
+async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
+    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -68,6 +73,13 @@ async function main() {
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+
+    const alone = await post('/api/local/connectors', {
+        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
+    });
+    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa' && getConnectorByAddress(ADDRESS) === null,
+        `setup: 2FA off, the password alone → 403 password_needs_2fa, no connector added (got ${alone.status} ${alone.json?.code})`);
+    tfa = turnOn2faForTests(PW);
 
     // ── The operator's own path: add the peer, then choose a limit for it. ────────────────────────────────
     const added = await post('/api/local/connectors', {

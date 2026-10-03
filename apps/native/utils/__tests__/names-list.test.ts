@@ -49,7 +49,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -3123,5 +3123,59 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
         expect(sentAs('GET', '/api/names/state')).toEqual([]);
         expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-trust:'))).toEqual([]);
+    });
+});
+
+describe('§8 21. Two phones, one key: the higher-seq copy is merged, never rolled back (design §3, §5 "Merging")', () => {
+    /** One phone's names storage for this key: its AsyncStorage keys and its pin's sealing secret. */
+    const takePhone = (me: BeanPoolIdentity) => ({
+        mem: new Map([...mem].filter(([k]) => k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase()))),
+        secret: secrets.get(namesPinSecretName(namesTrustStoreKey(me.publicKey, COMMUNITY))),
+    });
+    const putPhone = (me: BeanPoolIdentity, p: ReturnType<typeof takePhone>) => {
+        for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k);
+        for (const [k, v] of p.mem) mem.set(k, v);
+        const s = namesPinSecretName(namesTrustStoreKey(me.publicKey, COMMUNITY));
+        if (p.secret === undefined) secrets.delete(s); else secrets.set(s, p.secret);
+    };
+    const nodeCopy = (node: FakeNode, me: BeanPoolIdentity) => node.copies!.get(me.publicKey) ?? node.copies!.get(me.publicKey.toLowerCase());
+
+    it('21 phone A, back after phone B saved a newer copy with a key A lacks: A takes it, keeps both keys, saves past both, says it once', async () => {
+        const { node, phones: [owen, ada, bea], k1 } = await community(['Owen', 'Ada', 'Bea'], true);
+        const phoneA = takePhone(ada);
+        const was = (await pinOf(ada))!;
+        // Phone B: the same 12 words on a new phone (no pin): restored from the copy.
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        expect((await open(ada)).plan.kind).toBe('ready');
+        // Owen removes Bea: a new key reaches phone B only, and B saves a newer copy.
+        node.admins = [role(owen, 'owner'), role(ada)];
+        await removeOldKey(STORE, owen, COMMUNITY, bea.publicKey);
+        for (let i = 0; i < 2; i++) { await open(owen); await open(ada); }
+        const k2 = node.current()!.id;
+        expect(k2).not.toBe(k1);
+        const phoneB = (await pinOf(ada))!;
+        expect(Object.keys(phoneB.ring)).toContain(k2);
+        const newer = nodeCopy(node, ada)!.seq;
+        expect(newer).toBeGreaterThan(was.copy.seq);
+        // Phone A opens again.
+        putPhone(ada, phoneA);
+        sent = [];
+        const a = await open(ada);
+        const after = (await pinOf(ada))!;
+        expect(after.copy.seq).toBe(newer + 1);
+        expect(nodeCopy(node, ada)!.seq).toBe(after.copy.seq);
+        expect(after.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
+        expect(Object.keys(after.ring)).toEqual(expect.arrayContaining([k1, k2]));
+        expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+        expect(a.notices).toContain(NAMES_COPY.copyNewer);
+        expect((await open(ada)).notices).not.toContain(NAMES_COPY.copyNewer);
+        // The merge itself: the further chain kept whichever side holds it, never a lower number, no key of either lost.
+        const ab = mergeNamesPins(was, phoneB);
+        const ba = mergeNamesPins(phoneB, was);
+        for (const m of [ab, ba]) {
+            expect(m.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
+            expect(m.copy.seq).toBe(Math.max(was.copy.seq, phoneB.copy.seq));
+            expect(Object.keys(m.ring).sort()).toEqual([...new Set([...Object.keys(was.ring), ...Object.keys(phoneB.ring)])].sort());
+        }
     });
 });

@@ -480,6 +480,38 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
     return { ok: true, value: r.pin };
 }
 
+/**
+ * Two phones with one key (design §3 "higher seq", §5 "Merging"): `local` is this phone's pin, `other` the newer copy
+ * another phone saved. `other` is kept when its chain extends this phone's (same links, as far or further); otherwise
+ * this phone's pin is. Either way the rings are united (restricted to the kept pin's chain and `abandoned`, as
+ * `readNamesPin` holds), and the copy number is the higher one, so the next copy is numbered past both. `seen` stays
+ * this phone's. Never a pin numbered lower than either.
+ */
+export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
+    const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
+    const kept = extends_ ? other : local;
+    const onKept = new Set([...kept.chain.map((l) => l.id), ...kept.abandoned]);
+    const ring: Record<string, string> = {};
+    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
+    return { ...kept, ring, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
+}
+
+/**
+ * This phone has a pin and the node holds a newer copy of this key's (another phone signed in as this admin and saved
+ * after this one): fetched, checked (§2) and merged ({@link mergeNamesPins}), kept, and said once. Any failure keeps
+ * this phone's pin as it is (never rolled back); the copy then waits (`copy_newer`) and no shares go.
+ */
+async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin): Promise<NamesPin> {
+    const got = await getCopy(anchor, identity);
+    if (!got.ok) return local;
+    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: communityAddress(anchor) ?? anchor });
+    if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
+    const merged = mergeNamesPins(local, r.pin);
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged))) return local;
+    await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyNewer]);
+    return merged;
+}
+
 /** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
 export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address'];
 
@@ -837,6 +869,8 @@ async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinS
         const restored = await restoreFromCopy(anchor, identity, store, s.value, afresh);
         if (!restored.ok) return restored;
         from = restored.value;
+    } else if (s.value.myCopy && s.value.myCopy.seq > from.copy.seq) {
+        from = await mergeNewerCopy(anchor, identity, store, s.value, from);
     }
     const r = syncNames({ pin: from, state: s.value, me: identity });
     if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {

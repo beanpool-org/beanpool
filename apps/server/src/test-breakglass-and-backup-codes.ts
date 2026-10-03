@@ -30,6 +30,7 @@ import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } 
 import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests, verifyAndFindBackupCodeHash } from './totp.js';
 import { logger } from './logger.js';
+import { PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -167,20 +168,27 @@ async function main() {
         assert(m.status === 403 && !m.body?.breakGlassCode, `a moderator is refused (${m.status})`);
         assert(hashOf(admin.pub) === null && hashOf(moderator.pub) === null, 'no code was stored for the admin or the moderator');
 
-        const pwNone = await post(ISSUE, {}, asPassword);
+        // Step 7c: with the node's 2FA off the password alone makes no code; with 2FA on, the password and a code do.
+        const pwOff = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        assert(pwOff.status === 403 && pwOff.body?.code === PASSWORD_NEEDS_2FA_CODE && hashOf(owner2.pub) === null,
+            `with 2FA off the password alone is refused (${pwOff.status} ${pwOff.body?.code})`);
+        updateLocalConfig({ totpEnabled: true, totpSecret: SECRET } as any);
+        const asPasswordAndCode = () => { forgetUsedTotpCodesForTests(); return { ...asPassword, 'x-admin-totp': generateTotpCode(SECRET) }; };
+        const pwNone = await post(ISSUE, {}, asPasswordAndCode());
         assert(pwNone.status === 400 && !pwNone.body?.breakGlassCode, `the password must name the owner (${pwNone.status})`);
-        const pwMember = await post(ISSUE, { memberPubkey: member.pub }, asPassword);
+        const pwMember = await post(ISSUE, { memberPubkey: member.pub }, asPasswordAndCode());
         assert(pwMember.status === 409 && hashOf(member.pub) === null, `the password cannot make a code for a member who is not an owner (${pwMember.status})`);
-        const pwAdmin = await post(ISSUE, { memberPubkey: admin.pub }, asPassword);
+        const pwAdmin = await post(ISSUE, { memberPubkey: admin.pub }, asPasswordAndCode());
         assert(pwAdmin.status === 409 && hashOf(admin.pub) === null, `…nor for an admin (${pwAdmin.status})`);
-        const pwOwner = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        const pwOwner = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
         assert(pwOwner.status === 200 && BG_SHAPE.test(pwOwner.body?.breakGlassCode) && pwOwner.body?.memberPubkey === owner2.pub,
             `the password makes a code for a named owner (${pwOwner.status})`);
         shown.push(pwOwner.body?.breakGlassCode);
 
         updateLocalConfig({ breakGlassMode: true } as any);
-        const pwMode = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
-        assert(pwMode.status === 403 && !pwMode.body?.breakGlassCode, `break-glass mode closes it to the password (${pwMode.status})`);
+        const pwMode = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
+        assert(pwMode.status === 403 && pwMode.body?.code !== PASSWORD_NEEDS_2FA_CODE && !pwMode.body?.breakGlassCode, `break-glass mode closes it to the password (${pwMode.status})`);
+        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
         const keyMode = await post(ISSUE, {}, asOwner);
         assert(keyMode.status === 200 && BG_SHAPE.test(keyMode.body?.breakGlassCode), `…not to an owner's key (${keyMode.status})`);
         shown.push(keyMode.body?.breakGlassCode);

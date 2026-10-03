@@ -30,6 +30,7 @@ import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { logger } from './logger.js';
 import {
     applyCheckResult, getPlatformFloor, getFloorFrom, getMinAppVersionFrom, getPlatformFloorDetail, getAppFloors,
@@ -309,8 +310,14 @@ async function main(): Promise<void> {
     r = await get(route, ann);
     assert(r.status === 401 && !r.text.includes('"platforms"'), `a member's signature: 401, no counts (got ${r.status})`);
     resetAdminAuthTarpit();
+    // Step 7c: with the node's 2FA off, the owner's password alone is refused; the manager sends an owner's automation token.
     r = await get(route, null, { 'X-Admin-Password': PW });
-    assert(r.status === 200, `the owner's password: 200 (got ${r.status})`);
+    assert(r.status === 403 && r.body?.code === 'password_needs_2fa' && !r.text.includes('"platforms"'),
+        `the owner's password alone, 2FA off: 403 password_needs_2fa, no counts (got ${r.status})`);
+    resetAdminAuthTarpit();
+    const managerToken = ownerTokenHeaders('admin');
+    r = await get(route, null, managerToken);
+    assert(r.status === 200, `the owner's automation token: 200 (got ${r.status})`);
     const a = r.body?.platforms?.android, i = r.body?.platforms?.ios;
     assert(a?.floor === '1.2.60' && a?.store === '1.2.60' && a?.enforced === '1.2.60' && a?.held === false && a?.blocking === true,
         `Android's floor as set, its store and its enforcement (got ${JSON.stringify(a)})`);
@@ -321,7 +328,7 @@ async function main(): Promise<void> {
     assert(typeof r.body.since === 'string' && r.body.windowDays === 30 && r.body.minAppVersionFrom === '2026-01-01T00:00:00.000Z',
         'since, the window and the grace date');
     assert(!r.text.includes(ann.pub) && !r.text.includes(ben.pub), 'the answer names no member');
-    const post = await fetch(`${BASE}${route}`, { method: 'POST', headers: { 'X-Admin-Password': PW } });
+    const post = await fetch(`${BASE}${route}`, { method: 'POST', headers: managerToken });
     assert(post.status === 404 || post.status === 405, `read-only: no POST (got ${post.status})`);
 
     // Below the floor, and never refused for it: a members-only read and a public one answer as they would without it.

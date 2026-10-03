@@ -421,6 +421,11 @@ export const adminCredentialCommands: Record<string, (args: any) => Promise<unkn
         const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
         return ownerSessionHeaders(a.owner ?? await firstOwner());
     },
+    /** 2FA on, and the password with a fresh code: for a suite whose check is the password itself. */
+    'password-and-code': async (a: { password: string }) => {
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        return turnOn2faForTests(a.password).headers();
+    },
 };
 
 async function firstOwner(): Promise<string | undefined> {

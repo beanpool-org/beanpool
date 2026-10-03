@@ -79,11 +79,17 @@ export function recoverOwner(who: string, dir = dataDir()): RecoverResult {
             const was = conn.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(found.pubkey) as { role: string } | undefined;
             conn.prepare(`INSERT INTO node_roles (member_pubkey, role, granted_by, break_glass_hash) VALUES (?, 'owner', ?, ?)
                 ON CONFLICT(member_pubkey) DO UPDATE SET role = 'owner', break_glass_hash = excluded.break_glass_hash,
+                    session_epoch = CASE WHEN node_roles.role = 'owner' THEN node_roles.session_epoch ELSE node_roles.session_epoch + 1 END,
                     granted_by = CASE WHEN node_roles.role = 'owner' THEN node_roles.granted_by ELSE excluded.granted_by END,
                     granted_at = CASE WHEN node_roles.role = 'owner' THEN node_roles.granted_at ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END`)
                 .run(found.pubkey, RECOVER_ACTOR, hash);
+            // As grantNodeRole does on a role change: the member's row moves, so phones' delta reads carry the new role
+            // (the node's own caches follow when it delivers the notice).
+            if (was?.role !== 'owner') conn.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), found.pubkey);
             return was?.role === 'owner';
-        })();
+        // IMMEDIATE: take the write lock at the start, so beside a node that is writing this waits out the busy timeout
+        // instead of failing at once with SQLITE_BUSY (a DEFERRED read-then-write can't upgrade in WAL).
+        }).immediate();
 
         const notice: RecoverNotice = { pubkey: found.pubkey, callsign: member.callsign || found.pubkey.slice(0, 8), alreadyOwner, at: new Date().toISOString() };
         const name = `${NOTICE_PREFIX}${Date.now()}-${crypto.randomBytes(4).toString('hex')}.json`;

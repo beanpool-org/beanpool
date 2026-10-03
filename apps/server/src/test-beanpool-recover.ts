@@ -18,8 +18,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
@@ -123,6 +124,41 @@ async function main() {
     assert(again.code === 0, 'a pruned member with the same callsign does not make @callsign ambiguous');
     const nobody = cli('recover', '--key', '@nobody');
     assert(nobody.code !== 0 && /no member @nobody/i.test(nobody.out), 'an unknown @callsign is refused');
+    deliverRecoverNotices(deps);
+
+    // 7. An admin made owner: their sessions end (session_epoch moves, as grantNodeRole does) and phones' delta reads
+    //    carry the new role (profile_updated_at moves). An owner run again changes neither.
+    const CARA = pk();
+    addMember(CARA, 'cara');
+    db.prepare("INSERT INTO node_roles (member_pubkey, role, granted_by, session_epoch) VALUES (?, 'admin', 'owner:password', 3)").run(CARA);
+    db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run('2020-01-01T00:00:00.000Z', CARA);
+    const promoted = cli('recover', '--key', CARA);
+    const caraRole = db.prepare('SELECT role, session_epoch FROM node_roles WHERE member_pubkey = ?').get(CARA) as { role: string; session_epoch: number };
+    const caraAt = (db.prepare('SELECT profile_updated_at AS at FROM members WHERE public_key = ?').get(CARA) as { at: string }).at;
+    assert(promoted.code === 0 && caraRole.role === 'owner', 'an admin is made owner');
+    assert(caraRole.session_epoch === 4, `their admin sessions end: session_epoch 3 → ${caraRole.session_epoch}`);
+    assert(caraAt > '2020-01-01T00:00:00.000Z', 'their row moves, so phones see the new role');
+    cli('recover', '--key', CARA);
+    const caraAgain = db.prepare('SELECT session_epoch FROM node_roles WHERE member_pubkey = ?').get(CARA) as { session_epoch: number };
+    assert(caraAgain.session_epoch === 4, 'an owner run again keeps their sessions (session_epoch unchanged)');
+    deliverRecoverNotices(deps);
+
+    // 8. Beside a node that is writing: another process holds the write lock for 1.5 s; recover waits it out (busy
+    //    timeout) instead of failing at once with SQLITE_BUSY.
+    const DEV = pk();
+    addMember(DEV, 'dev');
+    const holder = spawn(process.execPath, ['-e', `
+        const D = require(${JSON.stringify(createRequire(import.meta.url).resolve('better-sqlite3'))});
+        const c = new D(${JSON.stringify(path.join(DATA_DIR, 'state.db'))});
+        c.exec('BEGIN IMMEDIATE'); c.prepare("UPDATE members SET bio = bio WHERE public_key = ?").run(${JSON.stringify(DEV)});
+        process.stdout.write('locked\\n');
+        setTimeout(() => { c.exec('COMMIT'); c.close(); }, 1500);`], { stdio: ['ignore', 'pipe', 'inherit'] });
+    await new Promise<void>((resolve) => holder.stdout!.on('data', (d) => { if (String(d).includes('locked')) resolve(); }));
+    const t0 = Date.now();
+    const busy = cli('recover', '--key', DEV);
+    const waited = Date.now() - t0;
+    assert(busy.code === 0 && roleRow(DEV)?.role === 'owner', `beside a writer holding the lock, recover waits and succeeds (exit ${busy.code}, ${waited} ms${busy.code ? ': ' + busy.out.split('\\n')[0] : ''})`);
+    await new Promise((r) => holder.once('exit', r));
     deliverRecoverNotices(deps);
 
     console.log(`\n${passed}/${run} passed`);

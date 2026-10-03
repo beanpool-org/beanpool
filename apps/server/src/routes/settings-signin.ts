@@ -3,9 +3,12 @@
  *
  *   POST /api/local/admin/auth/pairing              browser: new pairing; sets the binding cookie
  *   POST /api/local/admin/auth/pairing/:id/wait     browser: long-poll (≤25 s) with the binding cookie;
- *                                                   on approval, the admin_session cookie + a CSRF token
- *   GET  /api/local/admin/auth/pairing/:id          phone: the short code and "Firefox on Windows" to confirm
- *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, totpCode? }
+ *                                                   on approval, the admin_session cookie + a CSRF token,
+ *                                                   or { status: 'confirm' } when the phone shows two digits
+ *   POST /api/local/admin/auth/pairing/:id/confirm  browser: { code } — the phone's two digits, with the binding cookie
+ *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", the computer's address,
+ *                                                   how long ago it asked, the time left, and "same network"
+ *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, totpCode?, confirm? }
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
  * The phone's calls go through the auth limiter (15 a minute per client). The browser's creation has its own
@@ -14,12 +17,13 @@
 
 import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
-import { clientLimiterKey } from '../client-ip.js';
+import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { setAdminSessionCookie } from '../admin-key-auth.js';
 import {
     createPairing,
     describePairing,
     approvePairing,
+    confirmPairing,
     declinePairing,
     redeemPairing,
     waitForPairing,
@@ -36,7 +40,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
     const bodyOf = (ctx: any) => (ctx as any).requestBody || (ctx.request as any)?.body || {};
 
     router.post('/api/local/admin/auth/pairing', async (ctx) => {
-        const res = createPairing({ clientKey: clientLimiterKey(ctx as any), userAgent: ctx.get('user-agent') });
+        const res = createPairing({ clientKey: clientLimiterKey(ctx as any), userAgent: ctx.get('user-agent'), requesterAddress: clientIp(ctx as any) });
         if (!res.ok) {
             ctx.status = res.status;
             ctx.body = { error: res.error };
@@ -64,10 +68,30 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             if (!waited) { ctx.status = 429; ctx.body = { error: 'Already waiting on this code in another tab.' }; return; }
             res = redeemPairing(id, secret);
         }
+        answer(ctx, id, res);
+    });
 
+    router.post('/api/local/admin/auth/pairing/:id/confirm', async (ctx) => {
+        const id = ctx.params.id;
+        ctx.set('Cache-Control', 'no-store');
+        if (!isPairingId(id)) { ctx.status = 404; ctx.body = { status: 'unknown' }; return; }
+        const res = confirmPairing(id, ctx.cookies.get(bindingCookieName(id)) || undefined, bodyOf(ctx).code);
+        if (res.kind === 'wrong') {
+            ctx.status = 400;
+            ctx.body = { status: 'wrong', triesLeft: res.triesLeft, error: 'Those are not the digits on the phone.' };
+            return;
+        }
+        answer(ctx, id, res);
+    });
+
+    /** The page's answer for a poll or a confirm: a session, or where the pairing stands. */
+    function answer(ctx: any, id: string, res: ReturnType<typeof redeemPairing>): void {
         switch (res.kind) {
             case 'waiting':
                 ctx.body = { status: 'waiting', expiresAt: res.expiresAt, ...(res.notice ? { notice: res.notice } : {}) };
+                return;
+            case 'confirm':
+                ctx.body = { status: 'confirm', confirmExpiresAt: res.confirmExpiresAt, confirmInSeconds: Math.max(0, Math.round((res.confirmExpiresAt - Date.now()) / 1000)) };
                 return;
             case 'signed-in':
                 setAdminSessionCookie(ctx, res.sessionId);
@@ -98,19 +122,20 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
                 ctx.status = 410;
                 ctx.body = { status: res.kind };
         }
-    });
+    }
 
     router.get('/api/local/admin/auth/pairing/:id', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const res = describePairing(ctx.params.id);
+        const res = describePairing(ctx.params.id, Date.now(), clientIp(ctx as any));
         ctx.set('Cache-Control', 'no-store');
         if (!res.ok) { ctx.status = res.status; ctx.body = { error: res.error }; return; }
-        ctx.body = { shortCode: res.shortCode, browser: res.browser, expiresAt: res.expiresAt };
+        const { ok: _ok, ...shown } = res;
+        ctx.body = shown;
     });
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature, totpCode, signedFor } = bodyOf(ctx);
+        const { memberPubkey, signature, totpCode, signedFor, confirm } = bodyOf(ctx);
         if (typeof memberPubkey !== 'string' || typeof signature !== 'string' || !memberPubkey || !signature) {
             ctx.status = 400;
             ctx.body = { error: 'memberPubkey and signature are required' };
@@ -123,6 +148,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             totpCode: typeof totpCode === 'string' ? totpCode : undefined,
             signedFor,
             source: clientLimiterKey(ctx),
+            confirm: confirm === true,
         });
         if (!res.ok) {
             ctx.status = res.status;
@@ -130,7 +156,9 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}), ...(res.totpRequired ? { totpRequired: true } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
             return;
         }
-        ctx.body = { success: true, role: res.role };
+        ctx.body = res.confirmCode
+            ? { success: true, role: res.role, confirmCode: res.confirmCode, confirmExpiresAt: res.confirmExpiresAt }
+            : { success: true, role: res.role };
     });
 
     router.post('/api/local/admin/auth/pairing/:id/decline', async (ctx) => {

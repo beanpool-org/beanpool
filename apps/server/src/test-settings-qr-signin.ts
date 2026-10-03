@@ -14,6 +14,10 @@
  *      redemption gives no session.
  *   6. The node's 2FA code is still asked for, on the phone.
  *   7. Decline, and the brakes: creation per client, approvals through the auth limiter.
+ *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
+ *      "same network" when the phone's address matches.
+ *   9. Number matching: a new app's approval gives two digits; the page must type them. Wrong digits, three tries,
+ *      30 s, a replay, or a browser without the binding cookie: no session. An older app signs in as before.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -31,6 +35,8 @@ import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 import {
     approvePairing,
+    confirmPairing,
+    createPairing,
     redeemPairing,
     pairingMessage,
     bindingCookieName,
@@ -38,6 +44,7 @@ import {
     PAIRING_TTL_MS,
     PAIRING_CREATES_PER_MINUTE,
     PAIRING_MAX_REFUSALS,
+    PAIRING_CONFIRM_TTL_MS,
 } from './settings-signin-pairing.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -373,6 +380,94 @@ async function main() {
         assert(approveLimited >= 1, 'approvals from one client are braked by the auth limiter (15 a minute)');
         assert((await call('GET', `/api/local/admin/auth/pairing/${target.pairingId}`, { headers: via(phoneIp) })).status === 429,
             'and so are lookups from that client');
+    }
+
+    // ── 8. What the phone is told about the computer (design §5 fixes 1–2) ──
+    console.log('\n8. The phone sees where and when the computer asked');
+    {
+        const b = await newPairing();
+        const same = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(b.ip) });
+        assert(same.status === 200 && same.body.fromAddress === b.ip, `the phone is told the address the computer asked from (${same.body.fromAddress})`);
+        assert(same.body.sameNetwork === true, 'a phone on the same network as the computer is told so');
+        assert(typeof same.body.askedSecondsAgo === 'number' && same.body.askedSecondsAgo >= 0 && same.body.askedSecondsAgo < 10,
+            `the phone is told how long ago the computer asked (${same.body.askedSecondsAgo}s)`);
+        assert(typeof same.body.expiresInSeconds === 'number' && same.body.expiresInSeconds > 100 && same.body.expiresInSeconds <= 120,
+            `the phone is told how long is left (${same.body.expiresInSeconds}s)`);
+        const other = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(freshIp()) });
+        assert(other.status === 200 && other.body.sameNetwork === false && other.body.fromAddress === b.ip,
+            'a phone somewhere else is not told "same network", and still sees the computer\'s address');
+    }
+
+    // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──
+    console.log('\n9. Two digits typed on the computer');
+    const approveNew = (b: Browser, signer: Identity) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
+        body: { memberPubkey: signer.pub, signature: signText(signer, pairingMessage('approve', b.pairingId, b.shortCode)), confirm: true },
+        headers: via(freshIp()),
+    });
+    const confirmDigits = (b: Browser, code: string, cookie: string | null = b.cookie) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
+        body: { code },
+        headers: { ...via(b.ip), ...(cookie ? { Cookie: cookie } : {}) },
+    });
+    const sessionOf = (r: { cookies: string[] }) => {
+        const s = r.cookies.find(c => c.startsWith('admin_session='));
+        return s ? s.split(';')[0].slice('admin_session='.length) : null;
+    };
+    const wrongOf = (code: string) => String((Number(code) + 1) % 100).padStart(2, '0');
+    {
+        // Right digits: a session, once.
+        const b = await newPairing();
+        const ok = await approveNew(b, owner);
+        assert(ok.status === 200 && /^\d{2}$/.test(ok.body.confirmCode || ''), `a new app's approval gets two digits to show (${ok.body.confirmCode})`);
+        const waiting = await poll(b);
+        assert(waiting.status === 200 && waiting.body.status === 'confirm' && !waiting.sessionId,
+            'the page is asked for the digits, and holds no session yet');
+        const noCookie = await confirmDigits(b, ok.body.confirmCode, null);
+        assert(noCookie.status === 403 && !sessionOf(noCookie), 'digits from a browser without the binding cookie are refused');
+        const wrong = await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        assert(wrong.status === 400 && wrong.body.status === 'wrong' && wrong.body.triesLeft === 2 && !sessionOf(wrong),
+            'wrong digits give no session and say how many tries are left (the cookie-less try was not counted)');
+        const right = await confirmDigits(b, ok.body.confirmCode);
+        const sid = sessionOf(right);
+        assert(right.status === 200 && right.body.status === 'signed-in' && !!sid, 'the right digits sign the browser in');
+        assert(sid ? (await sessionInfo(sid)).authenticated === true : false, 'the session is a real one');
+        const replay = await confirmDigits(b, ok.body.confirmCode);
+        assert(replay.status === 410 && !sessionOf(replay), 'the digits replayed are refused');
+        const again = await poll(b);
+        assert(again.status === 410 && !again.sessionId, 'the page cannot redeem the pairing a second time');
+    }
+    {
+        // Three wrong: the pairing is burned, the right digits are then useless.
+        const b = await newPairing();
+        const ok = await approveNew(b, admin);
+        for (let i = 0; i < 3; i++) await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        const late = await confirmDigits(b, ok.body.confirmCode);
+        assert(late.status === 410 && late.body.status === 'refused' && !sessionOf(late), 'three wrong tries burn the pairing; the right digits then give nothing');
+        assert((await poll(b)).body.status === 'refused', 'the page is told the sign-in was refused');
+        assert(auditLines().some(l => l.includes('wrong digits')), 'the burn is logged');
+    }
+    {
+        // An older app sends no `confirm`: it signs the browser in as today.
+        const b = await newPairing();
+        const ok = await approve(b.pairingId, b.shortCode, owner);
+        assert(ok.status === 200 && !('confirmCode' in ok.body), 'an older app gets no digits');
+        const r = await poll(b);
+        assert(r.body.status === 'signed-in' && !!r.sessionId, 'and the browser is signed in as before');
+    }
+    {
+        // Expiry, at the module level with a clock: 30 s for the digits.
+        const t = Date.now();
+        const created = createPairing({ clientKey: 'confirm-expiry', requesterAddress: '198.51.100.7', now: t });
+        if (!created.ok) throw new Error('create failed');
+        const res = approvePairing({
+            pairingId: created.pairingId, memberPubkey: owner.pub,
+            signature: signText(owner, pairingMessage('approve', created.pairingId, created.shortCode)), confirm: true, now: t + 1_000,
+        });
+        assert(res.ok && /^\d{2}$/.test(res.confirmCode || ''), 'the module hands out two digits');
+        const code = res.ok ? res.confirmCode! : '';
+        const late = confirmPairing(created.pairingId, created.secret, code, t + 1_000 + PAIRING_CONFIRM_TTL_MS + 1);
+        assert(late.kind === 'expired', `the right digits after ${PAIRING_CONFIRM_TTL_MS / 1000}s give no session (${late.kind})`);
+        assert(redeemPairing(created.pairingId, created.secret, t + 1_000 + PAIRING_CONFIRM_TTL_MS + 2).kind === 'expired', 'and the page is told it expired');
+        assert(PAIRING_CONFIRM_TTL_MS === 30_000, 'the digits last 30 seconds');
     }
 
     console.log(`\n${passed}/${run} passed`);

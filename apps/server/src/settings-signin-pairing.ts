@@ -17,6 +17,14 @@
  *      gets the same admin_session a key sign-in gets. A photographed QR is useless elsewhere: without the
  *      binding secret a browser can only be told "this sign-in belongs to another browser".
  *
+ *   2b. Number matching. An app that can show them (it sends `confirm: true`) gets two digits back from its approval;
+ *      the page must type them (confirmPairing) within 30 s before the held token is redeemed. Someone who only
+ *      sent the owner a QR never sees the phone, so a fooled "Sign in" still gives them nothing. Three wrong tries
+ *      burn the pairing. An older app sends no flag and signs the browser in as before.
+ *
+ * The phone is also shown where and when the computer asked: the address the node saw the request from, how long
+ * ago, the time left, and "same network" when the phone's own address is the computer's (describePairing).
+ *
  * Single use and short-lived: two minutes to approve; one approval; one redemption. Five refused approvals
  * burn the pairing. Creation is braked per client and capped overall; approvals go through the auth limiter.
  * Everything lives in memory: a restart simply means "get a new code".
@@ -33,6 +41,7 @@ import {
 } from './admin-key-auth.js';
 import { settingsSigninText, verifyStatementSignature } from './engine/member-signature.js';
 import { logger } from './logger.js';
+import { limiterKeyForIp } from './client-ip.js';
 
 export const PAIRING_TTL_MS = 2 * 60_000;
 /** Live pairings across the whole node. A page holds one; this only stops a flood. */
@@ -43,12 +52,16 @@ export const PAIRING_CREATES_PER_MINUTE = 10;
 export const PAIRING_MAX_REFUSALS = 5;
 /** Long-poll waiters per pairing: one page, plus a reload or two. */
 export const PAIRING_MAX_WAITERS = 3;
+/** Time the page has to type the phone's two digits after the approval. */
+export const PAIRING_CONFIRM_TTL_MS = 30_000;
+/** Wrong digits before the pairing is burned. */
+export const PAIRING_CONFIRM_TRIES = 3;
 
 /** No 0/O, 1/I/L: read aloud or squinted at across a desk. */
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const SHORT_CODE_LENGTH = 6;
 
-export type PairingStatus = 'waiting' | 'approved' | 'declined' | 'refused' | 'used';
+export type PairingStatus = 'waiting' | 'confirming' | 'approved' | 'declined' | 'refused' | 'used';
 /** Something the waiting page should say while it keeps waiting. */
 export type PairingNotice = 'not-admin';
 
@@ -57,6 +70,8 @@ interface Pairing {
     shortCode: string;
     secretHash: Buffer;
     browser: string;
+    /** The address the node saw the request come from (clientIp), shown to the phone. */
+    requesterAddress: string;
     createdAt: number;
     expiresAt: number;
     status: PairingStatus;
@@ -66,6 +81,10 @@ interface Pairing {
     handshakeExpiresAt?: number;
     approvedBy?: string;
     role?: MemberNodeRole;
+    /** Number matching: the two digits the phone shows, until the page types them. */
+    confirmCode?: string;
+    confirmExpiresAt?: number;
+    confirmTries?: number;
 }
 
 const pairings = new Map<string, Pairing>();
@@ -135,7 +154,8 @@ function notify(id: string): void {
     for (const wake of set) wake();
 }
 
-const expired = (p: Pairing, now: number) => p.status === 'waiting' && now > p.expiresAt;
+const expired = (p: Pairing, now: number) =>
+    (p.status === 'waiting' && now > p.expiresAt) || (p.status === 'confirming' && now > (p.confirmExpiresAt ?? 0));
 
 // ===================== 1. THE BROWSER ASKS =====================
 
@@ -143,7 +163,7 @@ export type CreateResult =
     | { ok: true; pairingId: string; shortCode: string; expiresAt: number; secret: string }
     | { ok: false; status: 429 | 503; error: string };
 
-export function createPairing(opts: { clientKey: string; userAgent?: string; now?: number }): CreateResult {
+export function createPairing(opts: { clientKey: string; userAgent?: string; requesterAddress?: string; now?: number }): CreateResult {
     const now = opts.now ?? Date.now();
     const bucket = createBuckets.get(opts.clientKey);
     if (bucket && now < bucket.resetAt) {
@@ -169,6 +189,7 @@ export function createPairing(opts: { clientKey: string; userAgent?: string; now
         shortCode: shortCode(),
         secretHash: sha256(secret),
         browser: describeBrowser(opts.userAgent),
+        requesterAddress: String(opts.requesterAddress || 'unknown'),
         createdAt: now,
         expiresAt: now + PAIRING_TTL_MS,
         status: 'waiting',
@@ -180,19 +201,45 @@ export function createPairing(opts: { clientKey: string; userAgent?: string; now
 
 // ===================== 2. THE PHONE LOOKS, THEN APPROVES OR DECLINES =====================
 
-/** What the phone shows before asking for the unlock. Only for a pairing that can still be approved. */
-export function describePairing(pairingId: string, now = Date.now()):
-    | { ok: true; shortCode: string; browser: string; expiresAt: number }
+export interface PairingDescription {
+    shortCode: string;
+    browser: string;
+    expiresAt: number;
+    /** Relative times, so a phone whose clock is wrong still counts down right. */
+    expiresInSeconds: number;
+    askedSecondsAgo: number;
+    /** The address the computer asked from, as this node saw it. Learned from the node, never from the QR. */
+    fromAddress: string;
+    /** The phone looking it up is on the computer's network (same address, or the same IPv6 /64). */
+    sameNetwork: boolean;
+}
+
+/**
+ * What the phone shows before asking for the unlock. Only for a pairing that can still be approved.
+ * `viewerAddress` is the phone's own address as this node sees it (clientIp), only compared, never echoed.
+ */
+export function describePairing(pairingId: string, now = Date.now(), viewerAddress?: string):
+    | ({ ok: true } & PairingDescription)
     | { ok: false; status: 404 | 410; error: string } {
     const p = isPairingId(pairingId) ? pairings.get(pairingId) : undefined;
     if (!p) return { ok: false, status: 404, error: 'That code is not known here. Get a new code on the computer.' };
     if (expired(p, now)) return { ok: false, status: 410, error: 'That code has expired. Get a new code on the computer.' };
     if (p.status !== 'waiting') return { ok: false, status: 410, error: 'That code was already used. Get a new code on the computer.' };
-    return { ok: true, shortCode: p.shortCode, browser: p.browser, expiresAt: p.expiresAt };
+    const known = p.requesterAddress !== 'unknown';
+    return {
+        ok: true,
+        shortCode: p.shortCode,
+        browser: p.browser,
+        expiresAt: p.expiresAt,
+        expiresInSeconds: Math.max(0, Math.round((p.expiresAt - now) / 1000)),
+        askedSecondsAgo: Math.max(0, Math.round((now - p.createdAt) / 1000)),
+        fromAddress: p.requesterAddress,
+        sameNetwork: known && !!viewerAddress && limiterKeyForIp(viewerAddress) === limiterKeyForIp(p.requesterAddress),
+    };
 }
 
 export type ApproveResult =
-    | { ok: true; role: MemberNodeRole }
+    | { ok: true; role: MemberNodeRole; confirmCode?: string; confirmExpiresAt?: number }
     | { ok: false; status: number; error: string; code?: string; totpRequired?: boolean; retryAfter?: number; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'totp' | 'totp-braked' | 'refused' | 'wrong-community' | 'app-too-old' };
 
 function refuse(p: Pairing): void {
@@ -234,6 +281,8 @@ export function approvePairing(params: {
     signedFor?: unknown;
     /** The phone's address (client-ip.ts clientLimiterKey), counted by the 2FA brake beside the key. */
     source?: string;
+    /** The app can show two digits for the page to type (number matching). Absent from an older app. */
+    confirm?: boolean;
     now?: number;
 }): ApproveResult {
     const now = params.now ?? Date.now();
@@ -280,15 +329,24 @@ export function approvePairing(params: {
     }
 
     const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, signer.role, now);
-    p.status = 'approved';
     p.handshakeToken = handshakeToken;
     p.handshakeExpiresAt = expiresAt;
     p.approvedBy = memberPubkey;
     p.role = signer.role;
     p.notice = undefined;
-    logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser})`);
+    if (params.confirm === true) {
+        p.status = 'confirming';
+        p.confirmCode = String(crypto.randomInt(100)).padStart(2, '0');
+        p.confirmExpiresAt = now + PAIRING_CONFIRM_TTL_MS;
+        p.confirmTries = 0;
+    } else {
+        p.status = 'approved';
+    }
+    logger.security('AUTH', `Settings sign-in by phone APPROVED by ${who(memberPubkey)} as ${signer.role} for pairing ${p.id.slice(0, 8)} (${p.browser})${p.confirmCode ? ', waiting for the digits on the computer' : ''}`);
     notify(p.id);
-    return { ok: true, role: signer.role };
+    return p.confirmCode
+        ? { ok: true, role: signer.role, confirmCode: p.confirmCode, confirmExpiresAt: p.confirmExpiresAt }
+        : { ok: true, role: signer.role };
 }
 
 /**
@@ -325,6 +383,7 @@ export function declinePairing(params: { pairingId: string; memberPubkey: string
 
 export type RedeemResult =
     | { kind: 'waiting'; expiresAt: number; notice?: PairingNotice }
+    | { kind: 'confirm'; confirmExpiresAt: number }
     | { kind: 'signed-in'; sessionId: string; csrfToken?: string; memberPubkey: string; role: MemberNodeRole; hardExpiresAt?: number; idleExpiresAt?: number }
     | { kind: 'expired' | 'declined' | 'refused' | 'used' | 'unknown' }
     | { kind: 'wrong-browser' }
@@ -335,23 +394,69 @@ export type RedeemResult =
  * approved, the held handshake token is redeemed here, once, into an admin session.
  */
 export function redeemPairing(pairingId: string, secret: string | undefined, now = Date.now()): RedeemResult {
-    const p = isPairingId(pairingId) ? pairings.get(pairingId) : undefined;
-    if (!p) return { kind: 'unknown' };
-    const given = sha256(String(secret || ''));
-    if (!secret || !crypto.timingSafeEqual(given, p.secretHash)) {
-        if (p.status === 'approved') {
-            logger.warn('AUTH', `Settings sign-in by phone: pairing ${p.id.slice(0, 8)} was presented by a browser without its binding secret — refused`);
-        }
-        return { kind: 'wrong-browser' };
-    }
+    const p = boundPairing(pairingId, secret);
+    if (!p || p === 'wrong-browser') return p ? { kind: 'wrong-browser' } : { kind: 'unknown' };
     if (expired(p, now)) return { kind: 'expired' };
     switch (p.status) {
         case 'waiting': return { kind: 'waiting', expiresAt: p.expiresAt, ...(p.notice ? { notice: p.notice } : {}) };
+        case 'confirming': return { kind: 'confirm', confirmExpiresAt: p.confirmExpiresAt! };
         case 'declined': return { kind: 'declined' };
         case 'refused': return { kind: 'refused' };
         case 'used': return { kind: 'used' };
         case 'approved': break;
     }
+    return issue(p, now);
+}
+
+/** The pairing, only to the browser holding its binding secret. */
+function boundPairing(pairingId: string, secret: string | undefined): Pairing | 'wrong-browser' | undefined {
+    const p = isPairingId(pairingId) ? pairings.get(pairingId) : undefined;
+    if (!p) return undefined;
+    const given = sha256(String(secret || ''));
+    if (!secret || !crypto.timingSafeEqual(given, p.secretHash)) {
+        if (p.status === 'approved' || p.status === 'confirming') {
+            logger.warn('AUTH', `Settings sign-in by phone: pairing ${p.id.slice(0, 8)} was presented by a browser without its binding secret — refused`);
+        }
+        return 'wrong-browser';
+    }
+    return p;
+}
+
+/**
+ * The page types the two digits the phone shows. Right digits within 30 s redeem the held token, once; three wrong
+ * tries burn the pairing. Only the browser holding the binding secret may try, so nobody else can use up its tries.
+ */
+export function confirmPairing(pairingId: string, secret: string | undefined, digits: unknown, now = Date.now()):
+    RedeemResult | { kind: 'wrong'; triesLeft: number } {
+    const p = boundPairing(pairingId, secret);
+    if (!p || p === 'wrong-browser') return p ? { kind: 'wrong-browser' } : { kind: 'unknown' };
+    if (expired(p, now)) {
+        if (p.status === 'confirming') logger.warn('AUTH', `Settings sign-in by phone: the digits for pairing ${p.id.slice(0, 8)} were not typed in time — no session`);
+        return { kind: 'expired' };
+    }
+    if (p.status !== 'confirming') {
+        return p.status === 'waiting' ? { kind: 'waiting', expiresAt: p.expiresAt } : { kind: p.status === 'approved' ? 'used' : p.status as 'declined' | 'refused' | 'used' };
+    }
+    const given = Buffer.from(String(digits ?? '').trim().padEnd(2, ' ').slice(0, 8));
+    const want = Buffer.from(p.confirmCode!.padEnd(2, ' '));
+    if (given.length !== want.length || !crypto.timingSafeEqual(given, want)) {
+        p.confirmTries = (p.confirmTries ?? 0) + 1;
+        if (p.confirmTries >= PAIRING_CONFIRM_TRIES) {
+            p.status = 'refused';
+            p.handshakeToken = undefined;
+            p.confirmCode = undefined;
+            logger.security('AUTH', `Settings sign-in by phone: pairing ${p.id.slice(0, 8)} burned after ${p.confirmTries} wrong digits typed on the computer (${p.browser}) — approved by ${who(p.approvedBy || '')}, no session`);
+            notify(p.id);
+            return { kind: 'refused' };
+        }
+        return { kind: 'wrong', triesLeft: PAIRING_CONFIRM_TRIES - p.confirmTries };
+    }
+    p.confirmCode = undefined;
+    return issue(p, now);
+}
+
+/** Redeem the held handshake token, once, into an admin session. */
+function issue(p: Pairing, now: number): RedeemResult {
     const token = p.handshakeToken!;
     p.status = 'used';
     p.handshakeToken = undefined;

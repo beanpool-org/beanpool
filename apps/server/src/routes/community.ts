@@ -87,6 +87,7 @@ import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
 import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
 import { heavyRead, heavyReadKey } from '../heavy-reads.js';
+import { membersSnapshotKey, sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
 
 /**
  * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
@@ -2134,8 +2135,14 @@ router.get('/api/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
     const point = peoplePoint(ctx);
     if (point === undefined) return;
+    const cursor = ctx.query.updatedAfter;
+    // The whole directory, the same for every reader let in, is one shared answer per members version
+    // (members-snapshot.ts). Only the forms that differ by reader (lat/lng) or by cursor (a delta) are built per read.
+    const shared = !point && !cursor;
+    const snapshotKey = shared ? membersSnapshotKey(getMembersVersion(), avatarKeysRequired()) : '';
+    const ready = shared ? usableMembersSnapshot(snapshotKey) : null;
     const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
-    const etag = `W/"members-${getMembersVersion()}${querySig}"`;
+    const etag = ready ? ready.etag : `W/"members-${getMembersVersion()}${querySig}"`;
 
     ctx.set('ETag', etag);
     // With faces behind a member-only key (G9a-2, engine/avatar-keys.ts) the body holds those keys, so no shared cache
@@ -2145,13 +2152,20 @@ router.get('/api/members', async (ctx) => {
     if (ctx.query.updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
+    // The whole directory is confirmed only against the bytes of the current version's snapshot: with none built yet
+    // for it, the check waits until it is (answer() below), never against the version tag, which none of its 200s carry.
+    if (ifNoneMatch && (ready || !shared)) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
         if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
             ctx.status = 304;
             return;
         }
+    }
+    if (ready) {
+        // Under the cap too, weighed at what a send holds (a window of the shared bytes), and cut off at its deadline.
+        await heavyRead(ctx, 'members-snapshot', () => sendMembersSnapshot(ctx, ready), SNAPSHOT_SEND_WEIGHT);
+        return;
     }
 
     // Pruned members are left out (as getMembers) so the directory matches the count reported by /api/community/info —
@@ -2167,7 +2181,7 @@ router.get('/api/members', async (ctx) => {
     // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
     // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
     // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos.
-    const answer = () => {
+    const build = (): string => {
         const rows = getMemberDirectoryRows(ctx.query.updatedAfter || undefined)
             .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
 
@@ -2185,8 +2199,24 @@ router.get('/api/members', async (ctx) => {
             archetype: r.archetype || null,
         }));
 
-        const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
-
+        return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
+    };
+    const answer = () => {
+        if (shared) {
+            // Built for the members version as it is now (it may have moved while this reader waited under the cap), read
+            // in the same turn as the rows. One that waited finds the snapshot an earlier reader built for that version.
+            const key = membersSnapshotKey(getMembersVersion(), avatarKeysRequired());
+            const snap = usableMembersSnapshot(key) ?? storeMembersSnapshot(key, build());
+            ctx.set('ETag', snap.etag);
+            // A reader holding these very bytes (a version move or a 60 s rebuild that changed nothing in it) needs none.
+            if (ifNoneMatch && ifNoneMatch.includes(snap.etag.replace(/^W\//, ''))) {
+                ctx.status = 304;
+                return;
+            }
+            sendMembersSnapshot(ctx, snap);
+            return;
+        }
+        const bodyStr = build();
         ctx.status = 200;
         ctx.type = 'application/json';
         ctx.body = bodyStr;
@@ -2197,7 +2227,6 @@ router.get('/api/members', async (ctx) => {
     // the last hour, and goes straight through. Any other (0, 1970, a phone back after a day, an array) can be the whole
     // directory, so it waits under the cap too, weighed by the last answer to that same cursor: a cursor's answer only
     // grows as members join, so a small one never stands in for a bigger one under its key.
-    const cursor = ctx.query.updatedAfter;
     if (!cursor) await heavyRead(ctx, 'members', answer);
     else if (typeof cursor === 'string' && cursor >= new Date(Date.now() - MEMBERS_DELTA_FRESH_MS).toISOString()) answer();
     else await heavyRead(ctx, heavyReadKey('members-delta', { after: JSON.stringify(cursor) }), answer);

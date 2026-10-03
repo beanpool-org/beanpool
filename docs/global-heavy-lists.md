@@ -463,8 +463,11 @@ the rest of the load report's findings, and is Marty's call.
      with the cap it answers 200 or 503 and lives.
 2. **Server: the directory snapshot.**
    - A test that every write to a directory field moves the members version.
-   - One Buffer per version (5 s floor, 60 s ceiling), with a gzip variant served on `Accept-Encoding`; the ETag
-     from the snapshot; `lat`/`lng` and the delta bypass it.
+   - One Buffer per version, served only for that version (60 s ceiling), with a gzip variant served on
+     `Accept-Encoding`; the ETag from the snapshot; `lat`/`lng` and the delta bypass it. A 5 s floor (the last
+     snapshot served for 5 s after a write) was dropped in #1523: a directory change must show at once
+     (test-profile-fanout, test-member-photos-out-of-rows). A run of writes read between each costs a build each, still
+     never more than one per read as before the snapshot.
    - Suite: byte-identical to an unshared build for full, delta and `lat`/`lng`; the read gate unchanged; a pruned
      member gone after the rebuild; 512 at once under a 256 MB heap survive.
 3. **Server: roster snapshots.**

@@ -241,6 +241,7 @@ export const SUITES = [
     'test-members-contact-visibility',
     'test-heavy-read-cap',
     'test-heavy-read-keys',
+    'test-members-snapshot',
     'test-members-directory-cost',
     'test-member-photos-out-of-rows',
     'test-group-pictures-out-of-rows',

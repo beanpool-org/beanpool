@@ -30,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { generateTotpCode } from './totp.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--child';
@@ -123,18 +124,75 @@ async function started(dataDir: string, env: Record<string, string | undefined> 
         console.error(b.output);
         throw new Error(`the node on ${dataDir} exited (${b.exited}) before it served`);
     }
+    bootDirs.set(b, dataDir);
+    const t = twoFactorOf.get(dataDir);
+    if (t) t.lastStep = 0; // a new process has taken no code yet
     return b;
 }
 
-async function post(base: string, route: string, body: unknown): Promise<number> {
-    const res = await fetch(base + route, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    try { await res.text(); } catch { /* */ }
-    return res.status;
+// Step 7c: with the node's 2FA off, the admin password sent with a request opens only the password sign-in (its session
+// held to the 2FA setup card). So "it signs in" is that sign-in; and changing the password or resetting the node first
+// turns the node's 2FA on, as an owner does in Settings, and sends a code with the password from then on.
+const bootDirs = new WeakMap<Boot, string>();
+/** By data dir (2FA is in the config, so it outlives a restart): the secret, and the last code step used on that node. */
+const twoFactorOf = new Map<string, { secret: string; lastStep: number }>();
+
+/** A code the node has not taken yet (it takes each 30-second step once, one step either side of now); null with 2FA off. */
+async function nextCode(b: Boot): Promise<{ code: string; use: () => void } | null> {
+    const t = twoFactorOf.get(bootDirs.get(b) ?? '');
+    if (!t) return null;
+    for (;;) {
+        const now = Math.floor(Date.now() / 30_000);
+        // The step before now too, unless it is about to fall out of the node's window (the next step starts within 3 s).
+        const earliest = Date.now() % 30_000 < 27_000 ? now - 1 : now;
+        const step = Math.max(t.lastStep + 1, earliest);
+        if (step <= now + 1) return { code: generateTotpCode(t.secret, step - now), use: () => { t.lastStep = step; } };
+        await new Promise((r) => setTimeout(r, 1000));
+    }
 }
 
-const signsIn = async (b: Boot, password: string) => (await post(b.base, '/api/local/admin/data', { password })) === 200;
+async function send(base: string, route: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; body: any; res: Response }> {
+    const res = await fetch(base + route, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+    let parsed: any = null;
+    try { parsed = JSON.parse(await res.text()); } catch { /* */ }
+    return { status: res.status, body: parsed, res };
+}
+
+/** The password sign-in to Settings, with a code once the node's 2FA is on. A wrong password uses no code. */
+async function signsIn(b: Boot, password: string): Promise<boolean> {
+    const c = await nextCode(b);
+    const r = await send(b.base, '/api/local/admin/auth/password', { password }, c ? { 'X-Admin-TOTP': c.code } : {});
+    if (r.status === 200) c?.use();
+    return r.status === 200;
+}
+
+/** Turn the node's 2FA on from Settings: sign in with the password, set up an authenticator, confirm a code. */
+async function turnOn2fa(b: Boot, password: string): Promise<void> {
+    const dir = bootDirs.get(b) ?? '';
+    if (twoFactorOf.has(dir)) return;
+    const signIn = await send(b.base, '/api/local/admin/auth/password', { password });
+    const cookie = (signIn.res.headers.getSetCookie().find((h) => h.startsWith('admin_session=')) ?? '').split(';')[0];
+    const asSession = { Cookie: cookie, 'X-CSRF-Token': String(signIn.body?.csrfToken ?? '') };
+    const setup = await send(b.base, '/api/local/admin/2fa/setup', {}, asSession);
+    if (signIn.status !== 200 || setup.status !== 200 || !setup.body?.secret) {
+        throw new Error(`could not set up 2FA (sign-in ${signIn.status}, setup ${setup.status} ${JSON.stringify(setup.body)})`);
+    }
+    const t = { secret: String(setup.body.secret), lastStep: 0 };
+    twoFactorOf.set(dir, t);
+    const c = (await nextCode(b))!;
+    const verify = await send(b.base, '/api/local/admin/2fa/verify', { code: c.code }, asSession);
+    if (verify.status !== 200) throw new Error(`could not turn 2FA on (verify ${verify.status} ${JSON.stringify(verify.body)})`);
+    c.use();
+}
+
+/** An owner's request with the password and a code (the node's 2FA turned on first). */
+async function postAsOwner(b: Boot, password: string, route: string, body: unknown): Promise<number> {
+    await turnOn2fa(b, password);
+    const c = (await nextCode(b))!;
+    const r = await send(b.base, route, body, { 'X-Admin-TOTP': c.code });
+    c.use();
+    return r.status;
+}
 
 /** The password, or either half of it (a box or a wrapped line could split it), anywhere in the output. */
 function printed(output: string, password: string): boolean {
@@ -196,7 +254,7 @@ async function main(): Promise<void> {
     assert(!printed(bootB, firstPw), 'B4. without printing it');
     assert(await signsIn(a, firstPw), 'B5. it still signs in');
     const beforeChange = a.output().length;
-    const changed = await post(a.base, '/api/local/change-password', { currentPassword: firstPw, newPassword: NEW_PW });
+    const changed = await postAsOwner(a, firstPw, '/api/local/change-password', { currentPassword: firstPw, newPassword: NEW_PW });
     assert(changed === 200, `B6. changing the password in Settings works (${changed})`);
     assert(!fs.existsSync(fileA), 'B7. the file is gone the moment the password is changed, with no restart');
     // The log line is written before the answer goes back, so it is in the output already, give or take a pipe.
@@ -235,7 +293,8 @@ async function main(): Promise<void> {
     const pwBefore = fs.existsSync(fileIn(dirE)) ? readFile(dirE) : '';
     assert(!!pwBefore && await signsIn(e, pwBefore), 'E1. (setup) a first password in the file, and it signs in');
     const beforeReset = e.output().length;
-    const reset = await post(e.base, '/api/local/reset', { password: pwBefore });
+    const reset = await postAsOwner(e, pwBefore, '/api/local/reset', { password: pwBefore });
+    if (reset === 200) twoFactorOf.delete(dirE); // Wipe & Reset wipes the 2FA with the rest
     assert(reset === 200, `E2. Wipe & Reset works (${reset})`);
     assert(!fs.existsSync(fileIn(dirE)), 'E3. it deletes the file at once: the password in it is gone');
     await new Promise((r) => setTimeout(r, 200));
@@ -290,8 +349,9 @@ async function main(): Promise<void> {
         const h = await started(dirH);
         const pwH = fs.existsSync(fileIn(dirH)) ? readFile(dirH) : '';
         const cfgH = path.join(dirH, 'local-config.json');
+        await turnOn2fa(h, pwH); // before the config is made read-only: turning 2FA on writes it
         fs.chmodSync(cfgH, 0o444); // saveLocalConfig's write fails, and it only logs that
-        const failedChange = await post(h.base, '/api/local/change-password', { currentPassword: pwH, newPassword: NEW_PW });
+        const failedChange = await postAsOwner(h, pwH, '/api/local/change-password', { currentPassword: pwH, newPassword: NEW_PW });
         fs.chmodSync(cfgH, 0o644);
         assert(failedChange >= 500, `H0. the change is reported as a failure, not a success (${failedChange})`);
         assert(!!pwH && fs.existsSync(fileIn(dirH)) && readFile(dirH) === pwH, 'H1. the file is kept: the password in it is still the one on disk');

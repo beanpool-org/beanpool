@@ -21,10 +21,10 @@ import { initStateEngine, getMemberTrustProfile, getPosts } from './state-engine
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestTiersOneSource123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -71,8 +71,9 @@ async function main() {
     // 2. Admin member list
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    // Step 7c: the password alone opens no admin route with 2FA off; an owner's automation token does.
     const res = await fetch(`${BASE}/api/local/admin/data`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': PW },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...ownerTokenHeaders('admin') },
     });
     assert(res.status === 200, `admin data returns 200 (got ${res.status})`);
     const body = await res.json() as any;

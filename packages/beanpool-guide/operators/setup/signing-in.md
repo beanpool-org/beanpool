@@ -9,7 +9,7 @@ There are three ways into Settings. The password is one shared secret for the wh
 
 ## With the admin password
 
-Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: the password alone is not enough, and nothing else in Settings opens until an authenticator is set up (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.
+Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Until then, tools that send the password with every request still work without a code (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.
 
 The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup.
 

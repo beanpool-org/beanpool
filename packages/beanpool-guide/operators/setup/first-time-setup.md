@@ -26,7 +26,7 @@ The server reads ADMIN_PASSWORD only on its first start. After that it keeps a s
 
 ## Open Settings
 
-Go to your server's address followed by **/settings**, for example https://example.org/settings, and sign in with the admin password. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. The password alone is not enough, so nothing else opens until the server accepts a code from the authenticator. Then Settings, and the setup wizard, open.
+Go to your server's address followed by **/settings**, for example https://example.org/settings, and sign in with the admin password. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open.
 
 ## The setup wizard
 

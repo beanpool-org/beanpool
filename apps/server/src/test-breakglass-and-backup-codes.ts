@@ -371,9 +371,11 @@ async function main() {
             `the same code a second time: refused (${reuse.status})`);
 
         // The password with this request's own code inline: the code checked here is the body's, and must be current too.
-        const inline = generateTotpCode(SECRET, -1);
-        let body = generateTotpCode(SECRET, 0);
-        if (body === inline) body = generateTotpCode(SECRET, 1);
+        // This step and the next (not the previous and this one): if the 30-s step rolls over before the server checks them,
+        // they are still within its ±1 step and the body's is still the later one. A previous-step code went stale at a
+        // rollover and failed main's CI (run 37148410779: 401 Invalid 2FA code).
+        const inline = generateTotpCode(SECRET, 0);
+        const body = generateTotpCode(SECRET, 1);   // equal to `inline` about once in a million: a replay, refused
         forgetUsedTotpCodesForTests();
         const pwWrong = await post(BACKUP, { code: wrongCode() }, { ...asPassword, 'x-admin-totp': inline });
         assert(pwWrong.status === 401 && !pwWrong.body?.backupCodes, `the password + an inline code, with a wrong code to check: refused (${pwWrong.status})`);

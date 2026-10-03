@@ -30,6 +30,7 @@ import { TakeoverPanel } from './TakeoverPanel';
 import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
+import { AutomationTokensPanel } from './AutomationTokensPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
 import { OffboxBackupsPanel } from './OffboxBackupsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
@@ -1678,6 +1679,11 @@ export function ApplianceSection({
                             {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>
+
+                    {/* Automation tokens: owners only (the panel draws nothing for anyone else) */}
+                    <SectionErrorBoundary sectionName="Automation tokens" resetKey={activeNode.id}>
+                        <AutomationTokensPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
 
                     {/* Factory Reset Danger Zone */}
                     <div className="p-6 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-xl space-y-3">

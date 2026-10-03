@@ -69,6 +69,9 @@ export interface LocalConfig {
     // that has it unset, which reads as off, so a standby still copying with the admin
     // password keeps working; Settings tells the owner to switch it on.
     replicationTokenOnly?: boolean;
+    // Owner automation tokens (automation-tokens.ts): each one's public id, name, scope, who made it and when, and a
+    // SHA-256 of its secret, never the secret. This server's own: never in a backup file, the stager's copy or the bundle.
+    automationTokens?: AutomationTokenRecord[];
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
     // --- Backup pull cadence (operator-tunable, e.g. from the fleet manager) ---
@@ -165,6 +168,21 @@ const DEFAULT_CONFIG: LocalConfig = {
     currencyType: 'image',
     currencyValue: 'bean',
 };
+
+/** One owner automation token as local-config.json keeps it (automation-tokens.ts). */
+export interface AutomationTokenRecord {
+    id: string;
+    name: string;
+    scope: 'read' | 'backups' | 'admin';
+    /** The issuing owner: their key, or 'owner:password'. */
+    createdBy: string;
+    createdAt: number;
+    expiresAt: number | null;
+    lastUsedAt: number | null;
+    lastUsedRoute: string | null;
+    /** SHA-256 (hex) of the secret. */
+    hash: string;
+}
 
 export function getLocalConfig(): LocalConfig {
     try {
@@ -535,13 +553,13 @@ export function clearReplicationToken(): void {
 /**
  * What a backup file's node_config.json leaves out: this server's credentials. The admin password's hash and salt, the
  * two-factor secret and backup codes (and a half-made pair), the replication token's hash, the token a standby presents,
- * and the plain-text admin password an older standby may still hold. A readable backup is a file anyone who has it can
+ * the plain-text admin password an older standby may still hold, and the owners' automation tokens' hashes. A readable backup is a file anyone who has it can
  * read (Fable's replication review HIGH-1, 2026-10-01: the hash was offline guessing, the 2FA secret the second factor
  * gone); a locked one carries them in its take-over bundle, where a restore takes them from.
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'claim',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

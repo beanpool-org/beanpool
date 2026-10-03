@@ -48,7 +48,7 @@ async function call(method: string, p: string, opts: { body?: unknown; raw?: Buf
     const res = await fetch(`${BASE}${p}`, {
         method,
         headers: { ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(opts.headers || {}) },
-        body: opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
+        body: opts.raw ? new Uint8Array(opts.raw) : (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
         redirect: 'manual',
     });
     const text = await res.text();

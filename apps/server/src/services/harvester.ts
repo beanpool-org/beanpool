@@ -164,11 +164,11 @@ export function getNodes(): FleetNodeConfig[] {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
-    } catch (e: any) {
+    } catch (e) {
         // The path and what failed, never the error's text: JSON.parse's message can quote the file around the error, and
         // the file holds owner tokens and passwords. Only the position is kept from it.
         const at = e instanceof SyntaxError ? /(line \d+ column \d+|position \d+)/.exec(e.message)?.[1] : null;
-        const what = e instanceof SyntaxError ? `not valid JSON${at ? ` (at ${at})` : ''}` : (typeof e?.code === 'string' ? e.code : 'unreadable');
+        const what = e instanceof SyntaxError ? `not valid JSON${at ? ` (at ${at})` : ''}` : ((e as NodeJS.ErrnoException)?.code ?? 'unreadable');
         console.warn(`[Harvester] Failed to read ${NODES_FILE}: ${what}. Using the built-in node list.`);
     }
     return DEFAULT_NODES;

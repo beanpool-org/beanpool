@@ -604,6 +604,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     replicationTokenSalt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },
     backupReconcileMinutes: { kind: 'per-server', reason: "a standby's whole-copy interval" },

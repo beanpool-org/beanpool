@@ -477,7 +477,10 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
  * engine is given. Answers 403 and returns false when that is due.
  */
 function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
-    return !adminActionNeedsOwner(action, target, actor) || requirePhoneStepUp(ctx);
+    // An automation token acts for the owner who made it but never as them: what an owner may do to themselves (prune
+    // their own branch) is still an owner's action, so it is refused to the token (requirePhoneStepUp).
+    const asActor = ctx.state?.automationTokenId ? '' : actor;
+    return !adminActionNeedsOwner(action, target, asActor) || requirePhoneStepUp(ctx);
 }
 
 const handleEnrol = async (ctx: any) => {

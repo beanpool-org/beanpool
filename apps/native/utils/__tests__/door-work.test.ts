@@ -160,13 +160,17 @@ describe('short batches: the screen breathes while the work runs', () => {
     it('with the default batches, the screen gets a turn every few milliseconds', async () => {
         const { ticks, worstGapMs } = await longestHold(8);
         expect(ticks).toBeGreaterThan(5);
-        // A batch is 8 ms of tries, plus one try that started inside it and a timer's own lateness on a busy machine.
-        expect(worstGapMs).toBeLessThan(60);
+        // A batch is 8 ms of tries (9 ms worst here), plus one try that started inside it and a timer's own lateness on a
+        // busy machine: CI's shared runners measured 60 and 74 ms (2026-10-03). 150 ms still sits far below the control's
+        // hold of the whole solve (about 380 ms), which the control below pins above this bound.
+        expect(worstGapMs).toBeLessThan(150);
     });
 
     it('control: without the batches (one endless slice), the screen gets no turn until the work is done', async () => {
-        const { ticks } = await longestHold(Number.POSITIVE_INFINITY);
+        const { ticks, worstGapMs } = await longestHold(Number.POSITIVE_INFINITY);
         expect(ticks).toBe(0);
+        // The whole solve holds the screen for longer than the batched bound above, so that bound still tells them apart.
+        expect(worstGapMs).toBeGreaterThan(150);
     });
 });
 

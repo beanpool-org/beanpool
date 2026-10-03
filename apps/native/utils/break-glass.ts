@@ -8,8 +8,9 @@
  *
  * Until #1531 the app offered "Also keep it on this phone", a copy in the secure store that nothing ever read back. It
  * was dropped rather than given a "Show" row: a copy on the phone is gone in the one case the code is for (the phone is
- * lost); while the phone is in hand the owner can make a new code behind the same unlock; and "Sign out everywhere" now
- * retires the code on the node, so a kept copy could show a dead code. Any copy an older app kept is deleted at start
+ * lost); while the phone is in hand the owner can make a new code behind the same unlock; and "Sign out everywhere" (the
+ * app's row, utils/sign-out-everywhere.ts, or Settings' Owners & admins) retires the code on the node, so a kept copy
+ * could show a dead code. Any copy an older app kept is deleted at start
  * (sweepKeptBreakGlassCode) and whenever a new code is made (forgetBreakGlassCode).
  */
 import * as SecureStore from 'expo-secure-store';

@@ -296,9 +296,14 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
 const revocationNonces = new NonceStore(60_000);
 
 /**
- * POST /api/local/admin/auth/revoke-all
- * Revoke all web sessions for a member by bumping session_epoch in SQLite.
- * Gated by checkAdminAuth or signature header.
+ * POST /api/local/admin/auth/revoke-all — "Sign out everywhere" (Settings' Owners & admins, the app's admin rows).
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite. Who can end whose:
+ *   - a key session (owner, admin, moderator) or the app's signed request: the caller's own; the signed request always
+ *     the signer's, whatever the body names;
+ *   - an owner's key session, or the password: another member's too, named in the body (from the phone, after its
+ *     unlock again); the password naming nobody is refused (400), as it has no sessions of its own;
+ *   - an automation token: nobody's (403 token_not_allowed, as on every sign-in route).
+ * test-automation-tokens section 4b measures each over HTTP.
  */
 router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};

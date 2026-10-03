@@ -116,7 +116,8 @@ const BREAK_GLASS_MADE_BY: Record<string, string> = {
 
 /**
  * An owner's break-glass code, for their row (#1531): when it was last made and from which kind of session, so an owner
- * who signed out everywhere (which retires their code) can tell whether a code made since was theirs. Null for a role
+ * who signed out everywhere (SignOutEverywhere at the foot of this panel, or the app's row; it retires their code) can tell
+ * whether a code made since was theirs. Null for a role
  * that is not an owner, or from an older node that does not say.
  */
 export function breakGlassText(r: Pick<NodeRoleRecord, 'role' | 'has_break_glass' | 'break_glass_made_at' | 'break_glass_made_by'>): string | null {

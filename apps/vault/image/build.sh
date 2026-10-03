@@ -62,7 +62,12 @@ if ! printf '%s' "${version}" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|
     echo "--version is MAJOR.MINOR.PATCH" >&2
     exit 2
 fi
-network="$(node "${here}/image-settings.mjs" check "${network}")" || exit 2
+# Fail closed: go on only when the answer is exactly the setting given (no answer, or another one, stops the build).
+checked="$(node "${here}/image-settings.mjs" check "${network}")" || exit 2
+if [ -z "${checked}" ] || [ "${checked}" != "${network}" ]; then
+    echo "build.sh: image-settings.mjs check gave ${checked:-no answer} for --network ${network}: not building" >&2
+    exit 2
+fi
 mkdir -p "${out}" "${cache}/packages"
 out="$(cd "${out}" && pwd)"
 cache="$(cd "${cache}" && pwd)"
@@ -108,7 +113,14 @@ node -e '
     }, null, 2) + "\n");
 ' "${keys}" > "${extra}/etc/beanpool-vault/keyholder.json"
 # The host network: nothing changes for dhcp; the static form's file replaces the DHCP one.
-node "${here}/image-settings.mjs" write "${network}" "${extra}/etc/systemd/network/80-wan.network"
+# It must answer with the setting, and the file must then be there with its address and gateway (or not be there for dhcp).
+wan="${extra}/etc/systemd/network/80-wan.network"
+wrote="$(node "${here}/image-settings.mjs" write "${network}" "${wan}")"
+case "${network}" in
+    dhcp) [ "${wrote}" = "dhcp" ] && [ ! -e "${wan}" ] ;;
+    *) address="${network#static:}"
+       [ "${wrote}" = "${network}" ] && grep -qxF "Address=${address%%,*}" "${wan}" && grep -qxF "Gateway=${network##*,}" "${wan}" ;;
+esac || { echo "build.sh: image-settings.mjs write did not write ${wan} for --network ${network}: not building" >&2; exit 2; }
 if [ -n "${more}" ]; then
     echo "build.sh: adding ${more} (not a release image)" >&2
     cp -R "${more}/." "${extra}/"
@@ -185,4 +197,11 @@ roothash="$(docker run --rm -v "${out}:/output" "${builder}" \
 uki_sha="$(sha256 "${out}/vault.efi")"
 image_hash="$(printf 'beanpool-vault-image/1\n%s\n%s\n' "${uki_sha}" "${roothash}" | (sha256sum 2>/dev/null || shasum -a 256) | cut -d' ' -f1)"
 node "${here}/image-settings.mjs" image-json "${version}" "${uki_sha}" "${roothash}" "${image_hash}" "${network}" > "${out}/image.json"
+# Never an empty or partial image.json: it must name this build's hash, and the setting when it is not dhcp.
+if ! grep -qF "\"imageHash\": \"${image_hash}\"" "${out}/image.json" \
+    || { [ "${network}" != "dhcp" ] && ! grep -qF "\"network\": \"${network}\"" "${out}/image.json"; }; then
+    echo "build.sh: image-settings.mjs image-json did not write ${out}/image.json for --network ${network}" >&2
+    rm -f "${out}/image.json"
+    exit 2
+fi
 cat "${out}/image.json"

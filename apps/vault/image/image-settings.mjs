@@ -1,8 +1,12 @@
 // The image build's settings that change the image (build.sh): the host network, and image.json, which records it.
 //
 //   node image/image-settings.mjs check <network>          prints the setting back, or refuses (exit 2) and says why
-//   node image/image-settings.mjs write <network> <file>   writes the static form's network file (nothing for dhcp)
+//   node image/image-settings.mjs write <network> <file>   writes the static form's network file (nothing for dhcp),
+//                                                          and prints the setting back
 //   node image/image-settings.mjs image-json <version> <ukiSha256> <roothash> <imageHash> <network>
+//
+// build.sh goes on only when each answer is the one it expects (and checks the file written and image.json), so a run
+// that does nothing stops the build instead of building without the setting.
 //
 // <network> is `dhcp` (the default: the image's own etc/systemd/network/80-wan.network, untouched, so the image is
 // byte for byte what it was before the setting existed) or `static:<ipv4>/<prefix>,<gateway>` for a host that hands
@@ -13,7 +17,7 @@
 // The firewall (etc/nftables.conf) keeps its DHCP rules in both forms: they only let networkd's client send to the
 // DHCP ports, and with a static address networkd sends nothing there, so they are harmless. Leaving the file alone
 // keeps the dhcp image the same bytes.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -80,7 +84,17 @@ export function imageJson({ version, ukiSha256, roothash, imageHash, network }) 
     return JSON.stringify({ version, ukiSha256, roothash, imageHash, ...(network.kind === 'dhcp' ? {} : { network: network.value }) }, null, 2) + '\n';
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// Run as a program: compared by real path, since build.sh names this file by its logical path (`here` is a plain pwd)
+// while import.meta.url is the real one, and the two differ under a symlinked directory (macOS /tmp is one).
+function isMain() {
+    try {
+        return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+    } catch {
+        return false;
+    }
+}
+
+if (isMain()) {
     const [command, ...args] = process.argv.slice(2);
     let network;
     try {
@@ -97,6 +111,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
             mkdirSync(path.dirname(args[1]), { recursive: true });
             writeFileSync(args[1], text);
         }
+        process.stdout.write(`${network.value}\n`);
     } else if (command === 'image-json' && args.length === 5) {
         const [version, ukiSha256, roothash, imageHash] = args;
         process.stdout.write(imageJson({ version, ukiSha256, roothash, imageHash, network }));

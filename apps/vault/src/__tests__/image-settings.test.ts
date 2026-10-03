@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,5 +90,40 @@ describe('the image build\'s network setting', () => {
         expect(existsSync(file)).toBe(false);
         expect(run('write', 'static:192.0.2.10/24,192.0.2.1', file).status).toBe(0);
         expect(existsSync(file)).toBe(true);
+    });
+
+    // build.sh calls the module by its logical path (`here` is a plain pwd), so the repo under a symlink (macOS /tmp is
+    // one) must still run the command line: before, it ran nothing and exited 0, and a bad --network built a dhcp image.
+    it('through a symlinked directory the command line still runs, and build.sh still refuses a bad --network', () => {
+        const link = path.join(dir, 'linked-image');
+        symlinkSync(image, link);
+        const run = (...args: string[]) => spawnSync(process.execPath, [path.join(link, 'image-settings.mjs'), ...args], { encoding: 'utf8' });
+        expect(run('check', 'bogus')).toMatchObject({ status: 2 });
+        expect(run('check', 'static:192.0.2.10/24,192.0.2.1')).toMatchObject({ status: 0, stdout: 'static:192.0.2.10/24,192.0.2.1\n' });
+        const file = path.join(dir, 'linked-tree', '80-wan.network');
+        expect(run('write', 'static:192.0.2.10/24,192.0.2.1', file)).toMatchObject({ status: 0, stdout: 'static:192.0.2.10/24,192.0.2.1\n' });
+        expect(readFileSync(file, 'utf8')).toContain('Gateway=192.0.2.1\n');
+        expect(run('image-json', '0.0.1', 'aa', 'bb', 'cc', 'dhcp').stdout).toBe(imageJson({ version: '0.0.1', ukiSha256: 'aa', roothash: 'bb', imageHash: 'cc', network: parseNetwork('dhcp') }));
+        const out = path.join(dir, 'linked-out');
+        const r = spawnSync('bash', [path.join(link, 'build.sh'), '--custodian-keys', path.join(dir, 'keys.json'), '--version', '0.0.1',
+            '--out', out, '--network', 'bogus\n[Network]\nDNS=192.0.2.66'], { encoding: 'utf8' });
+        expect(r.status).toBe(2);
+        expect(existsSync(out)).toBe(false);
+    });
+
+    // Belt and braces: build.sh goes on only when `check` answers with exactly the setting it was given, so a module
+    // that runs nothing (as above) or answers wrongly stops the build instead of building without the setting.
+    it.each([['no answer', ''], ['another answer', 'dhcp\n']])('build.sh refuses when check gives %s', (_name, answer) => {
+        const stub = path.join(dir, `stub-${answer.length}`, 'image');
+        mkdirSync(stub, { recursive: true });
+        copyFileSync(path.join(image, 'build.sh'), path.join(stub, 'build.sh'));
+        copyFileSync(path.join(image, 'pins.env'), path.join(stub, 'pins.env'));
+        writeFileSync(path.join(stub, 'image-settings.mjs'), `process.stdout.write(${JSON.stringify(answer)});\n`);
+        const out = path.join(stub, 'out');
+        const r = spawnSync('bash', [path.join(stub, 'build.sh'), '--custodian-keys', path.join(dir, 'keys.json'), '--version', '0.0.1',
+            '--out', out, '--network', 'static:192.0.2.10/24,192.0.2.1'], { encoding: 'utf8' });
+        expect(r.status).toBe(2);
+        expect(r.stderr).toMatch(/image-settings\.mjs check/);
+        expect(existsSync(out)).toBe(false);
     });
 });

@@ -11,6 +11,7 @@
  *   4. A notice is left for the node: delivered once as a critical community announcement and a SECURITY log line,
  *      then gone, so it is never announced twice.
  *   5. Running it again for the same owner makes a new code; the code it printed before no longer works.
+ *   6. A member named by @callsign; an unknown callsign is refused.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-beanpool-recover.ts
  */
@@ -110,6 +111,19 @@ async function main() {
         'the code printed before no longer works');
     assert(!!row2?.break_glass_hash && (await breakGlassCodeMatches(code2!, row2.break_glass_hash)) !== 'no', 'the new code works');
     assert(fs.readFileSync(CONFIG).equals(configBefore), 'local-config.json is still unchanged');
+
+    // 6. By callsign
+    const BOB = pk();
+    addMember(BOB, 'Bob');
+    const byName = cli('recover', '--key', '@bob');
+    assert(byName.code === 0 && roleRow(BOB)?.role === 'owner', '@callsign (any case) finds the member and makes them owner');
+    const BOB_OLD = pk();
+    addMember(BOB_OLD, 'bob', 'pruned');
+    const again = cli('recover', '--key', '@BOB');
+    assert(again.code === 0, 'a pruned member with the same callsign does not make @callsign ambiguous');
+    const nobody = cli('recover', '--key', '@nobody');
+    assert(nobody.code !== 0 && /no member @nobody/i.test(nobody.out), 'an unknown @callsign is refused');
+    deliverRecoverNotices(deps);
 
     console.log(`\n${passed}/${run} passed`);
     if (passed !== run) process.exitCode = 1;

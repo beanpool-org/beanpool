@@ -47,7 +47,9 @@ function resolveMember(conn: Database.Database, who: string): { pubkey: string }
     if (/^[0-9a-fA-F]{64}$/.test(text)) return { pubkey: text.toLowerCase() };
     const callsign = text.replace(/^@/, '');
     if (!callsign) return { reason: 'Give a member public key (64 hex digits) or @callsign.' };
-    const rows = conn.prepare('SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND is_visitor = 0').all(callsign) as { public_key: string }[];
+    // As the unique index reads callsigns (db/db.ts idx_members_callsign_unique): a pruned or migrated row may share one.
+    const rows = conn.prepare(`SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND is_visitor = 0
+        AND status NOT IN ('migrated', 'pruned')`).all(callsign) as { public_key: string }[];
     if (rows.length === 0) return { reason: `There is no member @${callsign} on this server.` };
     if (rows.length > 1) return { reason: `More than one member is called @${callsign}; give the public key instead.` };
     return { pubkey: rows[0].public_key };

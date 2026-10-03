@@ -210,7 +210,7 @@ async function main() {
         const twoFa = turnOn2faForTests(adminPass);
         const pw = await admin('POST', LIST, twoFa.headers());
         updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
-        assert(pw.status === 200, `the admin password reads the list (got ${pw.status})`);
+        assert(pw.status === 200, `with 2FA on, the admin password with a code reads the list (got ${pw.status})`);
         const owners = pw.body.owners as any[];
         assert(owners.length === 2 && owners.map((o) => o.callsign).join(',') === 'wcAnna,wcBen', `the list is the owners, oldest first (${owners.map((o) => o.callsign)})`);
         assert(typeof owners[0].wordsCheckedAt === 'number' && owners[1].wordsCheckedAt === null, 'Anna checked, Ben not yet');

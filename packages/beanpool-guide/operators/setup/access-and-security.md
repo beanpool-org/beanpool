@@ -21,6 +21,8 @@ Two-factor sign-in asks for a 6-digit code from an authenticator app as well as 
 
 **Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with "Turn on two-factor sign-in in Settings, or use an automation token made from your phone". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before.
 
+**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says "Turn on two-factor sign-in in Settings (the new page), then come back". Turn it on in Settings, then sign in there with the password and a code.
+
 Two things still take the password alone while two-factor sign-in is off:
 
 - A standby that still copies with the password keeps copying, until you make copying take the replication token only (Live Backup Server). It cannot swap its password for a replication token on its own any more: its log says to make one on this server from the owner's phone (Replication Access) and paste it into the standby.

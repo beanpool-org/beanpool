@@ -102,6 +102,7 @@ import { startHttpsServer, getKoaApp, resetAdminRateLimit } from './https-server
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { lockedDm } from './dm-test-payload.js';
@@ -275,6 +276,9 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    // Step 7c: the password alone opens no admin route with 2FA off: the admin calls go under an owner's key session,
+    // made once here, before any section measures what changes.
+    const ownerAuth = ownerSessionHeaders();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     // The signature middleware refuses every signed write from a visitor's row that VISITOR_WRITES doesn't name
@@ -482,7 +486,7 @@ async function main(): Promise<void> {
         };
         const admin = async (method: string, path: string, body?: unknown): Promise<Res> => {
             resetGatewayRateLimit();
-            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': process.env.ADMIN_PASSWORD! },
+            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...ownerAuth },
                 body: body !== undefined ? JSON.stringify(body) : undefined });
             let json: any; try { json = await res.json(); } catch { /* empty */ }
             return { status: res.status, body: json };
@@ -1150,7 +1154,7 @@ async function main(): Promise<void> {
         const told = (m: Measured) => `${show(m.r)}${m.changed.length ? `; changed: ${m.changed.join(', ')}` : ''}`;
         const admin = async (method: string, path: string, body?: unknown): Promise<Res> => {
             resetLimits();
-            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': process.env.ADMIN_PASSWORD! },
+            const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...ownerAuth },
                 body: body !== undefined ? JSON.stringify(body) : undefined });
             let json: any; try { json = await res.json(); } catch { /* empty */ }
             return { status: res.status, body: json };

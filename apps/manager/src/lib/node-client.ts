@@ -534,6 +534,36 @@ export async function downloadAdminFile(
     return downloadNotice(res);
 }
 
+/**
+ * Sign-in step 7c: a node with two-factor sign-in off refuses the admin password sent with a request, 403
+ * password_needs_2fa. A profile with only a password then needs one of these, said after the node's own words.
+ */
+export const PASSWORD_NEEDS_2FA_HINT = 'Turn on two-factor sign-in, or sign in with an owner\'s token';
+
+/** The error for a request refused that way: the node's words plus the hint. Null for any other answer; the body is left unread. */
+export async function passwordNeeds2faError(res: Response): Promise<Error | null> {
+    if (res.status !== 403) return null;
+    // A copy, so the caller can still read the body; a stand-in Response without clone() is read as it is.
+    const copy = typeof res.clone === 'function' ? res.clone() : res;
+    const body = await Promise.resolve().then(() => copy.json()).catch(() => null) as { error?: unknown; code?: unknown } | null;
+    if (body?.code !== 'password_needs_2fa') return null;
+    const words = typeof body.error === 'string' && body.error.trim() ? body.error.trim() : 'This node needs two-factor sign-in for the admin password';
+    return new Error(`${words}${/[.!?]$/.test(words) ? '' : '.'} ${PASSWORD_NEEDS_2FA_HINT}.`);
+}
+
+/**
+ * Does this error mean "the credential was refused" rather than "node unreachable"?
+ *
+ * `fetchDiagnostics` throws `HTTP 401: Unauthorized`; the friendlier per-endpoint
+ * messages say the same thing in words. Both are matched, because retrying is futile
+ * either way — no amount of waiting turns a rejected password into an accepted one.
+ * A password refused because the node's two-factor sign-in is off (passwordNeeds2faError) is one too.
+ */
+export function isAuthFailure(message: string): boolean {
+    return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message)
+        || message.includes(PASSWORD_NEEDS_2FA_HINT);
+}
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/diagnostics');
     const res = await fetch(endpoint, {
@@ -541,7 +571,7 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, 
         cache: 'no-store',
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw (await passwordNeeds2faError(res)) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }

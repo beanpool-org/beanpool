@@ -1125,6 +1125,9 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     if (pathname === '/api/local/admin/auth/session') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/exchange') return ok({ authenticated: false });
     if (pathname === '/api/local/admin/auth/logout') return ok({ success: true });
+    // The claim check before sign-in (routes/node-claim.ts): this node has an owner. phone-width.mjs overrides it to
+    // draw the unclaimed card.
+    if (pathname === '/api/local/claim') return ok({ unclaimed: false });
     // Sign in with your phone: a pairing that just keeps waiting (the page answers each poll at most once a second).
     if (pathname === '/api/local/admin/auth/pairing') return ok({ pairingId: 'ab'.repeat(32), shortCode: 'K7F3QX', expiresAt: Date.now() + 120000, ttlMs: 120000 });
     if (/^\/api\/local\/admin\/auth\/pairing\/[0-9a-f]{64}\/wait$/.test(pathname)) return ok({ status: 'waiting', expiresAt: Date.now() + 120000 });

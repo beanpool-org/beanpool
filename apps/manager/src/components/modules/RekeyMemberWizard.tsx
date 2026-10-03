@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     issueRekeyCodeApi,
     completeRekeyApi,
@@ -50,24 +50,31 @@ export function RekeyMemberWizard({
     const [newPubkey, setNewPubkey] = useState('');
     const [completing, setCompleting] = useState(false);
 
+    // The node left an owner's or admin's pending code out: this phone session is past its step-up window (#1534).
+    const [codeNeedsStepUp, setCodeNeedsStepUp] = useState(false);
+    const [rereading, setRereading] = useState(false);
+
     const isChecklistComplete = checkPhysical && checkLost && checkInvalidateNotice;
+
+    /** Reads the member's re-key status and shows a pending code, or asks for Manage again when it is held back. */
+    const applyStatus = useCallback((status: RekeyStatusResponse) => {
+        setRekeyStatus(status);
+        const pending = status.pendingRequest;
+        if (!pending) return;
+        const isExpired = new Date(pending.expires_at).getTime() < Date.now();
+        if (isExpired) return;
+        setExpiresAt(pending.expires_at);
+        setStep(2);
+        setIssuedCode(pending.code ?? null);
+        setCodeNeedsStepUp(!!pending.codeNeedsStepUp);
+    }, []);
 
     useEffect(() => {
         let mounted = true;
         const checkExisting = async () => {
             try {
                 const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
-                if (mounted && status) {
-                    setRekeyStatus(status);
-                    if (status.pendingRequest) {
-                        const isExpired = new Date(status.pendingRequest.expires_at).getTime() < Date.now();
-                        if (!isExpired) {
-                            setIssuedCode(status.pendingRequest.code);
-                            setExpiresAt(status.pendingRequest.expires_at);
-                            setStep(2);
-                        }
-                    }
-                }
+                if (mounted && status) applyStatus(status);
             } catch {
                 // Not blocking
             }
@@ -76,7 +83,24 @@ export function RekeyMemberWizard({
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken]);
+    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+
+    /** After Manage again: read the status once more, which now carries the code. */
+    const handleReread = async () => {
+        setRereading(true);
+        setError(null);
+        try {
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            applyStatus(status);
+            if (status.pendingRequest?.codeNeedsStepUp) {
+                setError("Still waiting: press Manage in the BeanPool app again (it asks for your phone's lock), then try again.");
+            }
+        } catch (err: any) {
+            setError(err?.message || 'Failed to fetch re-key status');
+        } finally {
+            setRereading(false);
+        }
+    };
 
     const handleIssueCode = async () => {
         if (!isChecklistComplete) return;
@@ -85,6 +109,7 @@ export function RekeyMemberWizard({
         try {
             const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
             setIssuedCode(res.code);
+            setCodeNeedsStepUp(false);
             setExpiresAt(res.expiresAt);
             setStep(2);
         } catch (err: any) {
@@ -260,6 +285,7 @@ export function RekeyMemberWizard({
                             <span className="text-[11px] uppercase tracking-wider text-nature-400 font-mono font-bold block">
                                 One-Time Re-enrolment Code
                             </span>
+                            {issuedCode ? (
                             <div className="flex items-center justify-center gap-3">
                                 <span className="text-2xl font-mono font-extrabold tracking-widest text-amber-300 bg-black/40 px-4 py-2 rounded-xl border border-amber-900/60">
                                     {issuedCode}
@@ -272,6 +298,25 @@ export function RekeyMemberWizard({
                                     {copiedCode ? '✓ Copied' : 'Copy'}
                                 </button>
                             </div>
+                            ) : codeNeedsStepUp ? (
+                            <div className="space-y-2" data-testid="rekey-code-needs-step-up">
+                                <p className="text-[11px] leading-relaxed text-amber-200 m-0">
+                                    Confirm it's you first: this code moves an owner's or admin's role to a new phone. Press Manage in the BeanPool app again (it asks for your phone's lock), then show the code here.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleReread}
+                                    disabled={rereading}
+                                    className="px-3 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-[11px] font-semibold"
+                                >
+                                    {rereading ? 'Checking…' : 'Show the code'}
+                                </button>
+                            </div>
+                            ) : (
+                            <p className="text-[11px] leading-relaxed text-nature-300 m-0">
+                                Only the person who issued this code, or an owner, can see it.
+                            </p>
+                            )}
                             {expiresAt && (
                                 <p className={`text-[10px] m-0 ${
                                     new Date(expiresAt).getTime() < Date.now() ? 'text-amber-400 font-bold' : 'text-nature-400'
@@ -315,6 +360,7 @@ export function RekeyMemberWizard({
                                 type="button"
                                 onClick={() => {
                                     setIssuedCode(null);
+                                    setCodeNeedsStepUp(false);
                                     setExpiresAt(null);
                                     setStep(1);
                                 }}
@@ -332,10 +378,10 @@ export function RekeyMemberWizard({
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={completing || !newPubkey.trim() || Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now())}
+                                    disabled={completing || !issuedCode || !newPubkey.trim() || Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now())}
                                     onClick={handleCompleteRekey}
                                     className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
-                                        !completing && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
+                                        !completing && issuedCode && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
                                             ? 'bg-amber-600 hover:bg-amber-500 text-white'
                                             : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                     }`}

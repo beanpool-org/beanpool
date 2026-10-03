@@ -983,6 +983,18 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
     };
 }
 
+/**
+ * The claim (routes/node-claim.ts), exactly: GET and POST /api/local/claim, nothing under it or beside it. Neither
+ * per-address limiter (the gateway's, the administrative one) runs before it: a stranger who shares the installer's
+ * address (the same Wi-Fi, a carrier NAT, a proxy that is not trusted or forwards no address) could fill either and keep
+ * a right proof refused. The route sheds its own load: no scrypt, at most one HMAC and one Ed25519 verify a request, a
+ * wrong proof brakes its own source for 10 s before any verify, a node with an owner answers 409 before any verify, and
+ * its body is capped at 4 KiB (ROUTE_BODY_LIMITS).
+ */
+function isClaimRoute(ctx: Koa.Context): boolean {
+    return ctx.path === '/api/local/claim' && (ctx.method === 'GET' || ctx.method === 'POST');
+}
+
 /** Paths the signature middleware never verifies (they carry their own auth, or none). */
 function isSignatureBypassed(p: string): boolean {
     return p.startsWith('/api/local/') ||
@@ -1287,9 +1299,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         //    else under /api/federation/ or /api/community/: a purchase, a commission, a registration or an area
         //    is a member's own request and is charged like any other (W-main).
         //    The peer protocol's reads have a generous bucket of their own per address (gatewayAdmitPeerRead, DoS review
-        //    F4): exempt from the others, they had no ceiling at all.
+        //    F4): exempt from the others, they had no ceiling at all. The claim is exempt too (isClaimRoute).
         const peerRead = isPeerProtocolRead(ctx);
-        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !peerRead;
+        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !peerRead && !isClaimRoute(ctx);
         if (limited) {
             // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to the default
             const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
@@ -1306,7 +1318,8 @@ export async function startHttpsServer(port: number): Promise<number> {
     // Administrative In-Memory Rate Limiter Middleware
     app.use(async (ctx, next) => {
         const lowerPath = ctx.path.toLowerCase();
-        if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
+        // The claim has its own brake and no other (isClaimRoute).
+        if ((lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) && !isClaimRoute(ctx)) {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
@@ -1915,6 +1928,9 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     [/^\/api\/join\/knocks\//, 4 * 1024],
     // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).
     [/^\/api\/names\/copy$/, 1.5 * 1024 * 1024],
+    // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it
+    // (isClaimRoute), so it reads no more than this.
+    [/^\/api\/local\/claim$/, 4 * 1024],
 ];
 
 function routeBodyLimit(path: string): number {

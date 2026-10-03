@@ -538,7 +538,7 @@ export async function downloadAdminFile(
  * Sign-in step 7c: a node with two-factor sign-in off refuses the admin password sent with a request, 403
  * password_needs_2fa. A profile with only a password then needs one of these, said after the node's own words.
  */
-export const PASSWORD_NEEDS_2FA_HINT = 'Turn on two-factor sign-in, or sign in with an owner\'s token';
+export const PASSWORD_NEEDS_2FA_HINT = 'This profile signs in with the admin password; an owner\'s token works without it';
 
 /** The error for a request refused that way: the node's words plus the hint. Null for any other answer; the body is left unread. */
 export async function passwordNeeds2faError(res: Response): Promise<Error | null> {

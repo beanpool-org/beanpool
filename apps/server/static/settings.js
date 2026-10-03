@@ -62,7 +62,7 @@
             const link = document.createElement('a');
             link.href = '/settings';
             link.textContent = 'Settings';
-            el.replaceChildren(`${words}${/[.!?]$/.test(words) ? '' : '.'} Turn on two-factor sign-in in `, link, ' (the new page), then come back.');
+            el.replaceChildren(`${words}${/[.!?]$/.test(words) ? '' : '.'} Open `, link, ' (the new page) to turn it on, then come back.');
             el.className = 'status-msg show error';
         }
         /** True, with the message shown, when an admin call was refused because the password needs two-factor sign-in. */
@@ -74,10 +74,13 @@
             return true;
         }
         // Any pane: an admin call refused that way while signed in brings the sign-in view back with the message.
+        // Only this node's own answers count: the page also asks sister nodes for their status, and a sister's 403 must
+        // neither sign the operator out nor put its words on this node's sign-in view (#1564 deciding review).
         const pageFetch = window.fetch.bind(window);
+        const fromThisNode = (res) => { try { return new URL(res.url, location.href).origin === location.origin; } catch { return false; } };
         window.fetch = async (...args) => {
             const res = await pageFetch(...args);
-            if (authToken) await refusedForNeeds2fa(res);
+            if (authToken && fromThisNode(res)) await refusedForNeeds2fa(res);
             return res;
         };
 
@@ -427,7 +430,7 @@
                         if (info.location && info.location.lat && info.location.lng) {
                             const marker = L.marker([info.location.lat, info.location.lng], { icon: sisterIcon })
                                 .addTo(settingsMap)
-                                .bindPopup(`<div style="text-align:center;"><b>${info.callsign || c.callsign || 'Sister Node'}</b><br><a href="${c.publicUrl}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
+                                .bindPopup(`<div style="text-align:center;"><b>${esc(info.callsign || c.callsign || 'Sister Node')}</b><br><a href="${esc(c.publicUrl)}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
                             sisterMarkers.push(marker);
                         }
                     }

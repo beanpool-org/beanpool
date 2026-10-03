@@ -3,9 +3,11 @@
  * real node: headless Chromium signs in through the page itself.
  *
  *   1. 2FA off: the page's password sign-in passes verify-password, then admin routes answer 403 password_needs_2fa. The
- *      page stays on the sign-in view and shows the node's words plus "Turn on two-factor sign-in in Settings (the new
- *      page), then come back", with a link to /settings. Never an empty Settings view.
+ *      page stays on the sign-in view and shows the node's words plus "Open Settings (the new page) to turn it on, then
+ *      come back", with a link to /settings. Never an empty Settings view.
  *   2. Control, 2FA on: the password plus a code opens the Settings view, so (1) is the refusal, not a broken page.
+ *   2b. A sister node's answer: a 403 password_needs_2fa from another origin (the page asks sister nodes for their status)
+ *      neither signs the page out nor shows the sister's words.
  *   3. Any pane: 2FA turned off while signed in, the next admin call is refused the same way and the page goes back to
  *      the sign-in view with the message.
  *
@@ -34,6 +36,8 @@ const PORT = 8737;
 const BASE = `https://localhost:${PORT}`;
 const PWA_PACKAGE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../pwa/package.json');
 const PW = 'LegacySettings7c1!';
+const SISTER = 'sister.invalid';
+const SISTER_WORDS = 'A sister node refused its own password';
 const SECRET = generateTotpSecret();
 
 let run = 0, passed = 0;
@@ -61,6 +65,7 @@ interface Route {
     request(): { url(): string };
     abort(): Promise<void>;
     continue(): Promise<void>;
+    fulfill(opts: { status: number; contentType: string; headers: Record<string, string>; body: string }): Promise<void>;
 }
 /** Leaflet's stand-in: every property and every call gives the stand-in back, so the page's map code runs and draws nothing. */
 const LEAFLET_STAND_IN = 'window.L = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? undefined : window.L), apply: () => window.L, construct: () => window.L });';
@@ -115,7 +120,12 @@ async function main(): Promise<void> {
     await context.addInitScript({ content: WATCH_SETTINGS_VIEW });
     let offMachine = 0;
     await context.route('**/*', (route) => {
-        if (new URL(route.request().url()).hostname === 'localhost') return route.continue();
+        const host = new URL(route.request().url()).hostname;
+        if (host === 'localhost') return route.continue();
+        if (host === SISTER) {
+            return route.fulfill({ status: 403, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+                body: JSON.stringify({ error: SISTER_WORDS, code: 'password_needs_2fa' }) });
+        }
         offMachine++;
         return route.abort();
     });
@@ -139,7 +149,8 @@ async function main(): Promise<void> {
         let seen = await page.evaluate<Seen>(SEEN);
         assert(seen.login && !seen.settings && !flashed, `the sign-in view stays up and Settings never opened, not even for a moment (login ${seen.login}, settings ${seen.settings}, opened ${flashed})`);
         assert(seen.status.includes(PASSWORD_NEEDS_2FA_ERROR), `the node's words are shown: "${seen.status}"`);
-        assert(seen.status.includes('Turn on two-factor sign-in in Settings (the new page), then come back.'), 'and the way out');
+        assert(seen.status.includes('Open Settings (the new page) to turn it on, then come back.'), 'and the way out');
+        assert(seen.status.split('Turn on two-factor sign-in').length <= 2, `the way out isn't said twice: "${seen.status}"`);
         assert(seen.link === '/settings', `with a link to the new Settings page (${seen.link})`);
         await page.close();
 
@@ -157,6 +168,15 @@ async function main(): Promise<void> {
             .catch(() => { /* the check below says what was on screen */ });
         seen = await page.evaluate<Seen>(SEEN);
         assert(seen.settings && !seen.login, `the Settings view opens (settings ${seen.settings}, status "${seen.status}")`);
+
+        console.log('\n── 2b. a sister node answers 403 password_needs_2fa ──');
+        const sisterStatus = await page.evaluate<Promise<number>>(() => fetch('https://sister.invalid/api/local/status').then((r) => r.status, () => 0));
+        await page.waitForFunction(REFUSAL_SHOWN, undefined, { timeout: 2_000 }).catch(() => { /* expected: nothing shown */ });
+        seen = await page.evaluate<Seen>(SEEN);
+        assert(sisterStatus === 403, `the sister's answer reached the page (${sisterStatus})`);
+        assert(seen.settings && !seen.login && !seen.status.includes(SISTER_WORDS), `Settings stays open and the sister's words are not shown (settings ${seen.settings}, status "${seen.status}")`);
+        const stillSignedIn = await page.evaluate<boolean>(() => authToken !== null);
+        assert(stillSignedIn, 'the page is still signed in');
 
         console.log('\n── 3. any pane: 2FA turned off while signed in ──');
         set2fa(false);

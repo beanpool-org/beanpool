@@ -18,7 +18,7 @@ describe('a password-only profile against a node whose two-factor sign-in is off
         expect(err).toBeInstanceOf(Error);
         const message = (err as Error).message;
         expect(message).toContain(NODE_WORDS);
-        expect(message).toContain('Turn on two-factor sign-in, or sign in with an owner\'s token');
+        expect(message).toContain('This profile signs in with the admin password; an owner\'s token works without it');
         expect(message).not.toContain('HTTP 403: Forbidden');
         expect(isAuthFailure(message)).toBe(true);
     });
@@ -44,6 +44,6 @@ describe('a password-only profile against a node whose two-factor sign-in is off
     });
 
     it('the hint names both ways out', () => {
-        expect(PASSWORD_NEEDS_2FA_HINT).toBe('Turn on two-factor sign-in, or sign in with an owner\'s token');
+        expect(PASSWORD_NEEDS_2FA_HINT).toBe('This profile signs in with the admin password; an owner\'s token works without it');
     });
 });

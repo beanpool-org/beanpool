@@ -75,7 +75,8 @@ function acceptsGzip(ctx: Koa.Context): boolean {
 export function sendMembersSnapshot(ctx: Koa.Context, snap: MembersSnapshot): void {
     ctx.status = 200;
     ctx.type = 'application/json';
-    ctx.vary('Accept-Encoding');
+    // A route dispatched by a suite with a bare context has no vary(); a real one appends to any Vary already set.
+    if (typeof ctx.vary === 'function') ctx.vary('Accept-Encoding');
     if (acceptsGzip(ctx)) {
         snap.gzip ??= gzipSync(snap.body);
         ctx.set('Content-Encoding', 'gzip');

@@ -280,7 +280,7 @@ async function main(): Promise<void> {
         const p95 = ok.length ? Math.round(ok.map((a) => a.ms).sort((x, y) => x - y)[Math.ceil(0.95 * ok.length) - 1]) : null;
         console.log(`  (${BURST} at once: ${JSON.stringify(tally(burst))} in ${Math.round(burstMs)} ms; served p95 ${p95} ms)`);
         assert(!died, `the server lives through ${BURST} directory reads at once${died ? `: it died (${fatal || 'no FATAL line'})` : ''}`);
-        assert(ok.length + busy.length === BURST, `every reader is answered 200 or 503 (${JSON.stringify(tally(burst))})`);
+        assert(ok.length + busy.length === BURST, `every reader is answered 200 or 503 (${JSON.stringify(tally(burst))}${burst.some((a) => a.status === 'error') ? `: ${[...new Set(burst.filter((a) => a.status === 'error').map((a) => `${a.error} after ${Math.round(a.ms)} ms, ${a.bytes} bytes`))].slice(0, 4).join('; ')}` : ''})`);
         if (died) {
             // Origin/main ends here: there is no cap to look at.
             console.log(`\n${passed}/${run} passed`);
@@ -301,6 +301,22 @@ async function main(): Promise<void> {
             `every member has a photo, behind its key, as on the global node (${seeded[0]?.avatarUrl})`);
         assert(ok.every((a) => a.sha === after.sha && a.bytes === after.bytes), 'every 200 in the burst was that same whole directory, byte for byte');
 
+        // The shared directory (members-snapshot.ts; slice 2): 512 at once on the same 256 MB heap, every one served the
+        // one snapshot (the design measured its prototype at 512 on the emulated 1 GB droplet: docs/global-heavy-lists.md §5(d)).
+        const BIG = 512;
+        await server.ask('peak');
+        const g0 = performance.now();
+        const big = await Promise.all(Array.from({ length: BIG }, (_, i) => readers[i % BURST]).map((r) => open(target, '/api/members', signed('/api/members', r)).done));
+        const bigMs = performance.now() - g0;
+        await sleep(300);
+        const bigOk = big.filter((a) => a.status === 200);
+        const bigP95 = bigOk.length ? Math.round(bigOk.map((a) => a.ms).sort((x, y) => x - y)[Math.ceil(0.95 * bigOk.length) - 1]) : null;
+        const bigPeak = (await server.ask('peak')).peak / MB;
+        console.log(`  (${BIG} at once: ${JSON.stringify(tally(big))} in ${Math.round(bigMs)} ms; served p95 ${bigP95} ms; heap peak ${bigPeak.toFixed(0)} MB)`);
+        assert(!server.exited(), `the server lives through ${BIG} directory reads at once`);
+        assert(bigOk.length === BIG && bigOk.every((a) => a.sha === after.sha), `all ${BIG} are served the whole directory, byte for byte (${JSON.stringify(tally(big))}${big.some((a) => a.status !== 200) ? `: ${[...new Set(big.filter((a) => a.status !== 200).map((a) => `${a.status} ${a.error ?? ''}`))].slice(0, 4).join('; ')}` : ''})`);
+        assert(bigPeak < HEAP_MB * 0.75, `and the heap peaked at ${bigPeak.toFixed(0)} MB of ${HEAP_MB} MB`);
+
         // ── 2. The gate before the cap ───────────────────────────────────────────────────────────────────────────────
         console.log('\n— 2. the same server: the read gate before the cap; a delta uncapped; readers who stop reading —');
         const stats = async () => (await server.ask('stats')).stats as { inFlightBytes: number; waiting: number; admitted: number; refused: number };
@@ -320,7 +336,11 @@ async function main(): Promise<void> {
         const s2 = await stats();
         assert(delta.status === 200 && delta.text === '[]' && s2.admitted === s1.admitted, `a delta goes straight through, uncapped (${delta.status} ${delta.text})`);
 
-        const held = open(target, '/api/members', signed('/api/members', readers[2]), { hold: true });
+        // The whole directory is one shared answer now (members-snapshot.ts): a reader of it who stops reading holds only
+        // its socket, never budget. A delta from a cursor long past is the whole directory too, built for each read under
+        // the cap, so that is the read held here.
+        const WHOLE_DELTA = '/api/members?updatedAfter=1970-01-01T00:00:00.000Z';
+        const held = open(target, WHOLE_DELTA, signed(WHOLE_DELTA, readers[2]), { hold: true });
         const heldRes = await held.headers;
         const length = Number(heldRes?.headers['content-length']);
         const holding = await until(async () => (await stats()).inFlightBytes === length, 5000);
@@ -335,7 +355,7 @@ async function main(): Promise<void> {
         // "busy" when its wait is up (6 s), and the budget comes back when they hang up.
         const holders: Open[] = [];
         for (let i = 0; i < 8 && (await stats()).waiting === 0; i++) {
-            const h = open(target, '/api/members', signed('/api/members', readers[3 + i]), { hold: true });
+            const h = open(target, WHOLE_DELTA, signed(WHOLE_DELTA, readers[3 + i]), { hold: true });
             holders.push(h);
             await Promise.race([h.headers, until(async () => (await stats()).waiting > 0, 5000)]);
         }

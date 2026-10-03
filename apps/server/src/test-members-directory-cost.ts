@@ -251,6 +251,9 @@ async function main() {
     const want = oracle(new URLSearchParams(recent.slice(1)).get('updatedAfter'), null);
     assert(r.text === want, `at ${N} members, a delta with a few changes is the same bytes as before (${JSON.parse(want).length} members)`);
 
+    // The rows above went straight into SQLite, as no route writes them, so no members version moved: the full read
+    // would be the shared answer built before them (members-snapshot.ts) until its 60 s ceiling. Start it again.
+    (await import('./members-snapshot.js')).setMembersSnapshotForTests(undefined);
     const f0 = performance.now();
     const fullBig = await get('/api/members', reader);
     const fullMs = performance.now() - f0;

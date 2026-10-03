@@ -171,9 +171,11 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                         <details open={passwordFoldOpen} className="mt-6 border-t border-nature-800/80 pt-2" data-testid="claim-password-fold">
                             <summary
                                 onClick={(e) => { e.preventDefault(); setPasswordFoldOpen((o) => !o); }}
-                                className="min-h-[48px] flex items-center cursor-pointer text-sm font-semibold text-nature-300 hover:text-white"
+                                className="min-h-[48px] flex items-center gap-2 cursor-pointer list-none text-sm font-semibold text-nature-300 hover:text-white"
                             >
-                                This server also has an admin password
+                                {/* A flex summary loses the browser's own triangle: draw one. */}
+                                <span aria-hidden="true" className="shrink-0 w-4 text-center">{passwordFoldOpen ? '▾' : '▸'}</span>
+                                <span>This server also has an admin password</span>
                             </summary>
                             {passwordFoldOpen && <div className="mt-2">{passwordForm}</div>}
                         </details>

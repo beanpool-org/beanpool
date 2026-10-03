@@ -3742,11 +3742,12 @@
                 if (rxEl) rxEl.textContent = conn.msgRecvCount;
 
                 if (!connTrafficPaused) {
-                    const timeStr = new Date().toLocaleTimeString();
+                    // The node sends what kind of frame, its size, direction and time: never what it says (#1534).
+                    const timeStr = new Date(traffic.at || Date.now()).toLocaleTimeString();
                     const dirSymbol = traffic.direction === 'in' ? '⬇️' : '⬆️';
                     const dirText = traffic.direction === 'in' ? 'RX' : 'TX';
                     const color = traffic.direction === 'in' ? 'cyan' : 'emerald';
-                    appendTrafficLine(`[${timeStr}] ${dirSymbol} [${conn.ip}] ${dirText} (${traffic.size} B): ${traffic.preview}`, color);
+                    appendTrafficLine(`[${timeStr}] ${dirSymbol} [${conn.ip}] ${dirText} (${traffic.size} B): ${traffic.frameType || 'frame'}`, color);
                 }
             }
         }

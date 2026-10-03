@@ -40,12 +40,15 @@ Know its limits:
 
 ## Break-glass codes
 
-A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock, shows a new code once, and offers to keep a copy in the phone's secure store as well.
+A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock and shows a new code once. The app keeps no copy, since the code is for when that phone is lost: write it down.
 
 - The server's log records that a code was made and for whom, never the code itself.
 - Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.
 - The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
 - If two-factor sign-in is on, it still asks for the code.
+- When an owner signs out all of their own sessions at once (from their key, or from the app), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out, or signing out with the password, leaves codes alone.
+- Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.
+- In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one.
 
 Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.
 

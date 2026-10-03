@@ -30,8 +30,18 @@ const avatar = 'bundled://sunflower';
 // 1. Find or create the treasury.
 // The admin list (the same answer as /api/treasuries, which is members-only now): an unsigned ask of that one is refused,
 // and an empty list made this create a second "Community Eggs" on every run.
-const list = await (await fetch(`${NODE_URL}/api/local/admin/treasury`, { headers: auth })).json().catch(() => ({}));
-let eggs = (list.treasuries || []).find(t => t.name === 'Community Eggs');
+// Only an OK answer says whether one exists: a rate limit, a restart or a refused credential is not "none yet", and
+// reading it as that made a second one.
+const listRes = await fetch(`${NODE_URL}/api/local/admin/treasury`, { headers: auth }).catch((e) => {
+    console.error(`✗ Could not reach ${NODE_URL} to list the treasuries: ${e?.cause?.code || e?.message || e}. Nothing was created.`);
+    process.exit(1);
+});
+const list = await listRes.json().catch(() => null);
+if (!listRes.ok || !Array.isArray(list?.treasuries)) {
+    console.error(`✗ Listing the treasuries failed (HTTP ${listRes.status}): ${list?.error || listRes.statusText || 'no list in the answer'}. Nothing was created; run it again once the node answers.`);
+    process.exit(1);
+}
+let eggs = list.treasuries.find(t => t.name === 'Community Eggs');
 if (!eggs) {
     const res = await fetch(`${NODE_URL}/api/local/admin/treasury`, { method: 'POST', headers: admin, body: JSON.stringify({ name: 'Community Eggs', avatar, creditLine: 200 }) });
     const d = await res.json().catch(() => ({}));

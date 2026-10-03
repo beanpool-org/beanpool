@@ -291,6 +291,10 @@ run_check "workflows" node --test scripts/check-workflows.test.mjs
 # prints the primary's words and the way out. Instant.
 run_check "setup_backup" node --test scripts/setup-backup.test.mjs
 
+# The owner scripts that send an automation token (bootstrap-community-eggs, grant-operator, the shared token check)
+# against a stand-in node on localhost. Instant.
+run_check "token_scripts" node --test scripts/bootstrap-community-eggs.test.mjs
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

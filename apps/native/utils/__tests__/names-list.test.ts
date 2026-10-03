@@ -3195,11 +3195,9 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
     /** A copy is due on the next open: the node lost Ada's (self-healing). */
     const due = async () => {
         const c = await community(['Owen', 'Ada'], true);
-        node2 = c.node;
         c.node.copies!.delete(ownerKey(c.node, c.phones[1]));
         return c;
     };
-    let node2: FakeNode;
 
     it('409 stale_copy: one retry numbered past the node\'s, then confirmed; a second 409 stops there (two PUTs), said, and the list opens', async () => {
         const { node, phones: [, ada] } = await due();

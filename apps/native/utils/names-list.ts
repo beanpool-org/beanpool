@@ -552,6 +552,12 @@ export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null }
  * A copy not confirmed by then is said, and Sign Out goes on: the admin chooses, nothing waits for a slow node.
  */
 export const NAMES_SIGN_OUT_REQUEST_MS = 10_000;
+
+/** The head key's number when the pin trusts no other undropped admin (this phone its only holder); null otherwise. */
+function onlyKeyOnPin(pin: NamesPin, me: string): number | null {
+    const head = pin.chain[pin.chain.length - 1];
+    return head && !pin.trusted.some((k) => k !== me && !(k in pin.dropped)) ? head.n : null;
+}
 export const NAMES_SIGN_OUT_TOTAL_MS = 30_000;
 
 /**
@@ -561,6 +567,11 @@ export const NAMES_SIGN_OUT_TOTAL_MS = 30_000;
  * link then does nothing when its turn comes. Returns the ones not confirmed; the caller decides the words and never
  * blocks (no hard gates). `anchors`: the community addresses this key keeps a pin for (from the store's labels).
  */
+async function keptOnlyKey(store: NamesPinStore, publicKey: string, anchor: string): Promise<number | null> {
+    const kept = await readKeptPin(store, publicKey, anchor);
+    return kept.kind === 'pin' ? onlyKeyOnPin(kept.pin, publicKey.toLowerCase()) : null;
+}
+
 export async function saveNamesCopiesBeforeLeaving(
     identity: BeanPoolIdentity, anchors: readonly string[], store: NamesPinStore = DEVICE_NAMES_STORE,
     limits: { requestMs: number; totalMs: number } = { requestMs: NAMES_SIGN_OUT_REQUEST_MS, totalMs: NAMES_SIGN_OUT_TOTAL_MS },
@@ -580,7 +591,7 @@ export async function saveNamesCopiesBeforeLeaving(
             const me = identity.publicKey.toLowerCase();
             // The node's holder list unread (no time left, or the state failed): decided from the pin, so a sole admin is
             // never told another admin will send the keys.
-            const pinOnly = head && !kept.pin.trusted.some((k) => k !== me && !(k in kept.pin.dropped)) ? head.n : null;
+            const pinOnly = onlyKeyOnPin(kept.pin, me);
             if (left() <= 0) return { anchor, onlyKey: pinOnly };
             const s = await fetchNamesState(anchor, identity, left());
             const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
@@ -596,7 +607,8 @@ export async function saveNamesCopiesBeforeLeaving(
         const deadline = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), Math.max(0, until - Date.now())); });
         try {
             const first = await Promise.race([work, deadline]);
-            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), { anchor, onlyKey: null })) : first;
+            // Let go: decided from the pin as it is kept (read only, no request), as when the state can't be read.
+            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), { anchor, onlyKey: await keptOnlyKey(store, identity.publicKey, anchor) })) : first;
             if (confirmed) out.push(confirmed);
         } finally {
             clearTimeout(timer);

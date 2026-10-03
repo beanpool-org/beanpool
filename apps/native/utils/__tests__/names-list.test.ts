@@ -3131,7 +3131,9 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
         await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
         expect(r.at).toBe(NAMES_SIGN_OUT_TOTAL_MS);
-        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        // Let go, but decided from the pin read as it is kept (no request): Owen is its only admin, so the only-copy words.
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
         // Sign Out wipes the pin; the open's state then fails at its own limit, and the let-go link runs: nothing.
         for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-')) mem.delete(k);
         hold = null;
@@ -3140,6 +3142,22 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
         expect(sentAs('GET', '/api/names/state')).toEqual([]);
         expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-trust:'))).toEqual([]);
+    });
+
+    it('the pin held by an open at 30 s, another admin trusted on it: decided from the pin, the general words, no request', async () => {
+        const { phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        void openNamesList(COMMUNITY, ada, STORE);
+        await vi.advanceTimersByTimeAsync(0);
+        sent = [];
+        const r = timed(saveNamesCopiesBeforeLeaving(ada, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+        expect(sent).toEqual([]);
+        hold = null;
+        await vi.advanceTimersByTimeAsync(120_000);
     });
 });
 

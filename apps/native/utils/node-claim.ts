@@ -70,6 +70,8 @@ const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]/g;
  */
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+/** The same, beyond the basic plane (needs the u flag): tag characters U+E0000-E007F and musical format controls U+1D173-1D17A. */
+const INVISIBLE_ASTRAL = /[\u{E0000}-\u{E007F}\u{1D173}-\u{1D17A}]/gu;
 export const CLAIM_NAME_MAX = 80;
 /** Anything that looks like a claim code (with or without `claim-` and the dashes), for the developer log. */
 const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
@@ -81,7 +83,7 @@ const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
  */
 export function cleanClaimName(raw: unknown): string | null {
     if (typeof raw !== 'string') return null;
-    const flat = raw.replace(LINE_BREAKS, ' ').replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+    const flat = raw.replace(LINE_BREAKS, ' ').replace(INVISIBLE, '').replace(INVISIBLE_ASTRAL, '').replace(/\s+/g, ' ').trim();
     const capped = Array.from(flat).slice(0, CLAIM_NAME_MAX).join('').trim();
     return capped || null;
 }

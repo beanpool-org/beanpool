@@ -188,6 +188,10 @@ describe('the server-written community name, before it is shown', () => {
         expect(await nameFrom('Be\u200Ban To\u200Ewn\u2060\uFEFF\u00AD')).toBe('Bean Town');
     });
 
+    it('invisible characters beyond the basic plane go too: tag characters and musical format controls', async () => {
+        for (const ch of ['\u{E0000}', '\u{E0020}', '\u{E0041}', '\u{E007F}', '\u{1D173}', '\u{1D17A}']) expect(await nameFrom(`A${ch}B`)).toBe('AB');
+    });
+
     it('the zero-width non-joiner and joiner stay: Persian names and emoji sequences need them, and neither moves text', async () => {
         expect(await nameFrom('\u0645\u06CC\u200C\u0631\u0648\u0645')).toBe('\u0645\u06CC\u200C\u0631\u0648\u0645');
         expect(await nameFrom('Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467} garden')).toBe('Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467} garden');

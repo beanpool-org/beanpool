@@ -14,6 +14,9 @@
  *   6. A pending name: the message, and the QR falls back to --direct.
  *   7. The registrar down: --no-name and --direct still give the code; --name falls back after its wait.
  *   8. The request never reaches a backup or a standby's staging copy.
+ *   9. The hand-off file: only a small regular file is read (a named pipe never stops the node); anything else is moved
+ *      out of the way and logged once. --contact is cleaned and reaches the registrar with the claim.
+ *  10. --key for a key that is already a member: the terminal and the community notice name the member's own callsign.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-claim-cli.ts
  */
@@ -21,7 +24,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import readline from 'node:readline';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 
@@ -97,8 +100,8 @@ function cli(node: Node, args: string[], env: Record<string, string> = {}): Prom
 }
 
 // ── The fake registrar ──────────────────────────────────────────────────────────────────────
-interface Reg { status: string; name: string | null; claimedAt: number | null; claims: number }
-const reg: Reg = { status: 'none', name: null, claimedAt: null, claims: 0 };
+interface Reg { status: string; name: string | null; claimedAt: number | null; claims: number; lastClaim: any }
+const reg: Reg = { status: 'none', name: null, claimedAt: null, claims: 0, lastClaim: null };
 const registrar = http.createServer((req, res) => {
     let body = '';
     req.on('data', c => { body += c; });
@@ -109,6 +112,7 @@ const registrar = http.createServer((req, res) => {
         if (req.url === '/api/registrar/claim' && req.method === 'POST') {
             const b = JSON.parse(body || '{}');
             reg.claims++;
+            reg.lastClaim = b;
             if (b.name === 'taken-name') return send(409, { error: 'name taken' });
             reg.name = b.name;
             reg.claimedAt = Date.now();
@@ -124,11 +128,74 @@ const codeOf = (n: Node) => fs.readFileSync(path.join(n.dir, 'claim-code.txt'), 
 const qrOf = async (link: string) => QRCode.toString(link, { type: 'terminal', small: true });
 const pause = (ms: number) => new Promise(r => setTimeout(r, ms));
 
+/** In its own process: two takes of the hand-off file in `dir`, what they gave, what they logged and what is left. */
+async function takeChild(): Promise<void> {
+    const dir = process.argv[process.argv.indexOf('--take') + 1];
+    const { takeAddressRequestFile } = await import('./address-request.js');
+    const warns: string[] = [];
+    console.warn = (...a: unknown[]) => { warns.push(a.join(' ')); };
+    const first = takeAddressRequestFile(dir);
+    const second = takeAddressRequestFile(dir);
+    process.stdout.write('@@ ' + JSON.stringify({ first, second, warns, left: fs.readdirSync(dir) }) + '\n');
+    process.exit(0);
+}
+
+/** 'hung' when the take did not come back within 5 s (a read that blocks the node's loop). */
+function take(dir: string): Promise<any> {
+    return new Promise((resolve) => {
+        const p = spawn(process.execPath, [...process.execArgv, SCRIPT, '--take', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        p.stdout!.on('data', d => { out += d; });
+        const guard = setTimeout(() => p.kill('SIGKILL'), 5000);
+        p.on('exit', () => {
+            clearTimeout(guard);
+            const line = out.split('\n').find(l => l.startsWith('@@ '));
+            resolve(line ? JSON.parse(line.slice(3)) : 'hung');
+        });
+    });
+}
+
 async function main(): Promise<void> {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
     await new Promise<void>(r => registrar.listen(0, '127.0.0.1', () => r()));
     const regUrl = `http://127.0.0.1:${(registrar.address() as any).port}`;
     try {
+        console.log('\n9. The hand-off file: only a small regular file is read');
+        const takes = path.join(process.env.BEANPOOL_DATA_DIR!, 'takes');
+        const fresh = (name: string) => { const d = path.join(takes, name); fs.mkdirSync(d, { recursive: true }); return d; };
+        const at = (d: string) => path.join(d, 'address-request.json');
+        const asideOnce = (r: any) => r !== 'hung' && r.first === null && r.second === null && !r.left.includes('address-request.json') && r.warns.length === 1;
+        const show = (r: any) => r === 'hung' ? 'hung' : JSON.stringify({ first: r.first, warns: r.warns, left: r.left }).slice(0, 300);
+        let d = fresh('fifo');
+        execFileSync('mkfifo', [at(d)]);
+        let r = await take(d);
+        check(asideOnce(r), `a named pipe: never read (the loop never stops), moved out of the way, logged once (${show(r)})`);
+        d = fresh('link');
+        fs.writeFileSync(path.join(d, 'elsewhere.json'), JSON.stringify({ name: 'linked-name', at: 1 }));
+        fs.symlinkSync(path.join(d, 'elsewhere.json'), at(d));
+        r = await take(d);
+        check(asideOnce(r) && r.left.includes('elsewhere.json'), `a symlink: not followed, moved out of the way, its target untouched (${show(r)})`);
+        d = fresh('dangling');
+        fs.symlinkSync(path.join(d, 'nothing-here'), at(d));
+        r = await take(d);
+        check(asideOnce(r), `a dangling symlink: moved out of the way, not retried every 2 s (${show(r)})`);
+        d = fresh('dir');
+        fs.mkdirSync(at(d));
+        r = await take(d);
+        check(asideOnce(r), `a directory: moved out of the way (${show(r)})`);
+        d = fresh('big');
+        fs.writeFileSync(at(d), JSON.stringify({ name: 'big-name', contact: 'x'.repeat(50_000), at: 1 }));
+        r = await take(d);
+        check(asideOnce(r), `a 50 KB file: not read whole, moved out of the way (${show(r)})`);
+        d = fresh('good');
+        fs.writeFileSync(at(d), JSON.stringify({ name: 'good-name', contact: 'ops@example.org\u0007\u001b[2J\n' + 'y'.repeat(300), at: 5 }));
+        r = await take(d);
+        const contact = r === 'hung' ? '' : String(r.first?.contact ?? '');
+        check(r !== 'hung' && r.first?.name === 'good-name' && r.second === null && r.warns.length === 0 && !r.left.includes('address-request.json'),
+            `a small regular file is taken and removed (${show(r)})`);
+        check(contact.startsWith('ops@example.org [2J y') && !/[\u0000-\u001f\u007f]/.test(contact) && [...contact].length <= 254,
+            `its contact is cleaned: no control characters, at most 254 (${JSON.stringify(contact.slice(0, 30))}…, ${[...contact].length})`);
+
         console.log('\n1–5. A node with the registrar up');
         const a = await startNode('a', { REGISTRAR_URL: regUrl });
         const code = codeOf(a);
@@ -160,6 +227,8 @@ async function main(): Promise<void> {
         let burned = false;
         for (let i = 0; i < 40 && !burned; i++) { await pause(250); const c = readConfig(a).claim; burned = c?.claimedBy === key && !c.key && !c.salt; }
         check(burned, 'the node burned the code: claimedBy set, K and the salt deleted');
+        // The node burns the code, then logs and tells the community: wait for the line.
+        for (let i = 0; i < 40 && !a.output().includes('made @Founder its owner'); i++) await pause(250);
         check(/CLAIM|beanpool claim/.test(a.output()) && a.output().includes(`made @Founder its owner`), 'the node logged it and told the community');
         const second = await cli(a, ['--no-name']);
         check(second.code === 1 && /already has an owner/.test(second.err) && /beanpool recover/.test(second.err), 'a second claim from the shell is refused, pointing to beanpool recover');
@@ -170,9 +239,26 @@ async function main(): Promise<void> {
         console.log('\n6. A name that awaits approval');
         reg.status = 'none'; reg.name = null;
         const b = await startNode('b', { REGISTRAR_URL: regUrl });
-        const pend = await cli(b, ['--name', 'gated-one', '--direct', 'http://10.0.0.5:8080']);
+        const pend = await cli(b, ['--name', 'gated-one', '--direct', 'http://10.0.0.5:8080', '--contact', 'ops@example.org\u0007\nwe are here']);
         check(pend.code === 0 && /awaits approval/.test(pend.out), `pending: the message (${pend.code} ${pend.err.trim()})`);
+        check(reg.lastClaim?.name === 'gated-one' && reg.lastClaim?.contact === 'ops@example.org we are here',
+            `--contact reaches the registrar with the claim, cleaned (${JSON.stringify(reg.lastClaim?.contact)})`);
         check(pend.out.includes(await qrOf(`beanpool://claim?node=${encodeURIComponent('http://10.0.0.5:8080')}&id=${readConfig(b).claim.id}&code=${codeOf(b)}`)), 'the QR falls back to the direct address');
+
+        console.log('\n10. --key for a key that is already a member here');
+        const Database = (await import('better-sqlite3')).default;
+        const memberKey = 'cd'.repeat(32);
+        const conn = new Database(path.join(b.dir, 'state.db'));
+        conn.pragma('busy_timeout = 10000');
+        conn.prepare('INSERT INTO members (public_key, callsign, joined_at) VALUES (?, ?, ?)').run(memberKey, 'RealName', new Date().toISOString());
+        conn.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(memberKey);
+        conn.close();
+        const existing = await cli(b, ['--key', memberKey, '--callsign', 'Typed']);
+        check(existing.code === 0 && /@RealName is now the owner/.test(existing.out) && !/@Typed/.test(existing.out),
+            `the terminal names the member's own callsign (${existing.code} ${(existing.out + existing.err).trim().split('\n')[0]})`);
+        let toldReal = false;
+        for (let i = 0; i < 40 && !toldReal; i++) { await pause(250); toldReal = b.output().includes('made @RealName its owner'); }
+        check(toldReal && !b.output().includes('@Typed'), 'and so does the community notice');
 
         console.log('\n7. The registrar down');
         const c = await startNode('c', { REGISTRAR_URL: 'http://127.0.0.1:9' });
@@ -197,5 +283,6 @@ async function main(): Promise<void> {
     process.exit(passed === run ? 0 : 1);
 }
 
-if (process.argv.includes('--child')) child().catch(e => { console.error(e); process.exit(1); });
+if (process.argv.includes('--take')) takeChild().catch(e => { console.error(e); process.exit(1); });
+else if (process.argv.includes('--child')) child().catch(e => { console.error(e); process.exit(1); });
 else main().catch(e => { console.error(e); for (const n of started) { try { process.kill(-n.proc.pid!, 'SIGKILL'); } catch { /* gone */ } } process.exit(1); });

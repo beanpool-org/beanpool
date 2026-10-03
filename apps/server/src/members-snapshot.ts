@@ -28,11 +28,17 @@
  * The read gate and the route's own checks run before any of this. The build itself runs under the heavy-read cap
  * (heavy-reads.ts), as the unshared build did, and so does every send of a ready snapshot, weighed SNAPSHOT_SEND_WEIGHT
  * and under the cap's deadline: the number of them in flight is bounded, and one that stops reading is cut off.
+ *   - Each send holds the whole body it sends (its chunks are views of it) until its last byte leaves. So the cap counts
+ *     each body that sends in flight hold once, at its full size (holdSharedBody), as well as each send's window: the
+ *     current snapshot once however many read it, and a snapshot a newer version has replaced for as long as a reader who
+ *     stopped reading still holds it. Weighed only at the window, readers who stopped reading, one per version, held
+ *     +300 MB of RSS with the cap counting 6 MB (the deciding review of #1526).
  */
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { gzipSync } from 'node:zlib';
 import type Koa from 'koa';
+import { holdSharedBody, sharedBodyCost } from './heavy-reads.js';
 
 export interface MembersSnapshot {
     /** What it was built from: the members version and every other input that changes the answer. */
@@ -96,8 +102,22 @@ function acceptsGzip(ctx: Koa.Context): boolean {
     return /(^|,)\s*gzip\s*(;\s*q=(?!0(\.0*)?\s*($|,))[0-9.]+)?\s*($|,)/i.test(header);
 }
 
-/** Send `snap` on `ctx`: the gzip copy to a reader that accepts it, the plain bytes to any other. */
-export function sendMembersSnapshot(ctx: Koa.Context, snap: MembersSnapshot): void {
+/**
+ * What a send of `snap` on `ctx` adds to the heavy-read cap's bytes in flight now: its `window`, and the body it will
+ * send unless another send in flight holds that already. A gzip copy not yet made is weighed as the plain body, which
+ * it is smaller than; its own size is counted once it is made.
+ */
+export function snapshotSendWeight(ctx: Koa.Context, snap: MembersSnapshot, window = SNAPSHOT_SEND_WEIGHT): number {
+    const body = acceptsGzip(ctx) ? snap.gzip : snap.body;
+    return window + (body ? sharedBodyCost(body) : snap.body.length);
+}
+
+/**
+ * Send `snap` on `ctx`: the gzip copy to a reader that accepts it, the plain bytes to any other. Under the heavy-read cap,
+ * the body sent is held from now until this answer is out, counted once with every other send of it, and `window` as
+ * this send's own.
+ */
+export function sendMembersSnapshot(ctx: Koa.Context, snap: MembersSnapshot, window = SNAPSHOT_SEND_WEIGHT): void {
     ctx.status = 200;
     ctx.type = 'application/json';
     // A route dispatched by a suite with a bare context has no vary(); a real one appends to any Vary already set.
@@ -107,6 +127,7 @@ export function sendMembersSnapshot(ctx: Koa.Context, snap: MembersSnapshot): vo
         bytes = snap.gzip ??= gzipSync(snap.body);
         ctx.set('Content-Encoding', 'gzip');
     }
+    holdSharedBody(ctx, bytes, window);
     ctx.body = chunked(bytes);
     ctx.length = bytes.length;
 }

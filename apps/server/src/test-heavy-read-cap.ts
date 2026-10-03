@@ -19,6 +19,11 @@
  *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
  *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget, and each reader is served or
  *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB.
+ *  1c. The same, with the version moved before each reader (24 and 48, plain and gzip), on the shared directory and on a
+ *      20,000-member roster: each reader holds a snapshot no longer current, which the cap counts once at its full size
+ *      for as long as any send holds it. What they hold (live buffers) stays within the budget and is all counted, the
+ *      readers past it are told "busy", and RSS no longer grows with the readers. Weighed only at the send's window,
+ *      every one was served: 48 grew RSS +571 MB (directory) and +410 MB (roster) with the cap counting 6 to 14 MB.
  *   2. The same server, the gate before the cap.
  *      - An unsigned read, a bad signature and a key that isn't a member are refused before the cap: no budget taken.
  *      - A delta isn't capped.
@@ -77,7 +82,7 @@ function newKey(): Key {
 // ── The children ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** `n` members, `readers` first, each with a photo by its one writer (setMemberPhoto, as a profile save puts it there). */
-async function seed(a: { n: number; readers: string[] }): Promise<void> {
+async function seed(a: { n: number; readers: string[]; group?: number }): Promise<void> {
     const se = await import('./state-engine.js');
     const { db } = await import('./db/db.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
@@ -90,6 +95,17 @@ async function seed(a: { n: number; readers: string[] }): Promise<void> {
                 const pk = a.readers[i] ?? crypto.createHash('sha256').update(`heavy-read member ${i}`).digest('hex');
                 insert.run(pk, `Heavy${i}`, new Date(Date.UTC(2026, 0, 2) + i * 1000).toISOString(), `INV-HEAVY-${i}`);
                 setMemberPhoto(db as any, pk, PNG_1PX);
+            }
+        })();
+    }
+    // An open group of the first `group` members, the first its convenor: a big roster.
+    if (a.group) {
+        const g = se.createGroup({ name: 'Heavy roster', createdBy: a.readers[0], joinPolicy: 'open' } as any);
+        const join = db.prepare(`INSERT OR IGNORE INTO group_members (group_id, member_pubkey, role, status, joined_at, updated_at) VALUES (?, ?, 'member', 'active', ?, ?)`);
+        db.transaction(() => {
+            for (let i = 1; i < a.group!; i++) {
+                const pk = a.readers[i] ?? crypto.createHash('sha256').update(`heavy-read member ${i}`).digest('hex');
+                join.run(g.id, pk, new Date(Date.UTC(2026, 0, 3) + i * 1000).toISOString(), new Date(Date.UTC(2026, 0, 3) + i * 1000).toISOString());
             }
         })();
     }
@@ -115,7 +131,13 @@ async function serve(): Promise<void> {
         // Imported here so that the burst in 1 runs on a server from before the cap too (the fail-first run).
         if (line === 'stats') import('./heavy-reads.js').then((m) => say({ stats: m.heavyReadStats() }), () => say({ stats: null }));
         // The whole process, not only the heap: TLS keeps each socket's ciphertext off the V8 heap.
-        if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed } }); }
+        if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers } }); }
+        // The same after a full collection: what is held, not the garbage of the builds before it (1c builds one each version).
+        if (line === 'mem-gc') { (globalThis as any).gc?.(); (globalThis as any).gc?.(); const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed, buffers: m.arrayBuffers } }); }
+        // A write somewhere moves the version: the directory's (members) or every roster's (groups).
+        if (line === 'bump-members') import('./engine/versions.js').then((m) => { m.bumpMembersVersion(); say({ bumped: true }); });
+        if (line === 'bump-groups') { se.bumpGroupsVersion(); say({ bumped: true }); }
+        if (line === 'group') import('./db/db.js').then(({ db }) => say({ group: (db.prepare(`SELECT id FROM groups WHERE name = 'Heavy roster'`).get() as { id: string } | undefined)?.id ?? null }));
         if (line === 'exit') process.exit(0);
     });
 }
@@ -148,9 +170,34 @@ async function stall(a: { port: number; keys: { pk: string; der: string }[]; cou
     }
 }
 
+/**
+ * Readers of `route` who stop reading after the headers, one each time the orchestrator says 'open' (answering with what
+ * it got: 200 once the headers are in, or the whole refusal) or 'open-nowait' (answering at once). Says what each got
+ * on 'report', and hangs up all of them on 'bye'.
+ */
+async function stallOneByOne(a: { port: number; keys: { pk: string; der: string }[]; route: string; gzip: boolean }): Promise<void> {
+    const keys: Key[] = a.keys.map((k) => ({ pk: k.pk, priv: crypto.createPrivateKey({ key: Buffer.from(k.der, 'hex'), format: 'der', type: 'pkcs8' }) }));
+    const say = (m: unknown) => new Promise((r) => process.stdout.write(`@@ ${JSON.stringify(m)}
+`, r));
+    const opens: Open[] = [];
+    const answers: Promise<any>[] = [];
+    for await (const line of readline.createInterface({ input: process.stdin })) {
+        if (line === 'open' || line === 'open-nowait') {
+            const o = open({ port: a.port, tls: true }, a.route, { ...signed(a.route, keys[opens.length % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true });
+            opens.push(o);
+            const answer = o.headers.then(async (res) => (res?.statusCode === 200 ? { status: 200 } : await o.done));
+            answers.push(answer);
+            if (line === 'open') { const x = await answer; await say({ status: x.status }); } else await say({ status: 'opened' });
+        }
+        if (line === 'report') await say((await Promise.all(answers)).map((x: any) => ({ status: x.status, text: x.text, headers: x.headers, ms: x.ms, error: x.error })));
+        if (line === 'bye') { for (const o of opens) o.hangUp(); await say({ bye: true }); return; }
+    }
+}
+
 const role = process.argv[2];
-if (role === 'seed' || role === 'serve' || role === 'read' || role === 'stall') {
-    (role === 'seed' ? seed(JSON.parse(process.argv[3])) : role === 'read' ? read(JSON.parse(process.argv[3])) : role === 'stall' ? stall(JSON.parse(process.argv[3])) : serve()).then(
+if (role === 'seed' || role === 'serve' || role === 'read' || role === 'stall' || role === 'stall1') {
+    (role === 'seed' ? seed(JSON.parse(process.argv[3])) : role === 'read' ? read(JSON.parse(process.argv[3])) : role === 'stall' ? stall(JSON.parse(process.argv[3]))
+        : role === 'stall1' ? stallOneByOne(JSON.parse(process.argv[3])) : serve()).then(
         () => { if (role !== 'serve') process.exit(0); },
         (e) => { console.error(e); process.exit(1); },
     );
@@ -198,7 +245,7 @@ async function runToEnd(role: string, dataDir: string, args: unknown): Promise<v
 interface Server { port: number; ask: (line: string) => Promise<any>; output: () => string; exited: () => boolean; stop: () => Promise<void> }
 
 async function startServer(dataDir: string, heapMb: number): Promise<Server> {
-    const p = child('serve', dataDir, null, [`--max-old-space-size=${heapMb}`]);
+    const p = child('serve', dataDir, null, [`--max-old-space-size=${heapMb}`, '--expose-gc']);
     let out = '';
     let dead = false;
     const replies: ((m: any) => void)[] = [];
@@ -330,14 +377,21 @@ async function main(): Promise<void> {
     const root = fs.mkdtempSync(path.join(process.env.BEANPOOL_DATA_DIR || os.tmpdir(), 'heavy-read-cap-'));
 
     // ── 1. The burst ─────────────────────────────────────────────────────────────────────────────────────────────────
-    const N = 30_000, HEAP_MB = 256, BURST = 64;
+    const N = 30_000, HEAP_MB = 256, BURST = 64, ROSTER_N = 20_000;
     console.log(`\n— 1. ${N.toLocaleString('en')} members with photos, a ${HEAP_MB} MB heap, ${BURST} directory reads at once —`);
     const readers = Array.from({ length: BURST + 2 }, newKey);
     const dir = path.join(root, 'burst');
     fs.mkdirSync(dir, { recursive: true });
     const t0 = Date.now();
-    await runToEnd('seed', dir, { n: N, readers: readers.map((r) => r.pk) });
+    await runToEnd('seed', dir, { n: N, readers: readers.map((r) => r.pk), group: ROSTER_N });
     console.log(`  (seeded in ${Date.now() - t0} ms; state.db ${(fs.statSync(path.join(dir, 'state.db')).size / MB).toFixed(0)} MB)`);
+    // HEAVY_READ_CAP_ONLY=1c: section 1c alone, its own run in CI (scripts/server-suites.mjs VARIANTS).
+    if (process.env.HEAVY_READ_CAP_ONLY === '1c') {
+        console.log(`\n— 1c. readers who stop reading, the version moved before each: the directory and a ${ROSTER_N}-member roster —`);
+        await stalledAcrossVersions(dir, readers, BURST, HEAP_MB);
+        console.log(`\n${passed}/${run} passed`);
+        process.exit(passed === run ? 0 : 1);
+    }
     const server = await startServer(dir, HEAP_MB);
     const target = { port: server.port, tls: true };
     try {
@@ -458,6 +512,9 @@ async function main(): Promise<void> {
     console.log('\n— 1b. the same members, readers of the shared directory who stop reading, from a process of their own —');
     await stalledReaders(dir, readers, BURST, HEAP_MB);
 
+    // ── 1c. The same, with the version moved before each reader: its own run (scripts/server-suites.mjs VARIANTS,
+    // HEAVY_READ_CAP_ONLY=1c), since the whole file together passes CI's 300 s per run only on a quiet machine. ──────
+
     // ── 3. The cap itself ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 3. the cap itself, on a small server of its own —');
     await theCapItself();
@@ -505,6 +562,105 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
           }
         }
 
+}
+
+/**
+ * Readers who stop reading, each on a version of its own (section 1c): the version moved, one whole read (which builds
+ * the new snapshot), then a reader who stops reading it, a ready snapshot's send. Once the budget is full, the whole
+ * read is told "busy" and the rest are opened together, a version move before each.
+ *
+ * Memory is read after a full collection, so that it is what is held, not garbage. What the readers hold is the live
+ * buffers: every snapshot body is one, and each is counted. RSS is reported too, but on macOS it is a high-water mark: a
+ * bare Node process that frees 200 MB of Buffers and collects keeps them in its RSS and phys_footprint, and here nothing
+ * of it comes back when every reader hangs up. Each version is a build of its own (a control, the same version moves and
+ * whole reads with nobody who stops reading, gives the builds' own growth), and with gzip each body held also keeps
+ * about its size of the builds' memory from being reused. So for RSS the check is that it no longer grows with the
+ * readers: 48 grow it by no more than 24 did, and the extra connections and bodies served. Before, it grew linearly:
+ * +252 MB for 24 plain directory readers, +571 MB for 48.
+ */
+async function stalledAcrossVersions(dir: string, readers: Key[], BURST: number, HEAP_MB: number): Promise<void> {
+    const BUDGET_MB = 48;
+    // A send's window over what its weight said before it was built (heavy-reads.ts: a build is weighed at its last size).
+    const WINDOW_MB = 0.125;
+    // What the connections themselves cost: TLS sockets held open, about 0.17 MB each (the deciding review of #1526: 192
+    // readers of one snapshot grew RSS as much as 192 connections with nothing to send).
+    const PER_CONNECTION_MB = 0.25;
+    type Mem = { rss: number; heap: number; buffers: number };
+    // HEAVY_READ_CAP_1C=directory|roster: one half per CI run (each fits the 300 s per run); unset: both.
+    const only1c = process.env.HEAVY_READ_CAP_1C;
+    for (const what of (['directory', 'roster'] as const).filter((w) => !only1c || w === only1c)) {
+        const at24 = new Map<boolean, { grew: number; served: number }>();
+        for (const [n, gzip, stalls] of [[48, true, false], [24, false, true], [48, false, true], [24, true, true], [48, true, true]] as const) {
+            const server = await startServer(dir, HEAP_MB);
+            try {
+                const route = what === 'directory' ? '/api/members' : `/api/groups/${(await server.ask('group')).group}/members`;
+                const bump = what === 'directory' ? 'bump-members' : 'bump-groups';
+                const enc: Record<string, string> = gzip ? { 'Accept-Encoding': 'gzip' } : {};
+                let whole = 0;
+                const readWhole = async () => open({ port: server.port, tls: true }, route, { ...signed(route, readers[whole++ % BURST]), ...enc }).done;
+                const first = await readWhole();
+                const size = first.bytes / MB;
+                await sleep(1000);
+                const before = (await server.ask('mem-gc')).mem as Mem;
+                const keys = readers.slice(0, BURST).map((r) => ({ pk: r.pk, der: r.priv.export({ type: 'pkcs8', format: 'der' }).toString('hex') }));
+                const p = child('stall1', dir, { port: server.port, keys, route, gzip });
+                const said: ((m: any) => void)[] = [];
+                readline.createInterface({ input: p.stdout! }).on('line', (line) => { if (line.startsWith('@@ ')) said.shift()?.(JSON.parse(line.slice(3))); });
+                const ask = (line: string) => new Promise<any>((r) => { said.push(r); p.stdin!.write(line + '\n'); });
+                let full = false;
+                const wholeReads: (number | 'error')[] = [];
+                for (let i = 0; i < n; i++) {
+                    await server.ask(bump);
+                    if (!full) {
+                        const w = await readWhole();
+                        wholeReads.push(w.status);
+                        if (w.status !== 200) full = true;
+                    }
+                    if (!stalls) continue;
+                    if (!full && (await ask('open')).status !== 200) full = true;
+                    else if (full) await ask('open-nowait');
+                }
+                const got: Answer[] = await ask('report');
+                await sleep(3000);
+                const raw = (await server.ask('mem')).mem as Mem;
+                const after = (await server.ask('mem-gc')).mem as Mem;
+                const held = (await server.ask('stats')).stats;
+                await ask('bye');
+                await new Promise((r) => p.once('exit', r));
+                await until(async () => (await server.ask('stats')).stats.inFlightBytes === 0, 5000);
+                const heldAfter = (await server.ask('stats')).stats;
+                const grew = (after.rss - before.rss) / MB;
+                const wholeLine = `whole reads ${wholeReads.filter((x) => x === 200).length}×200 ${wholeReads.filter((x) => x !== 200).length}×busy`;
+                if (!stalls) {
+                    console.log(`  (${what}, ${size.toFixed(2)} MB ${gzip ? 'gzip' : 'plain'}, control: ${n} version moves, ${wholeLine}, nobody stops reading; RSS after a full GC ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB (+${grew.toFixed(0)}): the builds' own growth)`);
+                    assert(wholeReads.every((x) => x === 200) && held.inFlightBytes === 0, `${what}, control: ${n} versions read whole, each served, nothing left in flight (${(held.inFlightBytes / MB).toFixed(1)} MB)`);
+                    continue;
+                }
+                const served = got.filter((a) => a.status === 200).length;
+                const busy = got.filter((a) => a.status === 503);
+                const buffersGrew = (after.buffers - before.buffers) / MB;
+                const allowed = BUDGET_MB + n * PER_CONNECTION_MB;
+                console.log(`  (${what}, ${size.toFixed(2)} MB ${gzip ? 'gzip' : 'plain'}, ${n} readers who stop reading, a version each: ${served} served, ${busy.length} told "busy"; ${wholeLine}; `
+                    + `RSS after a full GC ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB (+${grew.toFixed(0)}; before the GC +${((raw.rss - before.rss) / MB).toFixed(0)}); `
+                    + `buffers ${(before.buffers / MB).toFixed(0)} → ${(after.buffers / MB).toFixed(0)} MB; heap ${(after.heap / MB).toFixed(0)} MB; ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight in ${held.sharedBodies ?? '?'} bodies)`);
+                assert(first.status === 200 && served + busy.length === n && busy.every(isBusy),
+                    `${what}, ${n} ${gzip ? 'gzip' : 'plain'} readers on ${n} versions: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy)`);
+                assert(held.inFlightBytes <= (BUDGET_MB + WINDOW_MB) * MB && buffersGrew <= allowed + WINDOW_MB,
+                    `and every body they hold is counted, within the budget: ${(held.inFlightBytes / MB).toFixed(1)} MB counted, live buffers +${buffersGrew.toFixed(1)} MB (of ${allowed.toFixed(0)} with the connections)`);
+                const base = at24.get(gzip);
+                if (n === 24) at24.set(gzip, { grew, served });
+                else if (base) {
+                    // Each extra body served may keep about its size again from being reused (above); 32 MB for noise: a
+                    // fresh server's RSS before the readers varies that much (315 and 338 MB measured, the same case).
+                    const flat = base.grew + 24 * PER_CONNECTION_MB + Math.max(0, served - base.served) * size * 2 + 32;
+                    assert(grew <= flat, `and the server's RSS no longer grows with the readers: 48 grow it +${grew.toFixed(0)} MB, 24 grew it +${base.grew.toFixed(0)} (at most ${flat.toFixed(0)})`);
+                }
+                assert(heldAfter.inFlightBytes === 0 && heldAfter.sharedBodies === 0, `and once they hang up nothing is counted or held (${heldAfter.inFlightBytes} bytes, ${heldAfter.sharedBodies} bodies)`);
+            } finally {
+                await server.stop();
+            }
+        }
+    }
 }
 
 async function theCapItself(): Promise<void> {

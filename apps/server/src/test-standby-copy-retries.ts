@@ -240,10 +240,15 @@ async function main(): Promise<void> {
             }
             return out;
         };
-        /** Settings' view of S: its backup-status, over its own HTTP server, with its admin password. */
+        /**
+         * Settings' view of S: its backup-status, over its own HTTP server. Step 7c: the password alone opens no admin route
+         * with 2FA off, so it goes under an owner's key session S makes, asked for each call: S starts again on every copy it
+         * swaps in, and a session lives in memory (takeover-test-harness.ts owner-session).
+         */
         const settings = async (): Promise<any> => {
+            const owner: Record<string, string> = await s.send('owner-session');
             const r = await fetch(`${s.base}/api/local/admin/backup-status`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': PW_STANDBY }, body: '{}',
+                method: 'POST', headers: { 'Content-Type': 'application/json', ...owner }, body: '{}',
             });
             require_(r.ok, `S's backup-status answers (${r.status})`);
             return r.json();

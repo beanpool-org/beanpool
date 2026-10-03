@@ -49,7 +49,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, namesSignOutWords, namesPinAddresses, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -3066,5 +3066,62 @@ describe('§5 the restored line, and Sign Out then sign in with the same 12 word
         expect(sentAs('GET', '/api/names/copy').length).toBe(1);
         expect(sentAs('POST', '/api/names/shares')).toEqual([]);
         expect(sent.every(nothingReadable)).toBe(true);
+    });
+});
+
+describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)', () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const never = () => new Promise<void>(() => {});
+    /** Starts the save under fake timers and says when it settled, in fake ms. */
+    function timed<T>(p: Promise<T>) {
+        const t0 = Date.now();
+        const r: { at: number | null; value: T | null } = { at: null, value: null };
+        p.then((v) => { r.at = Date.now() - t0; r.value = v; });
+        return r;
+    }
+
+    it('a node that never answers the state: not confirmed at 10 s (not 120 s), with the general words', async () => {
+        const { phones: [owen] } = await community(['Owen'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_REQUEST_MS - 1);
+        expect(r.at).toBeNull();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(r.at).toBe(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+    });
+
+    it('the state comes, the copy\'s PUT never answers: not confirmed 10 s later, with the only-holder words', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy' ? never() : null);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(r.at).toBe(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+    });
+
+    it('the pin held by an open still waiting on its 120 s state: let go at 30 s; when the open ends, the let-go save sends and writes nothing', async () => {
+        const { phones: [owen] } = await community(['Owen'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        void openNamesList(COMMUNITY, owen, STORE); // takes the pin's chain and waits on the state
+        await vi.advanceTimersByTimeAsync(0);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
+        expect(r.at).toBe(NAMES_SIGN_OUT_TOTAL_MS);
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        // Sign Out wipes the pin; the open's state then fails at its own limit, and the let-go link runs: nothing.
+        for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-')) mem.delete(k);
+        hold = null;
+        sent = [];
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(sentAs('GET', '/api/names/state')).toEqual([]);
+        expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-trust:'))).toEqual([]);
     });
 });

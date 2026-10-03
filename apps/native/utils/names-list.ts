@@ -212,7 +212,8 @@ async function send<T>(anchorUrl: string, identity: BeanPoolIdentity, method: 'G
     }
 }
 
-export const fetchNamesState = (anchor: string, id: BeanPoolIdentity) => call<NamesState>(anchor, id, 'GET', `${NAMES_PATH}/state`, undefined, stateTimeoutMs);
+/** `limitMs`: a shorter limit than the state's own (Sign Out's, {@link NAMES_SIGN_OUT_REQUEST_MS}). */
+export const fetchNamesState = (anchor: string, id: BeanPoolIdentity, limitMs?: number) => call<NamesState>(anchor, id, 'GET', `${NAMES_PATH}/state`, undefined, limitMs ?? stateTimeoutMs);
 /** Every entry, sealed, and every confirmation. The node logs it as a read, or, for an export, as an export. */
 export const fetchNamesList = (anchor: string, id: BeanPoolIdentity, forExport = false, entries = 2000) =>
     call<NamesListBody>(anchor, id, 'GET', `${NAMES_PATH}/entries${forExport ? '?for=export' : ''}`, undefined, listTimeoutMs(entries));
@@ -240,8 +241,8 @@ export const setNamesSettings = (anchor: string, id: BeanPoolIdentity, settings:
 
 const postGeneration = (anchor: string, id: BeanPoolIdentity, g: Pick<NamesGeneration, 'statement' | 'signature'>, replay = false) =>
     call<{ id: string; n: number; code?: string }>(anchor, id, 'POST', `${NAMES_PATH}/generations`, { statement: g.statement, signature: g.signature, ...(replay ? { replay: true } : {}) });
-const putCopy = (anchor: string, id: BeanPoolIdentity, c: NamesCopy) =>
-    call<{ seq: number; code?: string }>(anchor, id, 'PUT', `${NAMES_PATH}/copy`, { header: c.header, signature: c.signature, box: c.box });
+const putCopy = (anchor: string, id: BeanPoolIdentity, c: NamesCopy, limitMs?: number) =>
+    call<{ seq: number; code?: string }>(anchor, id, 'PUT', `${NAMES_PATH}/copy`, { header: c.header, signature: c.signature, box: c.box }, limitMs);
 /** Every fetch is logged on the node as `copy_restored` and other admins see it: only ever for a restore, never to check. */
 const getCopy = (anchor: string, id: BeanPoolIdentity) => call<unknown>(anchor, id, 'GET', `${NAMES_PATH}/copy`);
 const postShare = (anchor: string, id: BeanPoolIdentity, s: NamesShare) =>
@@ -400,9 +401,10 @@ const copyFailure = (code: string, message: string): NamesFailure => ({ ok: fals
  * caller holds it). The pin with its copy number moved on is kept on this phone first, so a retry reuses the number and
  * the same copy (`exists`); a 409 `stale_copy` moves past the node's number once. A failure is returned, never thrown:
  * the caller then sends neither the generation nor the shares that depend on it (design §9.4). Returns the pin as kept,
- * and the node's copy as it now stands (`mine`), for a later step of the same request to pass on.
+ * and the node's copy as it now stands (`mine`), for a later step of the same request to pass on. `limitMs`: each PUT's
+ * limit, asked as it goes out (Sign Out's, which shrinks to its deadline); the request limit otherwise.
  */
-async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<{ ok: true; pin: NamesPin; mine: NamesMyCopy | null | undefined } | NamesFailure> {
+async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>, limitMs?: () => number): Promise<{ ok: true; pin: NamesPin; mine: NamesMyCopy | null | undefined } | NamesFailure> {
     if (state.myCopy === undefined) return { ok: true, pin, mine: undefined };
     const label = namesTrustStoreKey(identity.publicKey, anchor);
     const part = copiedPart(pin);
@@ -431,7 +433,7 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
             }
             copiesInFlight.set(label, { part, copy });
         }
-        const put = await putCopy(anchor, identity, copy);
+        const put = await putCopy(anchor, identity, copy, limitMs?.());
         if (put.ok) {
             copiesInFlight.delete(label);
             await keepCopied(store, identity.publicKey, anchor, { seq: copy.seq, part, digest: copy.boxDigest });
@@ -485,29 +487,57 @@ export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address
 export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null }
 
 /**
+ * Sign Out's time limits (design §5, "one request, time-limited"): each request at most {@link NAMES_SIGN_OUT_REQUEST_MS},
+ * and the whole save, every community's included, at most {@link NAMES_SIGN_OUT_TOTAL_MS} (a request never runs past it).
+ * A copy not confirmed by then is said, and Sign Out goes on: the admin chooses, nothing waits for a slow node.
+ */
+export const NAMES_SIGN_OUT_REQUEST_MS = 10_000;
+export const NAMES_SIGN_OUT_TOTAL_MS = 30_000;
+
+/**
  * Sign Out (design §5): for each community where this key keeps a names pin, the copy saved (or found already saved) and
  * the node's `myCopy.digest` confirmed against the copy this phone last saw confirmed. On the pin's chain, so nothing
- * writes the pin after the wipe that follows. Returns the ones not confirmed; the caller decides the words and never
+ * writes the pin after the wipe that follows; a chain still held by something else at the deadline is let go, and this
+ * link then does nothing when its turn comes. Returns the ones not confirmed; the caller decides the words and never
  * blocks (no hard gates). `anchors`: the community addresses this key keeps a pin for (from the store's labels).
  */
-export async function saveNamesCopiesBeforeLeaving(identity: BeanPoolIdentity, anchors: readonly string[], store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesCopyUnconfirmed[]> {
+export async function saveNamesCopiesBeforeLeaving(
+    identity: BeanPoolIdentity, anchors: readonly string[], store: NamesPinStore = DEVICE_NAMES_STORE,
+    limits: { requestMs: number; totalMs: number } = { requestMs: NAMES_SIGN_OUT_REQUEST_MS, totalMs: NAMES_SIGN_OUT_TOTAL_MS },
+): Promise<NamesCopyUnconfirmed[]> {
+    const until = Date.now() + limits.totalMs;
+    const left = () => Math.max(0, Math.min(limits.requestMs, until - Date.now()));
     const out: NamesCopyUnconfirmed[] = [];
     for (const anchor of anchors) {
-        const confirmed = await withPin(identity.publicKey, anchor, async (): Promise<NamesCopyUnconfirmed | null> => {
+        let gaveUp = false;
+        let started = false;
+        const work = withPin(identity.publicKey, anchor, async (): Promise<NamesCopyUnconfirmed | null> => {
+            if (gaveUp) return null;
+            started = true;
             const kept = await readKeptPin(store, identity.publicKey, anchor);
             if (kept.kind !== 'pin') return null;
             const head = kept.pin.chain[kept.pin.chain.length - 1];
-            const s = await fetchNamesState(anchor, identity);
+            if (left() <= 0) return { anchor, onlyKey: null };
+            const s = await fetchNamesState(anchor, identity, left());
             const me = identity.publicKey.toLowerCase();
             const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
             const onlyKey = head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
-            if (!s.ok || s.value.myCopy === undefined) return { anchor, onlyKey };
-            const saved = await saveCopy(anchor, identity, store, kept.pin, s.value);
+            if (!s.ok || s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
+            const saved = await saveCopy(anchor, identity, store, kept.pin, s.value, left);
             if (!saved.ok) return { anchor, onlyKey };
             const last = await lastCopied(store, identity.publicKey, anchor);
             return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : { anchor, onlyKey };
         });
-        if (confirmed) out.push(confirmed);
+        // The chain may be held by an open still waiting on its own (longer) limits: past the deadline, this one is let go.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), Math.max(0, until - Date.now())); });
+        try {
+            const first = await Promise.race([work, deadline]);
+            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), { anchor, onlyKey: null })) : first;
+            if (confirmed) out.push(confirmed);
+        } finally {
+            clearTimeout(timer);
+        }
     }
     return out;
 }

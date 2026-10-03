@@ -404,6 +404,18 @@ const copyFailure = (code: string, message: string): NamesFailure => ({ ok: fals
  * and the node's copy as it now stands (`mine`), for a later step of the same request to pass on. `limitMs`: each PUT's
  * limit, asked as it goes out (Sign Out's, which shrinks to its deadline); the request limit otherwise.
  */
+/**
+ * The address a copy is sealed to and checked against, at save, restore and merge alike: `communityAddress`, with the
+ * scheme and host in lower case and a default port dropped, so one community typed two ways is one address.
+ */
+function copyAddress(anchor: string): string | null {
+    const a = communityAddress(anchor);
+    const m = a?.match(/^(https?):\/\/([^/?#]+)(.*)$/i);
+    if (!a || !m) return a;
+    const scheme = m[1].toLowerCase();
+    return `${scheme}://${m[2].toLowerCase().replace(scheme === 'https' ? /:443$/ : /:80$/, '')}${m[3]}`;
+}
+
 async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>, limitMs?: () => number): Promise<{ ok: true; pin: NamesPin; mine: NamesMyCopy | null | undefined } | NamesFailure> {
     if (state.myCopy === undefined) return { ok: true, pin, mine: undefined };
     const label = namesTrustStoreKey(identity.publicKey, anchor);
@@ -415,7 +427,7 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
     // A newer copy on the node is another phone's (design §3, "higher seq"): never written over before stage 3b's merge.
     if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNewer);
     if ((copiesPausedUntil.get(label) ?? 0) > Date.now()) return copyFailure('too_many_copies', NAMES_COPY.copyNotSaved);
-    const address = communityAddress(anchor);
+    const address = copyAddress(anchor);
     if (!address) return copyFailure('copy_not_saved', NAMES_COPY.copyNotSaved);
     let now = pin;
     for (let round = 0; round < 2; round++) {
@@ -464,7 +476,7 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
         if (got.status === 404 && got.code === 'no_copy') return { ok: true, value: null };
         return got.status === 0 ? { ...got, code: got.code ?? 'copy_unreachable', message: NAMES_COPY.copyUnreachable } : got;
     }
-    const address = communityAddress(anchor) ?? anchor;
+    const address = copyAddress(anchor) ?? anchor;
     const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address });
     if (!r.ok) {
         return r.reason === 'other_address'
@@ -509,7 +521,7 @@ export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
 async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin): Promise<NamesPin> {
     const got = await getCopy(anchor, identity);
     if (!got.ok) return local;
-    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: communityAddress(anchor) ?? anchor });
+    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: copyAddress(anchor) ?? anchor });
     if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
     const merged = mergeNamesPins(local, r.pin);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged))) return local;

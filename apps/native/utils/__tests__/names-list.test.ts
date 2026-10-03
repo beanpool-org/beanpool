@@ -3316,6 +3316,18 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
         expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(c.seq);
     });
 
+    for (const typed of ['https://mullum.beanpool.org/', 'https://MULLUM.BeanPool.org', 'https://mullum.beanpool.org:443', 'HTTPS://Mullum.beanpool.org:443/']) {
+        it(`the address saved under and the one restored with are normalised the same: saved at ${COMMUNITY}, restored at ${typed}`, async () => {
+            const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+            wipe(ada);
+            const r = await openNamesList(typed, ada, STORE);
+            expect(r.ok ? 'ok' : r.code).toBe('ok');
+            if (!r.ok) return;
+            expect(r.value.plan.kind).toBe('ready');
+            expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+        });
+    }
+
     it('copy_newer that can\'t be merged (the fetch fails, or the copy disagrees with the node\'s word): the pin is kept as it is, said, no copy, no shares, the list opens', async () => {
         const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
         const was = (await pinOf(ada))!;

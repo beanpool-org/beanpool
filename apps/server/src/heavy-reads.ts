@@ -239,12 +239,16 @@ export function heavyReadKey(route: string, inputs: Record<string, unknown>): st
  * after every check that refuses or answers 304, so only an answer that will be built takes budget. `key` names whose
  * last size this answer's weight is (heavyReadKey: every input that changes the answer's size). When there is no room in
  * time, the reader gets 503 with Retry-After and `code: heavy_read_busy`, and `build` never runs.
+ *
+ * `fixedWeight`: what this answer holds in flight when that isn't its size (a shared body sent a window at a time,
+ * members-snapshot.ts). It is always weighed at that, never light, and its size isn't learned.
  */
-export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>): Promise<void> {
+export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>, fixedWeight?: number): Promise<void> {
     const res = ctx.res;
-    const known = lastSize.get(slot(key));
+    const fixed = fixedWeight !== undefined;
+    const known = fixed ? undefined : lastSize.get(slot(key));
     const light = known !== undefined && known < LIGHT_BYTES;
-    const weight = light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
+    const weight = fixed ? fixedWeight : light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
     // A route called with no response to watch (a suite dispatching a handler directly): its weight is given back as
     // soon as it is built.
     const watched = typeof res?.once === 'function';
@@ -278,7 +282,7 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         if (!wasIn) return;
         // Its size, for the next answer's weight: also from a reader who left mid-answer, whose headers were already set.
         const bytes = answerBytes(ctx);
-        if (bytes !== null && (watched ? res.statusCode : ctx.status) === 200) remember(key, bytes);
+        if (!fixed && bytes !== null && (watched ? res.statusCode : ctx.status) === 200) remember(key, bytes);
         inFlightBytes -= ticket.held;
         ticket.held = 0;
         drain();
@@ -331,7 +335,7 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
     }
     if (!watched) { giveBack(); return; }
     // Built: what is in flight is this answer as it is, not the last one's size, when its headers already say so.
-    const bytes = ticket.phase === 'in' && !light ? answerBytes(ctx) : null;
+    const bytes = ticket.phase === 'in' && !light && !fixed ? answerBytes(ctx) : null;
     if (bytes !== null) {
         inFlightBytes += bytes - ticket.held;
         ticket.held = bytes;

@@ -16,6 +16,9 @@
  *      - then 512 at once, from 16 reader processes (readersAtOnce says why), all served the one shared directory
  *        (members-snapshot.ts), byte for byte, the heap under 75% of its 256 MB.
  *      How many are told "busy" depends on how fast the machine builds and sends (here, 24 to 40 of the 64).
+ *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
+ *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget, and each reader is served or
+ *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB.
  *   2. The same server, the gate before the cap.
  *      - An unsigned read, a bad signature and a key that isn't a member are refused before the cap: no budget taken.
  *      - A delta isn't capped.
@@ -32,7 +35,9 @@
  *      - a light answer goes past the line, and an answer bigger than the whole budget is served alone;
  *      - the log gets one line, not one per refusal;
  *      - an answer let in has 180 s to be sent: a reader who stops reading is cut off when it is up, its weight comes
- *        back, and the one waiting behind it is served.
+ *        back, and the one waiting behind it is served;
+ *      - a send at a fixed weight (a ready snapshot's) is weighed at that, never light, its size never learned, and is
+ *        refused and cut off as any other.
  *
  * Every server binds port 0. The children use directories under this run's data dir, and the runner's TMPDIR.
  *
@@ -109,6 +114,8 @@ async function serve(): Promise<void> {
         if (line === 'peak') { say({ peak }); peak = process.memoryUsage().heapUsed; }
         // Imported here so that the burst in 1 runs on a server from before the cap too (the fail-first run).
         if (line === 'stats') import('./heavy-reads.js').then((m) => say({ stats: m.heavyReadStats() }), () => say({ stats: null }));
+        // The whole process, not only the heap: TLS keeps each socket's ciphertext off the V8 heap.
+        if (line === 'mem') { const m = process.memoryUsage(); say({ mem: { rss: m.rss, heap: m.heapUsed } }); }
         if (line === 'exit') process.exit(0);
     });
 }
@@ -123,9 +130,27 @@ async function read(a: { port: number; keys: { pk: string; der: string }[]; coun
     await say(answers.map(({ status, bytes, sha, ms, error }) => ({ status, bytes, sha, ms, error })));
 }
 
+/**
+ * `count` directory reads that stop reading after the headers, as a phone put away mid-download (or one doing it on
+ * purpose), from a process of their own so that the server's memory is the server's. Says what each got once the
+ * orchestrator asks, and hangs up all of them when it says so.
+ */
+async function stall(a: { port: number; keys: { pk: string; der: string }[]; count: number; gzip: boolean }): Promise<void> {
+    const keys: Key[] = a.keys.map((k) => ({ pk: k.pk, priv: crypto.createPrivateKey({ key: Buffer.from(k.der, 'hex'), format: 'der', type: 'pkcs8' }) }));
+    const say = (m: unknown) => new Promise((r) => process.stdout.write(`@@ ${JSON.stringify(m)}\n`, r));
+    const opens = Array.from({ length: a.count }, (_, i) =>
+        open({ port: a.port, tls: true }, '/api/members', { ...signed('/api/members', keys[i % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true }));
+    const answers = opens.map((o) => o.headers.then(async (res) => (res?.statusCode === 200 ? { status: 200 } : { ...(await o.done), sha: '' })));
+    const lines = readline.createInterface({ input: process.stdin });
+    for await (const line of lines) {
+        if (line === 'report') await say((await Promise.all(answers)).map((x: any) => ({ status: x.status, text: x.text, headers: x.headers, ms: x.ms, error: x.error })));
+        if (line === 'bye') { for (const o of opens) o.hangUp(); await say({ bye: true }); return; }
+    }
+}
+
 const role = process.argv[2];
-if (role === 'seed' || role === 'serve' || role === 'read') {
-    (role === 'seed' ? seed(JSON.parse(process.argv[3])) : role === 'read' ? read(JSON.parse(process.argv[3])) : serve()).then(
+if (role === 'seed' || role === 'serve' || role === 'read' || role === 'stall') {
+    (role === 'seed' ? seed(JSON.parse(process.argv[3])) : role === 'read' ? read(JSON.parse(process.argv[3])) : role === 'stall' ? stall(JSON.parse(process.argv[3])) : serve()).then(
         () => { if (role !== 'serve') process.exit(0); },
         (e) => { console.error(e); process.exit(1); },
     );
@@ -429,12 +454,57 @@ async function main(): Promise<void> {
         await server.stop();
     }
 
+    // ── 1b. Readers of the shared directory who stop reading ───────────────────────────────────────────────────────
+    console.log('\n— 1b. the same members, readers of the shared directory who stop reading, from a process of their own —');
+    await stalledReaders(dir, readers, BURST, HEAP_MB);
+
     // ── 3. The cap itself ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 3. the cap itself, on a small server of its own —');
     await theCapItself();
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);
+}
+
+/** The shared directory's readers who stop reading, on servers of their own (main's section 1b). */
+async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_MB: number): Promise<void> {
+        // Readers of the shared directory who stop reading, from a process of their own, as the deciding review of #1523
+        // measured them: before this, each was sent the whole snapshot at once and its socket held about one encrypted
+        // copy in native memory (11 MB plain, 2 MB gzip), off the heap, uncapped and with no deadline: 24 plain readers
+        // +266 MB of RSS, 48 +532 MB. Now the server's whole memory stays within the cap's budget, and any reader past
+        // what the budget allows is told "busy".
+        const BUDGET_MB = 48;
+        for (const [n, gzip] of [[24, false], [48, false], [48, true]] as const) {
+          // A fresh server for each: memory a process has freed is reused before its RSS grows, so after a burst, or after
+          // the case before, RSS hides what readers hold. Its snapshot is built, and the gzip copy made, before the baseline.
+          const server = await startServer(dir, HEAP_MB);
+          try {
+            for (const enc of [{}, { 'Accept-Encoding': 'gzip' }] as Record<string, string>[]) await open({ port: server.port, tls: true }, '/api/members', { ...signed('/api/members', readers[0]), ...enc }).done;
+            await sleep(1000);
+            const before = (await server.ask('mem')).mem as { rss: number; heap: number };
+            const keys = readers.slice(0, BURST).map((r) => ({ pk: r.pk, der: r.priv.export({ type: 'pkcs8', format: 'der' }).toString('hex') }));
+            const p = child('stall', dir, { port: server.port, keys, count: n, gzip });
+            const said: ((m: any) => void)[] = [];
+            readline.createInterface({ input: p.stdout! }).on('line', (line) => { if (line.startsWith('@@ ')) said.shift()?.(JSON.parse(line.slice(3))); });
+            const ask = (line: string) => new Promise<any>((r) => { said.push(r); p.stdin!.write(line + '\n'); });
+            const got: Answer[] = await ask('report');
+            await sleep(3000);
+            const after = (await server.ask('mem')).mem as { rss: number; heap: number };
+            const held = (await server.ask('stats')).stats;
+            await ask('bye');
+            await new Promise((r) => p.once('exit', r));
+            const served = got.filter((a) => a.status === 200).length;
+            const busy = got.filter((a) => a.status === 503);
+            const grew = (after.rss - before.rss) / MB;
+            console.log(`  (${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: ${served} served, ${busy.length} told "busy"; RSS ${(before.rss / MB).toFixed(0)} → ${(after.rss / MB).toFixed(0)} MB (${grew >= 0 ? '+' : ''}${grew.toFixed(0)}), heap ${(after.heap / MB).toFixed(0)} MB, ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight)`);
+            assert(served + busy.length === n && busy.every(isBusy), `${n} ${gzip ? 'gzip' : 'plain'} readers who stop reading: each is served or told "busy" with Retry-After (${served} served, ${busy.length} busy)`);
+            assert(grew <= BUDGET_MB, `and the server's RSS grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
+            assert(held.inFlightBytes <= BUDGET_MB * MB, `and what they hold is counted within the budget (${(held.inFlightBytes / MB).toFixed(1)} MB)`);
+          } finally {
+            await server.stop();
+          }
+        }
+
 }
 
 async function theCapItself(): Promise<void> {
@@ -445,7 +515,8 @@ async function theCapItself(): Promise<void> {
     initStateEngine(); // the schema, so the log's lines land in system_logs
 
     // GET /?key=K&size=BYTES&tag=T: an answer of BYTES under the cap, weighed as K. &object=ROWS: an array body, as a
-    // roster's (its size known only as it is sent). &throw=1: the build throws.
+    // roster's (its size known only as it is sent). &throw=1: the build throws. &fixed=BYTES: weighed at BYTES, as a
+    // ready snapshot's send is (members-snapshot.ts).
     const built: string[] = [];
     const app = new Koa();
     app.silent = true;
@@ -459,7 +530,7 @@ async function theCapItself(): Promise<void> {
             if (q.object) { ctx.body = Array.from({ length: Number(q.object) }, (_, i) => ({ row: i, name: `Member ${i}` })); return; }
             ctx.type = 'application/json';
             ctx.body = `"${'x'.repeat(Number(q.size) - 2)}"`;
-        });
+        }, q.fixed ? Number(q.fixed) : undefined);
     });
     const httpServer = http.createServer(app.callback());
     await new Promise<void>((r) => httpServer.listen(0, '127.0.0.1', () => r()));
@@ -613,6 +684,24 @@ async function theCapItself(): Promise<void> {
         assert(cutLines() - cutLinesBefore === 1, `the log says one was cut off (${cutLines() - cutLinesBefore} line)`);
         stalled.hangUp();
         assert(await free() && stats().waiting === 0, `nothing is left in flight (${inFlight()}) or waiting (${stats().waiting})`);
+
+        // A send at a fixed weight (a ready snapshot's, members-snapshot.ts): weighed at that whatever its size, never
+        // light and its size never learned; only as many in flight as the budget holds of it, the next told "busy", and
+        // one who stops reading cut off at the deadline as any other.
+        // The wait (1 s) is up before the deadline (2.5 s) frees anything.
+        setHeavyReadsForTests({ budgetBytes: BUDGET, waitMs: 1000, maxQueue: 3, deadlineMs: 2500 });
+        const W = 3 * MB;
+        const f1 = get(`key=fixed&size=${6 * MB}&fixed=${W}`, { hold: true });
+        const f2 = get(`key=fixed&size=${6 * MB}&fixed=${W}`, { hold: true });
+        await Promise.all([f1.headers, f2.headers]);
+        const twoIn = inFlight();
+        const f3 = await get(`key=fixed&size=100&fixed=${W}`).done;
+        assert(twoIn === 2 * W && isBusy(f3) && heavyReadWeight('fixed') === undefined,
+            `sends at a fixed 3 MB: two hold 6 MB of the 8 MB budget (${(twoIn / MB).toFixed(1)} MB) though each is 6 MB, the third, a 100-byte one, waits and is told "busy" (${f3.status}), and no size is learned (${heavyReadWeight('fixed')})`);
+        const cutBoth = await until(() => stats().cutOff === 2, 4000);
+        assert(cutBoth && await free(), `and the two who stopped reading are cut off at the deadline, their weight given back (${stats().cutOff} cut off, ${inFlight()} in flight)`);
+        f1.hangUp();
+        f2.hangUp();
     } finally {
         setHeavyReadsForTests(undefined);
         await new Promise((r) => httpServer.close(r));

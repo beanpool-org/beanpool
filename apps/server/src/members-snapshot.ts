@@ -4,7 +4,7 @@
  * The full `GET /api/members` is the same for every reader the route lets in: it carries no viewer's own data (no
  * contact details, no friends, no per-reader distance). So it is built once per members version, kept as one Buffer,
  * and every reader is sent those same bytes. A burst of readers costs one build, and each reader in flight holds only
- * its socket, not a copy of the body.
+ * its socket and a window of the body, not a copy of it.
  *   - The snapshot is keyed by everything that changes the answer: the members version and the node's face-key setting
  *     (avatarUrlOf). Nothing about the viewer is in the key because nothing about the viewer is in the answer; the
  *     forms that are per reader (`lat`/`lng`) or per cursor (`updatedAfter`) never come here.
@@ -13,11 +13,17 @@
  *   - Its ETag is its own version and a digest of its bytes, so a 304 is never wrong, also across a 60 s rebuild.
  *   - The gzip copy is made once, on the first reader that accepts gzip, and shared the same way.
  *
+ *   - The bytes are sent SEND_CHUNK at a time, each when the socket has taken the last. Sent whole, each reader's socket
+ *     held one encrypted copy of the answer in native memory (off the heap) until its reader had read it all: readers
+ *     who stopped reading added 11 MB of RSS each plain and 2 MB gzip, and 48 of them 445 MB (the deciding review of
+ *     #1523). Now one holds about a window.
+ *
  * The read gate and the route's own checks run before any of this. The build itself runs under the heavy-read cap
- * (heavy-reads.ts), as the unshared build did; a reader served from a ready snapshot takes no budget, since all it
- * holds is its socket.
+ * (heavy-reads.ts), as the unshared build did, and so does every send of a ready snapshot, weighed SNAPSHOT_SEND_WEIGHT
+ * and under the cap's deadline: the number of them in flight is bounded, and one that stops reading is cut off.
  */
 import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { gzipSync } from 'node:zlib';
 import type Koa from 'koa';
 
@@ -30,6 +36,13 @@ export interface MembersSnapshot {
     gzip: Buffer | null;
 }
 
+/** How much of the body is handed to a reader's socket at once. */
+const SEND_CHUNK = 64 * 1024;
+/**
+ * What one send of a ready snapshot holds in flight, as the heavy-read cap weighs it: a window of the body on its
+ * socket, plaintext and encrypted (measured in test-heavy-read-cap §1b).
+ */
+export const SNAPSHOT_SEND_WEIGHT = 128 * 1024;
 const MIN_REBUILD_MS = 5_000;
 const MAX_AGE_MS = 60_000;
 
@@ -66,6 +79,20 @@ export function storeMembersSnapshot(key: string, bodyStr: string, now = Date.no
     return current;
 }
 
+/** `body` a SEND_CHUNK at a time, each a view of it (no copy), read only as the socket takes them. */
+function chunked(body: Buffer): Readable {
+    let at = 0;
+    return new Readable({
+        highWaterMark: SEND_CHUNK,
+        read() {
+            if (at >= body.length) { this.push(null); return; }
+            const end = Math.min(at + SEND_CHUNK, body.length);
+            this.push(body.subarray(at, end));
+            at = end;
+        },
+    });
+}
+
 function acceptsGzip(ctx: Koa.Context): boolean {
     const header = typeof ctx.get === 'function' ? ctx.get('Accept-Encoding') : '';
     return /(^|,)\s*gzip\s*(;\s*q=(?!0(\.0*)?\s*($|,))[0-9.]+)?\s*($|,)/i.test(header);
@@ -77,13 +104,13 @@ export function sendMembersSnapshot(ctx: Koa.Context, snap: MembersSnapshot): vo
     ctx.type = 'application/json';
     // A route dispatched by a suite with a bare context has no vary(); a real one appends to any Vary already set.
     if (typeof ctx.vary === 'function') ctx.vary('Accept-Encoding');
+    let bytes = snap.body;
     if (acceptsGzip(ctx)) {
-        snap.gzip ??= gzipSync(snap.body);
+        bytes = snap.gzip ??= gzipSync(snap.body);
         ctx.set('Content-Encoding', 'gzip');
-        ctx.body = snap.gzip;
-    } else {
-        ctx.body = snap.body;
     }
+    ctx.body = chunked(bytes);
+    ctx.length = bytes.length;
 }
 
 /** How many snapshots were built since the server started (tests). */

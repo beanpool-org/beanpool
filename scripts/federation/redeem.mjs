@@ -139,7 +139,7 @@ async function phase2() {
     const ourSeller = st.gippsland.identity;       // a gippsland member, doing the work
     // The peer resolved from eastgippy's OWN connector list rather than constructed here — the route looks the
     // connector up by address or public URL, so a hand-built multiaddr that differs by a character 404s.
-    const conns = await plain('eastgippy', 'GET', '/api/local/connectors');
+    const conns = await plain('eastgippy', 'GET', '/api/local/connectors', undefined, adminHeaders('eastgippy'));
     const gipps = (conns.json?.connectors ?? conns.json ?? [])
         .find(c => c.address?.includes(NODES.gippsland.containerIp));
     if (!gipps) { console.log('  eastgippy has no connector pointing at gippsland — stop'); return; }

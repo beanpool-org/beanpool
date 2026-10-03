@@ -439,24 +439,36 @@ router.post('/api/local/change-password', async (ctx) => {
 
 // ===================== DASHBOARD API =====================
 
+// The identity is public, as /api/local/status and libp2p already make it. The peer links are for this node's admins
+// only (GET /api/local/connectors, below). A caller that sends no admin credential gets the identity; one that sends a
+// credential has it checked as any admin route does, and is refused if it doesn't open one.
 router.get('/api/local/dashboard', async (ctx) => {
     const config = getLocalConfig();
     const node = getP2PNode();
-
-    ctx.body = {
-        identity: {
-            peerId: node?.peerId?.toString() || 'unknown',
-            callsign: config.callsign,
-            location: config.location,
-            joinedAt: config.joinedAt,
-        },
-        connectors: getConnectors(),
+    const identity = {
+        peerId: node?.peerId?.toString() || 'unknown',
+        callsign: config.callsign,
+        location: config.location,
+        joinedAt: config.joinedAt,
     };
+
+    if (!(await checkAdminAuth(ctx as any))) {
+        if (!(ctx.body as any)?.notSignedIn) return;
+        ctx.status = 200;
+        ctx.body = { identity };
+        return;
+    }
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
+    ctx.body = { identity, connectors: getConnectors() };
 });
 
 // ===================== CONNECTOR API =====================
 
+// Which peers are blocked, with their addresses, the credit extended to each, the trust levels and the links' errors:
+// the community's federation posture, so admin only, as the routes that change it are (#1564 review NB3).
 router.get('/api/local/connectors', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
     ctx.body = getConnectors();
 });
 

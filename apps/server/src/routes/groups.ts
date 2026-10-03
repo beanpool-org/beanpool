@@ -410,8 +410,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey);
+            if (!removed) {
+                ctx.status = 404;
+                ctx.body = { success: false, error: 'Group member not found' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: removed };
+            ctx.body = { success: true };
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
@@ -627,8 +632,13 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             const deleted = deleteGroupPost(ctx.params.id, actor, ctx.params.postId);
+            if (!deleted) {
+                ctx.status = 404;
+                ctx.body = { success: false, error: 'Group post not found' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: deleted };
+            ctx.body = { success: true };
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;

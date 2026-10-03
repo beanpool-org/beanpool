@@ -147,6 +147,14 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
         return () => clearInterval(t);
     }, [state.kind]);
 
+    // The 30 seconds ran out with nothing sent: the node would answer "expired", so say so now rather than sit at 0:00.
+    // Digits already on their way get the node's answer instead.
+    useEffect(() => {
+        if (state.kind === 'confirm' && !state.busy && state.deadline - now <= 0) {
+            setState({ kind: 'ended', message: PHONE_SIGNIN_MESSAGES.confirmLate });
+        }
+    }, [state, now]);
+
     // The page's own origin, not a configured URL: the pairing and its cookie live where this page's requests go.
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const qr = state.kind === 'showing'

@@ -234,6 +234,18 @@ describe('phone-signin helpers', () => {
         expect(typed).toEqual(['12', '47']);
     });
 
+    it("ends the box honestly when the 30 seconds run out, rather than sitting at 0:00 (4171995318)", async () => {
+        const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 1 } }] });
+        const onSignedIn = vi.fn();
+        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        await screen.findByLabelText(/Type the two digits your phone shows/i);
+        await waitFor(() => expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull(), { timeout: 3_000 });
+        expect(screen.getByText(PHONE_SIGNIN_MESSAGES.confirmLate)).toBeTruthy();
+        expect(screen.queryByText(/0:00 left/)).toBeNull();
+        expect(onSignedIn).not.toHaveBeenCalled();
+        expect(typed).toEqual([]);
+    });
+
     it('three wrong digits, or too late, end the sign-in with no session', async () => {
         fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
             { status: 410, body: { status: 'refused' } },

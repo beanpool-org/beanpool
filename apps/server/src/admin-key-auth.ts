@@ -715,6 +715,21 @@ export async function verifyBreakGlassCode(code: string, ownerPubkey?: string): 
 }
 
 /**
+ * A new break-glass code for a key that holds the owner role now, shown once by the caller. The stored hash is replaced,
+ * so any earlier code of that owner's stops working. Grants nothing: a key without the owner role gets an error, and
+ * nothing is stored. `by` names who asked, for the log line, which never carries the code.
+ */
+export function issueBreakGlassCode(ownerPubkey: string, by: string): string {
+    if (nodeRoleOf(ownerPubkey) !== 'owner') {
+        throw Object.assign(new Error('Only a key that holds the owner role has a break-glass code'), { status: 409 });
+    }
+    const code = generateBreakGlassCode();
+    setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code));
+    logger.security('AUTH', `A new break-glass code was made for owner ${ownerPubkey.slice(0, 12)}… by ${by}; any earlier code of theirs no longer works`);
+    return code;
+}
+
+/**
  * Enrols an admin key and generates a per-owner break-glass code.
  *
  * If isBreakGlass is true, emits a loud public alert to the community:

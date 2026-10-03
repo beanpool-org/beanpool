@@ -1,3 +1,4 @@
+import React from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApplianceSection } from './ApplianceSection';
@@ -146,35 +147,78 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText(/Database verified, no corruption \(PRAGMA integrity_check: ok\)/i)).toBeInTheDocument();
     });
 
-    it('renders break-glass placeholder card with admin-surface §2.2 explanation in Access tab', async () => {
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
+    const renderAccess = (rolesViewer: React.ComponentProps<typeof ApplianceSection>['rolesViewer']) => render(
+        <ApplianceSection
+            activeNode={mockProfile}
+            diag={mockDiag}
+            gateway={mockGateway}
+            gatewayLoading={false}
+            gatewaySuccess={null}
+            gatewaySaving={false}
+            nodeLogs={[]}
+            onChangeGateway={vi.fn()}
+            onSaveGateway={vi.fn()}
+            onRefreshDiag={vi.fn()}
+            onRefreshLogs={vi.fn()}
+            onDownloadBackup={vi.fn()}
+            onRunLedgerAudit={vi.fn()}
+            auditState={{ running: false, result: null }}
+            initialSubTab="access"
+            rolesViewer={rolesViewer}
+        />
+    );
+    /** fetch answering `route` with `answer`, and 2FA status as `totpEnabled`; every other call an empty 200. */
+    const fakeFetch = (route: string, answer: unknown, totpEnabled = false) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+        const url = String(input);
+        if (url.includes(route)) return new Response(JSON.stringify(answer), { status: 200 });
+        if (url.includes('/api/local/admin/2fa/status')) return new Response(JSON.stringify({ totpEnabled, backupCodesRemaining: 3 }), { status: 200 });
+        return new Response('{}', { status: 200 });
+    });
 
+    it('an owner key makes a break-glass code from the Access tab, shown once', async () => {
+        const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-a1b2-c3d4-e5f6-7890', memberPubkey: 'o'.repeat(64) });
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
         expect(screen.getByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
-        expect(screen.getByText(/The break-glass credential can do exactly one thing: enrol a new admin key/i)).toBeInTheDocument();
-        expect(screen.getByText(/Break-glass recovery used to authorise a new admin key for @callsign/i)).toBeInTheDocument();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
+        expect(call).toBeTruthy();
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({});
+        expect(screen.getByTestId('break-glass-code')).toHaveTextContent('bg-a1b2-c3d4-e5f6-7890');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /I have kept it safe/i })); });
+        expect(screen.queryByText('bg-a1b2-c3d4-e5f6-7890')).not.toBeInTheDocument();
+    });
 
-        const placeholderButton = screen.getByRole('button', { name: /Enrol Device Key via Break-Glass/i });
-        expect(placeholderButton).toBeDisabled();
+    it('the password names the owner; an admin is told only an owner has a code', async () => {
+        const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-0000-1111-2222-3333' });
+        await act(async () => { renderAccess({ kind: 'password' }); });
+        fireEvent.change(screen.getByLabelText(/Owner's member key/i), { target: { value: 'p'.repeat(64) } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ memberPubkey: 'p'.repeat(64) });
+        expect(screen.getByTestId('break-glass-code')).toHaveTextContent('bg-0000-1111-2222-3333');
+    });
+
+    it('an admin sees no break-glass button and no backup codes', async () => {
+        fakeFetch('/never', {}, true);
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }); });
+        expect(screen.getByText(/Only an owner has a break-glass code/i)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Make a break-glass code/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Show new backup codes/i })).not.toBeInTheDocument();
+    });
+
+    it('an owner sees new 2FA backup codes only after typing a 6-digit code', async () => {
+        const codes = ['aaaa1111', 'bbbb2222', 'cccc3333', 'dddd4444', 'eeee5555', 'ffff6666', 'a1a1b2b2', 'c3c3d4d4'];
+        const fetchSpy = fakeFetch('/api/local/admin/2fa/backup-codes', { success: true, backupCodes: codes }, true);
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
+        const button = await screen.findByRole('button', { name: /Show new backup codes/i });
+        await act(async () => { fireEvent.click(button); });
+        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'))).toBe(false);
+        expect(screen.getByText(/Enter the 6-digit code/i)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/New backup codes/i), { target: { value: '123456' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Show new backup codes/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'));
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ code: '123456' });
+        expect(screen.getByTestId('backup-codes')).toHaveTextContent('aaaa1111');
     });
 
     it('sends password in POST body when checking for updates', async () => {

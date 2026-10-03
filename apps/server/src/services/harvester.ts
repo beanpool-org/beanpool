@@ -41,6 +41,7 @@ import { sealFileVerified, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-bac
 import { extractBackupArchive } from './restore-checks.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
+import { isAutomationTokenShape } from '../automation-tokens.js';
 
 export interface FleetNodeConfig {
     id: string;
@@ -575,8 +576,10 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
     if (!node.automationToken && !node.adminPassword && !node.replicationToken) {
         throw new Error('No admin credentials (automationToken / adminPassword / replicationToken) configured');
     }
-    if (node.automationToken && !node.automationToken.startsWith('bp_')) {
-        throw new Error('automationToken is not an automation token (bp_<id>_<secret>): make one with the backups scope in the node\'s Settings');
+    // The whole shape, as the node checks it, before any header is built. The messages never repeat the value: fetch's
+    // own error for a header with a control character in it does, and the error is kept in harvester-state.json.
+    if (node.automationToken && !isAutomationTokenShape(node.automationToken)) {
+        throw new Error('automationToken is not an automation token (bp_ + 12 hex + _ + 64 hex, nothing before or after): make one with the backups scope in the node\'s Settings and copy it whole');
     }
 
     const baseUrl = normalizeUrl(node.url);
@@ -585,6 +588,10 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         // An owner's token with the backups scope: the node decides on it alone, so the password is never sent beside it.
         headers['Authorization'] = `Bearer ${node.automationToken}`;
     } else {
+        for (const [field, value] of [['adminPassword', node.adminPassword], ['replicationToken', node.replicationToken]] as const) {
+            // eslint-disable-next-line no-control-regex -- control characters are what this looks for
+            if (value && /[\x00-\x1f\x7f]/.test(value)) throw new Error(`${field} has a control character in it (a line break from a paste?): it cannot be sent`);
+        }
         if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
         if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
     }

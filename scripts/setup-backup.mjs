@@ -43,6 +43,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
 
 function parseArgs(argv) {
     const args = {};
@@ -156,9 +157,11 @@ async function main() {
         die('Usage: BEANPOOL_TOKEN=bp_... node scripts/setup-backup.mjs --primary <https url> --token <replication token> [--data-dir <path>]\n' +
             '   or (legacy): node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]');
     }
-    if (automationToken && !automationToken.startsWith('bp_')) {
-        die('BEANPOOL_TOKEN is not an automation token (bp_…): make one in the primary\'s Settings → Automation tokens (read or admin scope).');
-    }
+    // Each credential checked before any request, in words that never repeat it (automation-token.mjs). The replication
+    // token goes into .env as well as a header: a line break in it would add a line there.
+    const credentialProblem = (automationToken ? automationTokenProblem('BEANPOOL_TOKEN', automationToken) : headerValueProblem('--admin-pw', adminPw))
+        ?? headerValueProblem('The replication token', replicationToken);
+    if (credentialProblem) die(`${credentialProblem}${automationToken ? ' (On the primary: read or admin scope.)' : ''}`);
     // Said now, before anything is fetched or written: the step that makes the primary's replication token is an owner's.
     if (automationToken && !replicationToken) {
         die('With BEANPOOL_TOKEN, pass the primary\'s replication token with --token.\n' +

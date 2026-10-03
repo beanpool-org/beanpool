@@ -79,3 +79,20 @@ test('an OK list with no Community Eggs still creates one and posts its offer', 
         await node.close();
     }
 });
+
+test('a bp_ value that is not the whole token, or one with a line break in it, is refused before any request', async () => {
+    const node = await standIn([200, JSON.stringify({ treasuries: [] })]);
+    try {
+        for (const bad of ['bp_short', `${TOKEN.slice(0, 40)}\n${TOKEN.slice(40)}`]) {
+            const env = { ...process.env, NODE_URL: node.url, BEANPOOL_TOKEN: bad };
+            const { code, out } = await new Promise((resolve) => execFile(process.execPath, [SCRIPT], { env, timeout: 20_000 },
+                (err, stdout, stderr) => resolve({ code: err ? err.code : 0, out: `${stdout}${stderr}` })));
+            assert.notEqual(code, 0, out);
+            assert.ok(out.includes('BEANPOOL_TOKEN is not an automation token'), out);
+            assert.ok(!out.includes(TOKEN.slice(40)), 'the value is not repeated');
+        }
+        assert.deepEqual(node.requests, [], 'nothing was asked');
+    } finally {
+        await node.close();
+    }
+});

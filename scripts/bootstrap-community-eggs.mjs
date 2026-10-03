@@ -12,13 +12,17 @@
 // credit line so it can run at a deficit. Mints no beans. The offer step needs the admin-offer route
 // (POST /api/local/admin/treasury/:id/offer) deployed — if the node predates it you'll get a clear 404.
 
+import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'; // tolerate a direct self-signed node; harmless via Cloudflare
 
 const NODE_URL = (process.env.NODE_URL || 'https://test.beanpool.org').replace(/\/$/, '');
 const BEANPOOL_TOKEN = process.env.BEANPOOL_TOKEN;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 if (!BEANPOOL_TOKEN && !ADMIN_PASSWORD) { console.error('✗ Set BEANPOOL_TOKEN (an owner\'s automation token, admin scope) or, as before, ADMIN_PASSWORD.'); process.exit(1); }
-if (BEANPOOL_TOKEN && !BEANPOOL_TOKEN.startsWith('bp_')) { console.error('✗ BEANPOOL_TOKEN is not an automation token (bp_…): make one in Settings → Automation tokens.'); process.exit(1); }
+// Checked whole before any request, and never repeated: see automation-token.mjs.
+const credentialProblem = BEANPOOL_TOKEN ? automationTokenProblem('BEANPOOL_TOKEN', BEANPOOL_TOKEN) : headerValueProblem('ADMIN_PASSWORD', ADMIN_PASSWORD);
+if (credentialProblem) { console.error(`✗ ${credentialProblem}`); process.exit(1); }
 // The token alone, or the password alone: never both.
 const auth = BEANPOOL_TOKEN ? { authorization: `Bearer ${BEANPOOL_TOKEN}` } : { 'x-admin-password': ADMIN_PASSWORD };
 const admin = { 'content-type': 'application/json', ...auth };

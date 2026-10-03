@@ -690,6 +690,27 @@ async function harvestLocalNode(): Promise<void> {
             const t3 = await harvestNode({ ...viaToken, automationToken: PW }, true);
             assert(t3.status === 'error' && /not an automation token/.test(t3.error || '') && !seen['/api/local/admin/backup'],
                 `a value that is not a token (here the password, pasted into the wrong field) is never sent (got ${t3.status}: ${t3.error})`);
+
+            // The server's full shape, not only the prefix (#1550 review): a value that starts bp_ but is not a token is not sent.
+            const t4 = await harvestNode({ ...viaToken, automationToken: `bp_${backupsTok.token.slice(3, 15)}_short` }, true);
+            assert(t4.status === 'error' && /not an automation token/.test(t4.error || '') && !seen['/api/local/admin/backup'],
+                `a bp_ value that is not the token's shape is never sent (got ${t4.status}: ${t4.error})`);
+            // A control character inside (a bad paste, a hand-edited JSON string): fetch's invalid-header error repeats the
+            // whole value, and the error is kept in harvester-state.json. It is refused before any header is built.
+            const secret = backupsTok.token.slice(16);
+            const pasted = `${backupsTok.token.slice(0, 40)}\n${backupsTok.token.slice(40)}`;
+            const t5 = await harvestNode({ ...viaToken, id: 'tok-node-pasted', automationToken: pasted }, true);
+            const kept = JSON.stringify(loadHarvestState()['tok-node-pasted'] ?? {});
+            assert(t5.status === 'error' && /not an automation token/.test(t5.error || '') && !seen['/api/local/admin/backup']
+                && !(t5.error || '').includes(secret.slice(0, 24)) && !(t5.error || '').includes(secret.slice(-24))
+                && !kept.includes(secret.slice(0, 24)) && !kept.includes(secret.slice(-24)) && ![...(t5.error || '')].some(c => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f),
+                `a token with a newline inside is never sent, and neither the error nor the kept state repeats it (got ${t5.status}: ${t5.error})`);
+            // The legacy password and the replication token: a control character in either is refused the same way.
+            const pwCtl = 'legacy-pw-\r\nX-Injected: 1';
+            const t6 = await harvestNode({ ...localNode, id: 'tok-node-pwctl', automationToken: undefined, replicationToken: undefined, adminPassword: pwCtl }, true);
+            assert(t6.status === 'error' && !seen['/api/local/admin/backup'] && !(t6.error || '').includes('legacy-pw-')
+                && !JSON.stringify(loadHarvestState()['tok-node-pwctl'] ?? {}).includes('legacy-pw-'),
+                `a password with a control character is never sent nor repeated in the error (got ${t6.status}: ${t6.error})`);
         }
     } finally {
         try { fs.chmodSync(path.join(dataDir, 'backups', 'local-node', 'sealed'), 0o700); } catch { /* ignore */ }
@@ -720,6 +741,7 @@ async function main() {
     const reloadedNodes = getNodes();
     assert(reloadedNodes.length === 1 && reloadedNodes[0].id === 'custom-pool', 'saveNodes persists custom node configuration');
     assert(reloadedNodes[0].adminPassword === 'secret-pass', 'adminPassword field preserved');
+
 
     // 4. Test loadHarvestState default
     const initialState = loadHarvestState();

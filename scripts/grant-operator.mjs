@@ -7,6 +7,8 @@
 // signed in with their key). It is read from the environment only, never an argument: arguments show in `ps`.
 // ADMIN_PASSWORD (the node's admin password) still works in its place, as before; with a token it is never sent.
 
+import { automationTokenProblem, headerValueProblem } from './automation-token.mjs';
+
 const insecure = process.argv.includes('--insecure');
 if (insecure) {
     console.warn('⚠️  Warning: TLS certificate verification is disabled (--insecure). Do not use this in production.');
@@ -22,8 +24,10 @@ if (!BEANPOOL_TOKEN && !ADMIN_PASSWORD) {
     console.error('✗ Set BEANPOOL_TOKEN (an owner\'s automation token, admin scope) or, as before, ADMIN_PASSWORD.');
     process.exit(1);
 }
-if (BEANPOOL_TOKEN && !BEANPOOL_TOKEN.startsWith('bp_')) {
-    console.error('✗ BEANPOOL_TOKEN is not an automation token (bp_…): make one in Settings → Automation tokens.');
+// Checked whole before any request, and never repeated: see automation-token.mjs.
+const credentialProblem = BEANPOOL_TOKEN ? automationTokenProblem('BEANPOOL_TOKEN', BEANPOOL_TOKEN) : headerValueProblem('ADMIN_PASSWORD', ADMIN_PASSWORD);
+if (credentialProblem) {
+    console.error(`✗ ${credentialProblem}`);
     process.exit(1);
 }
 // The token alone, or the password alone: never both.

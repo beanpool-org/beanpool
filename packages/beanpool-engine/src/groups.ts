@@ -241,7 +241,9 @@ export function createGroup(db: Db, params: CreateGroupParams): Group {
 
         // The picture by its one writer; the row keeps the stamp it was made with (the writer's touch would move it).
         if (setGroupPicture(db, id, params.avatarUrl || null)) {
-            db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, id);
+            // Only when the picture's write moved it: restoring a stamp the row already holds is an update that changes
+            // nothing, which the touch trigger answers with a fresh stamp (a picture written in the same millisecond).
+            db.prepare('UPDATE groups SET updated_at = ? WHERE id = ? AND updated_at IS NOT ?').run(now, id, now);
         }
     })();
 

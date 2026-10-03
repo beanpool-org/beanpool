@@ -1702,6 +1702,13 @@ async function mintTokenWithPassword(primaryUrl: string, password: string): Prom
     if (!statusRes.ok) {
         const body = await statusRes.json().catch(() => ({} as any));
         if (body?.totpRequired) throw new SwapError('the main server has two-factor sign-in on, so it refuses the password alone', false, false);
+        // Step 7c: with the main server's 2FA off its admin routes refuse the password alone, these two included. This
+        // standby has no code to send, so it says what to do. Its copy routes still take the password unless the main
+        // server is token-only, which this answer does not say: whether it is copying is not known here.
+        if (body?.code === 'password_needs_2fa') {
+            throw new SwapError("the main server's two-factor sign-in is off, so it no longer makes a replication token for the admin password alone: " +
+                "make one there from the owner's phone (Settings, Replication Access)", true, null);
+        }
         if (statusRes.status === 401 || statusRes.status === 403) throw new SwapError(`the main server refused the stored password (HTTP ${statusRes.status}); it may have been changed`, false, false);
         if (statusRes.status === 404) throw new SwapError('the main server is too old to make replication tokens', false, true);
         throw new SwapError(`the main server answered HTTP ${statusRes.status}`, statusRes.status >= 500, null);

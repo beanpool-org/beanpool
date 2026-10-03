@@ -28,7 +28,7 @@ function getBearerToken(ctx: any): string | null {
     return null;
 }
 
-export async function checkAdminAuth(ctx: any): Promise<boolean> {
+export async function checkAdminAuth(ctx: any, opts: PasswordAuthOptions = {}): Promise<boolean> {
     // 0. An owner's automation token (automation-tokens.ts), before any session or the password: a bearer value that
     // starts bp_ is decided here alone, and never falls through to another credential.
     const bearer = getBearerToken(ctx);
@@ -125,7 +125,31 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
     }
 
-    return checkAdminPasswordAuth(ctx);
+    return checkAdminPasswordAuth(ctx, opts);
+}
+
+/**
+ * Design step 7c (D3: an owner needs a second factor). With the node's 2FA off, the password sent with a request (the
+ * X-Admin-Password or X-Break-Glass-Code header, or `password` / `breakGlassCode` in the body) is one factor, so every
+ * admin route refuses it: 403 PASSWORD_NEEDS_2FA_CODE, after the password is checked (a wrong one is answered, braked and
+ * tarpitted as before). Three things still take it:
+ *   - the password sign-in (POST /api/local/admin/auth/password, `opensSession`), whose session #1537 holds to the 2FA
+ *     setup card until a code is confirmed;
+ *   - a break-glass code on the enrol routes: the code is the recovery factor itself (an owner who lost their phone),
+ *     shown once and made by an owner; the password alone on those routes is refused like anywhere else;
+ *   - a legacy standby's copy routes (backup.ts replicationAuth, `legacyCopy`), only while the operator has not made
+ *     the replication token the only way, as before.
+ * With 2FA on, the password needs the code (or a 2FA session) exactly as before. A key session and an automation token
+ * never reach this.
+ */
+export const PASSWORD_NEEDS_2FA_CODE = 'password_needs_2fa';
+export const PASSWORD_NEEDS_2FA_ERROR = 'Turn on two-factor sign-in in Settings, or use an automation token made from your phone';
+
+export interface PasswordAuthOptions {
+    /** The password sign-in, which opens a session (held to the 2FA setup card while 2FA is off). */
+    opensSession?: boolean;
+    /** A copy route's legacy password (backup.ts replicationAuth), taken while replicationTokenOnly is off. */
+    legacyCopy?: boolean;
 }
 
 export const TOKEN_REFUSED_CODE = 'token_not_allowed';
@@ -189,7 +213,7 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
  * sign-in (POST /api/local/admin/auth/password) calls this alone, so a session cookie the browser still holds plays
  * no part in opening a new one.
  */
-export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
+export async function checkAdminPasswordAuth(ctx: any, opts: PasswordAuthOptions = {}): Promise<boolean> {
     // 2. Break-glass mode enforcement (docs/admin-surface.md §2.2, §2.4)
     // When breakGlassMode is enabled, password and break-glass credentials can ONLY reach key enrolment!
     const isBreakGlass = isBreakGlassMode();
@@ -300,6 +324,16 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
         await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
+        return false;
+    }
+
+    // Step 7c (PASSWORD_NEEDS_2FA_CODE, above): with the node's 2FA off (read now, after the wait), the password alone opens
+    // no admin route. Only a break-glass code on the enrol routes sets breakGlassOwner.
+    if (passwordSessionNeedsTotpSetup() && !opts.opensSession && !opts.legacyCopy && !breakGlassOwner) {
+        if (ctx.state) delete ctx.state.verifiedAdminPassword;
+        logger.security('AUTH', `The admin password was sent to ${reqPath} on a node with two-factor sign-in off: refused (from ${logAddressTag(brakeKey)})`);
+        ctx.status = 403;
+        ctx.body = { error: PASSWORD_NEEDS_2FA_ERROR, code: PASSWORD_NEEDS_2FA_CODE };
         return false;
     }
 
@@ -419,9 +453,8 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
  * /api/local/admin/auth/password) on a node whose 2FA is off reaches only TOTP_SETUP_ROUTES until a code from a new
  * authenticator is confirmed (/2fa/verify turns 2FA on and keeps this session signed in); every other admin route
  * answers 403 TOTP_SETUP_REQUIRED_CODE. Soft: nothing else is refused, key sessions (Manage, a computer by QR) are never
- * gated, and with 2FA on the password already needs the code. A caller sending X-Admin-Password on each request (a
- * legacy standby's pull, the harvester, the manager's fleet profiles) is not gated yet: step 7 moves those onto
- * owner automation tokens.
+ * gated, and with 2FA on the password already needs the code. The password sent on each request instead is refused
+ * outright while 2FA is off (step 7c, PASSWORD_NEEDS_2FA_CODE): such callers use an owner automation token.
  */
 export const TOTP_SETUP_REQUIRED_CODE = 'totp_setup_required';
 export const TOTP_SETUP_REQUIRED_ERROR =

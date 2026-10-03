@@ -320,8 +320,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -332,7 +335,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -408,7 +411,7 @@ async function main(): Promise<void> {
         const offer = async (who: Id, title: string, credits: number) => built(`${who.name} offers ${title}`, await As(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
         })).post;
-        built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: PW_MAIN, body: { grant: true } }));
+        built('the admin makes Gwen an Elder (a credit line to buy with)', await api(m, 'POST', `/api/local/admin/users/${gwen.pk}/elder`, { admin: await main.send('owner-session'), body: { grant: true } }));
         await offer(gwen, 'Sourdough', 4); // a buyer lists an offer first (the offer covenant)
         await offer(cy, 'Bike repair', 6);
         const honey = await offer(ann, 'Honey', 20);

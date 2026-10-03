@@ -16,7 +16,7 @@ import {
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, isOwnerLevelActor, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
     canVouch, getMemberTrustProfile,
     getMemberStats,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
@@ -1731,9 +1731,24 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
 });
 
 
+/**
+ * The node's inbox: the conversations of the first owner (getFirstNodeAdminPubkey), whose key the node's notices go out
+ * under (adminSendMessage), plus legacy 'system' ones. That list is that owner's own: who they talk to, when, unread
+ * counts. An admin needs none of it: the members' replies are encrypted to that owner's key, so an admin could read no
+ * reply, and the node's own lines are the notices they sent. So only an owner (the password is one), or that member
+ * themselves, reads it; an admin is refused before anything is looked up. Sending a notice (inbox/send) stays an
+ * admin's (#1534).
+ */
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    const viewer = resolveAdminActor(ctx);
+    if (!viewer) return;
     const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
+    if (!isOwnerLevelActor(viewer) && !(adminPubkey && viewer === adminPubkey)) {
+        ctx.status = 403;
+        ctx.body = { error: "Only an owner can read the node's inbox" };
+        return;
+    }
     if (!adminPubkey) {
         ctx.body = { conversations: [], adminPubkey: '' };
         return;

@@ -21,7 +21,8 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
+import { initStateEngine, grantNodeRole, revokeNodeRole, adminSendMessage } from './state-engine.js';
+import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
@@ -915,6 +916,39 @@ async function main() {
         const plainSt = await readStatus(plain.pub, adminStale);
         assert(plainIssued.status === 200 && plainSt.body.pendingRequest?.code === plainIssued.body.code && !('codeNeedsStepUp' in plainSt.body.pendingRequest),
             `a stale admin session still reads a plain member's code it issued, unflagged (got ${plainIssued.status} ${JSON.stringify(plainSt.body.pendingRequest)})`);
+    }
+
+    // ── 17. The node's inbox (POST /api/local/admin/inbox) is the first owner's own conversations: who they talk to, when,
+    // unread counts. An admin reads none of the members' replies there (they are encrypted to that owner's key) and
+    // already knows the node lines they sent, so only an owner, or that member themselves, reads it. Sending a notice
+    // (inbox/send) stays an admin's (#1534). ──
+    console.log('\n17. The node\'s inbox: owners only');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const pen = keypair();
+        seedMember(pen.pub, 'hoPen17');
+        adminSendMessage(pen.pub, 'A notice from the node (17)');
+        const firstOwner = getFirstNodeAdminPubkey();
+        assert(firstOwner === owner.pub, `the inbox is the first owner's (got ${firstOwner})`);
+
+        const adminFresh = await exchange((await requestLink(admin)).body.handshakeToken);
+        const byAdmin = await postJson('/api/local/admin/inbox', {}, as(adminFresh));
+        const leaked = JSON.stringify(byAdmin.body ?? {});
+        assert(byAdmin.status === 403 && !leaked.includes(pen.pub) && !leaked.includes(owner.pub) && !('conversations' in (byAdmin.body ?? {})),
+            `an admin's session reads no conversation list or metadata (got ${byAdmin.status} ${leaked.slice(0, 300)})`);
+
+        // owner2 is an admin by now (section 3): another owner is a co-owner made here.
+        const coOwner = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner17');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        for (const [who, s] of [['the first owner', await exchange((await requestLink(owner)).body.handshakeToken)], ['another owner', await exchange((await requestLink(coOwner)).body.handshakeToken)]] as const) {
+            const r = await postJson('/api/local/admin/inbox', {}, as(s));
+            const conv = (r.body?.conversations ?? []).find((c: any) => c.participants?.includes(pen.pub));
+            assert(r.status === 200 && !!conv && r.body.adminPubkey === owner.pub, `${who} reads the inbox (got ${r.status} ${JSON.stringify(r.body).slice(0, 200)})`);
+        }
+
+        const send = await postJson('/api/local/admin/inbox/send', { targetPubkey: pen.pub, message: 'An admin\'s notice (17)' }, as(adminFresh));
+        assert(send.status === 200, `an admin still sends a notice from the node (got ${send.status} ${JSON.stringify(send.body)})`);
     }
 
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);

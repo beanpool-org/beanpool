@@ -118,6 +118,7 @@ import {
     resolveNodeRole, roleFromSettings, takeoverMayRollBack, isTakeoverJournal, journalMayRollBack, TAKEOVER_STEPS_BEFORE_RESTART,
 } from '../config/node-role.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
+import { bumpMembersVersion } from '../engine/versions.js';
 import {
     installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE, CLEARED_KEY, MAIN_EPOCH_KEY, REOPENED_KEY,
 } from './recovery-seal-key.js';
@@ -1170,6 +1171,8 @@ function putStandbyStateBack(state: StandbyState): void {
         }
         upsert.run('node_config', JSON.stringify(stored));
     })();
+    // The roles are in the member directory (each member's nodeRole), so its shared answer is rebuilt (members-snapshot.ts).
+    bumpMembersVersion();
     putPullCursorBack(state.pullCursor ?? null);
 }
 

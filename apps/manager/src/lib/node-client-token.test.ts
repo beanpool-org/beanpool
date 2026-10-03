@@ -72,16 +72,19 @@ describe('a token profile sends the token as a bearer only', () => {
         expect(sent.length).toBeGreaterThan(60);
         const withAuth = sent.filter(s => s.headers.authorization);
         expect(withAuth.length).toBeGreaterThan(60);
-        // The manager's own /api/manager routes take no node URL (their first argument is the credential), so this
-        // sweep hands them the URL as a password and the token as the 2FA session: no real caller does that.
-        for (const s of sent.filter(x => !x.url.startsWith('/api/manager/'))) {
+        for (const s of sent) {
             // The token appears in exactly one place: the Authorization header.
             for (const [k, v] of Object.entries(s.headers)) if (k !== 'authorization') expect(v, `${s.url} ${k}`).not.toContain(TOKEN);
             expect(s.headers['x-admin-2fa-session'], s.url).toBeUndefined();
             if (s.headers.authorization) expect(s.headers.authorization).toBe(`Bearer ${TOKEN}`);
             if (s.body && typeof s.body === 'object') expect((s.body as { password?: unknown }).password, s.url).not.toBe(TOKEN);
             expect(s.url).not.toMatch(/password=/i);
+            // ...and only to its own node: the node's URL, or the manager's proxy to that node. Never the dashboard's
+            // own origin (/api/manager/*), which is not the node.
+            if (s.headers.authorization) expect(s.url, s.url).toMatch(/^(https:\/\/node\.example\/|\/proxy\/https\/node\.example\/)/);
+            if (s.url.startsWith('/api/manager/')) expect(JSON.stringify(s.body ?? null), s.url).not.toContain(TOKEN);
         }
+        expect(sent.some(s => s.url.startsWith('/api/manager/'))).toBe(true);
     });
 
     it('a password profile works as today: the password header and the body password, no bearer', async () => {
@@ -92,6 +95,37 @@ describe('a token profile sends the token as a bearer only', () => {
         // The callers that sent the password in the body still do (the node reads it there on older builds).
         const bodyPassword = sent.filter(s => s.body && typeof s.body === 'object' && (s.body as { password?: string }).password === PASSWORD);
         expect(bodyPassword.length).toBeGreaterThan(25);
+        // The dashboard's own origin is not a node: no password goes there either.
+        for (const s of sent.filter(x => x.url.startsWith('/api/manager/'))) {
+            expect(s.headers['x-admin-password'], s.url).toBeUndefined();
+            expect(JSON.stringify(s.body ?? null), s.url).not.toContain(PASSWORD);
+        }
+    });
+});
+
+describe('the dashboard\'s own /api/manager routes get no credential', () => {
+    it('a backup download from /api/manager sends no token and no password', async () => {
+        for (const credential of [TOKEN, PASSWORD]) {
+            const sent: Sent[] = [];
+            vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+                sent.push({ url: String(input), headers: headersOf(init), body: undefined });
+                return new Response(JSON.stringify({ error: 'no' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+            }));
+            await client.downloadAdminFile('/api/manager/backups/download-db', { nodeId: 'n1' }, credential, 'x.tar.gz', 'tfa').catch(() => undefined);
+            for (const s of sent) {
+                expect(s.headers.authorization, s.url).toBeUndefined();
+                expect(s.headers['x-admin-password'], s.url).toBeUndefined();
+                expect(s.headers['x-admin-2fa-session'], s.url).toBeUndefined();
+            }
+        }
+    });
+
+    it('a harvest sync has no credential to send, so it says so and sends nothing', async () => {
+        const fetchMock = vi.fn();
+        vi.stubGlobal('fetch', fetchMock);
+        const sync = client.triggerHarvesterSync as (...a: unknown[]) => Promise<unknown>;
+        await expect(sync('n1', NODE, TOKEN, TOKEN, 'tfa')).rejects.toThrow(/harvest/i);
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });
 

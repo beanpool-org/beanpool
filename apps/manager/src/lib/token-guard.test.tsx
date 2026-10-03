@@ -58,6 +58,17 @@ describe('an owner-only action with a token', () => {
     });
 });
 
+describe('a token never goes to the dashboard\'s own origin', () => {
+    it('a request with a token to /api/manager is not sent', async () => {
+        for (const url of ['/api/manager/backups/status', `${window.location.origin}/api/manager/backups/download-db?nodeId=n1`]) {
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+            expect(res.ok, url).toBe(false);
+        }
+        expect(inner).not.toHaveBeenCalled();
+        expect(events).toHaveLength(0);
+    });
+});
+
 describe('a 403 the node gives a token', () => {
     it('shows the same message, and the scope the node named is remembered', async () => {
         inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'This token can only read', code: 'token_not_allowed', scope: 'read' }), { status: 403 }));

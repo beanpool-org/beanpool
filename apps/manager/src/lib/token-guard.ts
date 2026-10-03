@@ -7,13 +7,14 @@
  * buildAdminHeaders), so this wraps fetch once for the page and looks only at requests that carry one:
  *   - a route on OWNER_ONLY_FOR_TOKENS is answered here with a 403 that says an owner's phone is needed, and nothing is
  *     sent to the node;
+ *   - a request to the dashboard's own /api/manager routes is not sent at all: a token goes only to its own node;
  *   - a 403 from the node with code `token_not_allowed` (a route this list missed, a conditional owner-only change, or a
  *     read token asked to write) is given the same words.
  * Either way OWNER_PHONE_EVENT tells the page, which offers the phone sign-in (scan the code). A request without a token
  * passes through untouched. The answer is a Response, not a thrown error, so the callers' "node offline" paths never
  * mistake it for a network failure.
  */
-import { isAutomationToken } from './node-client';
+import { isAutomationToken, isManagerApi } from './node-client';
 
 export const OWNER_PHONE_MESSAGE = "This needs an owner's phone: sign in with your phone (scan the code)";
 /** The server's code on a token's 403 (admin-auth.ts TOKEN_REFUSED_CODE). */
@@ -91,6 +92,13 @@ export function guardTokenFetch(fetchImpl: typeof fetch): typeof fetch {
         if (!token) return fetchImpl(input, init);
         const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         const pathname = new URL(raw, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname;
+        // A token goes only to its own node. The dashboard's own /api/manager routes are not a node (node-client
+        // isManagerApi), so a token bound there is never sent, whichever caller made the request.
+        if (isManagerApi(pathname)) {
+            return new Response(JSON.stringify({ error: 'A token goes only to its own node' }), {
+                status: 400, statusText: 'A token goes only to its own node', headers: { 'Content-Type': 'application/json' },
+            });
+        }
         if (tokenCannotReach(pathname)) {
             announce(knownTokenScope(token));
             return ownerPhoneResponse({ scope: knownTokenScope(token) });

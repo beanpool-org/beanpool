@@ -466,7 +466,9 @@ export async function downloadAdminFile(
     filename: string,
     tfaToken?: string,
 ): Promise<DownloadNotice> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    // The dashboard's own /api/manager routes are not a node: they get no credential (see isManagerApi).
+    const managerApi = isManagerApi(endpointPath);
+    const headers = managerApi ? {} : buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);
@@ -482,7 +484,7 @@ export async function downloadAdminFile(
             const body = await res.json();
             if (body?.error) detail = body.error;
         } catch { /* not JSON — the status is all we have */ }
-        throw new Error(detail);
+        throw new Error(managerApi ? `${HARVESTER_UNAVAILABLE} (${detail})` : detail);
     }
 
     // Asked before buffering, because afterwards is too late to warn about.
@@ -1691,47 +1693,30 @@ export interface HarvesterStatusResponse {
     harvestState: Record<string, HarvesterNodeState>;
 }
 
-// The three harvester helpers below talk to /api/manager/* on the SAME ORIGIN — the server
-// hosting this dashboard, not the node being inspected — and every one of those routes is behind
-// checkAdminAuth. They were sending no credential at all, so each answered 401 and the Harvested
-// Fleet Backups tab sat permanently empty. Same class of bug as the download buttons in #377.
-// The password travels in X-Admin-Password only, never a query parameter (see the note above
-// buildAdminHeaders): checkAdminAuth reads the header ahead of ?password= in its fallback chain,
-// and a credential in a URL ends up in access logs and browser history.
-export async function fetchHarvesterStatus(adminPassword?: string, tfaToken?: string): Promise<HarvesterStatusResponse> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    const res = await fetch('/api/manager/backups/status', { headers });
+// The harvester helpers below talk to /api/manager/* on the SAME ORIGIN: the server behind this dashboard, not the
+// node being inspected. No credential goes there, token or password (node sign-in step 7b-1). A profile's credential
+// belongs to its own node only, and no server route handles /api/manager today (the fleet manager's nightly backup
+// pull was retired), so a credential sent there could only reach a server that isn't its node.
+export const HARVESTER_UNAVAILABLE = 'No harvested backups here: the server behind this dashboard keeps none';
+
+/** True for the dashboard's own /api/manager routes, which never get a node's credential. */
+export function isManagerApi(path: string): boolean {
+    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname;
+    return p === '/api/manager' || p.startsWith('/api/manager/');
+}
+
+export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
+    const res = await fetch('/api/manager/backups/status');
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(`${HARVESTER_UNAVAILABLE} (HTTP ${res.status})`);
     }
     return res.json();
 }
 
-// `managerPassword` authenticates US to the local manager API. `adminPassword` is the TARGET
-// node's own credential and stays in the body, where the server forwards it to that node — the
-// two are different secrets and must not be conflated. The server resolves the target's password
-// as `body.adminPassword || body.password || found.adminPassword`, so putting the manager's
-// password in `password` would override the configured per-node credential and make the harvest
-// authenticate to a remote node with the wrong secret.
-export async function triggerHarvesterSync(
-    nodeId: string,
-    url?: string,
-    adminPassword?: string,
-    managerPassword?: string,
-    tfaToken?: string,
-): Promise<any> {
-    const managerAuth = managerPassword ?? adminPassword;
-    const headers = buildAdminHeaders(managerAuth, tfaToken);
-    const res = await fetch('/api/manager/backups/trigger', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ nodeId, url, adminPassword, ...passwordField(adminPassword) }),
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${res.statusText} ${text ? `— ${text}` : ''}`);
-    }
-    return res.json();
+// A harvest only ever did something by forwarding the target node's credential to the server behind this page, which
+// no longer happens; so this says so and sends nothing.
+export async function triggerHarvesterSync(nodeId: string): Promise<never> {
+    throw new Error(`${HARVESTER_UNAVAILABLE}, so there is no harvest to start for ${nodeId}`);
 }
 
 export interface HistoryFileItem {
@@ -1741,11 +1726,10 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string, adminPassword?: string, tfaToken?: string): Promise<HistoryFileItem[]> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
+export async function fetchNodeHistory(nodeId: string): Promise<HistoryFileItem[]> {
+    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`);
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(`${HARVESTER_UNAVAILABLE} (HTTP ${res.status})`);
     }
     const data = await res.json();
     return data.history || [];

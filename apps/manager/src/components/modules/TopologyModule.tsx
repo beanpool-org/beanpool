@@ -160,10 +160,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus(
-                nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            const data = await fetchHarvesterStatus();
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -253,16 +250,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
-    const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
+    const handleTriggerSync = async (nodeId: string) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(
-                nodeId,
-                node?.url,
-                nodeCredential(node),
-                nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            await triggerHarvesterSync(nodeId);
             await loadHarvester();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -313,11 +304,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(
-                nodeId,
-                nodeCredential(activeNode),
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            const items = await fetchNodeHistory(nodeId);
             setHistoryList(items);
         } catch {
             setHistoryList([]);
@@ -675,7 +662,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button
-                                                            onClick={() => handleTriggerSync(slug, node)}
+                                                            onClick={() => handleTriggerSync(slug)}
                                                             disabled={isSyncing}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-bold text-[11px] transition-all"
                                                         >

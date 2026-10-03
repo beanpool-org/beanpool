@@ -8,11 +8,16 @@
  *   - The snapshot is keyed by everything that changes the answer: the members version and the node's face-key setting
  *     (avatarUrlOf). Nothing about the viewer is in the key because nothing about the viewer is in the answer; the
  *     forms that are per reader (`lat`/`lng`) or per cursor (`updatedAfter`) never come here.
- *   - It is rebuilt when the version has moved, but at most every MIN_REBUILD_MS, and at least every MAX_AGE_MS even
- *     if the version hasn't moved, so a write that forgot to move the version is stale for a minute at most.
- *   - Its ETag is a digest of its bytes and nothing else, so a 304 is never wrong, also across a 60 s rebuild, and a
- *     write that moves the version but changes nothing in the answer (a member's area, holiday mode, a mute) still gets
- *     304 once rebuilt, not the whole directory again. "snapshot" keeps it apart from the route's version-only ETag.
+ *   - It is served only for the members version it was built for: a write that moves the version is in the very next
+ *     answer (a directory change shows at once: test-profile-fanout, test-member-photos-out-of-rows). Readers of one
+ *     version share its one build, also those who waited under the cap while it was built. An earlier 5 s floor served
+ *     the last snapshot for a while after a write, and with the digest ETag below a phone holding it got 304: stale.
+ *   - It is also rebuilt at least every MAX_AGE_MS while it is read, so a write that forgot to move the version (a
+ *     missed bump, engine/versions.ts) is stale for a minute at most, for a new reader as for one holding an ETag.
+ *   - Its ETag is a digest of its bytes and nothing else, and a 304 is given only against the current version's
+ *     snapshot, so a 304 is never wrong, also across a 60 s rebuild, and a write that moves the version but changes
+ *     nothing in the answer (a member's area, holiday mode, a mute) still gets 304 once rebuilt, not the whole
+ *     directory again. "snapshot" keeps it apart from the route's version-only ETag.
  *   - The gzip copy is made once, on the first reader that accepts gzip, and shared the same way.
  *
  *   - The bytes are sent SEND_CHUNK at a time, each when the socket has taken the last. Sent whole, each reader's socket
@@ -45,26 +50,17 @@ const SEND_CHUNK = 64 * 1024;
  * socket, plaintext and encrypted (measured in test-heavy-read-cap §1b).
  */
 export const SNAPSHOT_SEND_WEIGHT = 128 * 1024;
-const MIN_REBUILD_MS = 5_000;
 const MAX_AGE_MS = 60_000;
 
-let settings = { minRebuildMs: MIN_REBUILD_MS, maxAgeMs: MAX_AGE_MS };
+let settings = { maxAgeMs: MAX_AGE_MS };
 let current: MembersSnapshot | null = null;
 let builds = 0;
 
-/** The ready snapshot for `key`, or null when it must be (re)built. */
+/** The ready snapshot for `key`, or null when it must be (re)built: one built for any other key is never served. */
 export function usableMembersSnapshot(key: string, now = Date.now()): MembersSnapshot | null {
-    if (!current) return null;
+    if (!current || current.key !== key) return null;
     const age = now - current.builtAt;
-    if (age < 0 || age >= settings.maxAgeMs) return null;
-    if (current.key === key) return current;
-    // The version moved: the last snapshot stands until the floor has passed, so a run of writes costs one build.
-    // Only a version change waits: a change of the face-key setting changes every URL, and never waits.
-    return age < settings.minRebuildMs && sameSetting(current.key, key) ? current : null;
-}
-
-function sameSetting(a: string, b: string): boolean {
-    return a.slice(a.indexOf(':')) === b.slice(b.indexOf(':'));
+    return age < 0 || age >= settings.maxAgeMs ? null : current;
 }
 
 /** The snapshot key: the members version and the face-key setting. */
@@ -120,9 +116,9 @@ export function membersSnapshotBuilds(): number {
     return builds;
 }
 
-/** Tests only: other floors, and no snapshot kept. `undefined` puts the defaults back. */
+/** Tests only: another ceiling, and no snapshot kept. `undefined` puts the default back. */
 export function setMembersSnapshotForTests(overrides: Partial<typeof settings> | undefined): void {
-    settings = { minRebuildMs: MIN_REBUILD_MS, maxAgeMs: MAX_AGE_MS, ...(overrides ?? {}) };
+    settings = { maxAgeMs: MAX_AGE_MS, ...(overrides ?? {}) };
     current = null;
     builds = 0;
 }

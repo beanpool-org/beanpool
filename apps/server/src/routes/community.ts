@@ -2152,7 +2152,9 @@ router.get('/api/members', async (ctx) => {
     if (ctx.query.updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
+    // The whole directory is confirmed only against the bytes of the current version's snapshot: with none built yet
+    // for it, the check waits until it is (answer() below), never against the version tag, which none of its 200s carry.
+    if (ifNoneMatch && (ready || !shared)) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
         if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
@@ -2201,10 +2203,12 @@ router.get('/api/members', async (ctx) => {
     };
     const answer = () => {
         if (shared) {
-            // One that waited under the cap finds the snapshot an earlier reader built while it waited.
-            const snap = usableMembersSnapshot(snapshotKey) ?? storeMembersSnapshot(snapshotKey, build());
+            // Built for the members version as it is now (it may have moved while this reader waited under the cap), read
+            // in the same turn as the rows. One that waited finds the snapshot an earlier reader built for that version.
+            const key = membersSnapshotKey(getMembersVersion(), avatarKeysRequired());
+            const snap = usableMembersSnapshot(key) ?? storeMembersSnapshot(key, build());
             ctx.set('ETag', snap.etag);
-            // A reader holding these very bytes (a rebuild at the 60 s ceiling that found nothing changed) needs none.
+            // A reader holding these very bytes (a version move or a 60 s rebuild that changed nothing in it) needs none.
             if (ifNoneMatch && ifNoneMatch.includes(snap.etag.replace(/^W\//, ''))) {
                 ctx.status = 304;
                 return;

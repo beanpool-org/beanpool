@@ -10,9 +10,10 @@
  *      and so are the delta (`updatedAfter`) and the nearest-first read (`lat`/`lng`), which never touch the snapshot.
  *   3. The read gate is unchanged: a signed-out read, a key that isn't a member and a bad signature get what the delta
  *      (built per read, as before) gets; a member and an admin get the same bytes, from one build.
- *   4. The ETag is the snapshot's: If-None-Match gets 304; a write moves it once the 5 s floor has passed; until then
- *      the last snapshot stands, and 40 readers at once cost one build. A version move that changes nothing in the
- *      directory still gets 304: the ETag is the bytes' digest alone.
+ *   4. The ETag is the snapshot's: If-None-Match gets 304; a write is in the very next answer, also to a reader holding
+ *      the last ETag (no 304), and so is a write right after it (no floor holds the last snapshot); 40 readers at once
+ *      after a write cost one build. A version move that changes nothing in the directory still gets 304: the ETag is
+ *      the bytes' digest alone. Past the 60 s ceiling, even a write that moved no version is in the answer.
  *   5. A pruned member is gone from the answer after the rebuild.
  *   6. No contact details (a member's contact value, at every visibility) are in the shared answer, as they aren't in
  *      today's.
@@ -208,24 +209,33 @@ async function main() {
     assert(asOwner.status === 200 && asOwner.body.equals(full.body), 'the owner gets the same bytes as a member');
     assert(snapshot.membersSnapshotBuilds() === 1, 'still one build');
 
-    // ── 4. The ETag and the rebuild floor ────────────────────────────────────────────────────────────────────────
-    console.log('\n── 4. The ETag is the snapshot\'s, and the 5 s floor');
+    // ── 4. The ETag, and a write in the very next answer ─────────────────────────────────────────────────────────
+    console.log('\n── 4. The ETag is the snapshot\'s, and a write is in the very next answer');
     const etag = String(full.headers.etag);
     const notModified = await get('/api/members', reader, { 'If-None-Match': etag });
     assert(notModified.status === 304 && notModified.body.length === 0, 'If-None-Match with its ETag gets 304');
+    const noWrite = await Promise.all(Array.from({ length: 40 }, () => get('/api/members', reader)));
+    assert(noWrite.every(r => r.status === 200 && r.body.equals(full.body) && r.headers.etag === etag), 'with no write, 40 readers at once get the same bytes and ETag');
+    assert(snapshot.membersSnapshotBuilds() === 1, '40 readers at once with no write cost no build at all');
+    // A directory change shows at once (test-profile-fanout, test-member-photos-out-of-rows): the snapshot is served
+    // only for the version it was built for. Here it used to stand for 5 s after a write, and a held ETag got 304.
     se.updateProfile(people[12].pk, { callsign: 'renamed12' });
-    const withinFloor = await Promise.all(Array.from({ length: 40 }, () => get('/api/members', reader)));
-    assert(withinFloor.every(r => r.status === 200 && r.body.equals(full.body) && r.headers.etag === etag), 'within 5 s of the last build, the last snapshot stands (same bytes, same ETag)');
-    assert(snapshot.membersSnapshotBuilds() === 1, '40 readers at once cost no build at all');
-    snapshot.setMembersSnapshotForTests({ minRebuildMs: 0 });
     const afterWrite = await Promise.all(Array.from({ length: 40 }, () => get('/api/members', reader, { 'If-None-Match': etag })));
-    assert(afterWrite.every(r => r.status === 200 && r.body.toString('utf8') === unshared(undefined, null)), 'past the floor, a write is in the answer');
+    assert(afterWrite.every(r => r.status === 200 && r.body.toString('utf8') === unshared(undefined, null)), 'a write is in the very next answer, also to readers holding the last ETag (200, not 304)');
     assert(afterWrite.every(r => r.headers.etag !== etag && r.headers.etag === afterWrite[0].headers.etag), 'and the ETag moved, the same for every reader');
-    assert(snapshot.membersSnapshotBuilds() === 1, `40 readers at once cost one build (${snapshot.membersSnapshotBuilds()})`);
+    assert(snapshot.membersSnapshotBuilds() === 2, `40 readers at once after it cost one build (${snapshot.membersSnapshotBuilds() - 1})`);
     assert(afterWrite[0].body.toString('utf8').includes('renamed12'), 'the rename is there');
+    let lastEtag = String(afterWrite[0].headers.etag);
+    for (const name of ['renamed12b', 'renamed12c']) {
+        se.updateProfile(people[12].pk, { callsign: name });
+        const next = await get('/api/members', reader, { 'If-None-Match': lastEtag });
+        assert(next.status === 200 && next.body.toString('utf8').includes(name) && next.headers.etag !== lastEtag,
+            `a write right after the last one is in the next answer too, its ETag moved (${name}: ${next.status})`);
+        lastEtag = String(next.headers.etag);
+    }
 
     // The 60 s ceiling: a write that forgot to move the version is in the answer at the next build past it.
-    snapshot.setMembersSnapshotForTests({ minRebuildMs: 0, maxAgeMs: 0 });
+    snapshot.setMembersSnapshotForTests({ maxAgeMs: 0 });
     db.prepare('UPDATE members SET callsign = ? WHERE public_key = ?').run('silent-rename', people[13].pk);
     const ceiling = await get('/api/members', reader);
     assert(ceiling.body.toString('utf8').includes('silent-rename'), 'past the ceiling, even a write that moved no version is in the answer');
@@ -233,8 +243,8 @@ async function main() {
     assert(again.status === 304, 'a rebuild at the ceiling that found nothing new keeps the ETag: 304');
 
     // A write that moves the version but changes nothing in the directory (a member's area, holiday mode, a mute): past
-    // the floor the rebuild has the same bytes, so the same ETag, and a phone holding them gets 304, not all of it again.
-    snapshot.setMembersSnapshotForTests({ minRebuildMs: 0 });
+    // the rebuild has the same bytes, so the same ETag, and a phone holding them gets 304, not all of it again.
+    snapshot.setMembersSnapshotForTests(undefined);
     const held = await get('/api/members', reader);
     bumpMembersVersion();
     const sameBytes = await get('/api/members', reader, { 'If-None-Match': String(held.headers.etag) });
@@ -244,7 +254,7 @@ async function main() {
 
     // ── 5. A pruned member ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. A pruned member is gone after the rebuild');
-    snapshot.setMembersSnapshotForTests({ minRebuildMs: 0 });
+    snapshot.setMembersSnapshotForTests(undefined);
     const prunedPk = people[14].pk;
     assert((await get('/api/members', reader)).body.toString('utf8').includes(prunedPk), 'the member is in the answer');
     se.adminPruneUser(prunedPk, owner.pk);

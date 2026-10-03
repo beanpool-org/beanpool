@@ -57,6 +57,7 @@ import { db } from './db/db.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { hashPassword, updateLocalConfig, setReplicationToken, getLocalConfig } from './config/local-config.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
+import { issueAutomationToken } from './automation-tokens.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0;
@@ -235,7 +236,10 @@ async function harvestLocalNode(): Promise<void> {
     const cleanDbBytes = fs.readFileSync(cleanDbFile);
     const cleanTar = fs.readFileSync(tarOf({ 'state.db': cleanDbBytes, 'node_config.json': Buffer.from('{}') }));
     const app = new Koa();
+    // The headers of the latest request to each path, so a step can say what the harvester sent (node sign-in step 7b).
+    const seen: Record<string, Record<string, unknown>> = {};
     app.use(async (ctx, next) => {
+        seen[ctx.path] = { ...ctx.headers };
         if (ctx.path === '/old-node/api/local/admin/backup') {
             hits.old++;
             ctx.set('X-Backup-Contents', 'database+images');
@@ -642,6 +646,39 @@ async function harvestLocalNode(): Promise<void> {
         assert(e.status === 'error' && /HTTP 401/.test(e.error || ''), `a refused admin password: error with the reason (got ${e.status}: ${e.error})`);
         assert(e.identityStatus === 'secured' && /latest pull failed/.test(e.sealedBackup?.message || ''),
             'a refused admin password: the sealed backups already held still count, and the status says the latest pull failed');
+
+        // ── Node sign-in step 7b: an owner's automation token. The harvester sends it as a bearer and nothing beside it ──
+        {
+            const backupsTok = issueAutomationToken({ name: 'harvester', scope: 'backups', createdBy: ownerPub });
+            const readTok = issueAutomationToken({ name: 'harvester read-only', scope: 'read', createdBy: ownerPub });
+            if (!backupsTok.ok || !readTok.ok) throw new Error('the owner\'s tokens were not made');
+            // The password and the replication token are still configured: neither is sent with the token.
+            const viaToken: FleetNodeConfig = { ...localNode, automationToken: backupsTok.token };
+            delete seen['/api/local/admin/backup'];
+            delete seen['/api/community/info'];
+            const t0 = Date.now();
+            resetAdminAuthTarpit();
+            const t1 = await harvestNode(viaToken, true);
+            assert(t1.status === 'ok' && t1.error === null, `a backups token: the harvest takes the backup (got ${t1.status}: ${t1.error})`);
+            assert(listSealedBackups(viaToken).some(b => b.mtimeMs >= t0 - 1000),
+                `a backups token: the new locked backup is listed (${listSealedBackups(viaToken).map(b => b.file).join(', ')})`);
+            const sent = seen['/api/local/admin/backup'] ?? {};
+            assert(sent['authorization'] === `Bearer ${backupsTok.token}` && !('x-admin-password' in sent) && !('x-replication-token' in sent),
+                `a backups token: the backup request carries the bearer alone (headers: ${Object.keys(sent).join(', ')})`);
+            const info = seen['/api/community/info'];
+            assert(!!info && !('authorization' in info) && !('x-admin-password' in info) && !('x-replication-token' in info),
+                `the public /api/community/info is asked with no credential (headers: ${Object.keys(info ?? {}).join(', ')})`);
+
+            resetAdminAuthTarpit();
+            const t2 = await harvestNode({ ...viaToken, automationToken: readTok.token }, true);
+            assert(t2.status === 'error' && /HTTP 403/.test(t2.error || '') && !('x-admin-password' in (seen['/api/local/admin/backup'] ?? {})),
+                `a read token is refused the backup, and the password is not tried instead (got ${t2.status}: ${t2.error})`);
+
+            delete seen['/api/local/admin/backup'];
+            const t3 = await harvestNode({ ...viaToken, automationToken: PW }, true);
+            assert(t3.status === 'error' && /not an automation token/.test(t3.error || '') && !seen['/api/local/admin/backup'],
+                `a value that is not a token (here the password, pasted into the wrong field) is never sent (got ${t3.status}: ${t3.error})`);
+        }
     } finally {
         try { fs.chmodSync(path.join(dataDir, 'backups', 'local-node', 'sealed'), 0o700); } catch { /* ignore */ }
         await new Promise<void>(r => server.close(() => r()));

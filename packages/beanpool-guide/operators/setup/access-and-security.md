@@ -71,12 +71,14 @@ No token, whatever its scope, makes an owner-only change. It cannot change who i
 
 ### The fleet manager
 
-The fleet manager signs in to a node with an automation token instead of the admin password. Make the token on your phone as above (an **Admin** token for everyday work, or **Read** or **Backups** for less), then in the fleet manager edit the node (⚙️) and paste it under **Automation token**. **Where do I get one?** under the field says the same. Once a node has said what the token may do, the field shows its scope.
+The fleet manager signs in to a node with an automation token instead of the admin password. Make the token on your phone as above (an **Admin** token for everyday work, or **Read** or **Backups** for less), then in the fleet manager edit the node (⚙️) and paste it under **Automation token**. **Where do I get one?** under the field says the same.
 
 - The fleet manager holds the token in that page only, as it does the password: a reload asks for it again, and it is never saved on the computer or in the browser.
 - With a token, the fleet manager sends the token and nothing else: never the password, and no two-factor code. The password field stays for a node that runs a BeanPool older than tokens; it says it is not sent while a token is set.
 - What a token cannot do, the fleet manager does not try. For an owner-only change (owners and admins, the public address, a take-over, the recovery code, where backups go, two-factor sign-in) it sends nothing and says "This needs an owner's phone: sign in with your phone (scan the code)", with **Sign in with your phone**. That opens the node's own Settings, where you scan the code with the app as an owner and make the change there.
-- If a node refuses the token all the same (a Read token asked to change something, or a change that is owner-only only sometimes, such as making someone an owner), the fleet manager says the same words.
+- If a node refuses the token all the same (a Read token asked to change something, or a change that is owner-only only sometimes, such as making someone an owner or changing the backup schedule), the fleet manager says the same words. Reading who can take over, the owners' words checks, the backup schedule and the copy timing works with an Admin token.
+- If a node no longer takes the token (it was revoked, has expired, or was copied wrong), the fleet manager shows what the node said and "Make a new token from your phone (Settings → Automation tokens)", with **Fix token** to paste the new one. It never asks for the password instead.
+- A token, or a password, goes only to its own node: never to the server the fleet manager's page comes from.
 
 ## Factory reset
 

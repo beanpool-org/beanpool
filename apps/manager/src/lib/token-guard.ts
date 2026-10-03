@@ -55,21 +55,6 @@ export function tokenCannotReach(pathname: string): boolean {
     return OWNER_ONLY_FOR_TOKENS.some(re => re.test(p));
 }
 
-/** A token's scope, by its public id (bp_<id>), once a node has said it. Memory only; never the secret. */
-const scopes = new Map<string, string>();
-
-function tokenId(token: string): string {
-    return token.split('_')[1] ?? '';
-}
-
-export function knownTokenScope(token: string | undefined): string | undefined {
-    return isAutomationToken(token) ? scopes.get(tokenId(token)) : undefined;
-}
-
-function noteScope(token: string, scope: unknown): void {
-    if (typeof scope === 'string' && /^[a-z]{1,20}$/.test(scope)) scopes.set(tokenId(token), scope);
-}
-
 function bearerOf(input: RequestInfo | URL, init?: RequestInit): string | null {
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
     const auth = headers.get('authorization');
@@ -77,9 +62,9 @@ function bearerOf(input: RequestInfo | URL, init?: RequestInit): string | null {
     return m && isAutomationToken(m[1]) ? m[1] : null;
 }
 
-function announce(scope?: string): void {
+function announce(): void {
     if (typeof window === 'undefined') return;
-    window.dispatchEvent(new CustomEvent(OWNER_PHONE_EVENT, { detail: { scope } }));
+    window.dispatchEvent(new CustomEvent(OWNER_PHONE_EVENT));
 }
 
 function ownerPhoneResponse(extra: Record<string, unknown> = {}): Response {
@@ -121,19 +106,16 @@ export function guardTokenFetch(fetchImpl: typeof fetch): typeof fetch {
             });
         }
         if (tokenCannotReach(pathname)) {
-            announce(knownTokenScope(token));
-            return ownerPhoneResponse({ scope: knownTokenScope(token) });
+            announce();
+            return ownerPhoneResponse();
         }
         const res = await fetchImpl(input, init);
-        const said = res.headers.get('x-automation-token-scope');
-        if (said) noteScope(token, said);
         if (res.status === 401) return tokenRefusedResponse(res);
         if (res.status !== 403) return res;
-        const body = await res.clone().json().catch(() => null) as { code?: unknown; scope?: unknown } | null;
+        const body = await res.clone().json().catch(() => null) as { code?: unknown; error?: unknown } | null;
         if (body?.code !== TOKEN_REFUSED_CODE) return res;
-        noteScope(token, body.scope);
-        announce(typeof body.scope === 'string' ? body.scope : undefined);
-        return ownerPhoneResponse({ scope: body.scope, serverError: (body as { error?: unknown }).error });
+        announce();
+        return ownerPhoneResponse({ serverError: body.error });
     };
 }
 

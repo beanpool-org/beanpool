@@ -1,13 +1,5 @@
 import React, { useState } from 'react';
 import { isAutomationToken } from '../../lib/node-client';
-import { knownTokenScope } from '../../lib/token-guard';
-
-/** What each scope lets the fleet manager do (server automation-tokens.ts TOKEN_SCOPES). */
-const SCOPE_WORDS: Record<string, string> = {
-    read: 'read: it can look, and change nothing',
-    backups: 'backups: it can take, check and download backups, and nothing else',
-    admin: 'admin: everything an admin can do; owner-only changes still need an owner\'s phone',
-};
 
 /**
  * A node profile's automation token (node sign-in step 7b-1): masked, pasted, held in this page's memory only like the
@@ -17,7 +9,6 @@ export function AutomationTokenField({ value, onChange }: { value: string; onCha
     const [show, setShow] = useState(false);
     const trimmed = value.trim();
     const malformed = trimmed !== '' && !isAutomationToken(trimmed);
-    const scope = knownTokenScope(trimmed);
 
     const paste = async () => {
         try {
@@ -63,9 +54,6 @@ export function AutomationTokenField({ value, onChange }: { value: string; onCha
             </div>
             {malformed && (
                 <p role="alert" className="text-red-400 mt-1 mb-0">That isn&rsquo;t a token: a token starts bp_ and is copied whole from Settings.</p>
-            )}
-            {scope && (
-                <p data-token-scope className="text-nature-300 mt-1 mb-0 break-words">This token&rsquo;s scope is {SCOPE_WORDS[scope] ?? scope}.</p>
             )}
             <details id="bp-automation-token-help" className="mt-1 text-nature-400">
                 <summary className="cursor-pointer min-h-[32px] py-1">Where do I get one?</summary>

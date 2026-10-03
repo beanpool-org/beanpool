@@ -48,12 +48,15 @@ describe('the token field', () => {
         expect(spy).toHaveBeenCalledWith('https://primary.example', TOKEN);
     });
 
-    it('shows the scope once a node has said it', async () => {
+    it('claims no scope: a node names one only when it refuses a read or backups token, never for an admin token', async () => {
+        // Deciding review of #1549, finding 4: no server code sends the scope on an answer it allows, so a scope line
+        // would appear only after a refusal, and never for an admin token. The field says nothing about scope.
         const inner = vi.fn(async () => new Response(JSON.stringify({ code: 'token_not_allowed', scope: 'read', error: 'x' }), { status: 403 }));
         vi.stubGlobal('fetch', guardTokenFetch(inner as unknown as typeof fetch));
         await nodeClient.freezeNodeUser('https://primary.example', 'abc', true, TOKEN).catch(() => {});
         render(<EditNodeModal node={{ ...node, automationToken: TOKEN }} onClose={vi.fn()} onSave={vi.fn()} />);
-        expect(document.querySelector('[data-token-scope]')?.textContent).toMatch(/read: it can look/);
+        expect(document.querySelector('[data-token-scope]')).toBeNull();
+        expect(document.body.textContent).not.toMatch(/scope is/);
     });
 
     it('a new node can be added with a token', async () => {

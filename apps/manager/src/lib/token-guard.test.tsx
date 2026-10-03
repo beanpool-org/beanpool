@@ -5,7 +5,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
-import { guardTokenFetch, tokenCannotReach, knownTokenScope, OWNER_PHONE_EVENT, OWNER_PHONE_MESSAGE, TOKEN_REPLACE_ADVICE } from './token-guard';
+import { guardTokenFetch, tokenCannotReach, OWNER_PHONE_EVENT, OWNER_PHONE_MESSAGE, TOKEN_REPLACE_ADVICE } from './token-guard';
 import { forgetStandby, freezeNodeUser, fetchNodeData, buildAdminHeaders } from './node-client';
 import { OwnerPhoneBanner } from '../components/auth/OwnerPhoneBanner';
 
@@ -108,12 +108,11 @@ describe('a 401 the node gives a token (revoked, expired or wrong)', () => {
 });
 
 describe('a 403 the node gives a token', () => {
-    it('shows the same message, and the scope the node named is remembered', async () => {
+    it('shows the same message', async () => {
         inner.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'This token can only read', code: 'token_not_allowed', scope: 'read' }), { status: 403 }));
         await expect(freezeNodeUser(NODE, 'abc', true, TOKEN)).rejects.toThrow(OWNER_PHONE_MESSAGE);
         expect(inner).toHaveBeenCalledTimes(1);
         expect(events).toHaveLength(1);
-        expect(knownTokenScope(TOKEN)).toBe('read');
     });
 
     it('a 403 that is not a token refusal is left as the node said it', async () => {

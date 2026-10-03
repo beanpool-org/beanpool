@@ -66,6 +66,7 @@ import path from 'node:path';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import {
     isNamesEntryCiphertext, isNamesEntryId, NAMES_LIMITS, isNamesCommunityId, readNamesGeneration, readNamesShare, namesStatementId,
+    readNamesCopy, NAMES_COPY_MAX_BYTES,
 } from '@beanpool/core';
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
@@ -74,14 +75,15 @@ import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.j
 export const NAMES_TWO_ADMINS_KEY = 'names_two_admins';
 
 export type NamesAction = 'read' | 'export' | 'add' | 'edit' | 'delete' | 'confirm' | 'second' | 'revoke'
-    | 'key_made' | 'key_changed' | 'key_shared' | 'holder_dropped' | 'settings';
+    | 'key_made' | 'key_changed' | 'key_shared' | 'holder_dropped' | 'settings' | 'copy_restored';
 
 /** The log's actor for what the node did itself. */
 export const NODE_ACTOR = 'node';
 
 /** A refusal, with the status and code a route answers with. The message is said to an admin as it is. */
 export class NamesListError extends Error {
-    constructor(readonly status: number, readonly code: string, message: string) {
+    /** `extra`: more the route answers with, beside `error` and `code` (a stale copy's stored seq). */
+    constructor(readonly status: number, readonly code: string, message: string, readonly extra?: Record<string, unknown>) {
         super(message);
         this.name = 'NamesListError';
     }
@@ -520,6 +522,96 @@ export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
     const current = currentGeneration();
     if (current && holdersOf(current.id).has(pubkey)) markDropped(pubkey, current.id);
+    dropNamesCopyOf(pubkey);
+}
+
+// ── The locked copy ─────────────────────────────────────────────────────────────────────────────────────────────
+// Each admin's copy of their own names-list record (scratch/global-node/DESIGN-names-locked-copy-opus.md §4): sealed to
+// their member key and signed by it on their phone (@beanpool/core makeNamesCopy). This server never opens or changes
+// one; what it checks on a save only keeps it tidy (one row per admin, written by that admin, for this community, newer
+// than the last). The phone's own checks are the defence. The address in the header is never checked here: a node
+// doesn't know which address its admins' phones use, and none may need ours.
+
+export const NAMES_COPIES_PER_HOUR = 30;
+const COPY_WINDOW_MS = 60 * 60 * 1000;
+const copySaves = new Map<string, number[]>();
+
+interface CopyRow {
+    owner_pubkey: string; seq: number; head_n: number; head_id: string; saved_at: string; sealed_copy: string; copy_iv: string; copy_tag: string;
+    ephemeral_pubkey: string; kdf_params: string; box_digest: string; header: string; signature: string;
+}
+
+function copyRow(owner: string): CopyRow | undefined {
+    return db.prepare('SELECT * FROM names_copies WHERE owner_pubkey = ?').get(owner) as CopyRow | undefined;
+}
+
+/** What `GET /api/names/state` says of the requester's own copy: its header's numbers, or null. Never anyone else's. */
+export function myNamesCopy(actor: string): { seq: number; headN: number; headId: string | null; savedAt: string; digest: string } | null {
+    const r = copyRow(actor);
+    return r ? { seq: r.seq, headN: r.head_n, headId: r.head_id === '-' ? null : r.head_id, savedAt: r.saved_at, digest: r.box_digest } : null;
+}
+
+/** The requester's own copy, as their phone sent it, for a phone that lost its record: logged (`copy_restored`). */
+export function readNamesCopyOf(actor: string): { header: string; signature: string; box: Record<string, string> } {
+    const r = copyRow(actor);
+    if (!r) throw new NamesListError(404, 'no_copy', 'This server keeps no copy of your names-list record.');
+    log(actor, 'copy_restored');
+    return {
+        header: r.header, signature: r.signature,
+        box: { sealedCopy: r.sealed_copy, copyIv: r.copy_iv, copyTag: r.copy_tag, ephemeralPubkey: r.ephemeral_pubkey, kdfParams: r.kdf_params },
+    };
+}
+
+/** Counts a save toward the requester's hourly cap; throws 429 `too_many_copies` past it. */
+function chargeCopySave(actor: string, now = Date.now()): void {
+    const recent = (copySaves.get(actor) ?? []).filter((t) => now - t < COPY_WINDOW_MS);
+    if (recent.length >= NAMES_COPIES_PER_HOUR) {
+        copySaves.set(actor, recent);
+        throw new NamesListError(429, 'too_many_copies', 'This phone saved its names-list record too often in the last hour. Try again later.');
+    }
+    recent.push(now);
+    copySaves.set(actor, recent);
+}
+
+/**
+ * The requester's copy (`{ header, signature, box }`), saved over their last: `exists` for the identical header (a
+ * retry), refused for a seq not newer than the one kept. Not logged: a save reveals nothing.
+ */
+export function saveNamesCopy(actor: string, body: { header?: unknown; signature?: unknown; box?: unknown }): { seq: number; exists: boolean } {
+    assertPlainTablesWritable();
+    chargeCopySave(actor);
+    const sealed = (body.box as { sealedCopy?: unknown } | null | undefined)?.sealedCopy;
+    if (typeof sealed === 'string' && Buffer.byteLength(sealed, 'base64') > NAMES_COPY_MAX_BYTES) {
+        throw new NamesListError(413, 'copy_too_big', 'Your names-list record is too big to keep a copy on this server.');
+    }
+    const read = readNamesCopy(body);
+    if (!read.ok) throw new NamesListError(400, 'bad_copy', 'That isn’t a copy of a names-list record signed by the key that sent it.');
+    const c = read.copy;
+    if (c.owner !== actor) throw new NamesListError(403, 'not_yours', 'Each admin saves only their own copy.');
+    if (c.communityId !== namesCommunityId()) throw new NamesListError(400, 'other_community', 'That copy is of another community’s names list.');
+    const kept = copyRow(actor);
+    if (kept && kept.header === c.header) return { seq: kept.seq, exists: true };
+    if (kept && c.seq <= kept.seq) {
+        throw new NamesListError(409, 'stale_copy', 'This server already keeps a newer copy of your names-list record.', { seq: kept.seq });
+    }
+    db.prepare(
+        `INSERT INTO names_copies (owner_pubkey, seq, head_n, head_id, saved_at, sealed_copy, copy_iv, copy_tag, ephemeral_pubkey, kdf_params, box_digest, header, signature)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(owner_pubkey) DO UPDATE SET seq = excluded.seq, head_n = excluded.head_n, head_id = excluded.head_id, saved_at = excluded.saved_at,
+             sealed_copy = excluded.sealed_copy, copy_iv = excluded.copy_iv, copy_tag = excluded.copy_tag, ephemeral_pubkey = excluded.ephemeral_pubkey,
+             kdf_params = excluded.kdf_params, box_digest = excluded.box_digest, header = excluded.header, signature = excluded.signature,
+             created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    ).run(actor, c.seq, c.headN, c.headId ?? '-', c.savedAt, c.box.sealedCopy, c.box.copyIv, c.box.copyTag, c.box.ephemeralPubkey, c.box.kdfParams,
+        c.boxDigest, c.header, c.signature);
+    return { seq: c.seq, exists: false };
+}
+
+/**
+ * The copy of a key that stopped being a member here (removed, account deleted, replaced by a re-key), with a tombstone
+ * so a standby drops it too. Not on demotion: a re-admitted admin carries on from their record.
+ */
+export function dropNamesCopyOf(pubkey: string): void {
+    deletePlainRows('names_copies', 'owner_pubkey = ?', pubkey);
 }
 
 // ── Reading ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -602,6 +694,8 @@ export function namesState(actor: string) {
             locked: Object.entries(byKey).filter(([k]) => !heldByAny.has(k)).reduce((n, [, c]) => n + c, 0),
         },
         me: { pubkey: actor, role: admins.find((a) => a.pubkey === actor)?.role ?? null, owner: isNodeOwner(actor) },
+        // The requester's own locked copy (design §3): the phone saves a new one when this is behind its own.
+        myCopy: myNamesCopy(actor),
         limits: NAMES_LIMITS,
     };
 }

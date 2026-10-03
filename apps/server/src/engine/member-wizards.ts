@@ -435,33 +435,51 @@ export function completeRekey(
     };
 }
 
+/** A pending re-key as the status answer gives it: the code only to whoever may have it (getRekeyStatus). */
+export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string };
+/** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
+export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
+
 /**
- * Gets the current rekey status for a member.
+ * Gets the current rekey status for a member, as `viewer` (the admin route's session actor) may read it.
+ *
+ * A pending code is the whole credential on /api/member/re-enroll, which binds the new key with the code's issuer as
+ * operator. For a member who holds or has held aside an owner or admin role, the code goes only to its issuer (the
+ * manager's RekeyMemberWizard re-shows it from here) or an owner, who could re-key them anyway: given to any admin, it
+ * let them finish an owner's re-key with a key they chose and hold the owner role (confirm 3, 4172310632). For any other
+ * member, any admin may re-key them, so their code is read as before. Each answer is an explicit field list.
  */
-export function getRekeyStatus(publicKey: string): {
+export function getRekeyStatus(publicKey: string, viewer?: string): {
     isInvalidated: boolean;
     invalidatedInfo: InvalidatedKeyRow | null;
-    pendingRequest: RekeyRequestRow | null;
-    history: RekeyAuditLogRow[];
+    pendingRequest: RekeyRequestView | null;
+    history: RekeyAuditLogView[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
     const isInvalidated = isKeyInvalidated(cleanPub);
     const invalidatedInfo = getInvalidatedKeyInfo(cleanPub);
 
-    let pendingRequest: RekeyRequestRow | null = (db.prepare(
-        "SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
-    ).get(cleanPub) as RekeyRequestRow | undefined) || null;
+    const pending = (db.prepare(`
+        SELECT id, code, old_pubkey, new_pubkey, operator_pubkey, status, created_at, expires_at, completed_at
+        FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1
+    `).get(cleanPub) as RekeyRequestRow | undefined) || null;
 
-    if (pendingRequest && new Date(pendingRequest.expires_at).getTime() < Date.now()) {
+    let pendingRequest: RekeyRequestView | null = null;
+    if (pending && new Date(pending.expires_at).getTime() < Date.now()) {
         // Marked on a main server. A standby's codes are its main server's (config/node-role.ts assertPlainTablesWritable):
         // it answers one past its time as none, and writes nothing.
-        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
-        pendingRequest = null;
+        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pending.id);
+    } else if (pending) {
+        const { code, ...rest } = pending;
+        const cleanViewer = (viewer || '').trim().toLowerCase();
+        const mayReadCode = !heldPrivilegedRole(cleanPub) || (!!cleanViewer && cleanViewer === pending.operator_pubkey) || isOwnerLevelActor(cleanViewer);
+        pendingRequest = mayReadCode ? { ...rest, code } : rest;
     }
 
-    const history = (db.prepare(
-        'SELECT * FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC'
-    ).all(cleanPub, cleanPub) as RekeyAuditLogRow[]) || [];
+    const history = (db.prepare(`
+        SELECT id, old_pubkey, new_pubkey, operator_pubkey, performed_at, completed_at, details
+        FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC
+    `).all(cleanPub, cleanPub) as RekeyAuditLogView[]) || [];
 
     return {
         isInvalidated,

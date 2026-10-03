@@ -2142,9 +2142,12 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
 
 router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // The reader decides whether a pending owner's or admin's code is in the answer (getRekeyStatus).
+    const viewer = resolveAdminActor(ctx);
+    if (!viewer) return;
     try {
         const { pubkey } = ctx.params;
-        const status = getRekeyStatus(pubkey);
+        const status = getRekeyStatus(pubkey, viewer);
         ctx.body = status;
     } catch (e: any) {
         ctx.status = 400;

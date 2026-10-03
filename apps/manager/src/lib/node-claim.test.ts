@@ -7,6 +7,7 @@ import {
     fetchClaimState,
     buildClaimQr,
     sanitizeNodeAddress,
+    fetchCommunityInfo,
 } from './node-claim';
 
 describe('node-claim lib', () => {
@@ -78,6 +79,7 @@ describe('node-claim lib', () => {
                 codeId: 'deadbeef',
                 communityName: 'Bean Town',
                 password: false,
+                primaryAddress: null,
                 address: null,
                 addresses: [],
             });
@@ -102,6 +104,7 @@ describe('node-claim lib', () => {
                 codeId: '00000000',
                 communityName: 'Test',
                 password: true,
+                primaryAddress: null,
                 address: null,
                 addresses: [],
             });
@@ -126,6 +129,7 @@ describe('node-claim lib', () => {
                 codeId: null,
                 communityName: null,
                 password: true,
+                primaryAddress: null,
                 address: null,
                 addresses: [],
             });
@@ -193,7 +197,7 @@ describe('node-claim lib', () => {
             expect(result).toEqual({ kind: 'unknown' });
         });
 
-        it('returns address and addresses when provided by /api/local/claim', async () => {
+        it('ignores any address fields returned by /api/local/claim', async () => {
             vi.stubGlobal(
                 'fetch',
                 vi.fn().mockResolvedValue({
@@ -203,6 +207,7 @@ describe('node-claim lib', () => {
                         codeId: 'deadbeef',
                         communityName: 'Test Town',
                         address: 'https://test.beanpool.org',
+                        primaryAddress: 'https://test.beanpool.org',
                         addresses: ['test.beanpool.org'],
                     }),
                 } as Response)
@@ -214,47 +219,47 @@ describe('node-claim lib', () => {
                 codeId: 'deadbeef',
                 communityName: 'Test Town',
                 password: true,
-                address: 'https://test.beanpool.org',
-                addresses: ['test.beanpool.org'],
+                primaryAddress: null,
+                address: null,
+                addresses: [],
+            });
+        });
+    });
+
+    describe('fetchCommunityInfo', () => {
+        it('fetches /api/community/info and returns primaryAddress and addresses', async () => {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn().mockResolvedValue({
+                    ok: true,
+                    json: async () => ({
+                        primaryAddress: 'Town.BeanPool.org',
+                        addresses: ['Town.BeanPool.org', 'town.example.org'],
+                    }),
+                } as Response)
+            );
+
+            const result = await fetchCommunityInfo('/api/community/info');
+            expect(result).toEqual({
+                primaryAddress: 'town.beanpool.org',
+                addresses: ['town.beanpool.org', 'town.example.org'],
             });
         });
 
-        it('fetches /api/community/info when /api/local/claim provides no address', async () => {
-            vi.stubGlobal(
-                'fetch',
-                vi.fn(async (input: RequestInfo | URL) => {
-                    const url = String(input);
-                    if (url.endsWith('/api/local/claim')) {
-                        return {
-                            ok: true,
-                            json: async () => ({
-                                unclaimed: true,
-                                codeId: 'deadbeef',
-                                communityName: 'Test Town',
-                            }),
-                        } as Response;
-                    }
-                    if (url.endsWith('/api/community/info')) {
-                        return {
-                            ok: true,
-                            json: async () => ({
-                                primaryAddress: 'info.beanpool.org',
-                                addresses: ['info.beanpool.org'],
-                            }),
-                        } as Response;
-                    }
-                    throw new Error(`unexpected url ${url}`);
-                })
-            );
+        it('returns null primaryAddress and empty addresses on error or non-200 response', async () => {
+            const fetchMock = vi.fn();
+            vi.stubGlobal('fetch', fetchMock);
 
-            const result = await fetchClaimState('/api/local/claim');
-            expect(result).toEqual({
-                kind: 'unclaimed',
-                codeId: 'deadbeef',
-                communityName: 'Test Town',
-                password: true,
-                address: 'https://info.beanpool.org',
-                addresses: ['info.beanpool.org'],
+            fetchMock.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+            expect(await fetchCommunityInfo('/api/community/info')).toEqual({
+                primaryAddress: null,
+                addresses: [],
+            });
+
+            fetchMock.mockRejectedValueOnce(new TypeError('Network error'));
+            expect(await fetchCommunityInfo('/api/community/info')).toEqual({
+                primaryAddress: null,
+                addresses: [],
             });
         });
     });

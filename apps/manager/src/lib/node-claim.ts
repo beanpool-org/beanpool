@@ -18,6 +18,12 @@ export const CLAIM_POLL_MS = 5_000;
 export const CLAIM_TIMEOUT_MS = 8_000;
 /** What `beanpool claim` is run as on a Docker install; it prints the code and its own QR. */
 export const CLAIM_COMMAND = 'docker compose exec beanpool-node beanpool claim';
+export const COMMUNITY_INFO_PATH = '/api/community/info';
+
+export interface CommunityAddresses {
+    primaryAddress: string | null;
+    addresses: string[];
+}
 
 export type ClaimState =
     | { kind: 'unknown' }
@@ -28,6 +34,7 @@ export type ClaimState =
         codeId: string | null;
         communityName: string | null;
         password: boolean;
+        primaryAddress: string | null;
         address: string | null;
         addresses: string[];
     };
@@ -81,55 +88,56 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         if (b.unclaimed === false) return { kind: 'claimed' };
         if (b.unclaimed !== true) return { kind: 'unknown' };
 
-        let rawAddress: unknown = b.address ?? b.primaryAddress ?? null;
-        let rawAddresses: unknown = Array.isArray(b.addresses) ? b.addresses : null;
-
-        if (!rawAddress) {
-            try {
-                const infoUrl = url.replace(/\/api\/local\/claim(\?.*)?$/, '/api/community/info$1');
-                if (infoUrl !== url) {
-                    const infoRes = await fetch(infoUrl, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: ctl.signal });
-                    if (infoRes.ok) {
-                        const infoBody = (await infoRes.json().catch(() => null)) as Record<string, unknown> | null;
-                        if (infoBody && typeof infoBody === 'object') {
-                            rawAddress = infoBody.primaryAddress ?? infoBody.address ?? null;
-                            if (!rawAddresses && Array.isArray(infoBody.addresses)) {
-                                rawAddresses = infoBody.addresses;
-                            }
-                        }
-
-                    }
-                }
-            } catch {
-                // Ignore failure on community-info, fallback to null
-            }
-        }
-
-        const addresses: string[] = [];
-        if (Array.isArray(rawAddresses)) {
-            for (const item of rawAddresses) {
-                if (typeof item === 'string' && item.trim()) {
-                    addresses.push(item.trim());
-                }
-            }
-        }
-
-        let address = sanitizeNodeAddress(rawAddress);
-        if (!address && addresses.length > 0) {
-            address = addresses.map(sanitizeNodeAddress).find((a): a is string => Boolean(a)) ?? null;
-        }
-
         return {
             kind: 'unclaimed',
             // Only something shaped like an id ever reaches the QR.
             codeId: typeof b.codeId === 'string' && CODE_ID.test(b.codeId) ? b.codeId : null,
             communityName: typeof b.communityName === 'string' && b.communityName.trim() ? b.communityName.trim() : null,
             password: b.password !== false,
-            address,
-            addresses,
+            primaryAddress: null,
+            address: null,
+            addresses: [],
         };
     } catch {
         return { kind: 'unknown' };
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+    }
+}
+
+/**
+ * Reads /api/community/info once per card mount to get the community's published addresses and primaryAddress.
+ * A failed info read returns null primaryAddress and empty addresses (the card works as before).
+ */
+export async function fetchCommunityInfo(url: string, signal?: AbortSignal): Promise<CommunityAddresses> {
+    const ctl = new AbortController();
+    const onAbort = () => ctl.abort();
+    signal?.addEventListener('abort', onAbort);
+    const timer = setTimeout(() => ctl.abort(), CLAIM_TIMEOUT_MS);
+    try {
+        const res = await fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store', signal: ctl.signal });
+        if (!res.ok) return { primaryAddress: null, addresses: [] };
+        const body: unknown = await res.json().catch(() => null);
+        if (!body || typeof body !== 'object') return { primaryAddress: null, addresses: [] };
+        const b = body as Record<string, unknown>;
+        const addresses: string[] = [];
+        if (Array.isArray(b.addresses)) {
+            for (const item of b.addresses) {
+                if (typeof item === 'string' && item.trim()) {
+                    addresses.push(item.trim().toLowerCase());
+                }
+            }
+        }
+        const rawPrimary = typeof b.primaryAddress === 'string' && b.primaryAddress.trim()
+            ? b.primaryAddress.trim().toLowerCase()
+            : null;
+        return {
+            primaryAddress: rawPrimary,
+            addresses,
+        };
+    } catch {
+        return { primaryAddress: null, addresses: [] };
     } finally {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);

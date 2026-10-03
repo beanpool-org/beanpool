@@ -17,7 +17,7 @@ If the server made up the first password (ADMIN_PASSWORD was empty), changing it
 
 ## Two-factor sign-in
 
-Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
+Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. **The password needs it.** On a server where it is off, signing in with the password opens one card only, which says "Set up two-factor sign-in to open Settings: the admin password alone is not enough." Nothing else in Settings opens until the server accepts a code from your new authenticator; then Settings opens at once, without signing in again. Meanwhile the server keeps running and serving members, the card always opens for the password, and **Log Out** is on it. If two-factor sign-in is switched off later, the next thing the password does brings that card back. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
 
 - Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.
 - Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.
@@ -33,8 +33,8 @@ Know its limits:
 - Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.
 - Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.
 - There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.
-- The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.
-- If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first. beanpool recover (Signing in) does not help here yet: it makes someone an owner, and today an owner's key sign-in still asks for the code.
+- The server makes eight single-use backup codes when you set it up. The card the password opens, and the setup wizard, show them once: write them down or save them then, because the server keeps only a scrambled copy. Access & Security does not show them yet. Each backup code works once in place of a code. Keep the authenticator secret somewhere safe too.
+- If you lose the authenticator: sign in with a backup code in place of the code. If none is left, owners still get in from the app's Manage button, which never asks for the code, but the password stays locked behind the lost authenticator. If no owner can sign in from the app either, beanpool recover (Signing in) makes a member an owner from the server, and that owner then signs in from the app. Deleting data/local-config.json is not needed, and it loses every setting in it.
 
 ## Break-glass codes
 

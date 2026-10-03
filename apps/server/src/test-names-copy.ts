@@ -31,6 +31,7 @@ import { initStateEngine, exportSyncState } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { setNodeRole } from './config/node-role.js';
@@ -39,7 +40,9 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 let BASE = '';
 let COMMUNITY = '';
 const ADMIN_PW = 'Names-Copy-Admin-Pw-62!';
-const PASSWORD = { 'X-Admin-Password': ADMIN_PW };
+// Step 7c: the password alone opens no admin route with 2FA off, so the suite turns 2FA on and sends a code with it.
+let twoFa: ReturnType<typeof turnOn2faForTests>;
+const PASSWORD = () => twoFa.headers();
 const ADDRESS = 'https://copytown.example.org';
 
 let run = 0, passed = 0;
@@ -114,10 +117,11 @@ async function main(): Promise<void> {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
+    twoFa = turnOn2faForTests(ADMIN_PW);
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD);
+    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
     const owen = newId('Owen');
     require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the seed invite (${show(seed)})`);
     const others = ['Ada', 'Abe', 'Bea', 'Nia', 'Kit', 'Rex', 'Dee', 'Mo', 'Mel'].map(newId);
@@ -127,7 +131,7 @@ async function main(): Promise<void> {
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
     for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [abe, 'admin'], [bea, 'admin'], [nia, 'admin'], [kit, 'admin'], [rex, 'admin'], [dee, 'admin'], [mo, 'moderator']] as const) {
-        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD);
+        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD());
         require_(granted.status === 200, `${who.name} is made ${role} (${show(granted)})`);
     }
     const [owenP, adaP, abeP, beaP, niaP, kitP, rexP, deeP] = [owen, ada, abe, bea, nia, kit, rex, dee].map((i) => new Phone(i));
@@ -220,11 +224,11 @@ async function main(): Promise<void> {
 
     // ── 13. Lifecycle ────────────────────────────────────────────────────────────────────────────
     for (const [who, p] of [[nia, niaP], [kit, kitP], [rex, rexP], [dee, deeP]] as const) require_((await putCopy(who, p.next())).status === 200, `13. ${who.name} saves a copy`);
-    const demoted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dee.pk, role: 'moderator' }, PASSWORD);
+    const demoted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: dee.pk, role: 'moderator' }, PASSWORD());
     require_(demoted.status === 200, `13. Dee is made a moderator (${show(demoted)})`);
     await state(owen);
     assert(!!copyRow(dee.pk), '13. demoted: Dee\'s row is kept');
-    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, PASSWORD);
+    const pruned = await call(null, 'POST', `/api/local/admin/users/${nia.pk}/prune`, {}, PASSWORD());
     require_(pruned.status === 200, `13. Nia is removed (${show(pruned)})`);
     assert(!copyRow(nia.pk), '13. removed: Nia\'s row is gone');
     const purged = await call(kit, 'POST', '/api/member/purge', { action: 'purge_account' });

@@ -43,6 +43,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { claimKeyFromCode, claimProof, claimText, signedRequestBytes } from '@beanpool/core';
+import { generateTotpCode } from './totp.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--child';
@@ -176,7 +177,31 @@ const readCode = (dir: string) => fs.readFileSync(path.join(dir, FILE_NAME), 'ut
 const modeOf = (file: string) => fs.statSync(file).mode & 0o777;
 const printed = (output: string, code: string) => [code, code.slice(6, 15), code.slice(15)].some((p) => output.includes(p));
 const pendingIn = (dir: string) => { const c = JSON.parse(fs.readFileSync(path.join(dir, 'local-config.json'), 'utf-8')).claim; return !!c && !c.claimedBy; };
-const signsIn = async (b: Boot, password: string) => (await request(b, 'POST', '/api/local/admin/data', { password })).status === 200;
+/** The password sign-in to Settings (POST /api/local/admin/auth/password), with a code once the node's 2FA is on. */
+const signsIn = async (b: Boot, password: string, totpCode?: string) =>
+    (await request(b, 'POST', '/api/local/admin/auth/password', { password }, totpCode ? { 'X-Admin-TOTP': totpCode } : {})).status === 200;
+/** Step 7c: with the node's 2FA off, the password alone opens no admin route. */
+const aloneRefused = async (b: Boot, password: string, route = '/api/local/admin/data') => {
+    const r = await request(b, 'POST', route, { password });
+    return r.status === 403 && r.json?.code === 'password_needs_2fa';
+};
+
+/**
+ * Turn the node's 2FA on from Settings: sign in with the password, set up an authenticator, confirm a code. Returns its backup
+ * codes. The code goes as totpCode (the route takes either name): K1 counts any "code" field as a claim code.
+ */
+async function turnOn2fa(b: Boot, password: string): Promise<string[]> {
+    const signIn = await request(b, 'POST', '/api/local/admin/auth/password', { password });
+    const cookie = ([] as string[]).concat(signIn.headers['set-cookie'] ?? []).find((h) => h.startsWith('admin_session='))?.split(';')[0] ?? '';
+    const asSession = { Cookie: cookie, 'X-CSRF-Token': String(signIn.json?.csrfToken ?? '') };
+    const setup = await request(b, 'POST', '/api/local/admin/2fa/setup', {}, asSession);
+    if (signIn.status !== 200 || setup.status !== 200 || !setup.json?.secret) {
+        throw new Error(`could not set up 2FA (sign-in ${signIn.status}, setup ${setup.status} ${JSON.stringify(setup.json)})`);
+    }
+    const verify = await request(b, 'POST', '/api/local/admin/2fa/verify', { totpCode: generateTotpCode(String(setup.json.secret)) }, asSession);
+    if (verify.status !== 200) throw new Error(`could not turn 2FA on (verify ${verify.status} ${JSON.stringify(verify.json)})`);
+    return setup.json.backupCodes as string[];
+}
 
 function dbFacts(dir: string, pub: string): { rows: number; role: string | null; grantedBy: string | null; inviteCode: string | null } {
     const db = new Database(path.join(dir, 'state.db'), { readonly: true });
@@ -220,6 +245,7 @@ async function main(): Promise<void> {
     assert(!printed(a.output(), config.claim?.key || 'none'), 'A10. K is in no line of the output');
     const password = fs.readFileSync(path.join(dirA, 'first-admin-password.txt'), 'utf-8').trim();
     assert(await signsIn(a, password), 'A11. the first admin password still signs in');
+    assert(await aloneRefused(a, password), 'A12. (step 7c) with 2FA off, the password alone opens no admin route: 403 password_needs_2fa');
 
     console.log('\nB. Refusals');
     const alice = newKey();
@@ -415,8 +441,10 @@ async function main(): Promise<void> {
     const codeI = readCode(dirI);
     codes.push(codeI);
     const pwI = fs.readFileSync(path.join(dirI, 'first-admin-password.txt'), 'utf-8').trim();
-    const seeded = await request(iNode, 'POST', '/api/admin/seed-invite', { password: pwI });
-    assert(seeded.status === 200, `I1. the password makes the first invite, as on main (${seeded.status})`);
+    assert(await aloneRefused(iNode, pwI, '/api/admin/seed-invite'), 'I0. (step 7c) with 2FA off, the password alone makes no invite: 403 password_needs_2fa');
+    const backupI = await turnOn2fa(iNode, pwI);
+    const seeded = await request(iNode, 'POST', '/api/admin/seed-invite', { password: pwI }, { 'X-Admin-TOTP': backupI[0] });
+    assert(seeded.status === 200, `I1. the password, with a code (2FA on), makes the first invite (${seeded.status})`);
     // Measured, not decided here: on a fresh node the seed invite takes its "already have members" branch (the SYSTEM
     // rows count), so no owner is made and the node still has no owner. Whichever way that goes, the claim follows
     // nodeHasOwner().
@@ -424,7 +452,7 @@ async function main(): Promise<void> {
     console.log(`  (after the password's first invite the node is ${afterSeed ? 'still unclaimed' : 'claimed'})`);
     r = await claim(iNode, claimBody(alice, codeI, infoI.salt, infoI.codeId), '203.0.113.40');
     assert(afterSeed ? r.status === 200 : r.status === 409, `I2. the claim follows whether an owner exists (${r.status})`);
-    assert(await signsIn(iNode, pwI), 'I3. the password still signs in');
+    assert(await signsIn(iNode, pwI, backupI[1]), 'I3. the password still signs in (with a code: 2FA is on)');
     await iNode.stop();
     iNode = await boot(dirI, env);
     assert(!fs.existsSync(path.join(dirI, FILE_NAME)), 'I4. with an owner, the next start has no claim file');

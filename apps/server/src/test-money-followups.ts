@@ -32,6 +32,7 @@ import path from 'node:path';
 import { setCommonsBalance } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initAdminPassword, getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db, createCrowdfundProject } from './db/db.js';
 import {
     initStateEngine, transfer, createPost, acceptPost, requestPost, approvePostRequest, getBalance, runLedgerAudit,
@@ -95,10 +96,12 @@ async function signedRaw(urlPath: string, id: Id, raw: string) {
 }
 const signed = (urlPath: string, id: Id, body: unknown) => signedRaw(urlPath, id, JSON.stringify(body));
 
+// Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token.
+let ADMIN: Record<string, string> = {};
 async function adminPost(urlPath: string, body: unknown) {
     const res = await fetch(`${BASE}${urlPath}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify(body),
     });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
@@ -124,6 +127,7 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    ADMIN = ownerTokenHeaders('admin');
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

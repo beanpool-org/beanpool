@@ -735,7 +735,6 @@ async function main(): Promise<void> {
         });
 
         await step('10. a take-over confirmed during a delta\'s fetch, or a one-page whole copy\'s, stops it: no object request is sent to the old main server after it', async () => {
-            const pw = { 'X-Admin-Password': PW_STANDBY };
             /**
              * M gains photos `node` lacks; `node` pulls at a pace (`whole`: the routine whole copy); once it has fetched 10 of
              * their objects, its take-over is confirmed, with the restart switched off. The object requests sent to M
@@ -758,6 +757,9 @@ async function main(): Promise<void> {
                 px.holdObjects = true;
                 const quiet = await until(`the standby's fetch to wait on its ${OBJECT_CONCURRENCY} requests, held`, () => px.held.length >= OBJECT_CONCURRENCY, 30_000);
                 const asksAtConfirm = px.objectAsks;
+                // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key
+                // session the node makes (takeover-test-harness.ts owner-session).
+                const pw: Record<string, string> = await node.send('owner-session');
                 const openT = await post(node.base, '/api/local/admin/takeover/open', { code }, pw);
                 const confirmT = await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
                 px.holdObjects = false;
@@ -802,7 +804,8 @@ async function main(): Promise<void> {
             const g0 = gets();
             const pulling = standby.send('pull', { whole: true });
             const fetchedSome = await until('S to fetch 10 of the new objects', () => gets() >= g0 + 10, 30_000);
-            const pw = { 'X-Admin-Password': PW_STANDBY };
+            // Step 7c: under an owner's key session the standby makes, as above.
+            const pw: Record<string, string> = await standby.send('owner-session');
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             const asksAtConfirm = px.objectAsks;

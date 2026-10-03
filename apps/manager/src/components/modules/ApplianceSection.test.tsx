@@ -200,6 +200,64 @@ describe('ApplianceSection Component', () => {
         view.unmount();
     });
 
+    it('backup schedule holds at 320px with 130% text in unknown and known states', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403'));
+        let view!: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="backups"
+                    />
+                </div>
+            );
+        });
+        expect(await screen.findByText("The node's schedule could not be read, so it can't be changed from here right now.")).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        view.unmount();
+
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({ enabled: true, intervalHours: 24, keep: 7 });
+        await act(async () => {
+            view = render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="backups"
+                    />
+                </div>
+            );
+        });
+        expect(await screen.findByRole('button', { name: /^save$/i })).toBeInTheDocument();
+        view.unmount();
+    });
+
     it('manages automated backup schedule and verifies database integrity', async () => {
         await act(async () => {
             render(

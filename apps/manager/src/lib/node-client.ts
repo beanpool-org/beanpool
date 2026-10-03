@@ -474,7 +474,7 @@ export async function downloadAdminFile(
         url.searchParams.set(k, v);
     }
 
-    const res = await fetch(url.toString(), { headers, cache: 'no-store' });
+    const res = await fetch(url.toString(), { headers, credentials: 'same-origin', cache: 'no-store' });
     if (!res.ok) {
         // The endpoints answer 404 with a JSON reason worth surfacing — "no backup yet for
         // this node" is a different problem from "wrong password", and a bare HTTP code

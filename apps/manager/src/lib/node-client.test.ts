@@ -309,6 +309,7 @@ describe('2FA session token transmission in node client admin actions', () => {
 
         await downloadAdminFile('/proxy/https/node.example.com/api/local/admin/snapshots/download', { name: 'test' }, 'secret123', 'test.db', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
+        expect(lastCall()[1].credentials).toBe('same-origin');
 
         URL.createObjectURL = origCreate;
         URL.revokeObjectURL = origRevoke;

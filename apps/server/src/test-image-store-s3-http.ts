@@ -118,6 +118,10 @@ async function child(): Promise<void> {
     updateLocalConfig({ adminHash: hash, salt });
     const boot = await checkImageStoreAtBoot({ role: 'primary', dataDir });
     const membersBefore = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
+    // Step 7c: with 2FA off the password alone opens no admin route. This fresh server's owner has an authenticator,
+    // so the restore carries the password with a code (no member is seeded: membersBefore stays exact).
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(pw);
 
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -128,7 +132,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, {
         method: 'POST',
-        headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/octet-stream' },
+        headers: { ...twoFa.headers(), 'Content-Type': 'application/octet-stream' },
         body: new Uint8Array(fs.readFileSync(file)),
     });
     const body = await res.json();
@@ -214,9 +218,12 @@ async function main(): Promise<void> {
     assert(store.kind === 's3', 'the node\'s image store is the S3 store');
     const port = await startHttpsServer(0);
     const BASE = `https://localhost:${port}`;
+    // Step 7c: the password opens admin routes only with 2FA on and a code beside it.
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(pw);
     const adminFetch = async (p: string, init: RequestInit = {}) => {
         resetAdminAuthTarpit();
-        return fetch(`${BASE}${p}`, { ...init, headers: { 'X-Admin-Password': pw, ...(init.headers as any || {}) } });
+        return fetch(`${BASE}${p}`, { ...init, headers: { ...twoFa.headers(), ...(init.headers as any || {}) } });
     };
 
     // ── 2. a photo in, and out ─────────────────────────────────────────────────────────────────
@@ -476,14 +483,21 @@ async function main(): Promise<void> {
     // the kept label says, checked here where it is kept.)
     console.log('\n--- 9. The harvester\'s kept copy ---');
     {
+        // Step 7c: the shipped harvester still sends the admin password alone, with no code and no token (its token path
+        // is PR #1550), and this node refuses that (2FA off: password_needs_2fa; on, as here: a code is required). Until
+        // then this section FAILS, honestly: the refusal is recorded as a failed check rather than crashing the suite, so
+        // sections 10 and 11 still run. No assertion here is loosened.
         const node = { id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw };
         resetAdminAuthTarpit();
-        const pulled = await pullBackupForNode(node as any);
-        assert(pulled.kind === 'plain', 'the harvester pulled a readable backup from the s3 node');
+        let pulled: Awaited<ReturnType<typeof pullBackupForNode>> | null = null;
+        let pullError = '';
+        try { pulled = await pullBackupForNode(node as any); } catch (e) { pullError = (e as Error).message; }
+        assert(pulled?.kind === 'plain', `the harvester pulled a readable backup from the s3 node${pullError ? ` (${pullError})` : ''}`);
         const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
         assert(fs.existsSync(kept) && fs.existsSync(inBucketLabelFor(kept)), 'it kept the database AND the in-bucket label beside it');
         assert(listFiles(imagesDirFor(kept)).length === 0, 'with no images beside it, by design');
-        const label = readInBucketMember(path.dirname(kept), path.basename(inBucketLabelFor(kept)));
+        let label: ReturnType<typeof readInBucketMember> | null = null;
+        try { label = readInBucketMember(path.dirname(kept), path.basename(inBucketLabelFor(kept))); } catch { label = null; }
         assert(label?.bucket === fake.bucket && label.referenced === referenced && label.checked === true && label.missingFromBucket === 1,
             `the kept label names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing (${JSON.stringify(label)})`);
     }

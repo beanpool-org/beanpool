@@ -217,3 +217,7 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-10-03 - InstallPrompt Touch Target Sizing & Test Coverage
 **Learning:** `InstallPrompt.tsx` interactive controls ("Dismiss", "How?", "Install", and "Don't show this again") lacked explicit minimum touch target sizing (height/width < 44px on mobile devices), and the component lacked unit test coverage.
 **Action:** Added explicit `minWidth: '44px'`, `minHeight: '44px'` touch target properties and inline flex alignment to buttons in `InstallPrompt.tsx`, and created comprehensive unit test suite in `InstallPrompt.test.tsx`.
+
+## 2026-10-03 - OwnerUnlockCard Focus Ring Styling
+**Learning:** `OwnerUnlockCard.tsx` interactive action buttons and code input textarea lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to the helper `BTN` class and unlock code textarea in `OwnerUnlockCard.tsx`, and updated `OwnerUnlockCard.test.tsx`.

@@ -20,7 +20,54 @@ export interface KitModules {
         printToFileAsync(options: { html: string }): Promise<{ uri: string }>;
     };
     Sharing: { shareAsync(uri: string, options?: { mimeType?: string; UTI?: string; dialogTitle?: string }): Promise<unknown> };
-    FileSystem: { deleteAsync(uri: string, options?: { idempotent?: boolean }): Promise<unknown> };
+    FileSystem: KitFileSystem;
+}
+
+/** The expo-file-system/legacy calls the kit uses: delete its PDF, and sweep expo-print's folder. */
+export interface KitFileSystem {
+    cacheDirectory?: string | null;
+    readDirectoryAsync?(uri: string): Promise<string[]>;
+    deleteAsync(uri: string, options?: { idempotent?: boolean }): Promise<unknown>;
+}
+
+/**
+ * The folder expo-print's printToFileAsync writes every PDF to, in the app's cache: `<cache>/Print/<UUID>.pdf`
+ * (expo-print 55.0.19: Android FileUtils.kt generateFilePath, iOS ExpoPrintToFile.swift generatePath). The names
+ * list's PDF (app/names-list.tsx) is made there too, with the same risk, so the sweep takes it as well.
+ */
+export const PRINT_FOLDER = 'Print/';
+
+/**
+ * Deletes the PDFs left in expo-print's folder: a kit whose share sheet was still open when the app was killed (review
+ * 4170916838). Only `*.pdf` files in that one folder, nothing else. Once at app start and before each Save as PDF.
+ * Never throws: a phone with no folder yet, or an older build, sweeps nothing. Returns how many it deleted.
+ */
+export async function sweepPrintedPdfs(fileSystem?: KitFileSystem): Promise<number> {
+    try {
+        const FileSystem = fileSystem ?? (require('expo-file-system/legacy') as KitFileSystem);
+        const cache = FileSystem.cacheDirectory;
+        if (!cache || !FileSystem.readDirectoryAsync) return 0;
+        const folder = `${cache.endsWith('/') ? cache : `${cache}/`}${PRINT_FOLDER}`;
+        let names: string[];
+        try {
+            names = await FileSystem.readDirectoryAsync(folder);
+        } catch {
+            return 0;
+        }
+        let deleted = 0;
+        for (const name of names) {
+            if (!/\.pdf$/i.test(name) || name.includes('/')) continue;
+            try {
+                await FileSystem.deleteAsync(folder + name, { idempotent: true });
+                deleted++;
+            } catch {
+                // The next sweep tries again.
+            }
+        }
+        return deleted;
+    } catch {
+        return 0;
+    }
 }
 
 type ModulesOrLoader = KitModules | (() => KitModules);
@@ -57,14 +104,15 @@ export async function printRecoveryKit(kit: RecoveryKit, modules?: ModulesOrLoad
 }
 
 /**
- * Save as PDF: asked first (Cancel makes nothing), then the PDF is made, handed to the share sheet, and the phone's
- * temporary copy deleted whatever the share sheet did.
+ * Save as PDF: asked first (Cancel makes nothing), then any PDF an earlier Save left behind is swept, the PDF is made,
+ * handed to the share sheet, and the phone's temporary copy deleted whatever the share sheet did.
  */
 export async function saveRecoveryKitPdf(kit: RecoveryKit, askFirst: () => Promise<boolean>, modules?: ModulesOrLoader): Promise<KitResult> {
     if (!(await askFirst())) return 'cancelled';
     try {
         const html = recoveryKitHtml(kit);
         const { Print, Sharing, FileSystem } = modulesFrom(modules);
+        await sweepPrintedPdfs(FileSystem);
         const { uri } = await Print.printToFileAsync({ html });
         try {
             await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: KIT_TITLE });

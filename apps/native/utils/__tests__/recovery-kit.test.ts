@@ -2,10 +2,12 @@
  * The recovery kit (utils/recovery-kit.ts): the page made from the member's 12 words, and the Print and Save as PDF
  * actions that hand it to the phone. Nothing here touches a device: the print and share modules are stand-ins.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
     KIT_FAILED_LINE, KIT_SAVE_WARNING, askBeforeSavingKit, printRecoveryKit, recoveryKitHtml, saveRecoveryKitPdf,
-    type KitModules,
+    sweepPrintedPdfs, type KitFileSystem, type KitModules,
 } from '../recovery-kit';
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
@@ -164,5 +166,62 @@ describe('askBeforeSavingKit', () => {
     it('the failure line tells the member to write the words down', () => {
         expect(KIT_FAILED_LINE).toBe('The recovery kit couldn’t be made on this phone. Write the 12 words down instead.');
         expect(KIT_SAVE_WARNING).toBe('Keep this file off cloud backups and chats. Anyone who has it can sign in as you.');
+    });
+});
+
+describe('sweepPrintedPdfs (review 4170916838)', () => {
+    /** A fake expo-file-system/legacy: a cache folder with expo-print's Print/ folder in it, and what was deleted. */
+    function fakeFs(files: Record<string, string[]>, cacheDirectory: string | null = 'file:///data/cache/') {
+        const deleted: string[] = [];
+        const read: string[] = [];
+        const fsFake: KitFileSystem = {
+            cacheDirectory,
+            readDirectoryAsync: vi.fn(async (uri: string) => {
+                read.push(uri);
+                if (!(uri in files)) throw new Error('not a directory');
+                return files[uri];
+            }),
+            deleteAsync: vi.fn(async (uri: string) => { deleted.push(uri); }),
+        };
+        return { fsFake, deleted, read };
+    }
+
+    it('deletes only the *.pdf files in expo-print’s cache Print/ folder', async () => {
+        const { fsFake, deleted, read } = fakeFs({
+            'file:///data/cache/Print/': ['0b1e-kit.pdf', 'A7C2-NAMES.PDF', 'notes.txt', 'sub', 'x.pdf.tmp'],
+        });
+        expect(await sweepPrintedPdfs(fsFake)).toBe(2);
+        expect(read).toEqual(['file:///data/cache/Print/']);
+        expect(deleted).toEqual(['file:///data/cache/Print/0b1e-kit.pdf', 'file:///data/cache/Print/A7C2-NAMES.PDF']);
+    });
+
+    it('sweeps nothing, and never throws, with no folder yet, no cache directory, or an older module', async () => {
+        const none = fakeFs({});
+        expect(await sweepPrintedPdfs(none.fsFake)).toBe(0);
+        expect(none.deleted).toEqual([]);
+        const noCache = fakeFs({ 'file:///data/cache/Print/': ['a.pdf'] }, null);
+        expect(await sweepPrintedPdfs(noCache.fsFake)).toBe(0);
+        expect(await sweepPrintedPdfs({ deleteAsync: vi.fn(async () => {}) })).toBe(0);
+        const failing = fakeFs({ 'file:///data/cache/Print/': ['a.pdf', 'b.pdf'] });
+        (failing.fsFake.deleteAsync as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('busy'));
+        expect(await sweepPrintedPdfs(failing.fsFake)).toBe(1);
+    });
+
+    it('Save as PDF sweeps a PDF an earlier Save left behind before it makes the new one', async () => {
+        const { modules, calls } = fakeModules();
+        const left = fakeFs({ 'file:///cache/Print/': ['old-kit.pdf'] }, 'file:///cache');
+        modules.FileSystem = {
+            ...left.fsFake,
+            readDirectoryAsync: vi.fn(async (uri: string) => { calls.push('sweep'); return left.fsFake.readDirectoryAsync!(uri); }),
+            deleteAsync: vi.fn(async (uri: string) => { calls.push(`delete ${uri}`); }),
+        };
+        expect(await saveRecoveryKitPdf(KIT, async () => true, modules)).toBe('done');
+        expect(calls).toEqual(['sweep', 'delete file:///cache/Print/old-kit.pdf', 'toFile', 'share', 'delete file:///cache/kit.pdf']);
+    });
+
+    it('runs once at app start, from the root layout', () => {
+        const layout = readFileSync(resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+        expect(layout).toContain("import { sweepPrintedPdfs } from '../utils/recovery-kit';");
+        expect(layout).toMatch(/useEffect\(\(\) => \{ void sweepPrintedPdfs\(\); \}, \[\]\);/);
     });
 });

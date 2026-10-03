@@ -248,7 +248,8 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
 
     const deps: any = {
-        checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
+        // The options too, as https-server.ts passes checkAdminAuth itself: a copy route's `legacyCopy` (step 7c) is one.
+        checkAdminAuth: async (ctx: any, opts?: Parameters<typeof checkAdminAuth>[1]) => checkAdminAuth(ctx, opts),
         rateLimit: () => true, clampLimit: (_v: unknown, d = 20) => d, clampOffset: () => 0,
         activeConnections: new Map(), calculateAnalytics: () => ({}), enforceReadAuth: false, broadcast: () => {},
     };

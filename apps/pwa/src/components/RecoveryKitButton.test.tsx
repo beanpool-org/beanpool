@@ -8,13 +8,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RecoveryKitButton } from './RecoveryKitButton';
 import { KIT_WEB_RESTORE_STEPS } from '@beanpool/core';
-import { printKitInFrame } from '../lib/recovery-kit';
+import { KIT_FRAME_FALLBACK_MS, printKitInFrame, removeKitFrame } from '../lib/recovery-kit';
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
 const WARNING = 'Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.';
 const FAILED = 'The recovery kit couldn’t be made in this browser. Write the 12 words down instead.';
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    removeKitFrame();
+    vi.useRealTimers();
+});
 
 function setup(print: (w: Window) => void) {
     const seen: { html: string; inDom: boolean }[] = [];
@@ -45,8 +49,8 @@ describe('RecoveryKitButton', () => {
         expect(screen.queryByText(WARNING)).toBeNull();
     });
 
-    it('Continue prints the kit: all 12 words in order, no callsign, name or key; the frame is gone afterwards', async () => {
-        const { printer, seen } = setup(() => {});
+    it('Continue prints the kit: all 12 words in order, no callsign, name or key; the frame is gone after the print', async () => {
+        const { printer, seen } = setup((w) => { w.dispatchEvent(new Event('afterprint')); });
         fireEvent.click(screen.getByRole('button', { name: 'Print or save your recovery kit' }));
         fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
         await vi.waitFor(() => expect(printer).toHaveBeenCalledTimes(1));
@@ -90,11 +94,39 @@ describe('RecoveryKitButton', () => {
 });
 
 describe('printKitInFrame', () => {
-    it('removes the frame after print, and when print throws', async () => {
+    const frames = () => document.querySelectorAll('iframe').length;
+
+    it('keeps the frame after print() returns, and removes it on the frame’s afterprint (review 4170916062)', async () => {
+        let w: Window | null = null;
+        expect(await printKitInFrame('<p>x</p>', (win) => { w = win; })).toBe('done');
+        expect(frames()).toBe(1);
+        expect(document.querySelector('iframe')!.contentDocument!.body.innerHTML).toBe('<p>x</p>');
+        w!.dispatchEvent(new Event('afterprint'));
+        expect(frames()).toBe(0);
+    });
+
+    it('removes the frame after the fallback when afterprint never comes', async () => {
+        vi.useFakeTimers();
+        expect(KIT_FRAME_FALLBACK_MS).toBeGreaterThanOrEqual(60_000);
         expect(await printKitInFrame('<p>x</p>', () => {})).toBe('done');
-        expect(document.querySelector('iframe')).toBeNull();
+        vi.advanceTimersByTime(KIT_FRAME_FALLBACK_MS - 1);
+        expect(frames()).toBe(1);
+        vi.advanceTimersByTime(1);
+        expect(frames()).toBe(0);
+    });
+
+    it('never leaves a second frame: the next kit request removes the last one first', async () => {
+        await printKitInFrame('<p>one</p>', () => {});
+        let seen = -1;
+        await printKitInFrame('<p>two</p>', () => { seen = frames(); });
+        expect(seen).toBe(1);
+        expect(frames()).toBe(1);
+        expect(document.querySelector('iframe')!.contentDocument!.body.innerHTML).toBe('<p>two</p>');
+    });
+
+    it('removes the frame at once when print throws', async () => {
         expect(await printKitInFrame('<p>x</p>', () => { throw new Error('x'); })).toBe('failed');
-        expect(document.querySelector('iframe')).toBeNull();
+        expect(frames()).toBe(0);
     });
 });
 

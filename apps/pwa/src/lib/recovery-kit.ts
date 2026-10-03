@@ -31,31 +31,67 @@ export function webKit(
 }
 
 /**
- * Writes the page into a hidden frame, prints it, and removes the frame whatever print did, so no copy of the words is
- * left in the page. `print` is the browser's own unless a test hands in a stand-in.
+ * How long a kit's frame may stay when the browser never says its print is over ('afterprint'): long enough for a
+ * print preview that renders after print() has returned (Chrome on Android, iOS Safari; review 4170916062).
  */
-export async function printKitInFrame(html: string, print: (w: Window) => void = (w) => w.print()): Promise<'done' | 'failed'> {
+export const KIT_FRAME_FALLBACK_MS = 60_000;
+
+/** The one kit frame in the page, if any, and how to remove it. */
+let kitFrame: { remove: () => void } | null = null;
+
+/** Removes the kit's frame now, if there is one. The next kit request does this first, so there is never a second. */
+export function removeKitFrame(): void {
+    kitFrame?.remove();
+}
+
+/**
+ * Writes the page into a hidden frame and prints it. The frame stays while the browser's print may still read it, and
+ * is removed on its first of: the frame's 'afterprint', {@link KIT_FRAME_FALLBACK_MS}, the next kit request, or print
+ * throwing; so no copy of the words is left in the page for long. `print` is the browser's own unless a test hands in
+ * a stand-in.
+ */
+export async function printKitInFrame(
+    html: string,
+    print: (w: Window) => void = (w) => w.print(),
+    fallbackMs: number = KIT_FRAME_FALLBACK_MS,
+): Promise<'done' | 'failed'> {
+    removeKitFrame();
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
     frame.tabIndex = -1;
     frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const entry = {
+        remove: () => {
+            if (timer !== undefined) clearTimeout(timer);
+            frame.remove();
+            if (kitFrame === entry) kitFrame = null;
+        },
+    };
+    kitFrame = entry;
     try {
         document.body.appendChild(frame);
         const w = frame.contentWindow;
-        if (!w) return 'failed';
+        if (!w) {
+            entry.remove();
+            return 'failed';
+        }
         w.document.open();
         w.document.write(html);
         w.document.close();
+        // Set before print(): a browser whose print blocks may say 'afterprint' before print() returns.
+        w.addEventListener('afterprint', entry.remove, { once: true });
+        timer = setTimeout(entry.remove, fallbackMs);
         print(w);
         return 'done';
     } catch {
+        entry.remove();
         return 'failed';
-    } finally {
-        frame.remove();
     }
 }
 
 export async function printRecoveryKit(words: readonly string[], print?: (w: Window) => void): Promise<'done' | 'failed'> {
+    removeKitFrame();
     let html: string;
     try {
         html = recoveryKitHtml(webKit(words));

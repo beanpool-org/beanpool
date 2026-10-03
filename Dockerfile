@@ -153,6 +153,10 @@ VOLUME /data
 # Copy entrypoint script
 COPY --from=builder /app/entrypoint.sh /app/entrypoint.sh
 
+# `docker compose exec beanpool-node beanpool recover …`: the shell's commands for this node (apps/server/src/recover-cli.ts)
+COPY --from=builder --chown=root:root /app/apps/server/bin/beanpool /usr/local/bin/beanpool
+RUN chmod 0755 /usr/local/bin/beanpool
+
 # Run compiled JavaScript via the entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["node", "dist/index.js"]

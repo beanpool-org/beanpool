@@ -113,6 +113,7 @@ export const SUITES = [
     'test-totp-admin-2fa',
     'test-2fa-covers-admin-routes',
     'test-2fa-reenrol-needs-code',
+    'test-beanpool-recover',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',

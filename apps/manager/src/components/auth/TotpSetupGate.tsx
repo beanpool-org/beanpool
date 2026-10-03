@@ -84,7 +84,8 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
         <div className="min-h-screen bg-nature-950 flex items-center justify-center p-4 font-sans">
             <div className="w-full max-w-md bg-nature-900/90 border border-nature-800 rounded-3xl p-5 sm:p-8 shadow-2xl backdrop-blur-xl" data-testid="totp-setup-gate">
                 <div className="flex items-center gap-3 mb-5 border-b border-nature-800/80 pb-5">
-                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-terra-500/20 border border-terra-500/30 flex items-center justify-center text-2xl" aria-hidden="true">
+                    {/* No icon below 360 px: at 320 px and 1.3× text it squeezed the title to one word a line. */}
+                    <div className="hidden min-[360px]:flex w-12 h-12 shrink-0 rounded-2xl bg-terra-500/20 border border-terra-500/30 items-center justify-center text-2xl" aria-hidden="true">
                         🔐
                     </div>
                     <div className="flex-1 min-w-0">
@@ -167,7 +168,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
                 )}
 
                 <p className="text-xs text-nature-400 leading-relaxed mt-5 mb-0">
-                    Lost access? Backup codes, a second owner, or <code className="break-all">beanpool recover</code> on the server get you back in.
+                    Lost access? Backup codes, a second owner, or <code className="whitespace-nowrap">beanpool recover</code> on the server get you back in.
                 </p>
                 <button
                     type="button"

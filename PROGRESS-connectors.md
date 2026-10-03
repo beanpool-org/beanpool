@@ -22,4 +22,11 @@ Branch fix/connectors-admin-only, from main 19d43592. Lane started 10:40 AEDT 20
 3. settings.js refreshConnectors + redeem.mjs send credentials.
 
 ## Done
-- (nothing yet)
+- a3db9a97 fail-first test (test-connector-credit-cap §7): on main 35/43, 8 red (anonymous, member, moderator, wrong password, backups token all got the list; dashboard gave links to anyone)
+- 052e0736 server fix + settings.js refreshConnectors + redeem.mjs credentials: credit-cap 43/43
+- test-2fa-covers-admin-routes: GET /api/local/connectors added to its admin-route table
+- Ran: test-connector-credit-cap, test-password-needs-2fa, test-federation-link, test-connector-public-url, test-node-config-public,
+  test-gateway-real-client, test-2fa-covers-admin-routes, test-guest-view: all pass. tsc server 0. eslint: 0 errors in changed TS;
+  the static/.mjs no-undef errors are older lines (globals not configured), none on changed lines.
+- test-guest-view needed no edit: both routes are already in EVERY_ROUTE and its sweep checks leaks, not auth.
+- PR: (being opened)

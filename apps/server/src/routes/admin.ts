@@ -38,7 +38,7 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn } from '../decisions-engine.js';
+import { decisionsOn, adminActionNeedsOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -460,6 +460,16 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
     if (role === 'owner' || role === 'admin') return true;
     const held = heldNodeRoleOf(targetPubkey);
     return held === 'owner' || held === 'admin';
+}
+
+/**
+ * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
+ * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
+ * an owner's or admin's role, cutting short an owner's or admin's removal. From the phone's Manage hand-off it asks for
+ * its unlock again (requirePhoneStepUp). Answers 403 and returns false when that is due.
+ */
+function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string): boolean {
+    return !adminActionNeedsOwner(action, target) || requirePhoneStepUp(ctx);
 }
 
 const handleEnrol = async (ctx: any) => {
@@ -1353,6 +1363,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'suspend', ctx.params.pubkey)) return;
     const { reason } = (ctx as any).requestBody || {};
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
@@ -1383,6 +1394,7 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     }
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'lift', ctx.params.pubkey)) return;
     const result = adminLiftSuspension(ctx.params.pubkey, actor);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1742,6 +1754,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
         return;
     }
+    if (!stepUpIfOwnerOnly(ctx, 'halt', ctx.params.id)) return;
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1756,6 +1769,7 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const signedActor = resolveAdminActor(ctx);
     if (!signedActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'accelerate', ctx.params.id)) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = result.status || 400;

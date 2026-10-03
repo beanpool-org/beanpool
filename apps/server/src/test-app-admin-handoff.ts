@@ -483,6 +483,71 @@ async function main() {
         }
     }
 
+    // ── 9. Suspending an owner, and lifting, halting or speeding up what gives back or takes an owner's or admin's role
+    // (confirm 1, 4172121241): owner-only in the engine, so asked from a stale phone session, whatever the route. ──
+    console.log('\n9. Suspend, lift, halt and accelerate on an owner or admin from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status ?? null;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const reason = { reason: 'Testing the step-up on suspensions' };
+        const coOwner = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner9');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+
+        const suspendStale = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(stale));
+        assert(isStepUp(suspendStale) && roleOf(coOwner.pub) === 'owner' && statusOf(coOwner.pub) === 'active',
+            `suspending a co-owner asks, and they stay an active owner (got ${suspendStale.status} ${JSON.stringify(suspendStale.body)})`);
+        const suspendFresh = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(fresh));
+        assert(suspendFresh.status === 200 && statusOf(coOwner.pub) === 'disabled' && roleOf(coOwner.pub) === null,
+            `after Manage again, suspending a co-owner works (got ${suspendFresh.status} ${JSON.stringify(suspendFresh.body)})`);
+        const keepId: string = suspendFresh.body?.decision?.id;
+
+        const liftStale = await postJson(`/api/local/admin/users/${coOwner.pub}/status`, { status: 'active' }, as(stale));
+        assert(isStepUp(liftStale) && statusOf(coOwner.pub) === 'disabled' && roleOf(coOwner.pub) === null,
+            `lifting it, which gives the owner role back, asks and changes nothing (got ${liftStale.status} ${JSON.stringify(liftStale.body)})`);
+        const haltStale = await postJson(`/api/local/admin/decisions/${keepId}/halt`, reason, as(stale));
+        assert(isStepUp(haltStale) && statusOf(coOwner.pub) === 'disabled' && roleOf(coOwner.pub) === null,
+            `halting the keep-suspension vote, which gives it back too, asks (got ${haltStale.status} ${JSON.stringify(haltStale.body)})`);
+        const liftFresh = await postJson(`/api/local/admin/users/${coOwner.pub}/status`, { status: 'active' }, as(fresh));
+        assert(liftFresh.status === 200 && statusOf(coOwner.pub) === 'active' && roleOf(coOwner.pub) === 'owner',
+            `after Manage again, lifting it works and the owner role is back (got ${liftFresh.status} ${JSON.stringify(liftFresh.body)})`);
+        const suspendAgain = await postJson(`/api/local/admin/users/${coOwner.pub}/suspend`, reason, as(fresh));
+        const haltFresh = await postJson(`/api/local/admin/decisions/${suspendAgain.body?.decision?.id}/halt`, reason, as(fresh));
+        assert(haltFresh.status === 200 && roleOf(coOwner.pub) === 'owner', `…and so does halting the vote (got ${haltFresh.status} ${JSON.stringify(haltFresh.body)})`);
+
+        // A removal of an admin in its grace window: cutting it short is owner-only.
+        const leaving = keypair();
+        seedMember(leaving.pub, 'hoLeaving9');
+        grantNodeRole(leaving.pub, 'admin', owner.pub);
+        db.prepare(`INSERT INTO decisions (id, author_pubkey, title, description, touches, effect, subject, params,
+                        franchise, status, opens_at, closes_at, created_at, updated_at)
+                    VALUES ('ho-d9', 'SYSTEM', 'Remove x?', 'd', 'member', 'remove_member', ?, '{}', '1m1v', 'execution_pending_grace',
+                        strftime('%Y-%m-%dT%H:%M:%fZ','now','-8 days'), strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 days'),
+                        strftime('%Y-%m-%dT%H:%M:%fZ','now','-8 days'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(leaving.pub);
+        const accelStale = await postJson('/api/local/admin/decisions/ho-d9/accelerate', {}, as(stale));
+        const d9 = () => (db.prepare("SELECT status FROM decisions WHERE id = 'ho-d9'").get() as any)?.status;
+        assert(isStepUp(accelStale) && d9() === 'execution_pending_grace' && roleOf(leaving.pub) === 'admin',
+            `cutting short an admin's removal asks and changes nothing (got ${accelStale.status} ${JSON.stringify(accelStale.body)})`);
+        const accelFresh = await postJson('/api/local/admin/decisions/ho-d9/accelerate', {}, as(fresh));
+        assert(!isStepUp(accelFresh), `after Manage again it passes the step-up (got ${accelFresh.status} ${JSON.stringify(accelFresh.body)})`);
+
+        // An admin's own work is not asked: suspending and lifting a plain member six minutes on.
+        const plain = keypair();
+        seedMember(plain.pub, 'hoPlain9');
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        const suspendPlain = await postJson(`/api/local/admin/users/${plain.pub}/suspend`, reason, as(adminStale));
+        assert(suspendPlain.status === 200 && statusOf(plain.pub) === 'disabled', `an admin suspends a member six minutes on, unasked (got ${suspendPlain.status} ${JSON.stringify(suspendPlain.body)})`);
+        const liftPlain = await postJson(`/api/local/admin/users/${plain.pub}/status`, { status: 'active' }, as(adminStale));
+        assert(liftPlain.status === 200 && statusOf(plain.pub) === 'active', `…and lifts it, unasked (got ${liftPlain.status} ${JSON.stringify(liftPlain.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

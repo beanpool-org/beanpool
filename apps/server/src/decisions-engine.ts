@@ -1466,9 +1466,7 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     }
     // Halting a removal in its grace window, or the vote on an emergency suspension, gives the member back
     // the node role held aside for it — and only an owner may grant an owner or admin role.
-    const restoresRole = (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
-        || decision.effect === 'keep_suspension';
-    if (restoresRole && !isOwnerLevelActor(adminPubkey)) {
+    if (haltRestoresRole(decision) && !isOwnerLevelActor(adminPubkey)) {
         const held = heldRoleFor([decisionId]);
         if (held) return { success: false, status: 403, error: roleRestoreRefusal(held) };
     }
@@ -1589,6 +1587,35 @@ function heldRoleFor(decisionIds: string[]): 'owner' | 'admin' | null {
 
 function roleRestoreRefusal(role: 'owner' | 'admin'): string {
     return `This member held the ${role} role, which comes back with them, and only an owner can give back an owner or admin role. Ask an owner to do this`;
+}
+
+/** Halting this Decision gives the member back the node role held aside for it (adminHaltDecision). */
+function haltRestoresRole(decision: { status: string; effect: string }): boolean {
+    return (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
+        || decision.effect === 'keep_suspension';
+}
+
+export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate';
+
+/**
+ * Whether this admin action on this member (suspend, lift) or Decision (halt, accelerate) is one only an owner may
+ * make: the conditions on which the engine below refuses it to an admin (adminEmergencySuspend, adminLiftSuspension,
+ * adminHaltDecision, adminAccelerateDecision), whoever is acting. No role gate sees these, since they turn on the
+ * target, so the routes ask the phone's step-up on exactly these (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string): boolean {
+    if (!target) return false;
+    if (action === 'suspend') return isNodeOwner(target);
+    if (action === 'lift') {
+        const openKeeps = db.prepare(
+            "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
+        ).all(target) as { id: string }[];
+        return !!heldRoleFor(openKeeps.map(k => k.id));
+    }
+    const decision = getDecision(target);
+    if (!decision) return false;
+    if (action === 'halt') return haltRestoresRole(decision) && !!heldRoleFor([target]);
+    return decision.effect === 'remove_member' && !!decision.subject && !!heldPrivilegedRole(decision.subject);
 }
 
 /**

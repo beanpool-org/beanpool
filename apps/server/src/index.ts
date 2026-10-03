@@ -55,7 +55,7 @@ scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
 import { initAdminPassword } from './config/local-config.js';
-import { initClaimCode } from './claim-code.js';
+import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
 import { startHttpServer } from './http-server.js';
@@ -140,6 +140,7 @@ async function main() {
         announce: adminBroadcastAnnouncement,
         log: message => logger.security('AUTH', message),
         changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
+        burnClaim: burnClaimFromShell,
     });
     // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
     // (it asks whether there is an owner). Never throws: the admin password works as before either way.

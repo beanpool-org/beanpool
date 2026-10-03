@@ -47,7 +47,8 @@ export const SETTINGS_SIGNIN_TAG = 'beanpool-settings-signin/2';
 export const INVITE_TICKET_TAG = 'beanpool-invite-ticket/2';
 export const RE_ENROLL_TAG = 'beanpool-re-enroll/2';
 export const PUSH_LEAVE_TAG = 'beanpool-push-leave/2';
-export const CLAIM_TAG = 'beanpool-claim/1';
+export const CLAIM_TAG = 'beanpool-claim/2';
+export const CLAIM_PROOF_TAG = 'beanpool-claim-proof/1';
 
 // ─── The host ───────────────────────────────────────────────────────────────────────────────
 
@@ -254,11 +255,16 @@ export function parseInviteTicketText(text: string): ParsedInviteTicketText | nu
 
 /**
  * Claiming a community that has no owner yet with the one-time claim code its first boot wrote to its data folder
- * (`/api/local/claim`). `codeId` is the code's short public id, which the node answers with; the code itself is sent
- * beside the signature, never signed into it.
+ * (`/api/local/claim`). `codeId` is the code's short public id, which the node answers with. The code is never sent:
+ * `proof` (claim-proof.ts claimProof, hex) shows the claimer knows it, and the key signs it in with the rest.
  */
-export function claimText(host: string, codeId: string): string {
-    return `${CLAIM_TAG}\n${host}\n${codeId}`;
+export function claimText(host: string, codeId: string, publicKey: string, proof: string): string {
+    return `${CLAIM_TAG}\n${host}\n${codeId}\n${publicKey}\n${proof}`;
+}
+
+/** What a claim's proof is an HMAC of (claim-proof.ts claimProof): the host, the code's id and the claiming key. */
+export function claimProofText(host: string, codeId: string, publicKey: string): string {
+    return `${CLAIM_PROOF_TAG}\n${host}\n${codeId}\n${publicKey}`;
 }
 
 /** A re-enrolment code's proof of possession of the new key (`/api/member/re-enroll`). */

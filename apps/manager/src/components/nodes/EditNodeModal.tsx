@@ -120,7 +120,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-2 border-t border-nature-800/80">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-nature-800/80">
                         <button
                             type="button"
                             onClick={handleTestConnection}

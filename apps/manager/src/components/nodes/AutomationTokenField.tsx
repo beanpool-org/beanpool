@@ -30,7 +30,7 @@ export function AutomationTokenField({ value, onChange }: { value: string; onCha
         <div>
             <label htmlFor="bp-automation-token" className="block text-nature-300 font-semibold mb-1">Automation token</label>
             <div className="flex flex-wrap gap-2">
-                <div className="relative flex-1 min-w-[12rem]">
+                <div className="relative flex-1 basis-[10rem] min-w-0">
                     <input
                         id="bp-automation-token"
                         type={show ? 'text' : 'password'}

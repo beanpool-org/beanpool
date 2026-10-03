@@ -52,6 +52,7 @@ import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { lockedDm } from './dm-test-payload.js';
@@ -120,9 +121,11 @@ async function send(req: ReturnType<typeof signed>): Promise<Res> {
     return { status: res.status, body: json };
 }
 const call = (method: 'GET' | 'POST', path: string, id: Id, body?: unknown) => send(signed(method, path, id, body));
+// Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token.
+let ADMIN: Record<string, string> = {};
 async function asAdmin(method: 'POST', path: string, body: unknown): Promise<Res> {
     resetGatewayRateLimit();
-    const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': PW }, body: JSON.stringify(body) });
+    const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...ADMIN }, body: JSON.stringify(body) });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
@@ -201,6 +204,7 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    ADMIN = ownerTokenHeaders('admin');
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 

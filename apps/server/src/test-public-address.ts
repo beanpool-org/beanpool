@@ -196,6 +196,8 @@ async function run() {
                 ctx.body = { error: 'Unauthorized' };
                 return false;
             }
+            // As the real checkAdminAuth does for the admin password: owner level (an admin is test-tunnel-token-owner-only's).
+            ctx.state.adminRole = 'owner';
             return true;
         },
     } as any;

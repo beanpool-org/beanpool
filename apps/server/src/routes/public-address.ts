@@ -13,6 +13,7 @@ import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, r
 import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
 import { getNodeConfig, getNodeRole, updateNodeConfig } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { requireAdminRole } from '../admin-auth.js';
 import type { RouteDeps } from './types.js';
 
 export interface ProbeLogEntry {
@@ -88,6 +89,34 @@ function describeTunnel(t: TunnelStatus): string {
 /** What every status answer carries about this server: its tunnel, and whether Docker's socket is still mounted. */
 const serverSide = () => ({ tunnel: getTunnelStatus(), dockerSocket: dockerSocketMounted() });
 
+/**
+ * The fields of a registrar answer, or of the saved address, that Settings shows. An answer is built from these by name,
+ * never by spreading what the registrar sent: whatever else it carries stays on the server.
+ */
+const ADDRESS_FIELDS = [
+    'status', 'name', 'hostname', 'mode', 'reason', 'since', 'warning', 'held_until', 'heldUntil',
+    'communityName', 'community_name', 'contact',
+] as const;
+
+/**
+ * The tunnel token is an owner's: an owner signed in with their key, or the admin password, which counts as one. Whoever
+ * holds it can run a second connector for this node's name and be handed a share of its visitors, owners' Manage
+ * sign-ins among them. An admin is told only that there is one (`tunnelTokenOwnerOnly`).
+ */
+function addressFields(ctx: any, answer: any): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (!answer || typeof answer !== 'object') return out;
+    for (const k of ADDRESS_FIELDS) if (answer[k] !== undefined) out[k] = answer[k];
+    if (typeof answer.tunnelToken === 'string' && answer.tunnelToken) {
+        if (ctx.state?.adminRole === 'owner') out.tunnelToken = answer.tunnelToken;
+        else out.tunnelTokenOwnerOnly = true;
+    }
+    return out;
+}
+
+/** Claiming, releasing or renaming the community's address is an owner's (operators/setup/signing-in.md). */
+const ADDRESS_OWNER_ONLY = 'Only an owner of this node can change its public address';
+
 export function createPublicAddressRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth } = deps;
@@ -137,6 +166,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/public-address/claim', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
@@ -165,7 +195,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                     console.warn('[PublicAddr] Edge status probe error:', err?.message || err);
                 });
             }
-            ctx.body = { success: true, ...result, ...serverSide() };
+            ctx.body = { success: true, ...addressFields(ctx, result), ...serverSide() };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Claim failed: ${e.message}`, 'error');
             ctx.status = 400;
@@ -175,6 +205,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/public-address/update', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         const b = (ctx.request as any).body || (ctx as any).requestBody || {};
         try {
             const communityName = b.communityName !== undefined ? b.communityName : b.community_name;
@@ -184,7 +215,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             if (communityName !== undefined) updatedPa.communityName = communityName;
             if (b.contact !== undefined) updatedPa.contact = b.contact;
             updateNodeConfig({ publicAddress: updatedPa } as any);
-            ctx.body = { success: true, ...result };
+            ctx.body = { success: true, ...addressFields(ctx, result) };
         } catch (e: any) {
             ctx.status = 400;
             ctx.body = { error: e.message };
@@ -215,7 +246,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 const { origin: _dropped, ...kept } = prev;
                 updateNodeConfig({ publicAddress: { ...kept, ...origin, ...result } } as any);
                 await syncTunnel();
-                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...result, ...serverSide() };
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
                 return;
             }
             // Any other answer is written on the name it concerns, and the name stays this community's. `none` above
@@ -225,7 +256,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             const names = recordRegistrarAnswer(result, 'status');
             const kept = result.status === 'none' ? names.find((n) => n.role === 'current') : undefined;
             ctx.body = {
-                success: true, pubkey: nodePubkeyHex(), ...result,
+                success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result),
                 ...(kept ? { kept: { hostname: kept.address, mode: localPa?.mode ?? null } } : {}),
                 ...serverSide(),
             };
@@ -234,7 +265,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 ctx.body = {
                     success: true,
                     pubkey: nodePubkeyHex(),
-                    ...localPa,
+                    ...addressFields(ctx, localPa),
                     cached: true,
                     error: e.message,
                     ...serverSide(),
@@ -316,6 +347,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/public-address/offline', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
+        if (!requireAdminRole(ctx, ['owner'], ADDRESS_OWNER_ONLY)) return;
         try {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Releasing domain & deleting tunnel on Cloudflare registrar...`, 'info');
@@ -336,7 +368,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                     console.warn('[PublicAddr] Edge offline probe error:', err?.message || err);
                 });
             }
-            ctx.body = { success: true, status: 'none', ...result };
+            ctx.body = { success: true, ...addressFields(ctx, result), status: 'none' };
         } catch (e: any) {
             addProbeLog('1/4', `❌ Offline failed: ${e.message}`, 'error');
             ctx.status = 400;

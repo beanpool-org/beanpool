@@ -143,6 +143,7 @@ async function main(): Promise<void> {
     const { hashPassword, updateLocalConfig, getLocalConfig, setReplicationToken, verifyReplicationToken, hasReplicationToken } = await import('./config/local-config.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
     const { createSnapshot, writeDbSnapshot, getAutoSnapshotConfig } = await import('./services/snapshot-scheduler.js');
     const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
     const { initTls } = await import('./services/tls.js');
@@ -204,7 +205,10 @@ async function main(): Promise<void> {
     const asOwner = { 'x-admin-session': ownerSession };
     const asAdmin = { 'x-admin-session': adminSession };
     const asMod = { 'x-admin-session': modSession };
-    const asPassword = { 'x-admin-password': PW };
+    // Step 7c: with the node's 2FA off the password alone opens no admin route. Step 1 checks that, then sends the node
+    // password with a code (2FA on, for that loop only); the later steps' owner requests use the owner's key session.
+    let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+    const asPassword = (): Record<string, string> => (tfa ? tfa.headers() : { 'x-admin-password': PW });
 
     const roles = () => JSON.stringify(db.prepare('SELECT member_pubkey, role FROM node_roles ORDER BY member_pubkey').all());
     const memberCount = () => (db.prepare('SELECT COUNT(*) AS n FROM members').get() as { n: number }).n;
@@ -298,32 +302,41 @@ async function main(): Promise<void> {
         assert(r.status === 200, `1. an admin still reads ${route} (${r.status})`);
     }
     // An owner, by key session and by the password, gets each (the restore is step 5's).
-    for (const [who, creds] of [["an owner's key session", asOwner], ['the node password', asPassword]] as const) {
-        const bk = await call('POST', '/api/local/admin/backup', creds);
+    {
+        const alone = await call('POST', '/api/local/admin/backup', asPassword());
+        assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa' && !isGzip(alone.bytes),
+            `1. /backup: the node password alone, 2FA off, is refused (password_needs_2fa) (${alone.status})`);
+    }
+    for (const [who, credsOf] of [["an owner's key session", () => asOwner], ['the node password', () => { tfa ??= turnOn2faForTests(PW); return asPassword(); }]] as const) {
+        const bk = await call('POST', '/api/local/admin/backup', credsOf());
         assert(bk.status === 200 && isGzip(bk.bytes), `1. /backup: ${who} gets the backup (${bk.status})`);
-        const sd = await call('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snapA.name)}`, creds);
+        const sd = await call('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snapA.name)}`, credsOf());
         assert(sd.status === 200 && isGzip(sd.bytes), `1. the snapshot download: ${who} gets it (${sd.status})`);
-        const copy = await call('GET', '/api/local/admin/sync-snapshot', { ...creds, 'x-admin-password': who === 'the node password' ? PW : 'anything at all' });
+        // (credsOf() already carries the node password for that row; a second header of the same name would join the two.)
+        const copy = await call('GET', '/api/local/admin/sync-snapshot', { ...credsOf(), ...(who === 'the node password' ? {} : { 'x-admin-password': 'anything at all' }) });
         assert(copy.status !== 401 && copy.status !== 403, `1. a copy through the admin-password path: ${who} passes the gate (${copy.status})`);
         // The fleet manager's backup routes are gone (2026-10-02): no database there for anyone, an owner included.
-        const mdb = await call('GET', '/api/manager/backups/download-db?nodeId=local', creds);
+        const mdb = await call('GET', '/api/manager/backups/download-db?nodeId=local', credsOf());
         assert(mdb.status >= 400 && mdb.status < 500 && !isGzip(mdb.bytes) && !mdb.bytes.includes(SQLITE),
             `1. the manager's download-db is gone: ${who} gets no database there (${mdb.status})`);
-        const offbox = await call('POST', '/api/local/admin/offbox-backups/status', creds);
+        const offbox = await call('POST', '/api/local/admin/offbox-backups/status', credsOf());
         assert(offbox.status === 200 && offbox.json?.state === 'none', `1. the off-box backups status: ${who} reads it (${offbox.status})`);
-        const cfg = await call('POST', '/api/local/admin/snapshots/config', creds, JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
+        const cfg = await call('POST', '/api/local/admin/snapshots/config', credsOf(), JSON.stringify({ keep: getAutoSnapshotConfig().keep }));
         assert(cfg.status === 200, `1. a snapshot settings change: ${who} makes it (${cfg.status})`);
-        const save = await call('POST', '/api/local/admin/replication-config/save', creds, JSON.stringify({ primaryUrl: '' }));
+        const save = await call('POST', '/api/local/admin/replication-config/save', credsOf(), JSON.stringify({ primaryUrl: '' }));
         assert(save.status === 200, `1. replication-config/save: ${who} saves it (${save.status})`);
-        const mode = await call('POST', '/api/local/admin/replication-token/mode', creds, JSON.stringify({ tokenOnly: false }));
+        const mode = await call('POST', '/api/local/admin/replication-token/mode', credsOf(), JSON.stringify({ tokenOnly: false }));
         assert(mode.status === 200, `1. replication-token/mode: ${who} sets it (${mode.status})`);
-        const gen = await call('POST', '/api/local/admin/replication-token/generate', creds);
+        const gen = await call('POST', '/api/local/admin/replication-token/generate', credsOf());
         assert(gen.status === 200 && typeof gen.json?.token === 'string' && await verifyReplicationToken(gen.json.token),
             `1. replication-token/generate: ${who} makes a token that works (${gen.status})`);
-        const clear = await call('POST', '/api/local/admin/replication-token/clear', creds);
+        const clear = await call('POST', '/api/local/admin/replication-token/clear', credsOf());
         assert(clear.status === 200 && !hasReplicationToken(), `1. replication-token/clear: ${who} removes it (${clear.status})`);
         setReplicationToken(TOKEN);
     }
+    // The node's 2FA off again, as the rest of this suite was written for.
+    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [] });
+    tfa = null;
     const del = await call('POST', '/api/local/admin/snapshots/delete', asOwner, JSON.stringify({ name: snapB.name }));
     assert(del.status === 200 && !fs.existsSync(path.join(dataDir!, 'snapshots', snapB.name)), `1. a snapshot delete: an owner makes it (${del.status})`);
 
@@ -396,7 +409,7 @@ async function main(): Promise<void> {
             const file = tarFiles(tar).get('node_config.json');
             return { tar, config: file ? JSON.parse(file.toString('utf8')) : null };
         };
-        const r = await call('POST', '/api/local/admin/backup', asPassword);
+        const r = await call('POST', '/api/local/admin/backup', asOwner);
         assert(r.status === 200 && isGzip(r.bytes) && r.headers.get('x-backup-locked') === 'no', `3. setup: /backup is the readable tar.gz (${r.status})`);
         const { tar, config } = readConfig(r.bytes);
         const inFile = needles.filter(([, v]) => JSON.stringify(config).includes(v)).map(([w]) => w);
@@ -408,7 +421,7 @@ async function main(): Promise<void> {
         // An older node's data/node_config.json, which the backup used to copy byte for byte.
         const legacyFile = path.join(dataDir!, 'node_config.json');
         fs.writeFileSync(legacyFile, JSON.stringify({ callsign: 'OldNode', adminHash: 'f'.repeat(128), backupAdminPassword: 'legacy-file-plaintext-4471' }));
-        const r2 = await call('POST', '/api/local/admin/backup', asPassword);
+        const r2 = await call('POST', '/api/local/admin/backup', asOwner);
         const legacy = readConfig(r2.bytes);
         assert(legacy.config?.callsign === 'OldNode' && !('adminHash' in legacy.config) && !('backupAdminPassword' in legacy.config)
             && !legacy.tar.includes(Buffer.from('legacy-file-plaintext-4471')),
@@ -419,13 +432,13 @@ async function main(): Promise<void> {
 
     // Locked backups from here on, and the sweep again.
     await makeRecoveryCode();
-    const lockedNow = await call('POST', '/api/local/admin/backup', asPassword);
+    const lockedNow = await call('POST', '/api/local/admin/backup', asOwner);
     assert(lockedNow.status === 200 && lockedNow.headers.get('x-backup-locked') === 'yes', '2. setup: with a recovery code, backups are locked');
     await sweep('backups locked (a recovery code)');
 
     // ── 4. A restore refuses what it should, and changes nothing ─────────────────────────────────────────────────
     console.log('\n— 4. what a restore refuses —');
-    const restore = (bytes: Buffer) => call('POST', '/api/local/admin/restore', asPassword, bytes);
+    const restore = (bytes: Buffer) => call('POST', '/api/local/admin/restore', asOwner, bytes);
     const liveRoles = roles();
     const liveMembers = memberCount();
     const good = databaseCopy();

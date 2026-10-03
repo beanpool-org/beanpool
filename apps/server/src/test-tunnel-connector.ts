@@ -469,7 +469,8 @@ async function main(): Promise<void> {
         });
 
         await section('7. Settings: claim, status, Take offline, Restart tunnel', async () => {
-            const deps = { checkAdminAuth: async () => true } as unknown as RouteDeps;
+            // Owner level, as the real checkAdminAuth gives the admin password (an admin is test-tunnel-token-owner-only's).
+            const deps = { checkAdminAuth: async (ctx: any) => { ctx.state.adminRole = 'owner'; return true; } } as unknown as RouteDeps;
             const k = new Koa();
             k.use(async (ctx: any, next: any) => {
                 if (ctx.method === 'POST') {

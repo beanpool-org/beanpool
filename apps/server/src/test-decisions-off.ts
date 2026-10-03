@@ -35,8 +35,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
-const ADMIN = { 'x-admin-password': ADMIN_PW };
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The admin calls go under the owner
+// Olga's key session, opened once she holds the role (below).
+let ADMIN: Record<string, string> = {};
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60 * 1000;
 const VOTES_OFF = /Community votes are switched off on this node/;
@@ -114,6 +115,8 @@ async function main() {
     const jack = member('Jack'), kate = member('Kate'), lena = member('Lena');
     grantNodeRole(olga.pk, 'owner', 'owner:password');
     grantNodeRole(erin.pk, 'admin', 'owner:password');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    ADMIN = ownerSessionHeaders(olga.pk);
     const voters = [alice, bob, carol, dave];
 
     // A Decision already on this node, as if opened before the switch went off.

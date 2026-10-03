@@ -224,6 +224,102 @@ export function isNamesRingBox(b: unknown): b is NamesRingBox {
     }
 }
 
+// ── The locked copy ──────────────────────────────────────────────────────────────────────────
+
+/** The scheme name a locked copy's box carries in its `kdfParams` (DESIGN-names-locked-copy §2). */
+export const NAMES_COPY_ALG = 'x25519-xc20p-names-copy-v1';
+/** The most ciphertext a locked copy may hold: 1 MiB, about 1,200 generations (design §1). */
+export const NAMES_COPY_MAX_BYTES = 1024 * 1024;
+const COPY_INFO = 'beanpool-names-copy';
+const COPY_AAD = 'beanpool-names-copy-v1';
+const COPY_ADDRESS = /^https?:\/\/[^\s|]{1,500}$/i;
+
+/** An admin's own pin, sealed to its own member key: the five fields of a ring box, under the copy's names. */
+export interface NamesCopyBox {
+    sealedCopy: string;
+    copyIv: string;
+    copyTag: string;
+    ephemeralPubkey: string;
+    kdfParams: string;
+}
+
+/** Whose copy it is, for which community and address, and its number: all of it bound into the box. */
+export interface NamesCopyContext {
+    communityId: string;
+    /** The phone's own address for the community (an http(s) address, as `communityAddress` makes it). */
+    address: string;
+    owner: string;
+    seq: number;
+}
+
+/** Whether `a` can be a copy's address: http(s), no whitespace and no `|` (the AAD's separator). */
+export function isNamesCopyAddress(a: unknown): a is string {
+    return typeof a === 'string' && COPY_ADDRESS.test(a);
+}
+
+function copyDomain(ctx: NamesCopyContext): MemberKeyDomain {
+    if (typeof ctx.communityId !== 'string' || !/^[0-9A-Za-z_-]{1,64}$/.test(ctx.communityId)) throw new NamesListCryptoError('A community id is needed to seal the copy.');
+    if (!isNamesCopyAddress(ctx.address)) throw new NamesListCryptoError('A copy is sealed for the community’s http(s) address.');
+    const owner = hexKey(ctx.owner, 'The owner');
+    if (!Number.isSafeInteger(ctx.seq) || ctx.seq < 1 || ctx.seq > 999_999_999) throw new NamesListCryptoError('A copy’s number is a whole number from 1.');
+    return { alg: NAMES_COPY_ALG, info: COPY_INFO, aad: `${COPY_AAD}|${ctx.communityId}|${ctx.address}|${owner}|${ctx.seq}` };
+}
+
+/**
+ * Seals `payload` (the copy's JSON) to `ctx.owner`'s own account key, with the member scheme ({@link sealToMemberKey}) under
+ * the copy's own labels. Sealing authenticates nothing: names-list-trust.ts `makeNamesCopy` signs a header over the box.
+ * Throws {@link NamesListCryptoError} for a payload over {@link NAMES_COPY_MAX_BYTES} ("too big").
+ */
+export function sealNamesCopy(payload: string | Uint8Array, ctx: NamesCopyContext): NamesCopyBox {
+    const body = typeof payload === 'string' ? utf8ToBytes(payload) : payload;
+    if (body.length > NAMES_COPY_MAX_BYTES) throw new NamesListCryptoError('The names list’s record is too big to keep a copy on the server.');
+    const sealed = sealToMemberKey(body, hexKey(ctx.owner, 'The owner'), copyDomain(ctx));
+    return {
+        sealedCopy: sealed.encryptedShare,
+        copyIv: sealed.shareIv,
+        copyTag: sealed.shareTag,
+        ephemeralPubkey: sealed.ephemeralPubkey as string,
+        kdfParams: sealed.kdfParams,
+    };
+}
+
+/** Opens a copy's box with the owner's own identity key (PKCS8 or raw seed), for the context its header names. Returns the payload text. */
+export function openNamesCopy(box: NamesCopyBox, privateKey: string | Uint8Array, ctx: NamesCopyContext): string {
+    if (!isNamesCopyBox(box)) throw new NamesListCryptoError('That is not a copy’s box.');
+    const sealed: SealedShare = {
+        encryptedShare: box.sealedCopy, shareIv: box.copyIv, shareTag: box.copyTag, ephemeralPubkey: box.ephemeralPubkey, kdfParams: box.kdfParams,
+    };
+    try {
+        return Buffer.from(openWithMemberKey(sealed, privateKey, copyDomain(ctx))).toString('utf8');
+    } catch (e) {
+        if (e instanceof NamesListCryptoError) throw e;
+        if (e instanceof KeeperCryptoError) throw new NamesListCryptoError(`The names list’s copy did not open: ${e.message}`);
+        throw e;
+    }
+}
+
+/** A copy box's digest: the {@link namesBoxDigest} rule, SHA-256 over its five fields in order, each on its own line. */
+export function namesCopyBoxDigest(box: NamesCopyBox): string {
+    return namesBoxDigest({ sealedRing: box.sealedCopy, ringIv: box.copyIv, ringTag: box.copyTag, ephemeralPubkey: box.ephemeralPubkey, kdfParams: box.kdfParams });
+}
+
+/** Whether `b` has a copy box's shape: base64 fields of the right widths, at most 1 MiB sealed, and `kdfParams` naming {@link NAMES_COPY_ALG}. */
+export function isNamesCopyBox(b: unknown): b is NamesCopyBox {
+    if (!b || typeof b !== 'object') return false;
+    const r = b as Record<string, unknown>;
+    const b64 = (v: unknown, bytes?: number) => typeof v === 'string' && v.length > 0 && B64.test(v)
+        && (bytes === undefined || Buffer.from(v, 'base64').length === bytes);
+    if (typeof r.sealedCopy !== 'string' || r.sealedCopy.length > Math.ceil(NAMES_COPY_MAX_BYTES / 3) * 4 || !b64(r.sealedCopy)) return false;
+    if (!b64(r.copyIv, NONCE_LEN) || !b64(r.copyTag, TAG_LEN) || !b64(r.ephemeralPubkey, KEY_LEN)) return false;
+    if (typeof r.kdfParams !== 'string' || r.kdfParams.length > 200) return false;
+    try {
+        const k = JSON.parse(r.kdfParams) as Record<string, unknown>;
+        return !!k && k.alg === NAMES_COPY_ALG && Object.keys(k).length === 1;
+    } catch {
+        return false;
+    }
+}
+
 // ── Entries ──────────────────────────────────────────────────────────────────────────────────
 
 function entryAad(entryId: string, keyId: string): Uint8Array {

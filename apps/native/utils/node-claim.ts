@@ -117,6 +117,18 @@ export function parseClaimLink(link: unknown): ClaimLink | null {
     };
 }
 
+/**
+ * The route for a link the system hands the app (app/+native-intent.ts), when it is a claim link: `beanpool://claim?…`
+ * or the bare `claim?…` / `/claim?…` path form. Null for every other link.
+ */
+export function claimRouteFromSystemPath(path: unknown): string | null {
+    if (typeof path !== 'string') return null;
+    const m = /^(?:beanpool:\/\/\/?|\/)?claim\/?(\?[^#]*)?(?:#.*)?$/i.exec(path.trim());
+    if (!m) return null;
+    const link = parseClaimLink(`beanpool://claim${m[1] ?? ''}`);
+    return link ? claimRouteFor(link) : null;
+}
+
 /** The in-app route a claim link opens (app/claim-community.tsx), with only the checked fields. */
 export function claimRouteFor(link: ClaimLink): string {
     const q: string[] = [];
@@ -335,3 +347,25 @@ export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
         return null;
     }
 };
+
+/**
+ * The success screen's buttons. Manage opens only the phone's own community (NodeAdminEntry), so a phone anchored
+ * elsewhere is first asked to make this its community. "Set the address" only when the node says it has none.
+ */
+export type ClaimSuccessAction = 'set-address' | 'open-settings' | 'make-mine' | 'not-now';
+
+export function claimSuccessActions(opts: { isAnchor: boolean; hasAddress: boolean | null }): ClaimSuccessAction[] {
+    if (!opts.isAnchor) return ['make-mine', 'not-now'];
+    return [opts.hasAddress === false ? 'set-address' : 'open-settings'];
+}
+
+/**
+ * What a QR scanned on the claim screen fills: a claim link's code (only for this node: a link naming another node fills
+ * nothing), or a bare claim code. Null when the scan holds neither.
+ */
+export function claimCodeFromScan(raw: unknown, origin: string): string | null {
+    if (typeof raw !== 'string') return null;
+    const link = parseClaimLink(raw);
+    if (link) return link.code && (!link.node || link.node === origin) ? link.code : null;
+    return isClaimCode(raw) ? raw.trim().toLowerCase() : null;
+}

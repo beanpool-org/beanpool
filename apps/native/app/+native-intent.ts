@@ -3,6 +3,7 @@ import { DeviceEventEmitter, Platform } from 'react-native';
 import { linkRoutePath, isReturnFromSettings } from '../utils/settings-return';
 import { postIdFromLink } from '../utils/event-extras';
 import { isAuthReturnLink } from '../utils/auth-return';
+import { claimRouteFromSystemPath } from '../utils/node-claim';
 
 /**
  * Intercept incoming native deep links before Expo Router matches routes.
@@ -64,6 +65,11 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
     if (isAuthReturnLink(path)) {
         return initial ? '/' : null;
     }
+
+    // `beanpool://claim?node=…[&id=…][&code=…]` (utils/node-claim.ts): the claim screen, with only the fields that passed
+    // their checks. The screen itself offers the claim only when that node answers that it has no owner.
+    const claimRoute = claimRouteFromSystemPath(path);
+    if (claimRoute) return claimRoute;
 
     // A shared event: `https://<node>/?post=<id>` (apps/native/utils/event-extras.ts). Path "/" is what the
     // app links claim on every node host, so a link a member sends from the event screen opens the event

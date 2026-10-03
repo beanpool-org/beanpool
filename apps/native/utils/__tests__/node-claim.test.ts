@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createHash, createHmac, scryptSync } from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { CLAIM_SCRYPT, claimText, signedRequestBytes } from '@beanpool/core';
@@ -11,7 +12,7 @@ vi.mock('expo-crypto', async () => {
 
 import {
     APP_CLAIM_SCRYPT, buildClaimBody, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, type OwnerCheck,
+    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, type OwnerCheck,
 } from '../node-claim';
 
 // core's fixed vectors (packages/beanpool-core/src/__tests__/claim-proof.test.ts), made with Node's crypto.
@@ -43,7 +44,7 @@ describe('the scrypt is the app\'s own, and the server\'s', () => {
     });
 
     it('the server derives K with core\'s CLAIM_SCRYPT, not parameters of its own', () => {
-        const src = readFileSync(new URL('../../../server/src/claim-code.ts', import.meta.url), 'utf8');
+        const src = readFileSync(fileURLToPath(new URL('../../../server/src/claim-code.ts', import.meta.url).href), 'utf8');
         expect(src).toMatch(/import \{[^}]*\bCLAIM_SCRYPT\b[^}]*\} from '@beanpool\/core'/);
         expect(src).toMatch(/const \{ N, r, p, dkLen \} = CLAIM_SCRYPT;/);
         // and that is the key the server stores, byte for byte
@@ -293,5 +294,34 @@ describe('the owner check after a lost answer', () => {
             expect(me).toBeTruthy();
             spy.mockRestore();
         }
+    });
+});
+
+describe('the success buttons and the scan', () => {
+    it('Set the address only for this phone\'s community with no address; Make it mine for another', () => {
+        expect(claimSuccessActions({ isAnchor: true, hasAddress: false })).toEqual(['set-address']);
+        expect(claimSuccessActions({ isAnchor: true, hasAddress: true })).toEqual(['open-settings']);
+        expect(claimSuccessActions({ isAnchor: true, hasAddress: null })).toEqual(['open-settings']);
+        expect(claimSuccessActions({ isAnchor: false, hasAddress: false })).toEqual(['make-mine', 'not-now']);
+    });
+
+    it('a scan fills the code from this node\'s link or a bare code, never from another node\'s link', () => {
+        expect(claimCodeFromScan(`beanpool://claim?node=${ORIGIN}&code=${CODE}`, ORIGIN)).toBe(CODE);
+        expect(claimCodeFromScan(`beanpool://claim?code=${CODE}`, ORIGIN)).toBe(CODE);
+        expect(claimCodeFromScan(`beanpool://claim?node=https://other.example&code=${CODE}`, ORIGIN)).toBeNull();
+        expect(claimCodeFromScan(` ${CODE.toUpperCase()} `, ORIGIN)).toBe(CODE);
+        expect(claimCodeFromScan('https://evil.example', ORIGIN)).toBeNull();
+    });
+});
+
+describe('the system hands the app a claim link', () => {
+    it('beanpool://claim, claim? and /claim? open the claim screen; nothing else does', () => {
+        expect(claimRouteFromSystemPath(`beanpool://claim?node=https%3A%2F%2Fa.example&id=${CODE_ID}`)).toBe(`/claim-community?node=https%3A%2F%2Fa.example&id=${CODE_ID}`);
+        expect(claimRouteFromSystemPath('/claim?node=https://a.example')).toBe('/claim-community?node=https%3A%2F%2Fa.example');
+        expect(claimRouteFromSystemPath('claim')).toBe('/claim-community');
+        expect(claimRouteFromSystemPath('/claims')).toBeNull();
+        expect(claimRouteFromSystemPath('/post/claim')).toBeNull();
+        expect(claimRouteFromSystemPath('https://a.example/claim?node=x')).toBeNull();
+        expect(claimRouteFromSystemPath('beanpool://claim?node=javascript%3Aalert(1)')).toBe('/claim-community?refused=1');
     });
 });

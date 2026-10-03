@@ -17,6 +17,7 @@ import {
     updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
+import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
@@ -1248,6 +1249,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         </div>
                                     )}
                                 </div>
+
+                                <RecoveryKitButton words={seedWords} />
 
                                 <button
                                     onClick={handleCopySeed}

@@ -57,9 +57,10 @@ export interface LocalConfig {
     // to read-only replication only — distinct from the all-powerful admin password,
     // and independently rotatable). Never store the plaintext.
     // --- Claim code (claim-code.ts) ---
-    // A node with no owner writes a one-time claim code to data/claim-code.txt; only its scrypt hash, its short public id
-    // and when it was made are kept here. `claimedBy`/`claimedAt` once a phone key claimed the node with it.
-    claim?: { hash: string; id: string; createdAt: number; claimedBy?: string | null; claimedAt?: number | null } | null;
+    // A node with no owner writes a one-time claim code to data/claim-code.txt; only K = scrypt(sha256(code), salt) (hex,
+    // a secret: it checks a claim's proof), the public salt, the code's short public id and when it was made are kept
+    // here. `claimedBy`/`claimedAt` once a phone key claimed the node with it; the burn deletes `key` and `salt`.
+    claim?: { key?: string; salt?: string; id: string; createdAt: number; claimedBy?: string | null; claimedAt?: number | null } | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;

@@ -29,4 +29,4 @@ Branch fix/connectors-admin-only, from main 19d43592. Lane started 10:40 AEDT 20
   test-gateway-real-client, test-2fa-covers-admin-routes, test-guest-view: all pass. tsc server 0. eslint: 0 errors in changed TS;
   the static/.mjs no-undef errors are older lines (globals not configured), none on changed lines.
 - test-guest-view needed no edit: both routes are already in EVERY_ROUTE and its sweep checks leaks, not auth.
-- PR: (being opened)
+- PR: https://github.com/beanpool-org/beanpool/pull/1570 (opened; lane stopped here)

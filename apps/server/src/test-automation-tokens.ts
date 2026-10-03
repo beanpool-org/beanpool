@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationToken } from './automation-tokens.js';
 import { TOKEN_NEEDS_KEY_CODE } from './routes/automation-tokens.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
+import { signedRequestText, signedRequestBytes, SIGNED_FOR_HEADER } from '@beanpool/core';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -389,6 +390,60 @@ async function main(): Promise<void> {
         assert(after.status === 401, `the revoked token is refused at once (${after.status})`);
         const revByToken = await call('POST', `/api/local/admin/automation-tokens/${tAdmin.body.record.id}/revoke`, { headers: bearer(ADMIN), body: {} });
         assert(revByToken.status === 403, 'a token cannot revoke one');
+
+        // ── 4b. Sign out everywhere: who can end whose sessions ──────────────────────────────────
+        // Anyone ends only their own sessions; an owner (a key session, or the password, which is owner level) may end
+        // an admin's. A token has no sessions of its own, so it ends nobody's: refused as every sign-in route refuses it.
+        console.log('── 4b. Sign out everywhere: who can end whose sessions ──');
+        const REVOKE_ALL = '/api/local/admin/auth/revoke-all';
+        const alive = async (s: Reply) => (await call('GET', '/api/local/admin/auth/session', { headers: asSession(s.sessionId) })).body?.authenticated === true;
+        const signedRevokeAll = (k: Key, body: unknown = {}) => {
+            const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
+            const text = signedRequestText({ host: 'localhost', method: 'POST', path: REVOKE_ALL, timestamp: ts, nonce, body: JSON.stringify(body) });
+            const sig = crypto.sign(null, signedRequestBytes(text), k.priv).toString('base64');
+            return call('POST', REVOKE_ALL, { headers: { 'X-Public-Key': k.pub, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce, [SIGNED_FOR_HEADER]: 'localhost' }, body });
+        };
+        resetAdminAuthTarpit();
+        resetAdminRateLimit();
+        const o1 = await keySignIn(owner), a1 = await keySignIn(admin);
+        assert(o1.status === 200 && a1.status === 200, 'the owner and the admin each sign in');
+        const tRead2 = await make(asSession(o1.sessionId), { name: 'read again', scope: 'read' });
+        assert(tRead2.status === 201, 'a read token is made');
+        const READ2: string = tRead2.body.token;
+        secrets.push(READ2);
+        for (const [t, scope] of [[READ2, 'read'], [BACKUPS, 'backups'], [ADMIN, 'admin']] as const) {
+            for (const body of [{}, { memberPubkey: owner.pub }, { memberPubkey: admin.pub }]) {
+                const r = await call('POST', REVOKE_ALL, { headers: bearer(t), body });
+                assert(r.status === 403 && r.body?.code === TOKEN_REFUSED_CODE, `a ${scope} token is refused like every sign-in route (${JSON.stringify(body)}: ${show(r)})`);
+            }
+        }
+        assert(await alive(o1) && await alive(a1), "after them, the owner's and the admin's sessions still work");
+
+        const adminOnOwner = await call('POST', REVOKE_ALL, { headers: asSession(a1.sessionId), body: { memberPubkey: owner.pub } });
+        assert(adminOnOwner.status === 403 && await alive(o1), `an admin cannot sign the owner out (${show(adminOnOwner)})`);
+        const pwNobody = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: {} });
+        assert(pwNobody.status === 400 && await alive(o1), `the password naming nobody signs nobody out (${show(pwNobody)})`);
+        const ownerOnAdmin = await call('POST', REVOKE_ALL, { headers: asSession(o1.sessionId), body: { memberPubkey: admin.pub } });
+        assert(ownerOnAdmin.status === 200 && ownerOnAdmin.body?.breakGlassCodeRetired === false, `an owner signs the admin out (${show(ownerOnAdmin)})`);
+        assert(!(await alive(a1)) && await alive(o1), "the admin's session ended, the owner's did not");
+
+        const a2 = await keySignIn(admin);
+        const adminSelf = await call('POST', REVOKE_ALL, { headers: asSession(a2.sessionId), body: {} });
+        assert(adminSelf.status === 200 && adminSelf.body?.memberPubkey === admin.pub && !(await alive(a2)) && await alive(o1),
+            `an admin signs themselves out, and only themselves (${show(adminSelf)})`);
+        const a3 = await keySignIn(admin);
+        const pwOnAdmin = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: { memberPubkey: admin.pub } });
+        assert(pwOnAdmin.status === 200 && !(await alive(a3)) && await alive(o1), `the password, naming the admin, signs the admin out (${show(pwOnAdmin)})`);
+
+        const a4 = await keySignIn(admin);
+        const appOwnerNamingAdmin = await signedRevokeAll(owner, { memberPubkey: admin.pub });
+        assert(appOwnerNamingAdmin.status === 200 && appOwnerNamingAdmin.body?.memberPubkey === owner.pub, `the app's signed request ends the signer's sessions, whoever the body names (${show(appOwnerNamingAdmin)})`);
+        assert(!(await alive(o1)) && await alive(a4), "the owner's session ended; the admin's did not");
+        const appAdmin = await signedRevokeAll(admin);
+        assert(appAdmin.status === 200 && appAdmin.body?.memberPubkey === admin.pub && !(await alive(a4)), `an admin's app signs the admin out (${show(appAdmin)})`);
+        const o2 = await keySignIn(owner);
+        const ownerSelf = await call('POST', REVOKE_ALL, { headers: asSession(o2.sessionId), body: {} });
+        assert(ownerSelf.status === 200 && ownerSelf.body?.memberPubkey === owner.pub && !(await alive(o2)), `an owner's key session signs the owner out (${show(ownerSelf)})`);
 
         // ── 5. Never the secret in a log, a backup or the config ──────────────────────────────────
         console.log('── 5. The secret is in no log, and only its hash is kept ──');

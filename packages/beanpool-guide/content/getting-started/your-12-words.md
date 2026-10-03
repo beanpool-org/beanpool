@@ -24,6 +24,14 @@ Your account is not a password kept by someone else. It is a key kept on your ph
 - In the web app, the copy clears after a minute if you stay on that screen. On an iPhone or iPad, in Safari or in Firefox, the browser lets the app clear it only when you tap or press a key, so it clears at your first tap or key press after the minute. If you leave that screen or switch to another app or tab first, the app can't tell whether you copied something else, so it leaves your clipboard alone: copy something else over the words.
 - If your phone has no screen lock, anyone holding it can open your 12 words, and the app says so under them. A PIN, pattern, password, fingerprint or face lock, set in your phone's settings, keeps them safer.
 
+## Your recovery kit
+
+The recovery kit is one printable page: your 12 words in order, your community's name and address, the date you made it, and the steps to get back in on a phone and in a web browser. It does not say whose account it is. It is optional: you can carry on without it.
+
+- **On the phone**: next to your 12 words (on Safety Backup when you join, and in Settings), tap **Print your recovery kit** to print it, or **Save as PDF** to make a PDF and choose where it goes. Before saving, the app warns: "Keep this file off cloud backups and chats. Anyone who has it can sign in as you." The phone deletes its own copy of the PDF afterwards.
+- **In the web app**: next to your 12 words (when you join, and in Settings under **View Recovery Phrase**), click **Print or save your recovery kit**. The app warns: "Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you." Click **Continue** for your browser's print dialog. To keep a PDF instead of paper, choose **Save as PDF** there.
+- Keep the page as you would the words: anyone who has it can sign in as you.
+
 ## Where to see them again
 
 Open **Settings** with the sliders button at the top of the screen. Then either:

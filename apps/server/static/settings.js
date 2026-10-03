@@ -52,6 +52,38 @@
             el.className = `status-msg show ${type}`;
         }
 
+        // Sign-in step 7c: with the node's two-factor sign-in off, the admin password opens no admin route (403
+        // password_needs_2fa). This page signs in with the password, so there it can't work: it says so on the sign-in
+        // view, in the node's words and with the way out, instead of an empty Settings view.
+        function showPasswordNeeds2fa(serverWords) {
+            logout();
+            const el = document.getElementById('login-status');
+            const words = String(serverWords || 'This node needs two-factor sign-in before the admin password opens Settings').trim();
+            const link = document.createElement('a');
+            link.href = '/settings';
+            link.textContent = 'Settings';
+            el.replaceChildren(`${words}${/[.!?]$/.test(words) ? '' : '.'} Open `, link, ' (the new page) to turn it on, then come back.');
+            el.className = 'status-msg show error';
+        }
+        /** True, with the message shown, when an admin call was refused because the password needs two-factor sign-in. */
+        async function refusedForNeeds2fa(res) {
+            if (res.status !== 403) return false;
+            const body = await res.clone().json().catch(() => null);
+            if (!body || body.code !== 'password_needs_2fa') return false;
+            showPasswordNeeds2fa(body.error);
+            return true;
+        }
+        // Any pane: an admin call refused that way while signed in brings the sign-in view back with the message.
+        // Only this node's own answers count: the page also asks sister nodes for their status, and a sister's 403 must
+        // neither sign the operator out nor put its words on this node's sign-in view (#1564 deciding review).
+        const pageFetch = window.fetch.bind(window);
+        const fromThisNode = (res) => { try { return new URL(res.url, location.href).origin === location.origin; } catch { return false; } };
+        window.fetch = async (...args) => {
+            const res = await pageFetch(...args);
+            if (authToken && fromThisNode(res)) await refusedForNeeds2fa(res);
+            return res;
+        };
+
         function showView(name) {
             document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
             document.getElementById('view-settings').classList.toggle('hidden', name !== 'settings');
@@ -398,7 +430,7 @@
                         if (info.location && info.location.lat && info.location.lng) {
                             const marker = L.marker([info.location.lat, info.location.lng], { icon: sisterIcon })
                                 .addTo(settingsMap)
-                                .bindPopup(`<div style="text-align:center;"><b>${info.callsign || c.callsign || 'Sister Node'}</b><br><a href="${c.publicUrl}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
+                                .bindPopup(`<div style="text-align:center;"><b>${esc(info.callsign || c.callsign || 'Sister Node')}</b><br><a href="${esc(c.publicUrl)}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
                             sisterMarkers.push(marker);
                         }
                     }
@@ -512,13 +544,23 @@
                 if (loginData.tfaSessionToken) {
                     tfaSessionToken = loginData.tfaSessionToken;
                 }
-                initLogsWs();
-                let dashboardData = null;
+                // /dashboard itself checks no admin credential, so an admin route is asked first: on a node where the
+                // password needs two-factor sign-in it is refused, and Settings never opens empty.
+                const gateRes = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
+                if (await refusedForNeeds2fa(gateRes)) return;
                 const dashRes = await fetch(`${API}/dashboard`, { headers: adminHeaders() });
-                if (dashRes.ok) {
-                    dashboardData = await dashRes.json();
-                    hydrateSettings(dashboardData);
+                if (!dashRes.ok) {
+                    // Never the Settings view after a failed load: an empty view tells the operator nothing.
+                    if (!(await refusedForNeeds2fa(dashRes))) {
+                        const err = await dashRes.json().catch(() => ({}));
+                        logout();
+                        showStatus('login-status', err.error || `Settings could not load (HTTP ${dashRes.status})`, 'error');
+                    }
+                    return;
                 }
+                const dashboardData = await dashRes.json();
+                hydrateSettings(dashboardData);
+                initLogsWs();
                 showView('settings');
                 loadVersionInfo();
                 loadHealthDashboard();

@@ -287,6 +287,10 @@ run_check "migration_steps" bash scripts/check-migrations-unchanged.sh
 # the repository's workflows and each edit the check exists to catch. Instant.
 run_check "workflows" node --test scripts/check-workflows.test.mjs
 
+# setup-backup.mjs against a stand-in primary on localhost: a password refused for needing two-factor sign-in (step 7c)
+# prints the primary's words and the way out. Instant.
+run_check "setup_backup" node --test scripts/setup-backup.test.mjs
+
 # Security / Secrets Guard
 run_check "secrets_guard" bash -c '
   # Check 1: Stripe / payment tokens

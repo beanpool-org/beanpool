@@ -580,7 +580,7 @@ async function main(): Promise<void> {
     const oscar = newId('Oscar');
     const oscarInvite = await generate(owen);
     require_(oscarInvite.status === 200 && (await redeem(oscar, oscarInvite.body?.invite?.code)).status === 200, '9. Oscar joins');
-    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: oscar.pk, role: 'admin' }, PASSWORD())).status === 200, "9. the owner password makes Oscar an admin: the server's word alone");
+    require_((await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: oscar.pk, role: 'admin' }, PASSWORD())).status === 200, "9. the owner password with a 2FA code makes Oscar an admin: the server's word alone");
     const oscarP = new Phone(oscar);
     const oscarGen = makeNamesGeneration({ communityId: COMMUNITY, n: 4, parentId: k3, drops: [owen.pk, adaNew.pk] }, oscarP.signer);
     const oscarMakes = await postGen(oscar, oscarGen);
@@ -605,7 +605,7 @@ async function main(): Promise<void> {
     const issued = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/issue-code`, {}, PASSWORD());
     const moved = await call(null, 'POST', `/api/local/admin/members/${adaNew.pk}/rekey/complete`, { code: issued.body?.code, newPubkey: op.pk }, PASSWORD());
     require_(issued.status === 200 && issued.body?.operator === 'owner:password' && moved.status === 200,
-        `9. A3 the owner password alone re-keys Ada's account to a key the operator holds (${show(issued)} | ${show(moved)})`);
+        `9. A3 the owner password with a 2FA code, and no key, re-keys Ada's account to a key the operator holds (${show(issued)} | ${show(moved)})`);
     const o9b = await owenP.open();
     const k4 = owenP.head();
     assert(o9b.made?.status === 201 && readNamesGeneration(o9b.state.generations.find((g: any) => g.id === k4), COMMUNITY)?.drops.join() === adaNew.pk,

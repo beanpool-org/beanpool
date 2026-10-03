@@ -104,10 +104,10 @@ async function runCase(step: string, baseDir: string, root: string, code: string
     const outputs: string[] = [];
     let node: NodeProc | null = await spawnNode(SCRIPT, dir, env);
     try {
-        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': PW_STANDBY });
+        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         if (opened.status !== 200) throw new Error(`[${step}] open answered ${opened.status}: ${JSON.stringify(opened.body)}`);
         // For a step before the restart the process dies inside this request, so there may be no answer.
-        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         await node.exited;
         outputs.push(node.output());
         node = null;

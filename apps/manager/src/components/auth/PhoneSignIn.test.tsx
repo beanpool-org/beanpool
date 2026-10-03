@@ -18,7 +18,8 @@ function json(status: number, body: unknown): Response {
  * A fake node: each POST /pairing hands out the next id; each /wait answers from the script for that id.
  * A script entry that is `'hang'` never answers (a long-poll still waiting) until the request is aborted.
  */
-function fakeNode(scripts: Record<string, Array<unknown | 'hang'>>, ids = [ID1, ID2, 'c'.repeat(64), 'd'.repeat(64), 'e'.repeat(64), 'f'.repeat(64)]) {
+function fakeNode(scripts: Record<string, Array<unknown | 'hang'>>, ids = [ID1, ID2, 'c'.repeat(64), 'd'.repeat(64), 'e'.repeat(64), 'f'.repeat(64)], confirms: Array<{ status?: number; body: unknown }> = []) {
+    const typed: unknown[] = [];
     const calls: string[] = [];
     let next = 0;
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -26,6 +27,11 @@ function fakeNode(scripts: Record<string, Array<unknown | 'hang'>>, ids = [ID1, 
         if (url === '/api/local/admin/auth/pairing') {
             const id = ids[next++];
             return json(200, { pairingId: id, shortCode: CODES[(next - 1) % CODES.length], expiresAt: Date.now() + 120_000, ttlMs: 120_000 });
+        }
+        if (/pairing\/[0-9a-f]{64}\/confirm$/.test(url)) {
+            typed.push(JSON.parse(String(init?.body || '{}')).code);
+            const c = confirms.shift() || { status: 410, body: { status: 'expired' } };
+            return json(c.status ?? 200, c.body);
         }
         const m = url.match(/pairing\/([0-9a-f]{64})\/wait$/);
         if (m) {
@@ -42,7 +48,7 @@ function fakeNode(scripts: Record<string, Array<unknown | 'hang'>>, ids = [ID1, 
         return json(404, {});
     });
     vi.stubGlobal('fetch', fetchMock);
-    return { fetchMock, calls };
+    return { fetchMock, calls, typed };
 }
 
 describe('PhoneSignIn — the QR card', () => {
@@ -207,5 +213,50 @@ describe('phone-signin helpers', () => {
     it('accepts a moderator (their Settings is Reports only)', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json(200, { status: 'signed-in', role: 'moderator', memberPubkey: 'x', csrfToken: 'y' })));
         expect(await waitForPhone(ID1)).toEqual({ kind: 'signed-in', session: { memberPubkey: 'x', role: 'moderator' }, csrfToken: 'y' });
+    });
+
+    it('asks for the two digits the phone shows, and signs in only when they are right', async () => {
+        const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
+            { status: 400, body: { status: 'wrong', triesLeft: 2 } },
+            { body: { status: 'signed-in', memberPubkey: 'f'.repeat(64), role: 'owner', csrfToken: 'csrf-1' } },
+        ]);
+        const onSignedIn = vi.fn();
+        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
+        expect(screen.queryByTestId('phone-signin-qr')).toBeNull();
+        fireEvent.change(box, { target: { value: '12' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(/not the digits on your phone.*2 tries left/i);
+        expect(onSignedIn).not.toHaveBeenCalled();
+        fireEvent.change(box, { target: { value: '47' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
+        await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith({ memberPubkey: 'f'.repeat(64), role: 'owner' }, 'csrf-1'));
+        expect(typed).toEqual(['12', '47']);
+    });
+
+    it("ends the box honestly when the 30 seconds run out, rather than sitting at 0:00 (4171995318)", async () => {
+        const { typed } = fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 1 } }] });
+        const onSignedIn = vi.fn();
+        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        await screen.findByLabelText(/Type the two digits your phone shows/i);
+        await waitFor(() => expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull(), { timeout: 3_000 });
+        expect(screen.getByText(PHONE_SIGNIN_MESSAGES.confirmLate)).toBeTruthy();
+        expect(screen.queryByText(/0:00 left/)).toBeNull();
+        expect(onSignedIn).not.toHaveBeenCalled();
+        expect(typed).toEqual([]);
+    });
+
+    it('three wrong digits, or too late, end the sign-in with no session', async () => {
+        fakeNode({ [ID1]: [{ body: { status: 'confirm', confirmInSeconds: 30 } }] }, undefined, [
+            { status: 410, body: { status: 'refused' } },
+        ]);
+        const onSignedIn = vi.fn();
+        render(<PhoneSignIn onSignedIn={onSignedIn} onUsePassword={vi.fn()} />);
+        const box = await screen.findByLabelText(/Type the two digits your phone shows/i);
+        fireEvent.change(box, { target: { value: '99' } });
+        fireEvent.click(screen.getByRole('button', { name: /^Confirm$/ }));
+        expect(await screen.findByRole('alert')).toHaveTextContent(PHONE_SIGNIN_MESSAGES.refused);
+        expect(onSignedIn).not.toHaveBeenCalled();
+        expect(screen.queryByLabelText(/Type the two digits/i)).toBeNull();
     });
 });

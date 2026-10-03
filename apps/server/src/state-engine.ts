@@ -6471,12 +6471,25 @@ function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id
     return report.target_pubkey || null;
 }
 
+/**
+ * Whether actioning this report with suspendUser takes an owner's or admin's role away: actionReport deletes the
+ * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts), so actionReport
+ * refuses it to anyone else. The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    if (!report) return false;
+    const subject = reportSubjectOf(report);
+    return !!subject && !isClosedAccountKey(subject) && !!heldPrivilegedRole(subject);
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
     suspendUser: boolean = false,
     removePulseItem: boolean = false,
-    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null },
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
@@ -6491,6 +6504,16 @@ export function actionReport(
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
+        // Suspending takes the subject's node role away (below), and only an owner may take away an owner's or admin's
+        // role (node-roles; adminEmergencySuspend refuses an owner target the same way). Refused, 403, before any write,
+        // so the report stays as it was; actioning it without suspendUser is untouched. `actor` is the authenticated
+        // admin actor (routes/admin.ts resolveAdminActor), a pubkey or 'owner:password'; none given counts as no owner.
+        const subjectToSuspend = suspendUser ? reportSubjectOf(report) : null;
+        if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && heldPrivilegedRole(subjectToSuspend) && !isOwnerLevelActor(opts?.actor)) {
+            const err: any = new Error('Only an owner can suspend an owner or admin');
+            err.status = 403;
+            throw err;
+        }
         const wasOpen = report.status === 'pending' || report.status == null;
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -7357,6 +7380,15 @@ export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null 
 }
 
 /**
+ * Whether pruning this member by this actor is a change only an owner may make (assertMayPrune's condition, whoever is
+ * acting): they hold or have held aside an owner or admin role, and it is neither their own leaving nor a community
+ * Decision. The admin routes ask the phone's step-up on exactly this (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function pruneNeedsOwner(publicKey: string, actor: string): boolean {
+    return !!heldPrivilegedRole(publicKey) && actor !== publicKey && actor !== COMMUNITY_DECISION_ACTOR;
+}
+
+/**
  * node_roles: only an owner may grant (so only an owner may take away) an owner or admin role, and pruning
  * takes it away for good. A plain admin gets a 403. Leaving yourself and a community Decision are allowed.
  */
@@ -7746,9 +7778,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     return { ok: true, message: 'Account successfully purged from node.' };
 }
 
-export function adminPruneBranch(rootPublicKey: string, actor: string) {
-    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
-    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+/** The member and everyone in their invite subtree: what adminPruneBranch prunes. */
+export function inviteBranchOf(rootPublicKey: string): string[] {
     const branch: string[] = [];
     const seen = new Set<string>();
     function walk(pubkey: string) {
@@ -7759,6 +7790,13 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
         children.forEach(c => walk(c.public_key));
     }
     walk(rootPublicKey);
+    return branch;
+}
+
+export function adminPruneBranch(rootPublicKey: string, actor: string) {
+    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
+    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+    const branch = inviteBranchOf(rootPublicKey);
     for (const pubkey of branch) assertMayPrune(pubkey, actor);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.

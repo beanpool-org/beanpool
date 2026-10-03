@@ -5,9 +5,10 @@
  *    §2.2). On main it was a second owner password on every admin route while break-glass mode was off (the default):
  *    node-roles read and granted with it. Now any other route answers it as a wrong password, braked as one. The code is
  *    stored as salted scrypt; an old unsalted SHA-256 row is rewritten at boot, or on its code's next use.
- * 2. MEDIUM 2. The 2FA code at key sign-in is braked, per key and per address, on the Manage link (verify-challenge)
- *    and the QR pairing alike, and a challenge is burned after 5 wrong codes. On main 200 wrong codes on one challenge
- *    were answered in 401 ms and the right one then worked.
+ * 2. MEDIUM 2 was a brake on the 2FA code at key sign-in. Since decision D2 (2026-10-03) a key sign-in is not asked
+ *    for the code at all (the phone's unlock is the key's second factor), so there is nothing to brake: with 2FA on, an
+ *    owner's, an admin's and a moderator's key sign in with no code, a stray code is not looked at, a signature by
+ *    another key opens nothing, and the password alone is still asked for the code.
  * 3. LOW 4. An invite redeem, or an offline-ticket redeem, must be signed by the key it registers. On main anyone
  *    holding a code registered any key, unsigned, under a name of their choosing. A real join (old app or new) still
  *    works.
@@ -48,7 +49,6 @@ const viaTunnel = (ip: string) => ({ 'cf-connecting-ip': ip, 'x-forwarded-for': 
 let ipSeq = 10;
 const freshIp = () => `198.51.100.${ipSeq++}`;
 let BASE = '';
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Reply { status: number; headers: Headers; json: any; text: string }
 async function req(path: string, opts: { method?: string; headers?: Record<string, string>; body?: unknown; raw?: string } = {}): Promise<Reply> {
@@ -205,7 +205,9 @@ async function keySession(k: Key, ip: string, totpCode?: string): Promise<string
 }
 
 async function part2KeySignin2fa(owner: Key): Promise<void> {
-    console.log('\n— 2. the 2FA code at key sign-in is braked, per key and per address —');
+    // Decision D2 (2026-10-03): the node's 2FA code is the password's second factor; a key's is the phone's own unlock.
+    // So a key sign-in is not asked for the code and there is no code to guess or brake; the password still is.
+    console.log('\n— 2. with 2FA on, a key sign-in asks for no code; the password still does —');
     resetAdminAuthTarpit();
     const secret = generateTotpSecret();
     updateLocalConfig({ totpEnabled: true, totpSecret: secret, totpBackupCodesHashes: [] } as any);
@@ -218,49 +220,49 @@ async function part2KeySignin2fa(owner: Key): Promise<void> {
     };
     const X = freshIp();
 
-    // One challenge, five wrong codes: each is checked and refused, and then the challenge is burned.
-    const c1 = (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(X) })).json;
-    const five: number[] = [];
-    for (let i = 0; i < 5; i++) five.push((await signIn(owner, X, wrong(), c1)).status);
-    assert(five.every((s) => s === 401), `five wrong codes on one challenge are each refused (${five.join(',')})`);
-    const onBurned = await signIn(owner, X, right(), c1);
-    assert(onBurned.status !== 200 && !onBurned.json?.handshakeToken, `the right code on that challenge is refused: it is burned (${show(onBurned)})`);
-
-    // A new challenge: the key has had five, so one more wrong code is checked, then the key and the address wait.
-    const sixth = await signIn(owner, X, wrong());
-    assert(sixth.status === 401 && sixth.json?.totpRequired === true, `a ${SOURCE_FREE_FAILURES + 1}th wrong code on a new challenge is checked (${show(sixth)})`);
-    const braked = await signIn(owner, X, right());
-    assert(braked.status === 429 && Number(braked.headers.get('retry-after')) >= 1 && !braked.json?.handshakeToken && !braked.json?.totpRequired,
-        `then even the right code is not checked: 429 with Retry-After (${show(braked)}, Retry-After ${braked.headers.get('retry-after')})`);
-    const Y = freshIp();
-    const otherAddress = await signIn(owner, Y, right());
-    assert(otherAddress.status === 429, `per key: from another address the key waits too (${show(otherAddress)})`);
+    const plain = await signIn(owner, X);
+    assert(plain.status === 200 && typeof plain.json?.handshakeToken === 'string' && plain.json?.totpRequired === undefined,
+        `an owner's key signs in with no code (${show(plain)})`);
+    // An older app that still sends a code, even a wrong one, many times over: the code is not looked at, nothing is held.
+    const many: number[] = [];
+    for (let i = 0; i < 8; i++) many.push((await signIn(owner, X, wrong())).status);
+    assert(many.every((s) => s === 200), `eight sign-ins carrying a wrong code all sign in: no code is checked, no brake (${many.join(',')})`);
 
     const bob = member('BobAdmin2fa');
     grantNodeRole(bob.pub, 'admin', owner.pub);
-    const bobAtX = await signIn(bob, X, right());
-    assert(bobAtX.status === 429, `per address: another admin's key from that address waits too (${show(bobAtX)})`);
-    const bobElsewhere = await signIn(bob, freshIp(), right());
-    assert(bobElsewhere.status === 200 && typeof bobElsewhere.json?.handshakeToken === 'string', `and from anywhere else it signs in (${show(bobElsewhere)})`);
+    const bobIn = await signIn(bob, X);
+    assert(bobIn.status === 200 && typeof bobIn.json?.handshakeToken === 'string', `an admin's key signs in with no code (${show(bobIn)})`);
+    const mo = member('MoModerator2fa');
+    grantNodeRole(mo.pub, 'moderator', owner.pub);
+    const moSession = await keySession(mo, freshIp());
+    assert(!!moSession, 'a moderator\'s key opens a session with no code');
 
-    // The QR pairing shares the brake: a held key is held there too, and no code is looked at.
-    const pairingAt = freshIp();
-    const pairing = (await req('/api/local/admin/auth/pairing', { method: 'POST', headers: viaTunnel(pairingAt), body: {} })).json;
-    const approve = (k: Key, totpCode: string) => req(`/api/local/admin/auth/pairing/${pairing.pairingId}/approve`, {
-        method: 'POST', headers: viaTunnel(freshIp()),
-        body: { memberPubkey: k.pub, signature: signText(k, pairingMessage('approve', pairing.pairingId, pairing.shortCode)), totpCode },
+    // Without the key, nothing: a signature by another key under the owner's name is refused, and is not asked for a code.
+    const c = (await req('/api/local/admin/auth/challenge', { method: 'POST', headers: viaTunnel(X) })).json;
+    const forged = await req('/api/local/admin/auth/verify-challenge', {
+        method: 'POST', headers: viaTunnel(X),
+        body: { challengeId: c.challengeId, memberPubkey: owner.pub, signature: signText(bob, c.challenge) },
     });
-    const qrBraked = await approve(owner, right());
-    assert(qrBraked.status === 429 && qrBraked.json?.reason === 'totp-braked', `the QR sign-in holds the key too (${show(qrBraked)})`);
+    assert(forged.status !== 200 && !forged.json?.handshakeToken && forged.json?.totpRequired === undefined,
+        `a signature by another key opens nothing (${show(forged)})`);
 
-    // After the wait, the right code signs in, and clears the key's count.
-    await sleep(2_100);
-    const after = await signIn(owner, freshIp(), right());
-    assert(after.status === 200 && typeof after.json?.handshakeToken === 'string', `after the wait the right code signs in (${show(after)})`);
-    const freshWrong = await signIn(owner, freshIp(), wrong());
-    assert(freshWrong.status === 401 && freshWrong.json?.totpRequired === true, `and the key's count starts again: a wrong code is checked, not held (${show(freshWrong)})`);
-    const qrOk = await approve(owner, right());
-    assert(qrOk.status === 200, `the pairing the brake held was not charged a refusal, and is approved now (${show(qrOk)})`);
+    // The QR pairing: the same.
+    const pairing = (await req('/api/local/admin/auth/pairing', { method: 'POST', headers: viaTunnel(freshIp()), body: {} })).json;
+    const qr = await req(`/api/local/admin/auth/pairing/${pairing.pairingId}/approve`, {
+        method: 'POST', headers: viaTunnel(freshIp()),
+        body: { memberPubkey: owner.pub, signature: signText(owner, pairingMessage('approve', pairing.pairingId, pairing.shortCode)) },
+    });
+    assert(qr.status === 200, `the QR sign-in approves with no code (${show(qr)})`);
+
+    // The password path is exactly as before: the password alone opens nothing, the password and a code do.
+    resetAdminAuthTarpit();
+    const pwOnly = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW } });
+    assert(pwOnly.status === 401 && pwOnly.json?.totpRequired === true && !(pwOnly.headers.get('set-cookie') || '').includes('admin_session='),
+        `the password alone is still asked for the code (${show(pwOnly)})`);
+    const pwWrong = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW, totpCode: wrong() } });
+    assert(pwWrong.status === 401 && !(pwWrong.headers.get('set-cookie') || '').includes('admin_session='), `the password and a wrong code open nothing (${show(pwWrong)})`);
+    const pwRight = await req('/api/local/admin/auth/password', { method: 'POST', headers: viaTunnel(freshIp()), body: { password: PW, totpCode: right() } });
+    assert(pwRight.status === 200 && (pwRight.headers.get('set-cookie') || '').includes('admin_session='), `the password and the right code sign in (${show(pwRight)})`);
 
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
     resetAdminAuthTarpit();

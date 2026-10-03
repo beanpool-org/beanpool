@@ -1,11 +1,10 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
-import { resetKeySigninBrake } from './key-signin-brake.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 
@@ -55,6 +54,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                 ctx.state.auth_signer = sessionRes.session.memberPubkey;
                 ctx.state.adminRole = sessionRes.session.role;
                 ctx.state.isKeySession = true;
+                // A phone hand-off whose unlock is older than PHONE_STEP_UP_WINDOW_MS: owner-only changes wait for
+                // Manage again (requirePhoneStepUp).
+                ctx.state.phoneStepUpDue = phoneStepUpDue(sessionRes.session);
             }
 
             // A moderator's session reaches the moderator routes and nothing else (MODERATOR_ROUTES, below).
@@ -396,9 +398,47 @@ export function isModeratorRoute(ctx: any): boolean {
  */
 export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error: string): boolean {
     const role = ctx.state?.adminRole;
-    if (allowed.includes(role)) return true;
+    if (allowed.includes(role)) {
+        // An owner-only change from the phone's Manage hand-off asks for the phone's unlock again (requirePhoneStepUp).
+        // Reads are not asked: Settings must keep showing what it shows.
+        if (!allowed.includes('admin') && !isReadRequest(ctx) && !requirePhoneStepUp(ctx)) return false;
+        return true;
+    }
     ctx.status = 403;
     ctx.body = { error };
+    return false;
+}
+
+/**
+ * Owner-only reads that Settings sends as POST (the body says which store, or nothing): they change nothing, so the
+ * step-up does not ask for them. Named one by one; every other POST is a change.
+ */
+const READ_ONLY_POSTS: readonly string[] = [
+    '/api/local/admin/offbox-backups/status',
+    '/api/local/admin/offbox-backups/list',
+    '/api/local/admin/standby-health',
+];
+
+function requestPathOf(ctx: any): string {
+    return String(ctx.path || ctx.request?.path || '').toLowerCase().replace(/\/+$/, '');
+}
+
+function isReadRequest(ctx: any): boolean {
+    const method = String(ctx.method || ctx.request?.method || '').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return true;
+    return method === 'POST' && READ_ONLY_POSTS.includes(requestPathOf(ctx));
+}
+
+/**
+ * The step-up of decision D2 (2026-10-03): a key sign-in asks for no 2FA code, the phone's lock being the factor, so a
+ * session the phone's Manage hand-off opened may make owner-only changes only within PHONE_STEP_UP_WINDOW_MS of that
+ * unlock (admin-key-auth.ts phoneStepUpDue). After it, 403 `step_up_required` until Manage is pressed again. Every
+ * other session (the password's, a computer's) passes. Answers 403 and returns false when the step-up is due.
+ */
+export function requirePhoneStepUp(ctx: any): boolean {
+    if (!ctx.state?.phoneStepUpDue) return true;
+    ctx.status = 403;
+    ctx.body = { error: STEP_UP_REQUIRED_ERROR, code: STEP_UP_REQUIRED_CODE };
     return false;
 }
 
@@ -504,7 +544,6 @@ export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
     resetPasswordBrake();
-    resetKeySigninBrake();
     breakGlassWhileBraked.clear();
     breakGlassWhileBrakedNode = [];
 }

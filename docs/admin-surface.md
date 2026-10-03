@@ -113,18 +113,28 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   live role again when it issues the token and again when the browser exchanges it, and a key session's role
   follows `node_roles` on every request.
 - *Second factor:* the phone's own unlock (fingerprint, face or PIN) comes before the token is requested.
-  A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock. The
-  node's own TOTP, when turned on, is still asked for on top.
-- *Wrong 2FA codes are braked (2026-10-01, Fable's security review, MEDIUM 2).* Before this, nothing counted them: 200
-  wrong codes on one challenge took 401 ms, and the right one then worked, so a stolen key made 2FA a free oracle. Now
-  `key-signin-brake.ts` counts them per key and per address, with the password brake's numbers: 5 free, then
-  2 s, 4 s, 8 s … up to an hour. While a key or an address is held the answer is 429 with `Retry-After`, and the code
-  is not looked at. A right code clears both; so does a day with no wrong code. A challenge is burned after 5 wrong
-  codes (410); the app asks for a fresh challenge on every try anyway. Only a key holder is counted (the code is
-  checked after the signature), so a stranger cannot hold an owner's key. A thief holding one does hold it for its
-  owner too, who then signs in with the password, another owner's key, or a new key, and revokes the stolen one.
-  The brake's records are its own, not the password brake's: wrong passwords never hold key sign-in (§2.6), and wrong
-  codes here never hold the password.
+  A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock.
+- *No 2FA code on a key sign-in (decision D2, 2026-10-03).* The node's own TOTP is not asked for on the Manage link
+  or a pairing's approval: the phone's lock is the factor, and only a valid signature from the key of someone who
+  holds a role now opens a session. With no code on this path there is nothing to guess, so `key-signin-brake.ts` and
+  its 429 `totp-braked` were removed with the code. An older app that still sends a code is answered as if it had
+  not (a backup code it sends is not spent). In exchange, a session the Manage hand-off opened makes owner-only
+  changes only within `PHONE_STEP_UP_WINDOW_MS` (5 minutes) of the phone's unlock; after it, 403 `step_up_required`
+  until Manage is pressed again (`requirePhoneStepUp`). That covers every owner-only route that changes something
+  (`requireAdminRole` with owners only; reads sent as POST are named in `READ_ONLY_POSTS` and pass), every node-roles
+  change or enrolment that names owner or admin or whose target holds owner or admin now (`roleChangeNeedsOwner`),
+  every action the engine refuses to an admin because of its target (`stepUpIfOwnerOnly` on decisions-engine
+  `adminActionNeedsOwner`: suspending an owner; lifting a suspension or halting a Decision that gives back an owner's
+  or admin's role; accelerating an owner's or admin's removal; pruning, branch-pruning or offboarding an owner or admin;
+  re-keying one, `rekey/issue-code` and `rekey/complete`, their own re-key included, since the code binds a key the
+  caller chooses to that role; a report action with `suspendUser` on one), `POST /auth/revoke-all` for another member (your own is not asked),
+  `POST /auth/break-glass-mode`, and the bulk downloads `GET snapshots/download` and `GET offbox-backups/download`.
+  `GET takeover-envelope` is not asked: it is sealed to the owners. A computer's session (the QR pairing) is not asked.
+  Two of those were not refused to an admin by the engine until #1530 fix round 3. Now `issueRekeyCode` and
+  `completeRekey` refuse a re-key of an owner or admin, a role held aside included (member-wizards `assertMayRekey`),
+  and `actionReport` refuses `suspendUser` on one (it takes the role). Both answer 403 and write nothing, unless the
+  actor is owner level. A member re-keying their own key is never refused, an owner's or admin's included. An admin
+  emergency-suspending another admin stays allowed: the role is held aside, and only an owner gives it back.
 - *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /
   SFSafariViewController. The token goes in the **fragment**, so it never reaches a server, proxy log or
   Referer. `/settings` wipes it from the address bar, then POSTs it once to `/api/local/admin/auth/exchange`.
@@ -159,15 +169,13 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   The code must name the app's own node; the node's lookup must return the same short code and names the browser ("Firefox on Windows"); then
   the phone unlock (same gate as Manage), then the member key signs
   `beanpool-settings-signin:v1:approve:<id>:<code>`. The node runs the same signer checks as the Manage link
-  (`authorizeKeySigner`: active member, any node role (a moderator's session is then narrowed by MODERATOR_ROUTES), signature, TOTP) and mints the same 60 s handshake token,
+  (`authorizeKeySigner`: active member, any node role (a moderator's session is then narrowed by MODERATOR_ROUTES), signature; no TOTP since D2) and mints the same 60 s handshake token,
   kept inside the pairing: the phone never sees it.
 - *Redemption:* the browser long-polls `…/pairing/:id/wait` with its cookie and the node redeems the held token
   through `consumeHandshakeToken` → the same `admin_session` + CSRF token. Without the binding secret: 403,
   logged. Single use throughout; five refused approvals burn a pairing; creation braked at 10/min per client
-  and 200 live; phone calls go through the auth limiter. SECURITY log lines name who approved which pairing. The 2FA
-  code here is under the same per-key and per-address brake as the Manage link (above), so a stolen key cannot move
-  its guessing to pairings; an approval the brake holds is answered 429 `totp-braked` and is not one of the pairing's
-  refusals.
+  and 200 live; phone calls go through the auth limiter. SECURITY log lines name who approved which pairing. No 2FA
+  code is asked here since D2 (above), so there is no code to guess and no brake on one.
 - *PWA:* not a scanner. Its Manage row says to open Settings on the computer and scan with the app.
 
 ### 2.4 Migration — do not flip this in one release
@@ -261,8 +269,8 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
 - Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
   one fails. A dashboard sending several right passwords at once is served in turn, not refused.
 - Every password check goes through it: `checkAdminAuth`, sign-in (`verify-password`), and `/ws/logs?auth=`
-  (refused outright under 2FA or in break-glass mode). Key sign-in never does: its 2FA code has a brake of its own
-  (§2.3), with its own records.
+  (refused outright under 2FA or in break-glass mode). Key sign-in never does: since D2 (2026-10-03) it asks for no 2FA
+  code, so there is nothing on it to guess (§2.3).
 - Under 2FA a right password alone clears nothing; only a right code does. Until 2026-09-19 the admin routes
   that took the password alone cleared a source's record, so someone who knew the password could guess 2FA codes
   without limit by sending it between guesses. Every admin route now goes through `checkAdminAuth` (seed-invite

@@ -19,6 +19,8 @@ import {
     KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
+import { readClaimStatus } from '../utils/node-claim';
 
 export { ErrorBoundary };
 
@@ -133,6 +135,23 @@ export default function FindCommunityScreen() {
         const t = setTimeout(loadList, query ? 400 : 0);
         return () => clearTimeout(t);
     }, [loadList, query]);
+
+    // ── A typed server address with no owner yet: "Claim ‹name›" (utils/node-claim.ts) ─────────────────────
+    // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
+    // community with an owner never shows it.
+    // The name is the server's, cleaned (node-claim.ts cleanClaimName), or the address's host when it gave none.
+    const [claimable, setClaimable] = useState<{ origin: string; name: string; codeId: string } | null>(null);
+    useEffect(() => {
+        const origin = claimProbeOrigin(query);
+        setClaimable(null);
+        if (!origin) return;
+        let alive = true;
+        const t = setTimeout(async () => {
+            const s = await readClaimStatus(origin);
+            if (alive && s.kind === 'unclaimed') setClaimable({ origin, name: s.communityName, codeId: s.codeId });
+        }, 500);
+        return () => { alive = false; clearTimeout(t); };
+    }, [query]);
 
     // ── This phone's knocks, and their answers ──────────────────────────────────────────────────────────
     const [asked, setAsked] = useState<RememberedKnock[]>([]);
@@ -406,13 +425,29 @@ export default function FindCommunityScreen() {
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search by name"
+                        placeholder="Search by name, or a server address"
                         placeholderTextColor={colors.text.muted}
                         returnKeyType="search"
                         autoCorrect={false}
                         accessibilityLabel="Search communities by name"
                     />
                 </View>
+                {claimable && (
+                    <View style={[styles.card, { marginTop: 10 }]}>
+                        <Text style={styles.name}>{claimable.name} has no owner yet</Text>
+                        <Text style={styles.facts} selectable>{claimable.origin}</Text>
+                        <Text style={styles.note}>If you installed it, claim it with the one-time code on the server.</Text>
+                        <View style={styles.actions}>
+                            <Pressable
+                                style={styles.primary}
+                                onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.primaryText}>Claim {claimable.name}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                )}
                 {!point && (
                     <Pressable style={styles.pillBtn} onPress={locateMe} disabled={locating} accessibilityRole="button">
                         <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.brand.primary} />

@@ -142,6 +142,10 @@ describe('the member key signs only through core\'s builders and the listed old-
             // The push leave statement: core's signPushLeave builds `0xFF ‖ beanpool-push-leave/2\nHOST\n…` from the
             // key, the phone's own token and stamp, and the host of the address the phone sent the token to.
             'utils/member-statements.ts signPushLeaveStatement',
+            // The claim (utils/node-claim.ts): core's claimText through signedRequestBytes, `0xFF ‖ beanpool-claim/2\nHOST\n…`,
+            // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
+            // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.
+            'utils/node-claim.ts buildClaimBody',
         ]);
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });
@@ -220,6 +224,8 @@ describe('the phone\'s community address is written only after the plain-address
         'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
         // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
         'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
+        // The claim's "Make ‹name› my community": the origin came through claimNodeOrigin; this is the write's own check.
+        'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
         // The header's community switcher.
         'utils/use-communities.ts switchTo': /assertPlainNodeAddress\(url\)/,
         // Both restores (12 words, sign-in).

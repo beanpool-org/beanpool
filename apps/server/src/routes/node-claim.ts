@@ -36,7 +36,7 @@ import { nodeHasOwner } from '../engine/node-roles.js';
 import { verifyStatementSignature } from '../engine/member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import {
-    brakeClaimSource, claimBrakeWait, claimedByThisKey, claimKey, claimNode, claimProofMatches, isClaimCodeId, pendingClaim,
+    brakeClaimSource, claimBrakeWait, claimedByThisKey, claimKey, claimLogAdmit, claimNode, claimProofMatches, isClaimCodeId, pendingClaim,
 } from '../claim-code.js';
 import { getMember } from '../state-engine.js';
 import { logger } from '../logger.js';
@@ -132,7 +132,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
         const signed = verify();
         if (!signed.ok) return refuse(ctx, signed.status, signed.code || 'claim_bad_signature', signed.error);
         if (!proofRight) {
-            logger.security('AUTH', `A wrong claim proof was refused (key ${key.slice(0, 12)}…, from ${logAddressTag(source)})`);
+            if (claimLogAdmit()) logger.security('AUTH', `A wrong claim proof was refused (key ${key.slice(0, 12)}…, from ${logAddressTag(source)})`);
             return refuse(ctx, 403, 'claim_wrong_code', 'That claim code is not right. Read it on the server again.');
         }
 

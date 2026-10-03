@@ -225,6 +225,48 @@ export function resetClaimBrake(): void {
     lastWrong.clear();
 }
 
+// ===================== THE LOG BUDGET =====================
+// A wrong proof's SECURITY line is budgeted node-wide: the brake is per source, so many sources (IPv6 /64s, a botnet)
+// would otherwise write a row each and push real lines out of the kept rows (pruneSystemLogs). The first
+// CLAIM_LOG_BUDGET a minute are written; the rest are counted into one "and M more" line when the minute is over. Only
+// this line: a right claim's line (claimNode) is always written.
+
+export const CLAIM_LOG_BUDGET = 20;
+let logWindowStart = 0, logWritten = 0, logUnwritten = 0;
+let logSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function claimLogWindowMs(): number {
+    const scaled = Number(process.env.CLAIM_LOG_WINDOW_MS);
+    return process.env.NODE_ENV === 'test' && Number.isFinite(scaled) && scaled > 0 ? scaled : 60 * 1000;
+}
+
+function writeClaimLogSummary(): void {
+    if (logSummaryTimer) clearTimeout(logSummaryTimer);
+    logSummaryTimer = null;
+    if (logUnwritten > 0) logger.security('AUTH', `…and ${logUnwritten} more wrong claim proofs were refused in that minute, past the ${CLAIM_LOG_BUDGET} logged one by one`);
+    logUnwritten = 0;
+}
+
+/** Whether a wrong proof's SECURITY line may be written now; false counts it into the minute's summary line. */
+export function claimLogAdmit(now = Date.now()): boolean {
+    const windowMs = claimLogWindowMs();
+    if (now - logWindowStart >= windowMs) {
+        writeClaimLogSummary();
+        logWindowStart = now;
+        logWritten = 0;
+    }
+    if (logWritten < CLAIM_LOG_BUDGET) {
+        logWritten++;
+        return true;
+    }
+    logUnwritten++;
+    if (!logSummaryTimer) {
+        logSummaryTimer = setTimeout(writeClaimLogSummary, Math.max(0, logWindowStart + windowMs - now));
+        logSummaryTimer.unref?.();
+    }
+    return false;
+}
+
 // ===================== THE CLAIM =====================
 
 export type ClaimOutcome =

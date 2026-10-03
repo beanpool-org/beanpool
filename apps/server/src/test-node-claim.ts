@@ -21,7 +21,8 @@
  *   E. A restart after the claim: no file, no new code, GET says claimed.
  *   F. A new code after the file was lost: a statement for the old code id is refused.
  *   G. The claim file cannot be written: the node starts anyway, no code, and the password still works.
- *   H. A flood of wrong proofs from many sources never delays a right proof: it answers 200 at once.
+ *   H. A flood of wrong proofs from many sources never delays a right proof: it answers 200 at once. Their SECURITY lines
+ *      stop at the node-wide budget, with one "and M more" line a minute; the claim's own line is always written.
  *   I. The password's first invite, then the claim: the claim follows whether the node has an owner; the password still
  *      signs in; with an owner, the next start has no file and no waiting code.
  *   J. Two keys with the right proof at once: one owner, the other 409.
@@ -328,11 +329,12 @@ async function main(): Promise<void> {
 
     console.log('\nH. A flood of wrong proofs never delays a right one');
     const dirH = path.join(root, 'h');
-    const h = await boot(dirH, env);
+    // The wrong-proof SECURITY line's node-wide budget (claim-code.ts claimLogAdmit), its minute scaled to 2 s.
+    const h = await boot(dirH, { ...env, NODE_ENV: 'test', CLAIM_LOG_WINDOW_MS: '2000' });
     const infoH = await claimInfo(h);
     const codeH = readCode(dirH);
     codes.push(codeH);
-    const SOURCES = 40, EACH = 3;
+    const SOURCES = 60, EACH = 3, LOG_BUDGET = 20;
     const flood: Promise<{ status: number }>[] = [];
     for (let i = 0; i < SOURCES; i++) {
         for (let j = 0; j < EACH; j++) flood.push(claim(h, claimBody(newKey(), wrong, infoH.salt, infoH.codeId), `198.51.${100 + i}.1`));
@@ -346,6 +348,14 @@ async function main(): Promise<void> {
     const ms = Date.now() - t0;
     assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
     assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
+    const wrongLines = (out: string) => out.split('\n').filter((x) => /A wrong claim proof was refused/.test(x)).length;
+    assert(wrongLines(h.output()) === LOG_BUDGET,
+        `H4. ${SOURCES} wrong proofs from ${SOURCES} sources wrote the budget's ${LOG_BUDGET} SECURITY lines, no more (${wrongLines(h.output())})`);
+    assert(/CLAIMED/.test(h.output()), 'H5. the right claim is logged whatever the budget');
+    await new Promise((res) => setTimeout(res, 2500));
+    const more = h.output().split('\n').filter((x) => /more wrong claim proofs/.test(x));
+    assert(more.length === 1 && more[0].includes(String(SOURCES - LOG_BUDGET)),
+        `H6. and one summary line for the rest, once the minute is over (${more.length}: ${more[0] ?? ''})`);
     await h.stop();
 
     console.log('\nL. A stranger sharing the installer\'s address cannot hold the claim shut');

@@ -56,6 +56,10 @@ export interface LocalConfig {
     // endpoint accepts a request bearing the matching token (least-privilege, scoped
     // to read-only replication only — distinct from the all-powerful admin password,
     // and independently rotatable). Never store the plaintext.
+    // --- Claim code (claim-code.ts) ---
+    // A node with no owner writes a one-time claim code to data/claim-code.txt; only its scrypt hash, its short public id
+    // and when it was made are kept here. `claimedBy`/`claimedAt` once a phone key claimed the node with it.
+    claim?: { hash: string; id: string; createdAt: number; claimedBy?: string | null; claimedAt?: number | null } | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
@@ -536,7 +540,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'claim',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

@@ -47,6 +47,7 @@ export const SETTINGS_SIGNIN_TAG = 'beanpool-settings-signin/2';
 export const INVITE_TICKET_TAG = 'beanpool-invite-ticket/2';
 export const RE_ENROLL_TAG = 'beanpool-re-enroll/2';
 export const PUSH_LEAVE_TAG = 'beanpool-push-leave/2';
+export const CLAIM_TAG = 'beanpool-claim/1';
 
 // ─── The host ───────────────────────────────────────────────────────────────────────────────
 
@@ -249,6 +250,15 @@ export function parseInviteTicketText(text: string): ParsedInviteTicketText | nu
     if (!lines[1] || !lines[2] || !/^\d+$/.test(lines[3]) || !Number.isSafeInteger(timestamp)) return null;
     const intendedFor = lines.slice(4).join('\n');
     return { host: lines[1], inviter: lines[2], timestamp, ...(intendedFor ? { intendedFor } : {}) };
+}
+
+/**
+ * Claiming a community that has no owner yet with the one-time claim code its first boot wrote to its data folder
+ * (`/api/local/claim`). `codeId` is the code's short public id, which the node answers with; the code itself is sent
+ * beside the signature, never signed into it.
+ */
+export function claimText(host: string, codeId: string): string {
+    return `${CLAIM_TAG}\n${host}\n${codeId}`;
 }
 
 /** A re-enrolment code's proof of possession of the new key (`/api/member/re-enroll`). */

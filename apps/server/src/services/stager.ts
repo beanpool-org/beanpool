@@ -68,12 +68,12 @@ const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.j
  * What the stager's copy of local-config.json leaves out: this server's credentials (config/local-config.ts). The stager
  * signs in to nothing and nothing signs in to it, so data/staging, which a copy made ready keeps until the next start,
  * never holds a second copy of them: the admin password's hash and salt, the two-factor secrets and backup codes, the
- * recovery code's record, the replication token's hash and a standby's own token, and a legacy standby's stored admin
+ * recovery code's record, the claim code's record, the replication token's hash and a standby's own token, and a legacy standby's stored admin
  * password (test-standby-token-only's step 6 greps the data directory for it).
  */
 const CREDENTIALS_LEFT_OUT = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes', 'recoveryCode',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'claim',
 ];
 /**
  * node_config: the copy this database was swapped in from, written by the stager into the staging database. The puller's

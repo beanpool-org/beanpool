@@ -31,7 +31,10 @@ delete process.env.CF_RECORD_NAME;
 delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
+import vm from 'node:vm';
 import Koa from 'koa';
 import WebSocket from 'ws';
 import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
@@ -412,6 +415,63 @@ async function main() {
         assert(atLimitRes.status === 200 && atLimitRes.body?.deleted === 200 && atLimitRes.body?.deletedCount === 200,
             `exactly 200 ids go through and all 200 are deleted (${atLimitRes.status}, ${atLimitRes.body?.deleted})`);
         await flush(); sent.length = 0; clear(...all);
+
+        // The node's own settings page (static/settings.js) sends a Delete Selected of any size in batches of at most
+        // 200, one after another: its real bulkDeletePosts, lifted out and run against this route.
+        {
+            const settingsSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'static', 'settings.js'), 'utf-8');
+            const start = settingsSrc.indexOf('window.bulkDeletePosts = async function()');
+            let depth = 0, end = settingsSrc.indexOf('{', start);
+            for (let i = end; i < settingsSrc.length; i++) {
+                if (settingsSrc[i] === '{') depth++;
+                else if (settingsSrc[i] === '}' && --depth === 0) { end = i + 1; break; }
+            }
+            assert(start > 0 && end > start, 'settings.js still defines window.bulkDeletePosts');
+            const runSettingsDelete = async (postIds: string[], failOnCall?: number) => {
+                const alerts: string[] = [], batches: number[] = [];
+                let loads = 0, inFlight = 0, maxInFlight = 0;
+                const selectedPostIds = new Set(postIds);
+                const ctx = vm.createContext({
+                    window: {} as any, selectedPostIds, authToken: 'pw', JSON,
+                    confirm: () => true, alert: (m: string) => { alerts.push(m); }, loadAdminData: () => { loads++; },
+                    fetch: async (u: string, init: any) => {
+                        const body = JSON.parse(init.body);
+                        batches.push(body.postIds.length);
+                        inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+                        try {
+                            if (batches.length === failOnCall) return { ok: false, status: 503, json: async () => ({ error: 'The Commons pot is unknown', code: 'POT_UNKNOWN' }) };
+                            // The stand-in auth reads the header; settings.js sends the password in the body.
+                            return await realFetch(`${adminBase}${u}`, { ...init, headers: { ...init.headers, 'x-admin-password': body.password } });
+                        } finally { inFlight--; }
+                    },
+                });
+                vm.runInContext(settingsSrc.slice(start, end), ctx);
+                await (ctx as any).window.bulkDeletePosts();
+                return { alerts, batches, loads, maxInFlight, selectedPostIds };
+            };
+            const freshPosts = (n: number, tag: string) =>
+                Array.from({ length: n }, (_, i) => se.createPost('offer', 'goods', `${tag} ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+            const upCount = (ids: string[]) => ids.length === 0 ? 0 : (db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE id IN (${ids.map(() => '?').join(',')}) AND active = 1`).get(...ids) as any).c;
+
+            const none = await runSettingsDelete([]);
+            assert(none.batches.length === 0 && none.alerts.length === 0 && none.loads === 0, 'settings.js: nothing selected sends nothing');
+            for (const [n, sizes] of [[1, [1]], [200, [200]], [201, [200, 1]], [950, [200, 200, 200, 200, 150]]] as [number, number[]][]) {
+                const postIds = freshPosts(n, `Settings jar ${n}`);
+                const r = await runSettingsDelete(postIds);
+                assert(JSON.stringify(r.batches) === JSON.stringify(sizes) && r.maxInFlight === 1,
+                    `settings.js: ${n} selected go in batches ${JSON.stringify(sizes)}, one at a time (${JSON.stringify(r.batches)}, ${r.maxInFlight} at once)`);
+                assert(r.alerts.length === 1 && r.alerts[0] === `Deleted ${n} post${n !== 1 ? 's' : ''}.`, `settings.js: and says the summed count (${r.alerts[0]})`);
+                assert(upCount(postIds) === 0 && r.selectedPostIds.size === 0 && r.loads === 1, `settings.js: all ${n} are gone, the selection is clear, the list reloads once`);
+            }
+            const failIds = freshPosts(950, 'Settings fail jar');
+            const failed = await runSettingsDelete(failIds, 3);
+            assert(JSON.stringify(failed.batches) === '[200,200,200]', `settings.js: a failing 3rd batch stops the run (${JSON.stringify(failed.batches)})`);
+            assert(failed.alerts.length === 1 && failed.alerts[0] === 'Deleted 400 of 950, then: The Commons pot is unknown',
+                `settings.js: and says how many went before it and why (${failed.alerts[0]})`);
+            assert(upCount(failIds) === 550 && failed.selectedPostIds.size === 550 && failed.loads === 1,
+                `settings.js: the other 550 stay up and selected, and the list reloads once (${upCount(failIds)} up, ${failed.selectedPostIds.size} selected)`);
+            await flush(); sent.length = 0; clear(...all);
+        }
 
         // ── 8. The enterprise ledger after an arbitrated deal ────────────────────────────────────
         console.log('\n— 8. the enterprise ledger names an arbitrated deal\'s signer in words —');

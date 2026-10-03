@@ -39,12 +39,15 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
+// Step 7c: the password alone opens no admin route with 2FA off; the operator's calls carry an owner's automation token.
+let ADMIN: Record<string, string> = {};
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -660,6 +663,7 @@ async function partTwo(): Promise<void> {
     await initTls();
     initStateEngine();
     initAdminPassword();
+    ADMIN = ownerTokenHeaders('admin');
     const member = keypair();
     // Joined long ago with a photo and a name, so no new-account limit or profile gate is what answers.
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
@@ -780,7 +784,7 @@ async function partTwo(): Promise<void> {
     const adminTreasury = async (name: string, avatar: string): Promise<{ status: number; json: any }> => {
         const res = await fetch(`${BASE}/api/local/admin/treasury`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            headers: { 'Content-Type': 'application/json', ...ADMIN },
             body: JSON.stringify({ name, avatar }),
         });
         return { status: res.status, json: await res.json().catch(() => null) };
@@ -908,7 +912,7 @@ async function partTwo(): Promise<void> {
     console.log('\n── 2h. The operator\'s pricing-guide thumbnail: POST /api/pricing-guide/admin/item → GET /api/pricing-guide ──');
     const saved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify({
             id: 'custom-photo-meta', category: 'food', emoji: '🍋', name: 'Lemons (bag)', priceBeans: 5,
             thumbnailUrl: dataUrl('image/jpeg', CAMERA_JPEG),
@@ -920,7 +924,7 @@ async function partTwo(): Promise<void> {
     await served('pricing-guide thumbnail', decodeDataUrl(item?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
     const saveThumbnail = (thumbnailUrl: string) => fetch(`${BASE}/api/pricing-guide/admin/item`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify({ id: 'custom-photo-meta', category: 'food', emoji: '🍋', name: 'Lemons (bag)', priceBeans: 5, thumbnailUrl }),
     });
     for (const [label, value] of [
@@ -1087,7 +1091,7 @@ async function partTwo(): Promise<void> {
         const { id, category, emoji, name, description, priceBeans, unit, seasonalityHint, thumbnailUrl } = readBack;
         const resaved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            headers: { 'Content-Type': 'application/json', ...ADMIN },
             body: JSON.stringify({ id, category, emoji, name, description, priceBeans: priceBeans + 1, unit, isPinned: true, seasonalityHint, thumbnailUrl }),
         });
         assert(resaved.status === 200, `the item, read back and saved with a new price and its own photo link, is saved (${resaved.status})`);

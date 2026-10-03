@@ -53,6 +53,8 @@ Keep it offline, like a spare key. Anyone who has it can add an admin key of the
 
 An automation token lets a script, or a tool like a fleet manager, use this node's Settings without the admin password. An owner makes one under Access & Security, **Automation tokens**: give it a name that says what will use it, pick what it may do, and, if you like, when it stops working. Admins and moderators do not see this card.
 
+You make a token with your owner key, never with the admin password: open Settings from **Manage** in the app, or sign in on a computer by scanning a code with the app. Signed in with the password, the card lists the tokens and lets you revoke them, but has no form for making one. That way every token belongs to an owner.
+
 What a token may do is its scope:
 
 - **Read**: look, change nothing. Dashboards and checks.
@@ -62,9 +64,9 @@ What a token may do is its scope:
 No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup, reset the node or sign anyone in to Settings. Do those signed in as an owner.
 
 - Settings shows the token once, when you make it. Copy it then: the server keeps only a scrambled copy and cannot show it again. If you lose it, revoke it and make a new one.
-- The script sends it in the Authorization header, as Bearer followed by the token (it starts with bp_). It needs no two-factor code: the owner who made it already signed in with theirs. Keep it as you would the password.
+- The script sends it in the Authorization header, as Bearer followed by the token (it starts with bp_). It needs no two-factor code: it was made with an owner's key. Keep it as you would the password.
 - What a script does with a token counts as done by the owner who made it, and the server's log records each use with the token's id, never the token itself. The list shows when and where each token was last used.
-- Any owner can revoke any token, and it stops working at once. A token also stops working when the owner who made it is no longer an owner.
+- Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.
 - Tokens stay on this server: they are not in backups, standby copies or a take-over.
 
 ## Factory reset

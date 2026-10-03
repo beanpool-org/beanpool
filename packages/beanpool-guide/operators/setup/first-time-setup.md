@@ -42,14 +42,11 @@ Go to your server's address followed by **/settings**, for example https://examp
 
 ## A community with no owner yet
 
-On a new server, the sign-in page at /settings first says **This community has no owner yet.** and shows how to claim it:
-
-- **On the server, run:** docker compose exec beanpool-node beanpool claim. It prints the community's one-time claim code and a QR code of its own.
-- **Then on your phone,** open the BeanPool app and choose **Claim a community**, or scan the QR code on the page. Your phone becomes the community's first owner.
+On a new server, the sign-in page at /settings first says **This community has no owner yet.** and shows how to claim it: see Claim your community: the address, then your phone above.
 
 The page's QR code carries only your server's address, as it is in the browser's address bar, and a short number that names the waiting code. It never carries the code itself: anyone can open this page, so the code is only ever read on the server. The address is written out under the QR code too, so you can check it. Open the page at the address the app will use (for example https://yourtown.beanpool.org/settings), not the server's home-network address.
 
-The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. If the server cannot be asked, the page shows the normal sign-in, so the claim never stands in the way of the password.
+The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. Only when the first check fails does the page show the normal sign-in (a later failure keeps the card), so the claim never stands in the way of the password.
 
 Below the claim, **This server also has an admin password** opens today's password sign-in, for a server set up with one. A server that has no admin password does not show it.
 

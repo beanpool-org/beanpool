@@ -221,6 +221,17 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         assert.ok(!everything.includes('PHOTO'), 'no group read carries the photo');
     });
 
+    it('a new group with a picture keeps the stamp it was made with, even when the picture is written in the same millisecond', () => {
+        // The touch trigger stamps afresh on an update that leaves updated_at as it was; 300 groups make a same-millisecond
+        // picture write all but certain (it failed about 1 run in 12 with one group).
+        const picture = `data:image/jpeg;base64,${'QUJD'.repeat(50)}`;
+        for (let i = 0; i < 300; i++) {
+            const group = createGroup(db, { name: `Stamped ${i}`, joinPolicy: 'open', createdBy: 'alice_pub', avatarUrl: picture });
+            const row = db.prepare('SELECT created_at, updated_at FROM groups WHERE id = ?').get(group.id) as any;
+            assert.strictEqual(row.updated_at, row.created_at, `group ${i} keeps the stamp it was made with`);
+        }
+    });
+
     it("a group's own picture is kept apart and every read gives its URL, never the picture (#1486)", () => {
         const picture = `data:image/jpeg;base64,${'QUJD'.repeat(2000)}`;
         const group = createGroup(db, { name: 'Pictured', joinPolicy: 'open', createdBy: 'alice_pub', avatarUrl: picture });

@@ -28,6 +28,10 @@
  *     has no write timeout of its own, so a reader who stops reading (a phone put away mid-download, or one doing it on
  *     purpose) held its share for as long as it kept the connection open: four held 45 of the 48 MB.
  *   - While it refuses or cuts answers off, the log gets one line a minute saying how many.
+ *   - A shared body (a snapshot's bytes, members-snapshot.ts) is counted once, at its full size, for as long as any send
+ *     of it is in flight (holdSharedBody): a send holds the whole body until its last byte leaves, however small its
+ *     window, and a body a newer version has replaced stays alive for as long as a send of it does. So the current
+ *     snapshot is counted once however many read it, and so is each older one a reader who stopped reading still holds.
  *
  * Only a request the routes would answer gets here. The read gate, the signature and each route's own checks run first,
  * and a 304 costs nothing, so an unsigned or refused read never takes budget.
@@ -81,7 +85,7 @@ interface HeavyReadSettings {
 }
 
 interface Waiter {
-    weight: number;
+    weight: () => number;
     admit: () => void;
     leave: () => void;
 }
@@ -91,6 +95,12 @@ let resolved: HeavyReadSettings | null = null;
 
 let inFlightBytes = 0;
 const line: Waiter[] = [];
+/** Each shared body held by sends in flight, and how many hold it (holdSharedBody). Its bytes are in inFlightBytes once. */
+const sharedHeld = new Map<Buffer, number>();
+/** The answer in flight on each request, so that its send can say which shared body it holds. */
+const tickets = new WeakMap<object, Ticket>();
+
+interface Ticket { phase: 'waiting' | 'in' | 'out'; held: number; shared: Buffer | null; waiter: Waiter | null; deadline: NodeJS.Timeout | null }
 const lastSize = new Map<string, number>();
 /**
  * The map keeps a fixed-size digest of each key, never the key: a key carries the request's inputs in full (a delta's
@@ -125,8 +135,37 @@ export function heavyReadSettings(): Readonly<HeavyReadSettings> {
  * What is in flight and waiting now, and how many were let through, refused and cut off at the deadline since the server
  * started.
  */
-export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number; cutOff: number } {
-    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount };
+export function heavyReadStats(): { inFlightBytes: number; waiting: number; admitted: number; refused: number; cutOff: number; sharedBodies: number } {
+    return { inFlightBytes, waiting: line.length, admitted: admittedCount, refused: refusedCount, cutOff: cutOffCount, sharedBodies: sharedHeld.size };
+}
+
+/** What a send holding `body` would add to the bytes in flight now: nothing while another send in flight holds it. */
+export function sharedBodyCost(body: Buffer): number {
+    return sharedHeld.has(body) ? 0 : body.length;
+}
+
+/**
+ * Called by a heavy read's build as it sends a shared body (members-snapshot.ts): from now until this answer is out, it
+ * holds `window` bytes of its own, and `body`, counted once among all the sends that hold it. Outside a heavy read it
+ * does nothing.
+ */
+export function holdSharedBody(ctx: Koa.Context, body: Buffer, window: number): void {
+    const ticket = tickets.get(ctx);
+    if (!ticket || ticket.phase !== 'in') return;
+    if (ticket.shared) releaseShared(ticket.shared);
+    inFlightBytes += window - ticket.held;
+    ticket.held = window;
+    ticket.shared = body;
+    const holders = sharedHeld.get(body) ?? 0;
+    sharedHeld.set(body, holders + 1);
+    if (holders === 0) inFlightBytes += body.length;
+}
+
+function releaseShared(body: Buffer): void {
+    const holders = sharedHeld.get(body) ?? 0;
+    if (holders > 1) { sharedHeld.set(body, holders - 1); return; }
+    sharedHeld.delete(body);
+    inFlightBytes -= body.length;
 }
 
 /** Tests only: how many characters the kept keys hold, all together. */
@@ -165,7 +204,7 @@ function fits(weight: number): boolean {
 
 /** Let in whoever is first in line, for as long as they fit. In order: a big answer waiting is never overtaken. */
 function drain(): void {
-    while (line.length > 0 && fits(line[0].weight)) line.shift()!.admit();
+    while (line.length > 0 && fits(line[0].weight())) line.shift()!.admit();
 }
 
 function remember(key: string, bytes: number): void {
@@ -241,16 +280,24 @@ export function heavyReadKey(route: string, inputs: Record<string, unknown>): st
  * time, the reader gets 503 with Retry-After and `code: heavy_read_busy`, and `build` never runs.
  *
  * `fixedWeight`: what this answer holds in flight when that isn't its size (a shared body sent a window at a time,
- * members-snapshot.ts). It is always weighed at that, never light, and its size isn't learned.
+ * members-snapshot.ts). It is always weighed at that, never light, and its size isn't learned. A function is asked
+ * again each time the answer is weighed, while it waits too: a ready snapshot's send weighs its body only while no other
+ * send holds that (sharedBodyCost).
  */
-export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>, fixedWeight?: number): Promise<void> {
+export async function heavyRead(ctx: Koa.Context, key: string, build: () => void | Promise<void>, fixedWeight?: number | (() => number)): Promise<void> {
     const res = ctx.res;
     const fixed = fixedWeight !== undefined;
     const known = fixed ? undefined : lastSize.get(slot(key));
-    // A fixed weight of 0 is a caller's light answer (a small shared roster, roster-snapshots.ts): straight through, as a
-    // key whose last answer was light.
-    const light = fixed ? fixedWeight === 0 : known !== undefined && known < LIGHT_BYTES;
-    const weight = fixed ? fixedWeight : light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
+    const fixedBytes = typeof fixedWeight === 'number' ? fixedWeight : 0;
+    // A caller's function holds what it weighs (a ready snapshot, both its bodies), so it is let go as soon as this answer
+    // is in or out: the listeners below, and all they hold, live as long as the connection. Kept, a reader who stopped
+    // reading a gzip copy held the plain body too.
+    let weighs = typeof fixedWeight === 'function' ? fixedWeight : null;
+    // A fixed weight of 0 is a caller's light answer (a small shared roster whose body is already held, roster-snapshots.ts):
+    // straight through, as a key whose last answer was light.
+    const light = fixed ? (weighs ? weighs() : fixedBytes) === 0 : known !== undefined && known < LIGHT_BYTES;
+    const learned = light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
+    const weight = () => (weighs ? weighs() : fixed ? fixedBytes : learned);
     // A route called with no response to watch (a suite dispatching a handler directly): its weight is given back as
     // soon as it is built.
     const watched = typeof res?.once === 'function';
@@ -259,12 +306,14 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
     if (watched && (res.destroyed || res.writableEnded)) return;
 
     // This answer: waiting in line, in flight holding `held` bytes of the budget, or out (refused, left or done).
-    const ticket: { phase: 'waiting' | 'in' | 'out'; held: number; waiter: Waiter | null; deadline: NodeJS.Timeout | null } =
-        { phase: 'waiting', held: 0, waiter: null, deadline: null };
+    const ticket: Ticket = { phase: 'waiting', held: 0, shared: null, waiter: null, deadline: null };
+    tickets.set(ctx, ticket);
     const take = () => {
         ticket.phase = 'in';
-        ticket.held = weight;
-        inFlightBytes += weight;
+        ticket.held = weight();
+        weighs = null;
+        ticket.waiter = null;
+        inFlightBytes += ticket.held;
         admittedCount++;
         if (watched) ticket.deadline = setTimeout(cutOff, heavyReadSettings().deadlineMs).unref();
     };
@@ -281,12 +330,15 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         if (ticket.phase === 'waiting') ticket.waiter?.leave();
         const wasIn = ticket.phase === 'in';
         ticket.phase = 'out';
+        weighs = null;
         if (!wasIn) return;
         // Its size, for the next answer's weight: also from a reader who left mid-answer, whose headers were already set.
         const bytes = answerBytes(ctx);
         if (!fixed && bytes !== null && (watched ? res.statusCode : ctx.status) === 200) remember(key, bytes);
         inFlightBytes -= ticket.held;
         ticket.held = 0;
+        if (ticket.shared) releaseShared(ticket.shared);
+        ticket.shared = null;
         drain();
     };
     if (watched) {
@@ -294,10 +346,11 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         res.once('close', giveBack);
     }
 
-    if (light || (line.length === 0 && fits(weight))) {
+    if (light || (line.length === 0 && fits(weight()))) {
         take();
     } else if (line.length >= heavyReadSettings().maxQueue) {
         ticket.phase = 'out';
+        weighs = null;
         noteRefusal();
         refuse(ctx);
         return;
@@ -322,6 +375,8 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
             // busy, and only the first counts as a refusal (a reader who left hears nothing).
             if (ticket.phase !== 'out') noteRefusal();
             ticket.phase = 'out';
+            weighs = null;
+            ticket.waiter = null;
             refuse(ctx);
             // The one that left may have been holding up the line.
             drain();
@@ -336,12 +391,15 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
         throw e;
     }
     if (!watched) { giveBack(); return; }
-    // Built: what is in flight is this answer as it is, not the last one's size, when its headers already say so.
+    // Built: what is in flight is this answer as it is, not the last one's size, when its headers already say so. A
+    // shared body it sends was counted as it began (holdSharedBody), once, and its size is still learned for the next build.
     const bytes = ticket.phase === 'in' && !light && !fixed ? answerBytes(ctx) : null;
     if (bytes !== null) {
-        inFlightBytes += bytes - ticket.held;
-        ticket.held = bytes;
+        if (!ticket.shared) {
+            inFlightBytes += bytes - ticket.held;
+            ticket.held = bytes;
+        }
         if (ctx.status === 200) remember(key, bytes);
-        drain();
     }
+    drain();
 }

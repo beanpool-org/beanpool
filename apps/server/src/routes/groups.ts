@@ -50,7 +50,7 @@ import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 import { heavyRead, heavyReadKey, LIGHT_BYTES } from '../heavy-reads.js';
 import { getMembersVersion } from '../engine/versions.js';
-import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT } from '../members-snapshot.js';
+import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, snapshotSendWeight } from '../members-snapshot.js';
 import { noteRosterSent, rosterSlot, rosterSnapshotKey, rosterSnapshotSize, storeRosterSnapshot, usableRosterSnapshot, type RosterSnapshot, type RosterView } from '../roster-snapshots.js';
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -305,20 +305,24 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
         const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
         const holds = (snap: RosterSnapshot) => Boolean(ifNoneMatch && ifNoneMatch.includes(snap.etag.replace(/^W\//, '')));
+        // What a send holds besides the body itself, which the cap counts once however many send it: a small roster's
+        // window is nothing, as its key's last answer was light.
+        const windowOf = (snap: RosterSnapshot) => (snap.body.length < LIGHT_BYTES ? 0 : SNAPSHOT_SEND_WEIGHT);
         const send = (snap: RosterSnapshot) => {
             ctx.set('ETag', snap.etag);
             // A 304 only against the current key's snapshot, so never stale and never another view's.
             if (holds(snap)) { ctx.status = 304; return; }
             const before = rosterSnapshotSize(snap);
-            sendMembersSnapshot(ctx, snap);
+            sendMembersSnapshot(ctx, snap, windowOf(snap));
             noteRosterSent(slot, snap, before);
         };
         const ready = usableRosterSnapshot(slot, keyNow());
         if (ready) {
             if (holds(ready)) { ctx.set('ETag', ready.etag); ctx.status = 304; return; }
-            // Under the cap too, weighed at what a send holds (a window of the shared bytes), and cut off at its deadline. A
-            // small one is light, as its key's last answer was: straight through, never waiting behind the big ones.
-            await heavyRead(ctx, 'roster-snapshot', () => send(ready), ready.body.length < LIGHT_BYTES ? 0 : SNAPSHOT_SEND_WEIGHT);
+            // Under the cap too, weighed at what a send holds (a window of the shared bytes, and the bytes themselves while
+            // no other send in flight holds them), and cut off at its deadline. A small one whose bytes are already held is
+            // light, as its key's last answer was: straight through, never waiting behind the big ones.
+            await heavyRead(ctx, 'roster-snapshot', () => send(ready), () => snapshotSendWeight(ctx, ready, windowOf(ready)));
             return;
         }
         // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster with the same status and role: a

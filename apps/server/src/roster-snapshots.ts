@@ -4,7 +4,8 @@
  * `GET /api/groups/:id/members` is the same for every reader of one view of one group: the rows carry the group's
  * memberships and each member's name and photo, nothing about who is asking. So each view is built once per version,
  * kept as one Buffer, and sent to every reader of that view with the directory's mechanics (members-snapshot.ts:
- * chunked sends weighed SNAPSHOT_SEND_WEIGHT under the heavy-read cap and its deadline, a gzip copy made once).
+ * chunked sends under the heavy-read cap and its deadline, each weighed its window and each body counted once for as long
+ * as any send holds it, also once a newer version has replaced it; a gzip copy made once).
  *   - Who may read and which view they get are decided by the route first, per request (#828): an invite-only group
  *     is 404 to an outsider and 403 to an invitee or someone asking, and nothing here is looked at for either. Only
  *     then is the view chosen.

@@ -50,6 +50,7 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { resetPasswordBrake } from './password-brake.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 import { savePricingGuideItem } from './db/pricing-guide-db.js';
 import { verifyEpochStatement } from './services/identity-epoch.js';
@@ -211,27 +212,29 @@ async function thresholds(): Promise<void> {
     console.log('\n── 3. Admin thresholds: finite, in range ──');
     resetAdminAuthTarpit();
     const before = getLocalConfig().thresholds?.inactiveMemberDays;
-    const post = (raw: string) => call('POST', null, '/api/admin/thresholds', raw);
+    // Step 7c: the password alone opens no admin route with 2FA off: these go under an owner's automation token.
+    const admin = ownerTokenHeaders('admin');
+    const post = (raw: string) => call('POST', null, '/api/admin/thresholds', raw, admin);
     for (const [what, raw] of [
-        ['a negative number of days', `{"password":"${PW}","inactiveMemberDays":-5}`],
-        ['Infinity (1e999)', `{"password":"${PW}","inactiveMemberDays":1e999}`],
-        ['half a day', `{"password":"${PW}","inactiveMemberDays":7.5}`],
-        ['a rate over 1', `{"password":"${PW}","circulationRate":3}`],
+        ['a negative number of days', `{"inactiveMemberDays":-5}`],
+        ['Infinity (1e999)', `{"inactiveMemberDays":1e999}`],
+        ['half a day', `{"inactiveMemberDays":7.5}`],
+        ['a rate over 1', `{"circulationRate":3}`],
     ] as const) {
         const r = await post(raw);
         assert(r.status === 400 && typeof r.body?.error === 'string' && getLocalConfig().thresholds?.inactiveMemberDays === before
             && getLocalConfig().thresholds?.circulationRate !== 3,
             `${what} is refused, 400, and nothing saved (${show(r)})`);
     }
-    const ok = await post(`{"password":"${PW}","inactiveMemberDays":45,"circulationRate":0.01}`);
+    const ok = await post(`{"inactiveMemberDays":45,"circulationRate":0.01}`);
     assert(ok.status === 200 && ok.body?.thresholds?.inactiveMemberDays === 45 && getLocalConfig().thresholds?.inactiveMemberDays === 45,
         `a value in range is saved (${show(ok)})`);
-    const skipped = await post(`{"password":"${PW}","inactiveMemberDays":null}`);
+    const skipped = await post(`{"inactiveMemberDays":null}`);
     assert(skipped.status === 200 && skipped.body?.thresholds?.inactiveMemberDays === 45, `an emptied field (null) is left out, as before (${show(skipped)})`);
 
     // What a config file holds after an Infinity was saved before the limits: `null`. And a negative.
     updateLocalConfig({ thresholds: { ...(getLocalConfig().thresholds as any), inactiveMemberDays: null, sybilFunnelWindowDays: -3 } } as any);
-    const got = await call('POST', null, '/api/admin/thresholds/get', { password: PW });
+    const got = await call('POST', null, '/api/admin/thresholds/get', {}, admin);
     assert(got.status === 200 && got.body?.thresholds?.inactiveMemberDays === 30 && got.body?.thresholds?.sybilFunnelWindowDays === 30,
         `a bad value already saved reads as its default (${JSON.stringify({ inactive: got.body?.thresholds?.inactiveMemberDays, window: got.body?.thresholds?.sybilFunnelWindowDays })})`);
 }

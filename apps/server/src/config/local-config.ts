@@ -61,6 +61,12 @@ export interface LocalConfig {
     // a secret: it checks a claim's proof), the public salt, the code's short public id and when it was made are kept
     // here. `claimedBy`/`claimedAt` once a phone key claimed the node with it; the burn deletes `key` and `salt`.
     claim?: { key?: string; salt?: string; id: string; createdAt: number; claimedBy?: string | null; claimedAt?: number | null } | null;
+
+    // --- A name asked for at install (`beanpool claim --name`, address-request.ts) ---
+    // The command leaves data/address-request.json; the node moves it here (only the node writes this file) and its
+    // public-address agent claims <name>.beanpool.org with the node's own key, as it does for PUBLIC_ADDRESS_NAME (the env
+    // wins when both are set). Cleared once the registrar holds the name; `refused` keeps the registrar's reason.
+    addressRequest?: { name: string; mode: 'tunnel'; contact?: string | null; requestedAt: number; refused?: string | null } | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
@@ -559,7 +565,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

@@ -338,6 +338,17 @@ export function claimNode(params: {
     return { ok: true, memberPubkey: pubkey, callsign, role: 'owner', created, again: false };
 }
 
+/**
+ * In the node, from `beanpool claim --key`'s notice (claim-shell-owner.ts, which granted the owner in its own connection
+ * and deleted the file): the burn claimNode does, here because only the node writes local-config.json. K and the salt
+ * go; the record keeps who used it.
+ */
+export function burnClaimFromShell(id: string, pubkey: string): void {
+    const c = getLocalConfig().claim;
+    if (c && c.id === id && !c.claimedBy) updateLocalConfig({ claim: { id: c.id, createdAt: c.createdAt, claimedBy: pubkey, claimedAt: Date.now() } });
+    removeClaimFile('This community was claimed from the server');
+}
+
 /** The key as the community keeps keys (lower-case hex), or null. */
 export function claimKey(raw: unknown): string | null {
     const key = String(raw ?? '').trim();

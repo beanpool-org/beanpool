@@ -139,6 +139,67 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText(/Couldn't read this node's backup schedule/)).toBeInTheDocument();
     });
 
+    it('when schedule is unknown: no editable form and no save request; when known: shows real values and saving sends exactly what is shown', async () => {
+        const renderBackups = () => render(
+            <ApplianceSection
+                activeNode={mockProfile}
+                diag={mockDiag}
+                gateway={mockGateway}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                gatewaySaving={false}
+                nodeLogs={[]}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onRefreshDiag={vi.fn()}
+                onRefreshLogs={vi.fn()}
+                onDownloadBackup={vi.fn()}
+                onRunLedgerAudit={vi.fn()}
+                auditState={{ running: false, result: null }}
+                initialSubTab="backups"
+            />
+        );
+
+        // 1. Unknown schedule: schedule could not be read
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403: Forbidden'));
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = renderBackups(); });
+
+        expect(await screen.findByText('Unknown')).toBeInTheDocument();
+        expect(screen.getByText("The node's schedule could not be read, so it can't be changed from here right now.")).toBeInTheDocument();
+        // No editable form controls and no save request
+        expect(screen.queryByRole('checkbox', { name: /enable automated snapshots/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        expect(nodeClient.updateNodeSnapshotSchedule).not.toHaveBeenCalled();
+        view.unmount();
+
+        // 2. Known schedule: node returns real values
+        const realSchedule = { enabled: false, intervalHours: 12, keep: 3 };
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue(realSchedule);
+        await act(async () => { view = renderBackups(); });
+
+        expect(await screen.findByText('Disabled')).toBeInTheDocument();
+        const checkbox = screen.getByRole('checkbox', { name: /enable automated snapshots/i }) as HTMLInputElement;
+        expect(checkbox.checked).toBe(false);
+        expect(screen.getByDisplayValue('Every 12 hours')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Keep last 3 snapshots')).toBeInTheDocument();
+
+        // Saving sends exactly what is shown
+        const saveButton = screen.getByRole('button', { name: /^save$/i });
+        await act(async () => {
+            fireEvent.click(saveButton);
+        });
+
+        expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledTimes(1);
+        expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledWith(
+            mockProfile.url,
+            realSchedule,
+            mockProfile.adminPassword,
+            undefined
+        );
+        view.unmount();
+    });
+
     it('manages automated backup schedule and verifies database integrity', async () => {
         await act(async () => {
             render(

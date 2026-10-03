@@ -614,16 +614,19 @@ export async function saveNamesCopiesBeforeLeaving(
             if (left() <= 0) return unreadHolders(anchor, kept.pin, me);
             const s = await fetchNamesState(anchor, identity, left());
             if (!s.ok) return unreadHolders(anchor, kept.pin, me);
+            // An empty or missing holder list says nothing about who holds the key: its words are the unread ones (the
+            // copy is still saved below).
             const holders = (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase());
-            const onlyKey = head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
-            if (s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
+            const notSaved: NamesCopyUnconfirmed = holders.length === 0 ? unreadHolders(anchor, kept.pin, me)
+                : { anchor, onlyKey: head && holders.every((k) => k === me) ? head.n : null };
+            if (s.value.myCopy === undefined || left() <= 0) return notSaved;
             // Another phone saved a newer copy: merged first, as the open does, so this one is saved past both.
             const pin = s.value.myCopy && s.value.myCopy.seq > kept.pin.copy.seq ? await mergeNewerCopy(anchor, identity, store, s.value, kept.pin, left()) : kept.pin;
-            if (left() <= 0) return { anchor, onlyKey };
+            if (left() <= 0) return notSaved;
             const saved = await saveCopy(anchor, identity, store, pin, s.value, left);
-            if (!saved.ok) return { anchor, onlyKey };
+            if (!saved.ok) return notSaved;
             const last = await lastCopied(store, identity.publicKey, anchor);
-            return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : { anchor, onlyKey };
+            return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : notSaved;
         });
         // The chain may be held by an open still waiting on its own (longer) limits: past the deadline, this one is let go.
         let timer: ReturnType<typeof setTimeout> | undefined;

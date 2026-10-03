@@ -2977,6 +2977,31 @@ describe('§8 23. Sign Out saves the copy first; what it says when the node didn
         expect(words?.pdf).toBe(true);
     });
 
+    it('the node answers with an empty holder list and the copy isn\'t saved: the unread words and the PDF, never the general words', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => {
+            const path = new URL(req.url).pathname;
+            if (req.method === 'PUT' && path === '/api/names/copy') return { status: 502 };
+            const r = node.answer(req);
+            return path === '/api/names/state' && r.status === 200 ? { ...r, body: { ...(r.body as object), holdersOfCurrent: [] } } : r;
+        };
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(sentAs('PUT', '/api/names/copy').length).toBeGreaterThan(0);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(out)?.pdf).toBe(true);
+    });
+
+    it('an empty holder list still lets the copy be saved and confirmed', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => {
+            const r = node.answer(req);
+            return new URL(req.url).pathname === '/api/names/state' && r.status === 200 ? { ...r, body: { ...(r.body as object), holdersOfCurrent: [] } } : r;
+        };
+        expect(await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE)).toEqual([]);
+    });
+
     it('the words: a sure only copy wins over a "may", and the general words come only from a holder list the node returned', () => {
         expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: 3 }])).toEqual({ text: NAMES_COPY.signOutOnlyCopy(3), pdf: true });
         expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: null }])).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(2), pdf: true });

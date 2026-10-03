@@ -1747,7 +1747,8 @@ router.post('/api/local/admin/inbox', async (ctx) => {
     const viewer = resolveAdminActor(ctx);
     if (!viewer) return;
     const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
-    if (!isOwnerLevelActor(viewer) && !(adminPubkey && viewer === adminPubkey)) {
+    // A token acts for its owner but is not them: it never reads the owner's own conversations (#1546 review).
+    if ((ctx.state as any)?.viaToken || (!isOwnerLevelActor(viewer) && !(adminPubkey && viewer === adminPubkey))) {
         ctx.status = 403;
         ctx.body = { error: "Only an owner can read the node's inbox" };
         return;
@@ -2219,7 +2220,8 @@ router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
     if (!viewer) return;
     try {
         const { pubkey } = ctx.params;
-        const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue });
+        // An automation token is never a fresh phone session, so it never reads an owner's or admin's code (#1546 review).
+        const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue || !!(ctx.state as any)?.viaToken });
         ctx.body = status;
     } catch (e: any) {
         ctx.status = 400;

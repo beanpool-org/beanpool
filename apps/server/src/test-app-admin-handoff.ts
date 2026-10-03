@@ -23,7 +23,8 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole, adminSendMessage } from './state-engine.js';
 import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
-import { startHttpsServer } from './https-server.js';
+import { issueAutomationToken } from './automation-tokens.js';
+import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
@@ -907,6 +908,17 @@ async function main() {
             const otherFresh = await exchange((await requestLink(coOwnerB)).body.handshakeToken);
             const byOther = await readStatus(target.pub, otherFresh);
             assert(byOther.body.pendingRequest?.code === code, `…and so does another owner's fresh session (got ${JSON.stringify(byOther.body.pendingRequest)})`);
+
+            // An automation token never reads it, whatever its scope or maker: a token is never a fresh phone session (#1546).
+            for (const scope of ['read', 'admin'] as const) {
+                const made = issueAutomationToken({ name: `rekey-${scope}`, scope, createdBy: owner.pub });
+                assert(made.ok, `a ${scope} token is made for the check`);
+                const t = made.ok ? made.token : '';
+                const res = await fetch(`${BASE}/api/local/admin/members/${target.pub}/rekey/status`, { headers: { Authorization: `Bearer ${t}` } });
+                const text = await res.text();
+                assert(!text.includes(code), `a ${scope} token does not read ${who}'s code (got ${res.status} ${text.slice(0, 160)})`);
+            }
+            resetAdminRateLimit();   // these four reads would push the later sections over the admin limiter
         }
 
         // A plain member's code is not an owner's or admin's: a stale admin session that issued it still reads it.

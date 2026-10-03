@@ -44,6 +44,7 @@ import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
+import { RecoveryKitButtons } from '../../components/RecoveryKitButtons';
 import { copyWordsForAMinute } from '../../utils/words-clipboard';
 import { ADD_WORDS_COPY, viewWordsOpens } from '../../utils/add-words';
 import {
@@ -2141,6 +2142,9 @@ export default function SettingsScreen() {
                                             <Text style={{ color: colors.text.body, fontWeight: '600', fontSize: 14 }}>Hide</Text>
                                         </Pressable>
                                     </View>
+                                    <View style={{ marginTop: 10 }}>
+                                        <RecoveryKitButtons words={mnemonicWords ? mnemonicWords.split(' ') : null} colors={colors} />
+                                    </View>
                                     <CopyClearsNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 10 }} />
                                     <NoScreenLockNote style={{ color: colors.text.secondary, fontSize: 12, lineHeight: 17, marginTop: 8 }} />
                                 </View>
@@ -2761,6 +2765,9 @@ export default function SettingsScreen() {
                                             {seedCopied ? '✅ Copied!' : '📋 Copy Words'}
                                         </Text>
                                     </Pressable>
+                                    <View style={{ marginTop: 12 }}>
+                                        <RecoveryKitButtons words={seedWords} colors={colors} />
+                                    </View>
                                     <CopyClearsNote style={[styles.infoText, { marginTop: 10, marginBottom: 0 }]} />
                                     <NoScreenLockNote style={[styles.infoText, { marginTop: 8, marginBottom: 0 }]} />
                                 </>

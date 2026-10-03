@@ -38,6 +38,7 @@ import { setAppCovered, setAppLocked, setAppLockLaunchDecided, setAppUnlockActio
 import { AppLockSurface, installLockCovers } from '../components/AppLock';
 import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { sweepPrintedPdfs } from '../utils/recovery-kit';
 import { appVersionHeaderValue } from '../utils/force-update';
 import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
@@ -203,6 +204,9 @@ function RootLayoutNav() {
         const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
         return () => sub.remove();
     }, [lockScreen]);
+
+    // Once at start: a recovery kit PDF left in expo-print's folder by an app killed mid-share (utils/recovery-kit.ts).
+    useEffect(() => { void sweepPrintedPdfs(); }, []);
 
     // Check on startup
     useEffect(() => {

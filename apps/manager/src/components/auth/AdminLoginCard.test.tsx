@@ -9,6 +9,7 @@ import { AdminLoginCard } from './AdminLoginCard';
 vi.mock('../../lib/node-claim', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../lib/node-claim')>()),
     fetchClaimState: vi.fn(async () => ({ kind: 'claimed' })),
+    fetchCommunityInfo: vi.fn(async () => ({ primaryAddress: null, addresses: [] })),
 }));
 
 describe('AdminLoginCard component', () => {

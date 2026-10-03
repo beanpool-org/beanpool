@@ -48,21 +48,19 @@ export function useClaimState(url: string): ClaimState {
 
         const ask = async () => {
             inFlight = true;
-            const [next, info] = await Promise.all([
-                fetchClaimState(url, ctl.signal),
-                getInfo(),
-            ]);
+            const next = await fetchClaimState(url, ctl.signal);
+            if (next.kind === 'unclaimed') {
+                const info = await getInfo();
+                next.primaryAddress = info.primaryAddress;
+                next.address = info.primaryAddress;
+                next.addresses = info.addresses;
+            }
             inFlight = false;
             if (!alive) return;
             if (next.kind === 'unknown') {
                 if (!waiting) setState(next);
             } else {
                 waiting = next.kind === 'unclaimed';
-                if (next.kind === 'unclaimed') {
-                    next.primaryAddress = info.primaryAddress;
-                    next.address = info.primaryAddress;
-                    next.addresses = info.addresses;
-                }
                 setState(next);
             }
             schedule();

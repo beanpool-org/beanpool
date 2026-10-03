@@ -73,6 +73,7 @@ import {
     revokeAllMemberSessions,
     revokeAdminSession,
     enrolAdminOwnerKey,
+    issueBreakGlassCode,
     createPasswordSession,
     setAdminSessionCookie,
     clearAdminSessionCookie,
@@ -536,6 +537,55 @@ const handleEnrol = async (ctx: any) => {
 
 router.post('/api/local/admin/auth/enrol', handleEnrol);
 router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
+
+/**
+ * POST /api/local/admin/auth/break-glass/issue
+ * Settings' "Make a break-glass code": a new code for an owner, shown once; the owner's earlier code stops working.
+ * Owners only. A key session makes one for its own key and nobody else's. The password (an owner with no key behind it)
+ * names the owner in `memberPubkey`, which must hold the owner role already: this grants nothing. A break-glass code is
+ * a wrong password here (admin-auth.ts opens only the enrol routes to it), and break-glass mode closes it to the
+ * password, as it does every route but enrolment.
+ */
+router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
+    const state = ctx.state as any;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let target: string;
+    if (state.isKeySession) {
+        target = state.actor;
+        if (body.memberPubkey && body.memberPubkey !== target) {
+            ctx.status = 403;
+            ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
+            return;
+        }
+    } else {
+        target = typeof body.memberPubkey === 'string' ? body.memberPubkey : '';
+        if (!target) {
+            ctx.status = 400;
+            ctx.body = { error: 'memberPubkey is required: name the owner the code is for' };
+            return;
+        }
+        if (!isMemberKeySpelling(target)) {
+            ctx.status = 400;
+            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
+            return;
+        }
+    }
+    try {
+        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password');
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = {
+            success: true,
+            memberPubkey: target,
+            breakGlassCode: code,
+            message: 'Store this break-glass code securely. It will only be shown once.',
+        };
+    } catch (e: any) {
+        ctx.status = Number(e?.status) || 400;
+        ctx.body = { error: e?.message || 'Could not make a break-glass code' };
+    }
+});
 
 /**
  * POST /api/local/admin/auth/break-glass-mode

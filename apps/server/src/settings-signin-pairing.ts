@@ -11,7 +11,7 @@
  *      (@beanpool/core settingsSigninText; <host> the address the phone reached this node at, sent as `signedFor`),
  *      or, from an app before request binding and only until the switch, `beanpool-settings-signin:v1:approve:<id>:<code>`.
  *      The node runs the same signer checks as the app's one-time link (authorizeKeySigner: active member,
- *      owner, admin or moderator in node_roles, signature, the node's 2FA code when on) and mints the same 60-second
+ *      owner, admin or moderator in node_roles, signature; since step 5 no server 2FA code) and mints the same 60-second
  *      handshake token — but keeps it here, bound to the pairing. It is never sent to the phone or the page.
  *   3. The browser, long-polling with its binding cookie, redeems that token through consumeHandshakeToken and
  *      gets the same admin_session a key sign-in gets. A photographed QR is useless elsewhere: without the
@@ -48,7 +48,7 @@ export const PAIRING_TTL_MS = 2 * 60_000;
 export const PAIRING_MAX_LIVE = 200;
 /** New pairings per client per minute. A page auto-refreshes every two minutes, so 10 is generous. */
 export const PAIRING_CREATES_PER_MINUTE = 10;
-/** Refused approvals (bad signature, not an owner/admin, wrong 2FA code) before the pairing is burned. */
+/** Refused approvals (bad signature, not an owner/admin) before the pairing is burned. */
 export const PAIRING_MAX_REFUSALS = 5;
 /** Long-poll waiters per pairing: one page, plus a reload or two. */
 export const PAIRING_MAX_WAITERS = 3;

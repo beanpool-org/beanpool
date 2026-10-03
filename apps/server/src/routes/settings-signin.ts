@@ -13,7 +13,7 @@
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
  * The phone's calls go through the auth limiter (15 a minute per client). The browser's creation has its own
- * brake inside the pairing module.
+ * per-client limit inside the pairing module (PAIRING_CREATES_PER_MINUTE).
  */
 
 import Router from '@koa/router';

@@ -2796,8 +2796,6 @@ describe('§8 16-20. The locked copy on the node (design §3, §5)', () => {
     });
 
     it('18 order: a copy is saved before the generation and before the shares; a failed copy sends neither', async () => {
-        const { node } = await community(['Owen', 'Ada'], true);
-        void node;
         // A fresh community, every request recorded from the first open on.
         const owen = await admin('Owen');
         const ada = await admin('Ada');

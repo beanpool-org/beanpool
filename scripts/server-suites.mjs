@@ -263,6 +263,7 @@ export const SUITES = [
     'test-tunnel-connector',
     'test-no-docker-socket',
     'test-node-config-public',
+    'test-tunnel-token-owner-only',
     'test-registrar-contract',
     'test-invite-trampoline',
     'test-ticket-redeem-fault',

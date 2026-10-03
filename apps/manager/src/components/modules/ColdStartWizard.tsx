@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
 import type { NodeProfile } from '../../lib/profiles';
+import type { KeySession } from '../../lib/key-session';
 import { Avatar } from '../common/Avatar';
 import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
 import {
@@ -30,6 +31,11 @@ export interface ColdStartWizardProps {
      * session the node issued for it. Rejects when they cancel.
      */
     onRequestTfaCode?: () => Promise<string>;
+    /**
+     * Who opened Settings with a key (lib/key-session.ts), or null for the admin password. An owner's key is already
+     * an owner and never needs the 2FA code, so step 2 tells them that instead of the password holder's how-to.
+     */
+    keySession?: KeySession | null;
 }
 
 interface GeneratedCard {
@@ -101,7 +107,11 @@ export function ColdStartWizard({
     onCancel,
     onOpenAccessSecurity,
     onRequestTfaCode,
+    keySession,
 }: ColdStartWizardProps) {
+    // An owner who signed in with their phone key: already the owner, and keys never need the 2FA code. Step 2 says
+    // so instead of the password holder's how-to and 2FA setup. An admin's or moderator's key keeps today's step 2.
+    const isOwnerKey = keySession?.role === 'owner';
     // A 2FA session issued by turning 2FA on in step 2 outranks whatever the wizard was opened with: once 2FA is on,
     // every later admin call needs it.
     const [freshTfaToken, setFreshTfaToken] = useState<string | undefined>(undefined);
@@ -135,6 +145,8 @@ export function ColdStartWizard({
     const [kitDownloaded, setKitDownloaded] = useState(false);
 
     useEffect(() => {
+        // An owner's key never needs the code, so there is nothing to ask the node.
+        if (isOwnerKey) return;
         let cancelled = false;
         const loadTfaStatus = async () => {
             if (!activeNode?.url) return;
@@ -161,7 +173,7 @@ export function ColdStartWizard({
         };
         loadTfaStatus();
         return () => { cancelled = true; };
-    }, [activeNode?.id, activeNode?.url, nodeCredential(activeNode), effectiveTfaToken, tfaStatusAttempt]);
+    }, [isOwnerKey, activeNode?.id, activeNode?.url, nodeCredential(activeNode), effectiveTfaToken, tfaStatusAttempt]);
 
     const handleRetryTfaStatus = () => {
         setTfaState('checking');
@@ -543,7 +555,8 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
     // A step shows ✓ only when what it does really happened; a step passed without that shows ⚠.
     const stepDone: Record<number, boolean> = {
         1: step1Done,
-        2: tfaState === 'on',
+        // An owner's key is already the owner and needs no 2FA code: step 2 has nothing left to do.
+        2: isOwnerKey || tfaState === 'on',
         3: step3Done,
         4: commonsRead,
         5: false,
@@ -757,7 +770,9 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             <span>Step 2: Owner &amp; Two-Factor Sign-In</span>
                         </h3>
                         <p className="text-xs text-nature-400 m-0 mt-1">
-                            Turn on two-factor sign-in for these settings, and see how your phone becomes an owner.
+                            {isOwnerKey
+                                ? "You signed in with your phone's key, so you are already the owner. Keys do not need the 2FA code."
+                                : 'Turn on two-factor sign-in for these settings, and see how your phone becomes an owner.'}
                         </p>
                     </div>
 
@@ -768,7 +783,11 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 Two-factor sign-in
                             </h4>
 
-                            {tfaState === 'on' ? (
+                            {isOwnerKey ? (
+                                <p data-testid="owner-key-no-2fa" className="text-xs text-nature-300 m-0 leading-relaxed">
+                                    You signed in with your key. Keys do not need the 2FA code, so there is nothing to set up here.
+                                </p>
+                            ) : tfaState === 'on' ? (
                                 <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/80 text-xs text-emerald-300 font-semibold">
                                     ✓ 2FA is on. {tfaTurnedOnHere
                                         ? 'You turned it on here: signing in to these settings now needs a code from your authenticator app.'
@@ -888,30 +907,49 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             )}
                         </div>
 
-                        {/* How an owner links their key: the real way */}
-                        <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
-                            <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
-                                Your phone as owner
-                            </h4>
-                            <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
-                                Right now the admin password is the only way into these settings. To manage them from your phone
-                                with your own key instead:
-                            </p>
-                            <ol className="text-[11px] text-nature-300 m-0 pl-5 space-y-1.5 list-decimal leading-relaxed">
-                                <li>Join the community in the BeanPool app with one of the founding invites from step 5.</li>
-                                <li>
-                                    Here in Settings, open <strong>People &amp; Safety → Owners &amp; admins</strong> and add
-                                    yourself as an owner.
-                                </li>
-                                <li>
-                                    In the app's Settings, tap <strong>Manage {communityName.trim() || 'your community'}</strong>.
-                                    It opens these settings signed in with your key, with no password.
-                                </li>
-                            </ol>
-                            <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
-                                Keep at least two owners, so losing one phone never locks the community out.
-                            </p>
-                        </div>
+                        {isOwnerKey ? (
+                            /* Signed in with the owner's own key: nothing to link, only a second owner to add */
+                            <div data-testid="owner-key-owner-card" className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
+                                    Owners
+                                </h4>
+                                <p className="text-sm font-bold text-white m-0 break-words">
+                                    You are the owner.
+                                </p>
+                                <p className="text-[11px] text-nature-300 m-0 leading-relaxed">
+                                    Add a second owner soon: if this phone is lost, a second owner can still manage the community.
+                                </p>
+                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
+                                    Once they have joined, open <strong>People &amp; Safety → Owners &amp; admins</strong> here in
+                                    Settings and add them as an owner.
+                                </p>
+                            </div>
+                        ) : (
+                            /* How an owner links their key: the real way */
+                            <div className="p-5 rounded-2xl bg-nature-950 border border-nature-800 space-y-3 min-w-0">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-nature-300 m-0">
+                                    Your phone as owner
+                                </h4>
+                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
+                                    Right now the admin password is the only way into these settings. To manage them from your phone
+                                    with your own key instead:
+                                </p>
+                                <ol className="text-[11px] text-nature-300 m-0 pl-5 space-y-1.5 list-decimal leading-relaxed">
+                                    <li>Join the community in the BeanPool app with one of the founding invites from step 5.</li>
+                                    <li>
+                                        Here in Settings, open <strong>People &amp; Safety → Owners &amp; admins</strong> and add
+                                        yourself as an owner.
+                                    </li>
+                                    <li>
+                                        In the app's Settings, tap <strong>Manage {communityName.trim() || 'your community'}</strong>.
+                                        It opens these settings signed in with your key, with no password.
+                                    </li>
+                                </ol>
+                                <p className="text-[11px] text-nature-400 m-0 leading-relaxed">
+                                    Keep at least two owners, so losing one phone never locks the community out.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="pt-4 flex items-center justify-between gap-3 border-t border-nature-800">

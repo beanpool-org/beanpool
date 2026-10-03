@@ -316,6 +316,61 @@ describe('ColdStartWizard Component (settings-ia §4 & §6)', () => {
         expect(screen.queryByRole('button', { name: /Recovery Kit/i })).not.toBeInTheDocument();
     });
 
+    // Since claim stages A/B the installer's phone claims the node and is its owner; keys never need the 2FA code.
+    it('step 2 under an owner key session: "You are the owner.", a second owner soon, no 2FA setup and no password how-to', async () => {
+        await renderWizard({ keySession: { memberPubkey: 'owner_pk', role: 'owner' } });
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+
+        expect(screen.getByText('You are the owner.')).toBeInTheDocument();
+        expect(screen.getByText(
+            'Add a second owner soon: if this phone is lost, a second owner can still manage the community.'
+        )).toBeInTheDocument();
+        expect(screen.getByTestId('owner-key-owner-card')).toHaveTextContent('People & Safety → Owners & admins');
+        expect(screen.getByTestId('owner-key-no-2fa')).toHaveTextContent('Keys do not need the 2FA code');
+
+        // The password holder's how-to is gone.
+        expect(screen.queryByText(/Your phone as owner/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/admin password is the only way/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Manage Mullumbimby Commons/)).not.toBeInTheDocument();
+        // Not pushed through 2FA: no setup button, no status line, and the node is never asked.
+        expect(screen.queryByRole('button', { name: 'Set up 2FA' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/2FA is not on yet/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Checking whether 2FA is on/)).not.toBeInTheDocument();
+        expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/2fa/'), expect.anything());
+
+        // Nothing is left to do in step 2, so moving on marks it ✓, not ⚠.
+        await click(screen.getByRole('button', { name: /Next: Create First Enterprise/i }));
+        expect(screen.getByTestId('wizard-step-2')).toHaveTextContent('✓');
+    });
+
+    it('step 2 under a password session keeps today\'s text: the phone-as-owner how-to and 2FA setup', async () => {
+        await renderWizard({ keySession: null });
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+
+        expect(screen.getByText('Your phone as owner')).toBeInTheDocument();
+        expect(screen.getByText(/Right now the admin password is the only way into these settings/)).toBeInTheDocument();
+        expect(screen.getByText(/Manage Mullumbimby Commons/)).toBeInTheDocument();
+        expect(screen.getByText(/Keep at least two owners/)).toBeInTheDocument();
+        expect(screen.getByText(/Turn on two-factor sign-in for these settings/)).toBeInTheDocument();
+        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Set up 2FA' })).toBeInTheDocument();
+        expect(screen.queryByText('You are the owner.')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('owner-key-no-2fa')).not.toBeInTheDocument();
+    });
+
+    it('step 2 under an admin key session keeps today\'s text, never "You are the owner."', async () => {
+        await renderWizard({ keySession: { memberPubkey: 'admin_pk', role: 'admin' } });
+        await click(screen.getByRole('button', { name: /Next: Owner & 2FA/i }));
+
+        expect(screen.getByText('Your phone as owner')).toBeInTheDocument();
+        expect(screen.getByText(/Right now the admin password is the only way into these settings/)).toBeInTheDocument();
+        expect(screen.getByText('2FA is not on yet.')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Set up 2FA' })).toBeInTheDocument();
+        expect(screen.queryByText('You are the owner.')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Add a second owner soon/)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('owner-key-no-2fa')).not.toBeInTheDocument();
+    });
+
     it('the wizard source carries no BP-RECOVERY seed, emergency seed or pair-owner link', () => {
         const src = fs.readFileSync(path.resolve(__dirname, 'ColdStartWizard.tsx'), 'utf8');
         expect(src).not.toMatch(/BP-RECOVERY/);

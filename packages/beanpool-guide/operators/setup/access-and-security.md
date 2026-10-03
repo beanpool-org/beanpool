@@ -39,7 +39,7 @@ Know its limits:
 
 ## Break-glass codes
 
-A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none.
+A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock, shows a new code once, and offers to keep a copy in the phone's secure store as well.
 
 - The server's log records that a code was made and for whom, never the code itself.
 - Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.

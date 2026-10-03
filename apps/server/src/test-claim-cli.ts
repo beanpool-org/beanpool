@@ -193,7 +193,7 @@ async function main(): Promise<void> {
         const contact = r === 'hung' ? '' : String(r.first?.contact ?? '');
         check(r !== 'hung' && r.first?.name === 'good-name' && r.second === null && r.warns.length === 0 && !r.left.includes('address-request.json'),
             `a small regular file is taken and removed (${show(r)})`);
-        check(contact.startsWith('ops@example.org [2J y') && !/[\u0000-\u001f\u007f]/.test(contact) && [...contact].length <= 254,
+        check(contact.startsWith('ops@example.org[2J y') && !/[\u0000-\u001f\u007f]/.test(contact) && [...contact].length <= 254,
             `its contact is cleaned: no control characters, at most 254 (${JSON.stringify(contact.slice(0, 30))}…, ${[...contact].length})`);
 
         console.log('\n1–5. A node with the registrar up');

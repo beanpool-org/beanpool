@@ -117,7 +117,10 @@ export async function reconcile(): Promise<void> {
     const name = desiredName();
     if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
     const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
-    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX);
+    // The env's contact, or the one `beanpool claim --contact` gave with the name being claimed.
+    const req = getLocalConfig().addressRequest;
+    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX)
+        || (req && req.name === name ? cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) : undefined);
     const communityName = cleanLabel(process.env.PUBLIC_ADDRESS_COMMUNITY_NAME, REGISTRAR_COMMUNITY_NAME_MAX)
         || cleanLabel(getLocalConfig().communityName, REGISTRAR_COMMUNITY_NAME_MAX);
 

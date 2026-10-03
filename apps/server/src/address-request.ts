@@ -9,11 +9,12 @@
  * with its own key through claimAddress → persistAddress, as it does for PUBLIC_ADDRESS_NAME. No route takes a request:
  * only the server's shell can leave the file.
  *
- * No database or config import here: the command loads this.
+ * No database or config import here (clean-label.ts imports nothing): the command loads this.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
 
 export const ADDRESS_REQUEST_FILE = 'address-request.json';
 /** The command's file is a few hundred bytes; anything bigger is not one. */
@@ -91,7 +92,8 @@ export function takeAddressRequestFile(dir: string): AddressRequestFile | null {
     try {
         const req = JSON.parse(text);
         if (!req || !isAddressLabel(req.name)) return null;
-        return { name: req.name, contact: typeof req.contact === 'string' ? req.contact : null, at: Number(req.at) || Date.now() };
+        // As the registrar takes it: the contact goes with the claim (public-address-agent.ts reconcile).
+        return { name: req.name, contact: cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) ?? null, at: Number(req.at) || Date.now() };
     } catch {
         return null;
     }

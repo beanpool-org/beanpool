@@ -415,6 +415,8 @@ export const TABLES: Record<string, TableEntry> = {
     names_entries: plain('id ciphertext key_id created_by created_at updated_by updated_at'),
     names_generations: plain('id n parent_id maker drops statement signature created_at updated_at'),
     names_shares: plain('from_pubkey to_pubkey head_id key_ids trusts sealed_ring ring_iv ring_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Each admin's locked copy of their own record, sealed to their key: a take-over serves it to the phone that lost its own.
+    names_copies: plain('owner_pubkey seq head_n head_id saved_at sealed_copy copy_iv copy_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
     // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
     names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
     // A confirmation names a key, an entry and the admins, never a name.

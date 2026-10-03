@@ -1535,6 +1535,34 @@ CREATE TABLE IF NOT EXISTS names_shares (
     PRIMARY KEY (from_pubkey, to_pubkey)
 );
 
+-- An admin's locked copy of their own names-list record (scratch/global-node/DESIGN-names-locked-copy-opus.md §4): the keys
+-- their phone holds and whom it trusts, sealed to their own member key and signed by it (@beanpool/core
+-- names-list-crypto.ts sealNamesCopy, names-list-trust.ts makeNamesCopy), so Sign Out, a reinstall or a new phone loses
+-- nothing. One row per admin key, written only by that key (routes/names-list.ts PUT /api/names/copy) and read only by it.
+-- This server never opens or changes one: it keeps the header's numbers for `myCopy` and the rest as sent. Kept when an
+-- admin is demoted; deleted when the key stops being a member here (removed, account deleted, or replaced by a re-key).
+CREATE TABLE IF NOT EXISTS names_copies (
+    owner_pubkey      TEXT PRIMARY KEY,
+    seq               INTEGER NOT NULL,
+    head_n            INTEGER NOT NULL,
+    -- '-' with an empty chain.
+    head_id           TEXT NOT NULL,
+    -- The phone's clock, as signed: shown to the admin, never compared.
+    saved_at          TEXT NOT NULL,
+    -- base64, at most 1 MiB decoded (NAMES_COPY_MAX_BYTES).
+    sealed_copy       TEXT NOT NULL,
+    copy_iv           TEXT NOT NULL,
+    copy_tag          TEXT NOT NULL,
+    ephemeral_pubkey  TEXT NOT NULL,
+    kdf_params        TEXT NOT NULL,
+    box_digest        TEXT NOT NULL,
+    header            TEXT NOT NULL,
+    signature         TEXT NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 -- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
 -- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
 -- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).
@@ -1573,12 +1601,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(
 
 -- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
 -- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
--- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`).
+-- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`). A phone taking
+-- its admin's locked copy back is a line (`copy_restored`); saving one is not.
 CREATE TABLE IF NOT EXISTS names_access_log (
     id              TEXT PRIMARY KEY,
     actor_pubkey    TEXT NOT NULL,
     action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
-                                                    'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings')),
+                                                    'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings',
+                                                    'copy_restored')),
     entry_id        TEXT,
     subject_pubkey  TEXT,
     at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

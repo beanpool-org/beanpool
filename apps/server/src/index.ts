@@ -66,7 +66,11 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury } from './state-engine.js';
+import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement } from './state-engine.js';
+import { startRecoverNoticeWatch } from './recover-command.js';
+import { logger } from './logger.js';
+import { bumpMembersVersion } from './engine/versions.js';
+import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
@@ -128,6 +132,14 @@ async function main() {
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
     migrateAdminConversations();
+
+    // Step 2.51: `beanpool recover`, run in this container, leaves a notice in the data dir for each owner it adds: the
+    // community is told and the log keeps it, at boot and within 5 s while running (recover-command.ts). Never blocks the boot.
+    startRecoverNoticeWatch({
+        announce: adminBroadcastAnnouncement,
+        log: message => logger.security('AUTH', message),
+        changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
+    });
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
     // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over

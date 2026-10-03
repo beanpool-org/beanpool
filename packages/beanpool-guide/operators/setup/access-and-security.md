@@ -35,7 +35,7 @@ Know its limits:
 - Wrong codes at the app's Manage button, or when approving a computer's sign-in from the phone, are counted too, for that person's key and for the internet address they come from. After 5 wrong codes, each further try waits: 2 seconds, then 4, 8 and so on, up to an hour. A right code clears it. If this happens and it wasn't you, someone else has that person's key: remove their role, or sign them out everywhere, and add their new key.
 - There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.
 - The server makes eight single-use backup codes when you set it up. To see a new set, an owner types the 6-digit code the authenticator shows now under **New backup codes** in the two-factor card (a backup code does not work there). Settings shows the eight codes once; the old ones stop working at that moment. Write them down and keep them apart from the phone. Admins and moderators do not see this.
-- If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first.
+- If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first. beanpool recover (Signing in) does not help here yet: it makes someone an owner, and today an owner's key sign-in still asks for the code.
 
 ## Break-glass codes
 

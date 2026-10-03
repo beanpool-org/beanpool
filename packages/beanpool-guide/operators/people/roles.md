@@ -100,7 +100,7 @@ A server with no owner, which is a brand-new one before its first invite, or one
 
 ## Every owner locked out
 
-If the community has owners but none of them can sign in any more (phones and 12 words lost, no second owner, no break-glass code), whoever runs the server can make a member owner from the server's command line: `docker compose exec beanpool-node beanpool recover --key <their public key or @callsign>`. The member must have joined first. It adds an owner and removes nobody, changes no setting, prints the new owner's break-glass code once, and tells every member in a critical notice that an owner was added from the server. See Signing in.
+If the community has owners but none of them can sign in any more (phones and 12 words lost, no second owner, no break-glass code), whoever runs the server can make a member owner from the server's command line: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). The member must have joined first. It adds an owner and removes nobody, changes no setting, prints the new owner's break-glass code once, and tells every member in a critical notice that an owner was added from the server. See Signing in.
 
 ## The first owner, Admin
 

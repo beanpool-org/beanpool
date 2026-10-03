@@ -79,6 +79,17 @@ function die(msg) {
     process.exit(1);
 }
 
+/**
+ * Sign-in step 7c: a primary with two-factor sign-in off refuses the admin password sent with a request (403
+ * password_needs_2fa). Its words and the way out, or null for any other answer.
+ */
+function passwordNeeds2faHint(status, body) {
+    if (status !== 403 || body?.code !== 'password_needs_2fa') return null;
+    return `${body.error || 'The primary refused the admin password.'}\n` +
+        'The password alone opens nothing there: turn on two-factor sign-in on the primary, or set BEANPOOL_TOKEN ' +
+        '(an owner\'s automation token, read or admin scope) and pass the primary\'s replication token with --token.';
+}
+
 /** Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. */
 function upsertEnv(envPath, kv) {
     let lines = [];
@@ -118,7 +129,7 @@ async function mintTokenIfNone(primary, adminPw) {
             body: JSON.stringify({ password: adminPw }),
         });
         const body = await res.json().catch(() => ({}));
-        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and pass it with --token.' : ''}`);
+        if (!res.ok) die(`Primary refused ${p} (HTTP ${res.status}). ${passwordNeeds2faHint(res.status, body) ?? (body?.totpRequired ? 'Two-factor sign-in is on: make a token in Settings → Replication Access and pass it with --token.' : '')}`);
         return body;
     };
     const status = await post('/api/local/admin/replication-token/status');
@@ -177,7 +188,9 @@ async function main() {
         });
         if (!res.ok) {
             const body = await res.text().catch(() => '');
-            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : 'Check --admin-pw.') : body}`);
+            let parsed = null;
+            try { parsed = JSON.parse(body); } catch { /* not JSON: printed as it came */ }
+            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : 'Check --admin-pw.') : (passwordNeeds2faHint(res.status, parsed) ?? body)}`);
         }
         bundle = await res.json();
     } catch (e) {

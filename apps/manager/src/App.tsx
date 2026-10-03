@@ -80,19 +80,8 @@ import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEnt
 import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
-import { passwordField } from './lib/node-client';
+import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
-
-/**
- * Does this error mean "wrong password" rather than "node unreachable"?
- *
- * `fetchDiagnostics` throws `HTTP 401: Unauthorized`; the friendlier per-endpoint
- * messages say the same thing in words. Both are matched, because retrying is futile
- * either way — no amount of waiting turns a rejected password into an accepted one.
- */
-function isAuthFailure(message: string): boolean {
-    return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message);
-}
 
 /**
  * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
@@ -801,6 +790,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     }
                 }
 
+                // A node with two-factor sign-in off refuses the password per request (step 7c): its words, not "offline".
+                const needs2fa = await passwordNeeds2faError(diagRes);
+                if (needs2fa) throw needs2fa;
                 if (diagRes.status === 403 && !isFleetMode) {
                     // The password session is held to the 2FA card (2FA was turned off, here or elsewhere).
                     const body = await diagRes.json().catch(() => null) as Record<string, unknown> | null;

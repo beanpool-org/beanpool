@@ -8,6 +8,10 @@
  *      The code is stored scrypt-hashed, opens the break-glass enrol route, and a new code retires the old one.
  *   2. POST /api/node-admin/break-glass, signed with the member key (what the app sends): an owner gets a code for
  *      their own key; an admin, a member and an unsigned request do not.
+ *   2b. A stolen owner session leaves no lasting code (#1531): an owner signing out everywhere (a key session, or the
+ *      app's signed request) retires their own code, and the code is refused at break-glass sign-in; a new one made
+ *      afterwards works. Re-enrolling an owner who already holds the role leaves their code alone; a new owner grant
+ *      still gets one. Settings' roles list shows when, and from which kind of session, each owner's code was made.
  *   3. POST /api/local/admin/2fa/backup-codes: new backup codes for an owner who types the 6-digit code the
  *      authenticator shows now. Missing, wrong, reused, a backup code in its place, an admin, a moderator, and 2FA off
  *      are refused, and nothing changes. The old codes stop working.
@@ -203,6 +207,94 @@ async function main() {
         shown.push(o.body?.breakGlassCode);
         const use = await post('/api/local/admin/auth/break-glass/enrol', { memberPubkey: member.pub, role: 'admin' }, { 'x-break-glass-code': o.body?.breakGlassCode });
         assert(use.status === 200, `the app's code opens the enrol route (${use.status})`);
+    }
+
+    console.log('\n2b. A stolen owner session leaves no lasting code (#1531)');
+    {
+        const ENROL = '/api/local/admin/auth/enrol';
+        const BG_ENROL = '/api/local/admin/auth/break-glass/enrol';
+        const rolesSeen = async () => {
+            const res = await fetch(`${BASE}/api/local/admin/node-roles`, { headers: asPassword });
+            const json: any = await res.json().catch(() => null);
+            return (json?.roles || []) as any[];
+        };
+        const rowOf = async (pub: string) => (await rolesSeen()).find(r => r.member_pubkey === pub);
+        const recently = (iso: unknown) => typeof iso === 'string' && Math.abs(Date.now() - Date.parse(iso)) < 60_000;
+        const roleOf = (pub: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pub) as { role: string } | undefined)?.role ?? null;
+        // Its own owner, so that signing out everywhere leaves the owner's session section 3 uses alone.
+        const owner3 = seedMember('bgOwner3');
+        grantNodeRole(owner3.pub, 'owner', owner.pub);
+
+        // Settings shows, for each owner, when the code was last made and from which kind of session.
+        const appMade = await rowOf(owner2.pub);
+        assert(appMade?.has_break_glass === true && appMade?.break_glass_made_by === 'app' && recently(appMade?.break_glass_made_at),
+            `Settings shows the app made owner2's code, and when (${JSON.stringify(appMade)})`);
+
+        // The review's measurement (r4172011768): an owner's key session makes a code, then the owner signs out everywhere.
+        const stolen = { 'x-admin-session': keySession(owner3) };
+        const made = await post(ISSUE, {}, stolen);
+        const stolenCode = made.body?.breakGlassCode as string;
+        shown.push(stolenCode);
+        assert(made.status === 200 && BG_SHAPE.test(stolenCode), `a key session makes a code (${made.status})`);
+        const keyMade = await rowOf(owner3.pub);
+        assert(keyMade?.break_glass_made_by === 'key-session' && recently(keyMade?.break_glass_made_at),
+            `Settings shows a key session made it, and when (${JSON.stringify(keyMade)})`);
+
+        const out = await post('/api/local/admin/auth/revoke-all', {}, stolen);
+        assert(out.status === 200 && out.body?.breakGlassCodeRetired === true, `the owner signs out everywhere, and is told the code is retired (${out.status} ${JSON.stringify(out.body)})`);
+        const after = await post(ISSUE, {}, stolen);
+        assert(after.status === 401, `the signed-out session is refused (${after.status})`);
+        assert(hashOf(owner3.pub) === null, 'the owner has no stored code any more');
+        const thief = seedMember('bgThief');
+        const reuse = await post(BG_ENROL, { memberPubkey: thief.pub, role: 'owner' }, { 'x-break-glass-code': stolenCode });
+        assert(reuse.status === 401 && !roleOf(thief.pub), `the code that session made no longer enrols anyone (${reuse.status})`);
+        const gone = await rowOf(owner3.pub);
+        assert(gone?.has_break_glass === false && gone?.break_glass_made_at == null && gone?.break_glass_made_by == null,
+            `Settings shows the owner has no code (${JSON.stringify(gone)})`);
+
+        // The owner makes a new one from Settings when needed, and the normal break-glass flow works with it.
+        const fresh = { 'x-admin-session': keySession(owner3) };
+        const remade = await post(ISSUE, {}, fresh);
+        shown.push(remade.body?.breakGlassCode);
+        assert(remade.status === 200 && BG_SHAPE.test(remade.body?.breakGlassCode), `a new session makes a new code (${remade.status})`);
+        const helper = seedMember('bgHelper');
+        const useNew = await post(BG_ENROL, { memberPubkey: helper.pub, role: 'admin' }, { 'x-break-glass-code': remade.body?.breakGlassCode });
+        assert(useNew.status === 200 && roleOf(helper.pub) === 'admin', `the new code enrols a key (${useNew.status})`);
+
+        // The app's "Sign me out everywhere" (signed with the member key) is the owner's own too.
+        assert(hashOf(owner2.pub) !== null, 'owner2 holds a code before signing out everywhere from the app');
+        const appOut = await signedPost('/api/local/admin/auth/revoke-all', {}, owner2);
+        assert(appOut.status === 200 && appOut.body?.breakGlassCodeRetired === true && hashOf(owner2.pub) === null,
+            `signing out everywhere from the app retires that owner's code (${appOut.status} ${JSON.stringify(appOut.body)})`);
+
+        // Re-enrolling an owner who already holds the role keeps their code, from a key session or the password.
+        const pwMade = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        shown.push(pwMade.body?.breakGlassCode);
+        const pwRow = await rowOf(owner2.pub);
+        assert(pwMade.status === 200 && pwRow?.break_glass_made_by === 'password', `Settings shows the password made it (${JSON.stringify(pwRow)})`);
+        const held = hashOf(owner2.pub);
+        const byKey = await post(ENROL, { memberPubkey: owner2.pub, role: 'owner' }, fresh);
+        assert(byKey.status === 200 && !byKey.body?.breakGlassCode && hashOf(owner2.pub) === held,
+            `a key session re-enrolling an existing owner gets no code, and theirs is unchanged (${byKey.status} ${JSON.stringify(byKey.body)})`);
+        const byPw = await post(ENROL, { memberPubkey: owner2.pub, role: 'owner' }, asPassword);
+        assert(byPw.status === 200 && !byPw.body?.breakGlassCode && hashOf(owner2.pub) === held,
+            `…nor does the password (${byPw.status} ${JSON.stringify(byPw.body)})`);
+        const stillWorks = seedMember('bgStill');
+        const usePw = await post(BG_ENROL, { memberPubkey: stillWorks.pub, role: 'admin' }, { 'x-break-glass-code': pwMade.body?.breakGlassCode });
+        assert(usePw.status === 200, `owner2's code still works after both re-enrolments (${usePw.status})`);
+        const unchanged = await rowOf(owner2.pub);
+        assert(unchanged?.break_glass_made_by === 'password' && unchanged?.break_glass_made_at === pwRow?.break_glass_made_at,
+            'and Settings still shows when and how it was made');
+
+        // A new owner grant still gets a code.
+        const grantee = seedMember('bgGrantee');
+        const granted = await post(ENROL, { memberPubkey: grantee.pub, role: 'owner' }, fresh);
+        shown.push(granted.body?.breakGlassCode);
+        assert(granted.status === 200 && BG_SHAPE.test(granted.body?.breakGlassCode) && !!hashOf(grantee.pub),
+            `a new owner grant still gets a code (${granted.status})`);
+        const grantRow = await rowOf(grantee.pub);
+        assert(grantRow?.break_glass_made_by === 'key-session' && recently(grantRow?.break_glass_made_at),
+            `Settings shows the new owner's code was made by a key session (${JSON.stringify(grantRow)})`);
     }
 
     console.log('\n3. 2FA backup codes in Settings');

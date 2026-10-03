@@ -69,7 +69,7 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
             ctx.body = { error: 'Only an owner of this community has a break-glass code' };
             return;
         }
-        const code = issueBreakGlassCode(actor, 'their own key, from the app');
+        const code = issueBreakGlassCode(actor, 'their own key, from the app', 'app');
         ctx.body = { success: true, memberPubkey: actor, breakGlassCode: code };
     });
 

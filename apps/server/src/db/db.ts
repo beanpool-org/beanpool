@@ -1245,6 +1245,12 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
     }
 
+    // node_roles: when, and from which kind of session, each owner's break-glass code was last made (#1531). After the
+    // rebuild above, which copies only the columns it knows. Existing rows keep NULL in both (Settings: "made before
+    // this was recorded"); a fresh install gets them from schema.sql, and the ALTER fails harmlessly with no table yet.
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_by TEXT`).run(); } catch { }
+
     // group_members: the status CHECK gains 'removed', so a convenor's removal is kept as a record instead of a
     // deleted row that an open group's Join button re-creates. A CHECK cannot be altered in place, so the table
     // is rebuilt. BEFORE the schema.sql exec on purpose: dropping the table drops its touch trigger and indexes,

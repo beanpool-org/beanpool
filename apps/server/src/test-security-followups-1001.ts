@@ -96,9 +96,11 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     console.log('— 1. a break-glass code enrols a key, and does nothing else —');
     resetAdminAuthTarpit();
     const pwHeaders = { 'x-admin-password': PW };
-    const enrolled = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
+    // The owner already holds the role, and re-enrolling them keeps their code (#1531), so the password makes theirs the
+    // way Settings does, naming the owner. Before #1531 this re-enrolled them and took the code enrol made.
+    const enrolled = await req('/api/local/admin/auth/break-glass/issue', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub } });
     const code: string = enrolled.json?.breakGlassCode;
-    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the owner's enrolment issues a code (${enrolled.status})`);
+    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the password makes the owner a code (${enrolled.status})`);
 
     // Stored salted and slow, not as the code's plain SHA-256.
     const stored = getNodeRoleBreakGlassHash(owner.pub) ?? '';

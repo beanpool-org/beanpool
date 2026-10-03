@@ -85,6 +85,9 @@ async function main() {
     assert(!!code1, 'it prints a break-glass code for the new owner');
     assert(!!code1 && !!row?.break_glass_hash && (await breakGlassCodeMatches(code1, row.break_glass_hash)) !== 'no',
         'the stored hash matches the printed code');
+    const made = db.prepare('SELECT break_glass_made_at AS at, break_glass_made_by AS by FROM node_roles WHERE member_pubkey = ?').get(ALICE) as { at: string | null; by: string | null } | undefined;
+    assert(made?.by === 'recover' && !!made?.at && Math.abs(Date.now() - Date.parse(made.at)) < 60_000,
+        `Settings can show the code was made by beanpool recover, and when (${JSON.stringify(made)})`);
     assert(fs.readFileSync(CONFIG).equals(configBefore), 'local-config.json is unchanged (name, contact, token, break-glass mode)');
 
     // 4. The notice and the log line

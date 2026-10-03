@@ -188,6 +188,16 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByText('bg-a1b2-c3d4-e5f6-7890')).not.toBeInTheDocument();
     });
 
+    it('the Access tab carries the Automation tokens card for an owner and not for an admin', async () => {
+        fakeFetch('/api/local/admin/automation-tokens', { tokens: [], scopes: ['read', 'backups', 'admin'] });
+        let view: ReturnType<typeof renderAccess>;
+        await act(async () => { view = renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
+        expect(screen.getByText('Automation tokens')).toBeInTheDocument();
+        view!.unmount();
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }); });
+        expect(screen.queryByText('Automation tokens')).not.toBeInTheDocument();
+    });
+
     it('the password names the owner; an admin is told only an owner has a code', async () => {
         const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-0000-1111-2222-3333' });
         await act(async () => { renderAccess({ kind: 'password' }); });

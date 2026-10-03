@@ -16,6 +16,7 @@ import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
 import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
+import { nodeCredential } from '../../lib/profiles';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -78,7 +79,7 @@ export function PeopleSafetySection({
                 reportFilter,
                 50,
                 0,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setFetchedReports(res.reports);
@@ -110,7 +111,7 @@ export function PeopleSafetySection({
     }, [subTab, reportFilter, activeNode?.url, activeNode?.id, nodeData?.reports]);
 
     const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
-        await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
         onRefresh();
     });
     const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -123,7 +124,7 @@ export function PeopleSafetySection({
         setRemovingReportId(reportId);
         setPulseRemoveError(null);
         try {
-            await removeReportedPulseItem(activeNode.url, reportId, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await removeReportedPulseItem(activeNode.url, reportId, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setActionedReportIds((prev) => new Set(prev).add(String(reportId)));
             refreshReports();
         } catch (e: unknown) {
@@ -177,7 +178,7 @@ export function PeopleSafetySection({
 
             // The node takes at most BULK_DELETE_BATCH_SIZE ids per request: send them in batches, one after another,
             // stopping at the first that fails (lib/bulk-delete-posts.ts).
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             const outcome = await bulkDeleteInBatches(stalePostIds, (batch) => sendBulkDeleteBatch(url, headers, batch));
             setBulkDeleteResult(describeBulkDeleteOutcome(outcome));
             // Once, at the end, whenever any batch went through: a partial run changed the list too.
@@ -312,7 +313,7 @@ export function PeopleSafetySection({
                             nodeData={nodeData}
                             nodeDataLoading={nodeDataLoading}
                             activeNodeUrl={activeNode.url}
-                            adminPassword={activeNode.adminPassword}
+                            adminPassword={nodeCredential(activeNode)}
                             tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                             onRefresh={onRefresh}
                             onFreezeUser={onFreezeUser}
@@ -372,7 +373,7 @@ export function PeopleSafetySection({
                         <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
                             <BurstDigestCard
                                 nodeUrl={activeNode.url}
-                                adminPassword={activeNode.adminPassword}
+                                adminPassword={nodeCredential(activeNode)}
                                 tfaToken={getTfaSessionToken(activeNode.id)}
                                 onOpen={setBurstAnchor}
                                 reloadKey={burstReload}
@@ -384,7 +385,7 @@ export function PeopleSafetySection({
                                     nodeUrl={activeNode.url}
                                     anchor={burstAnchor}
                                     canRemove
-                                    adminPassword={activeNode.adminPassword}
+                                    adminPassword={nodeCredential(activeNode)}
                                     tfaToken={getTfaSessionToken(activeNode.id)}
                                     onClose={() => setBurstAnchor(null)}
                                     onChanged={() => { setBurstReload(n => n + 1); refreshReports(); }}
@@ -652,7 +653,7 @@ export function PeopleSafetySection({
                         setSelectedThreat(null);
                     }}
                     onDismissReport={async (threat) => {
-                        await dismissNodeReport(activeNode.url, String(threat.id), activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                        await dismissNodeReport(activeNode.url, String(threat.id), nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                         if (threat?.id) {
                             setDismissedReportIds((prev) => new Set(prev).add(String(threat.id)));
                         }

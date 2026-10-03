@@ -8,6 +8,7 @@ import {
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface EscrowDisputesPanelProps {
     activeNode: NodeProfile;
@@ -50,7 +51,7 @@ export function EscrowDisputesPanel({
             const data = await fetchEscrowDisputes(
                 activeNode.url,
                 minDays,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfaToken,
                 { limit: PAGE_SIZE, offset: page * PAGE_SIZE, status: filterStatus }
             );
@@ -134,7 +135,7 @@ export function EscrowDisputesPanel({
                 selectedDispute.id,
                 selectedAction,
                 reason.trim() || undefined,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfaToken
             );
 

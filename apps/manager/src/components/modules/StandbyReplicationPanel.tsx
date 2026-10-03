@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface StandbyReplicationPanelProps {
     activeNode: NodeProfile;
@@ -67,14 +69,14 @@ export function StandbyReplicationPanel({
     const loadData = useCallback(async () => {
         setLoadingStatus(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
 
             // 1. Fetch live backup status
             const statusUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
             const statusRes = await fetch(statusUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => null);
 
             if (statusRes && statusRes.ok) {
@@ -90,7 +92,7 @@ export function StandbyReplicationPanel({
             const configRes = await fetch(configUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => null);
 
             if (configRes && configRes.ok) {
@@ -107,7 +109,7 @@ export function StandbyReplicationPanel({
         } finally {
             setLoadingStatus(false);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => {
         loadData();
@@ -120,7 +122,7 @@ export function StandbyReplicationPanel({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-config/save');
             const body: Record<string, unknown> = {
-                password: activeNode.adminPassword,
+                ...passwordField(nodeCredential(activeNode)),
                 primaryUrl: primaryUrl.trim(),
             };
             if (primaryToken.trim()) {
@@ -131,7 +133,7 @@ export function StandbyReplicationPanel({
 
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
@@ -163,8 +165,8 @@ export function StandbyReplicationPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-resync');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchAppVersions, getTfaSessionToken, type AppPlatformVersions, type AppVersionsResponse } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * The phone app's versions in this community, and each platform's floor (server routes/admin.ts app-versions): so an
@@ -102,7 +103,7 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
         // Cleared first, so one node's numbers never show under another's name while the next loads.
         setData(null);
         setError(null);
-        fetchAppVersions(node.url, node.adminPassword, getTfaSessionToken(node.id))
+        fetchAppVersions(node.url, nodeCredential(node), getTfaSessionToken(node.id))
             .then((res) => {
                 if (cancelled) return;
                 // Anything but the shape this card reads (a proxy's page, a build that answers something else) is said in
@@ -115,7 +116,7 @@ export function AppVersionsCard({ node }: { node: NodeProfile }) {
             })
             .catch((e) => { if (!cancelled) setError(e?.message || 'Could not reach this node'); });
         return () => { cancelled = true; };
-    }, [node.id, node.url, node.adminPassword]);
+    }, [node.id, node.url, nodeCredential(node)]);
 
     return (
         <section

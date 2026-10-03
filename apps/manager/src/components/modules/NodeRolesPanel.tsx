@@ -10,6 +10,7 @@ import {
     type MemberNodeRole,
     type NodeRoleRecord,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * Owners & admins — who holds authority over this node (docs/admin-surface.md §1, the-commons.md §9.2).
@@ -160,14 +161,14 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            setRoles(await fetchNodeRoles(activeNode.url, activeNode.adminPassword, tfa));
+            setRoles(await fetchNodeRoles(activeNode.url, nodeCredential(activeNode), tfa));
             setLoadError(null);
         } catch (e: any) {
             setLoadError(e?.message || 'Could not load the list');
         } finally {
             setLoading(false);
         }
-    }, [activeNode.url, activeNode.adminPassword, tfa]);
+    }, [activeNode.url, nodeCredential(activeNode), tfa]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -239,7 +240,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
         setBusy(true);
         setNotice(null);
         try {
-            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, activeNode.adminPassword, tfa);
+            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa);
             const who = target.pubkey === myKey ? 'You are' : `${target.name} is`;
             setNotice({ kind: 'success', text: `${who} now ${ROLE_ARTICLE[newRole]}.` });
             resetAdd();
@@ -259,7 +260,7 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
         setBusy(true);
         setNotice(null);
         try {
-            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, activeNode.adminPassword, tfa);
+            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa);
             setNotice({ kind: 'success', text: `${name} is no longer ${ROLE_ARTICLE[removing.role]}.` });
             setRemoving(null);
             await load();

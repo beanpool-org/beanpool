@@ -106,6 +106,39 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByRole('button', { name: /deploy update/i })).not.toBeInTheDocument();
     });
 
+    it('shows the node\'s real backup schedule, and "Unknown" when it can\'t be read, never a made-up default', async () => {
+        const renderBackups = () => render(
+            <ApplianceSection
+                activeNode={mockProfile}
+                diag={mockDiag}
+                gateway={mockGateway}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                gatewaySaving={false}
+                nodeLogs={[]}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onRefreshDiag={vi.fn()}
+                onRefreshLogs={vi.fn()}
+                onDownloadBackup={vi.fn()}
+                onRunLedgerAudit={vi.fn()}
+                auditState={{ running: false, result: null }}
+                initialSubTab="backups"
+            />
+        );
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({ enabled: true, intervalHours: 6, keep: 3 });
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = renderBackups(); });
+        expect(await screen.findByText('Active (6h)')).toBeInTheDocument();
+        view.unmount();
+
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403: Forbidden'));
+        await act(async () => { renderBackups(); });
+        expect(await screen.findByText('Unknown')).toBeInTheDocument();
+        expect(screen.queryByText(/^Active \(/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Couldn't read this node's backup schedule/)).toBeInTheDocument();
+    });
+
     it('manages automated backup schedule and verifies database integrity', async () => {
         await act(async () => {
             render(

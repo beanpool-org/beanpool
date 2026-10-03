@@ -139,6 +139,7 @@ import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
 import { createNamesListRoutes } from './routes/names-list.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
+import { createNodeClaimRoutes } from './routes/node-claim.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
@@ -1739,6 +1740,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createNodeAdminRoutes(deps),
         createNamesListRoutes(deps),
         createSettingsSigninRoutes(deps),
+        createNodeClaimRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),

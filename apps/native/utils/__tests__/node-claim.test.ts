@@ -11,7 +11,7 @@ vi.mock('expo-crypto', async () => {
 
 import {
     APP_CLAIM_SCRYPT, buildClaimBody, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, type OwnerCheck,
+    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, type OwnerCheck,
 } from '../node-claim';
 
 // core's fixed vectors (packages/beanpool-core/src/__tests__/claim-proof.test.ts), made with Node's crypto.
@@ -259,5 +259,39 @@ describe('the claim', () => {
 
     it('confirmLostClaim on its own: unreachable → check again', async () => {
         expect(await confirmLostClaim(ORIGIN, identity, owner, (async () => { throw new Error('x'); }) as any)).toEqual({ kind: 'check-again' });
+    });
+});
+
+describe('the success screen\'s address button', () => {
+    it('"Set the address" only when the node says it has none', async () => {
+        expect(await readNodeHasAddress(ORIGIN, (async () => json(200, { addresses: [] })) as any)).toBe(false);
+        expect(await readNodeHasAddress(ORIGIN, (async () => json(200, { addresses: ['new.example.org'] })) as any)).toBe(true);
+        expect(await readNodeHasAddress(ORIGIN, (async () => json(200, { name: 'old node' })) as any)).toBeNull();
+        expect(await readNodeHasAddress(ORIGIN, (async () => json(500, {})) as any)).toBeNull();
+        expect(await readNodeHasAddress(ORIGIN, (async () => { throw new Error('x'); }) as any)).toBeNull();
+    });
+});
+
+describe('the owner check after a lost answer', () => {
+    const identity = { publicKey: PUB, privateKey: SEED };
+    function stubFetch(meStatus: number, meBody: unknown) {
+        return vi.spyOn(globalThis, 'fetch').mockImplementation((async (url: string) => {
+            if (String(url).endsWith('/api/community/info')) return json(200, { requestSigning: 2 });
+            return json(meStatus, meBody);
+        }) as any);
+    }
+
+    it('owner → owner; another role or none → not owner; 429 or 5xx → no answer', async () => {
+        const cases: Array<[number, unknown, string | null]> = [
+            [200, { role: 'owner' }, 'owner'], [200, { role: 'admin' }, 'not-owner'], [403, {}, 'not-owner'],
+            [429, {}, null], [503, {}, null],
+        ];
+        for (const [status, body, want] of cases) {
+            const spy = stubFetch(status, body);
+            expect(await ownerCheckViaRole(ORIGIN, identity)).toBe(want);
+            const me = spy.mock.calls.find(c => String(c[0]).endsWith('/api/node-admin/me'));
+            expect(me).toBeTruthy();
+            spy.mockRestore();
+        }
     });
 });

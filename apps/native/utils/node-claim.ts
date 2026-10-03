@@ -19,7 +19,7 @@
 import {
     CLAIM_SCRYPT, audienceOf, claimKeyFromCodeAsync, claimProof, claimText, signedRequestBytes, toBase64,
 } from '@beanpool/core';
-import { memberSigner } from './crypto';
+import { buildSignedHeaders, memberSigner } from './crypto';
 import { isPlainNodeAddress, normalizeNodeUrl, plainOriginOf, shouldBlockCleartextNodeUrl } from './node-url';
 
 /**
@@ -297,3 +297,41 @@ export function claimOutcomeMessage(outcome: ClaimOutcome, communityName: string
             return '';
     }
 }
+
+/**
+ * Whether the node already has a public address (`/api/community/info` `addresses`: its own names, empty on a node that
+ * knows none). `beanpool claim` usually sets one first, so the success screen offers "Set the address" only on `false`;
+ * `null` (no answer, an older node) offers Settings as usual.
+ */
+export async function readNodeHasAddress(origin: string, fetchImpl: Fetch = fetch): Promise<boolean | null> {
+    if (!isPlainNodeAddress(origin)) return null;
+    try {
+        const res = await fetchImpl(`${origin}/api/community/info`, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (!res.ok) return null;
+        const body = await res.json().catch(() => null) as { addresses?: unknown } | null;
+        if (!body || !Array.isArray(body.addresses)) return null;
+        return body.addresses.some(a => typeof a === 'string' && a.trim() !== '');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * {@link OwnerCheck} through the signed role lookup the app already uses (`GET /api/node-admin/me`, node-admin.ts). A 429
+ * or a 5xx is no answer ("check again"), not "someone else owns it".
+ */
+export const ownerCheckViaRole: OwnerCheck = async (origin, identity) => {
+    try {
+        const url = `${origin}/api/node-admin/me`;
+        const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
+        delete headers['Content-Type'];
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json', ...headers } });
+        if (res.status === 429 || res.status >= 500) return null;
+        if (!res.ok) return 'not-owner';
+        const body = await res.json().catch(() => null) as { role?: unknown } | null;
+        if (!body) return null;
+        return body.role === 'owner' ? 'owner' : 'not-owner';
+    } catch {
+        return null;
+    }
+};

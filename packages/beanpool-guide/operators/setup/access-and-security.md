@@ -17,11 +17,11 @@ If the server made up the first password (ADMIN_PASSWORD was empty), changing it
 
 ## Two-factor sign-in
 
-Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on.
+Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
 
 - Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.
 - Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.
-- There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.
+- There is one code for the whole server, not one per person. Everyone who signs in with the password needs it. Owners, admins and moderators who sign in from the app don't.
 - Once you have typed a code, the browser does not ask again for **4 hours** of use.
 - Each code works once. A code the server has already taken, from anyone, is refused with "That 2FA code was already used. Wait for the next one from your authenticator app." The next code comes within 30 seconds. So someone who saw a code over your shoulder can't use it after you, and two people signing in together need a code each.
 - Only an owner can switch it on or off.
@@ -32,7 +32,6 @@ Know its limits:
 - Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.
 - Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.
 - Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.
-- Wrong codes at the app's Manage button, or when approving a computer's sign-in from the phone, are counted too, for that person's key and for the internet address they come from. After 5 wrong codes, each further try waits: 2 seconds, then 4, 8 and so on, up to an hour. A right code clears it. If this happens and it wasn't you, someone else has that person's key: remove their role, or sign them out everywhere, and add their new key.
 - There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.
 - The server makes eight single-use backup codes when you set it up. To see a new set, an owner types the 6-digit code the authenticator shows now under **New backup codes** in the two-factor card (a backup code does not work there). Settings shows the eight codes once; the old ones stop working at that moment. Write them down and keep them apart from the phone. Admins and moderators do not see this.
 - If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first. beanpool recover (Signing in) does not help here yet: it makes someone an owner, and today an owner's key sign-in still asks for the code.

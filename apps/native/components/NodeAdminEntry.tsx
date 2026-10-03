@@ -11,6 +11,9 @@
  * For an owner or admin (not a moderator), "Names list" (app/names-list.tsx): the admins' list of members' real names,
  * sealed on admins' phones (community modes slice 2). Its routes refuse anyone else; the row only decides whether to offer.
  *
+ * Once the node says the member holds a role, App Lock is turned on for them, once (LocalAuth.turnAppLockOnForRole,
+ * decision D3): the phone's lock is a role holder's second factor since key sign-ins stopped asking for the node's code.
+ *
  * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
  * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
  */
@@ -25,6 +28,7 @@ import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { offersNamesList } from '../utils/names-list';
 import { makeBreakGlassCode, keepBreakGlassCode, forgetBreakGlassCode } from '../utils/break-glass';
+import { turnAppLockOnForRole, APP_LOCK_ON_FOR_ROLE } from '../utils/LocalAuth';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -32,7 +36,12 @@ interface MenuStyles {
     menuIconWrap: any; menuIcon: any; menuText: any; menuSub: any; menuChevron: any;
 }
 
-export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: MenuStyles; fallbackCommunityName?: string | null }) {
+export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn }: {
+    styles: MenuStyles;
+    fallbackCommunityName?: string | null;
+    /** Settings' App Lock switch, told when this turned App Lock on for a role holder. */
+    onAppLockTurnedOn?: () => void;
+}) {
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const [role, setRole] = useState<ManageRole | null>(null);
@@ -53,9 +62,13 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                 if (cancelled) return;
                 setRole(mine.role);
                 setCommunityName(mine.communityName);
+                if (canManageNode(mine.role) && (await turnAppLockOnForRole()) === 'turned-on' && !cancelled) {
+                    onAppLockTurnedOn?.();
+                    Alert.alert('App Lock is on', APP_LOCK_ON_FOR_ROLE(mine.communityName || fallbackCommunityName || 'your community'));
+                }
             })().catch(() => { if (!cancelled) setRole(null); });
             return () => { cancelled = true; };
-        }, [identity])
+        }, [identity, onAppLockTurnedOn, fallbackCommunityName])
     );
 
     if (!canManageNode(role) || !identity) return null;

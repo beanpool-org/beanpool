@@ -9,7 +9,7 @@
  *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", how long ago it asked and
  *                                                   the time left; signed by a member who holds a role here, also the
  *                                                   computer's address and "same network"
- *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, totpCode?, confirm? }
+ *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, confirm? }
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
  * The phone's calls go through the auth limiter (15 a minute per client). The browser's creation has its own
@@ -164,7 +164,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature, totpCode, signedFor, confirm } = bodyOf(ctx);
+        const { memberPubkey, signature, signedFor, confirm } = bodyOf(ctx);
         if (typeof memberPubkey !== 'string' || typeof signature !== 'string' || !memberPubkey || !signature) {
             ctx.status = 400;
             ctx.body = { error: 'memberPubkey and signature are required' };
@@ -174,15 +174,12 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             pairingId: ctx.params.id,
             memberPubkey,
             signature,
-            totpCode: typeof totpCode === 'string' ? totpCode : undefined,
             signedFor,
-            source: clientLimiterKey(ctx),
             confirm: confirm === true,
         });
         if (!res.ok) {
             ctx.status = res.status;
-            if (res.retryAfter) ctx.set('Retry-After', String(res.retryAfter));
-            ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}), ...(res.totpRequired ? { totpRequired: true } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
+            ctx.body = { error: res.error, reason: res.reason, ...(res.code ? { code: res.code } : {}) };
             return;
         }
         ctx.body = res.confirmCode

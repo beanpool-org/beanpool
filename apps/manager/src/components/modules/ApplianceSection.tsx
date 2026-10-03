@@ -1648,7 +1648,7 @@ export function ApplianceSection({
                                     <p className="text-[11px] text-nature-400 m-0">
                                         {rolesViewer.kind === 'key'
                                             ? 'Makes a new code for your own key. Any code you had before stops working.'
-                                            : "Signed in with the password: paste the member key of the owner the code is for. Any code they had before stops working. An owner can also make their own from the app's Manage screen."}
+                                            : "Signed in with the password: paste the member key of the owner the code is for. Any code they had before stops working. An owner can also make their own in the app: Settings, Community admin, Break-glass code."}
                                     </p>
                                     {rolesViewer.kind === 'password' && (
                                         <>

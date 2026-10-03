@@ -143,3 +143,64 @@ describe('the image build\'s network setting', () => {
         expect(existsSync(out)).toBe(false);
     });
 });
+
+describe('build.sh\'s own guards, run on a copied mkosi tree (the CI build-twice failure at eea5a6c5 was here)', () => {
+    const buildSh = readFileSync(path.join(image, 'build.sh'), 'utf8');
+    const block = (from: RegExp, to: RegExp) => {
+        const lines = buildSh.split('\n');
+        const a = lines.findIndex((l) => from.test(l));
+        const b = lines.findIndex((l, i) => i > a && to.test(l));
+        expect(a).toBeGreaterThanOrEqual(0);
+        expect(b).toBeGreaterThan(a);
+        return lines.slice(a, b + 1).join('\n');
+    };
+    const writeGuard = () => block(/^wan="\$\{extra\}\/etc\/systemd\/network\/80-wan\.network"$/, /^esac \|\|/);
+    const jsonGuard = () => block(/^if ! node -e '$/, /^fi$/);
+    const tree = (name: string) => {
+        const t = path.join(dir, name);
+        rmSync(t, { recursive: true, force: true });
+        spawnSync('cp', ['-R', path.join(image, 'mkosi'), t]);
+        return t;
+    };
+    const bash = (script: string, env: Record<string, string>) => spawnSync('bash', ['-c', 'set -e\n' + script], { env: { ...process.env, ...env }, encoding: 'utf8' }).status;
+    const wan = (t: string) => path.join(t, 'mkosi.extra/etc/systemd/network/80-wan.network');
+    const STATIC = 'static:89.126.250.9/24,89.126.250.1';
+
+    it('the write guard passes the real module for dhcp (the image\'s own file left as it is) and for static', () => {
+        expect(bash(writeGuard(), { here: image, extra: path.join(tree('g-dhcp'), 'mkosi.extra'), network: 'dhcp' })).toBe(0);
+        expect(bash(writeGuard(), { here: image, extra: path.join(tree('g-static'), 'mkosi.extra'), network: STATIC })).toBe(0);
+    });
+
+    it('the write guard refuses a dhcp file that was changed, and a static file with any extra setting', () => {
+        const d = tree('g-dhcp-bad');
+        writeFileSync(wan(d), readFileSync(wan(d), 'utf8') + '# changed\n');
+        // The real module leaves dhcp alone, so the changed file is what the guard sees.
+        expect(bash(writeGuard(), { here: image, extra: path.join(d, 'mkosi.extra'), network: 'dhcp' })).not.toBe(0);
+        for (const extraLine of ['[Network]\nDHCP=yes\n', 'DNS=6.6.6.6\n']) {
+            const t = tree('g-static-bad');
+            const stub = path.join(dir, 'stub-image');
+            rmSync(stub, { recursive: true, force: true });
+            mkdirSync(stub);
+            writeFileSync(path.join(stub, 'image-settings.mjs'),
+                `import { writeFileSync, readFileSync } from 'node:fs';\n` +
+                `import { networkFile, parseNetwork } from ${JSON.stringify(path.join(image, 'image-settings.mjs'))};\n` +
+                `const [, , , v, f] = process.argv; writeFileSync(f, networkFile(parseNetwork(v)) + ${JSON.stringify(extraLine)}); console.log(v);\n`);
+            spawnSync('cp', ['-R', path.join(image, 'mkosi'), path.join(stub, 'mkosi')]);
+            expect(bash(writeGuard(), { here: stub, extra: path.join(t, 'mkosi.extra'), network: STATIC })).not.toBe(0);
+        }
+    });
+
+    it('the image.json guard takes exactly this build\'s fields and refuses a stub or a wrong network', () => {
+        const h = 'a'.repeat(64);
+        const out = path.join(dir, 'g-json');
+        mkdirSync(out, { recursive: true });
+        const env = (network: string) => ({ out, version: '0.0.1', uki_sha: h, roothash: h, image_hash: h, network });
+        const run = (body: string, network: string) => { writeFileSync(path.join(out, 'image.json'), body); return bash(`${jsonGuard().replace(/rm -f[^\n]*\n\s*exit 2/, 'exit 2')}`, env(network)); };
+        for (const network of ['dhcp', STATIC]) {
+            expect(run(imageJson({ version: '0.0.1', ukiSha256: h, roothash: h, imageHash: h, network: parseNetwork(network) }), network)).toBe(0);
+        }
+        expect(run(JSON.stringify({ imageHash: h }), 'dhcp')).not.toBe(0);
+        expect(run(imageJson({ version: '0.0.1', ukiSha256: h, roothash: h, imageHash: h, network: parseNetwork(STATIC) }), 'dhcp')).not.toBe(0);
+        expect(run('', STATIC)).not.toBe(0);
+    });
+});

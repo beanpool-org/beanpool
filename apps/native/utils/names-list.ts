@@ -494,7 +494,11 @@ export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
     const onKept = new Set([...kept.chain.map((l) => l.id), ...kept.abandoned]);
     const ring: Record<string, string> = {};
     for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
-    return { ...kept, ring, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
+    // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
+    let pending = kept.pending;
+    if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
+    else if (local.pending) pending = local.pending;
+    return { ...kept, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
 }
 
 /**

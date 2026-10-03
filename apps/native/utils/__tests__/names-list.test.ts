@@ -3197,6 +3197,31 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
     });
 });
 
+describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () => {
+    const link = (id: string, n: number) => ({ statement: `s-${id}`, signature: `g-${id}`, id, n });
+    const K1 = '11'.repeat(32);
+    const G = '22'.repeat(32);
+    const me = 'aa'.repeat(32);
+
+    it('the other pin\'s chain holds the pending statement: its key goes into the ring under that id', () => {
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending: { ...link(G, 2), key: 'g-key' }, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.chain.map((l) => l.id)).toEqual([K1, G]);
+        expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key' });
+        expect(m.copy.seq).toBe(6);
+    });
+
+    it('the pending statement isn\'t on the kept chain: the pending is kept', () => {
+        const pending = { ...link(G, 2), key: 'g-key' };
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.pending).toEqual(pending);
+        expect(m.ring).toEqual({ [K1]: 'k1-key' });
+    });
+});
+
 describe('§5 a copy the node didn\'t take: what the phone says, and nothing is blocked (409, 429, too big, another address, newer)', () => {
     const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
     const ownerKey = (node: FakeNode, me: BeanPoolIdentity) => [...node.copies!.keys()].find((k) => k.toLowerCase() === me.publicKey.toLowerCase())!;

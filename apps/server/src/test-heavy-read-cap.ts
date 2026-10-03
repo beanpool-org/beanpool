@@ -385,8 +385,9 @@ async function main(): Promise<void> {
     const t0 = Date.now();
     await runToEnd('seed', dir, { n: N, readers: readers.map((r) => r.pk), group: ROSTER_N });
     console.log(`  (seeded in ${Date.now() - t0} ms; state.db ${(fs.statSync(path.join(dir, 'state.db')).size / MB).toFixed(0)} MB)`);
-    // HEAVY_READ_CAP_ONLY=1c: section 1c alone (a fail-first run on code from before it).
+    // HEAVY_READ_CAP_ONLY=1c: section 1c alone, its own run in CI (scripts/server-suites.mjs VARIANTS).
     if (process.env.HEAVY_READ_CAP_ONLY === '1c') {
+        console.log(`\n— 1c. readers who stop reading, the version moved before each: the directory and a ${ROSTER_N}-member roster —`);
         await stalledAcrossVersions(dir, readers, BURST, HEAP_MB);
         console.log(`\n${passed}/${run} passed`);
         process.exit(passed === run ? 0 : 1);
@@ -511,9 +512,8 @@ async function main(): Promise<void> {
     console.log('\n— 1b. the same members, readers of the shared directory who stop reading, from a process of their own —');
     await stalledReaders(dir, readers, BURST, HEAP_MB);
 
-    // ── 1c. The same, with the version moved before each reader ────────────────────────────────────────────────────
-    console.log(`\n— 1c. readers who stop reading, the version moved before each: the directory and a ${ROSTER_N}-member roster —`);
-    await stalledAcrossVersions(dir, readers, BURST, HEAP_MB);
+    // ── 1c. The same, with the version moved before each reader: its own run (scripts/server-suites.mjs VARIANTS,
+    // HEAVY_READ_CAP_ONLY=1c), since the whole file together passes CI's 300 s per run only on a quiet machine. ──────
 
     // ── 3. The cap itself ────────────────────────────────────────────────────────────────────────────────────────────
     console.log('\n— 3. the cap itself, on a small server of its own —');
@@ -586,7 +586,9 @@ async function stalledAcrossVersions(dir: string, readers: Key[], BURST: number,
     // readers of one snapshot grew RSS as much as 192 connections with nothing to send).
     const PER_CONNECTION_MB = 0.25;
     type Mem = { rss: number; heap: number; buffers: number };
-    for (const what of ['directory', 'roster'] as const) {
+    // HEAVY_READ_CAP_1C=directory|roster: one half per CI run (each fits the 300 s per run); unset: both.
+    const only1c = process.env.HEAVY_READ_CAP_1C;
+    for (const what of (['directory', 'roster'] as const).filter((w) => !only1c || w === only1c)) {
         const at24 = new Map<boolean, { grew: number; served: number }>();
         for (const [n, gzip, stalls] of [[48, true, false], [24, false, true], [48, false, true], [24, true, true], [48, true, true]] as const) {
             const server = await startServer(dir, HEAP_MB);

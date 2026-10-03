@@ -81,6 +81,7 @@ import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
 import { passwordField } from './lib/node-client';
+import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -1372,6 +1373,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </button>
                     </div>
                 )}
+                {/* A profile's automation token met an owner-only route (lib/token-guard.ts). */}
+                {isFleetMode && <OwnerPhoneBanner nodeUrl={activeNode?.url} />}
                 {/* Active Target Banner for Control Subsystems */}
                 {isFleetMode && activeTab !== 'overview' && activeTab !== 'analytics' && (
                     <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">

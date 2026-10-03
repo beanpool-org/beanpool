@@ -37,7 +37,7 @@ async function sweep(credential: string): Promise<Sent[]> {
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     for (const [name, fn] of Object.entries(client)) {
         if (typeof fn !== 'function' || /^(set|clear|get|normalize|resolve|is|build|password|format|parse|describe|download)/.test(name)) continue;
-        const args = [NODE, ...Array.from({ length: Math.max(0, (fn as Function).length - 1) }, () => credential), credential, credential];
+        const args = [NODE, ...Array.from({ length: Math.max(0, (fn as (...a: unknown[]) => unknown).length - 1) }, () => credential), credential, credential];
         try { await Promise.race([(fn as (...a: unknown[]) => unknown)(...args), new Promise(r => setTimeout(r, 50))]); } catch { /* a wrong-typed argument: the requests made before it still count */ }
     }
     return sent;

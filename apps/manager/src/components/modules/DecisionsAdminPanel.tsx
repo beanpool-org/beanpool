@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchAdminDecisions, fetchNodeDecisionsOn, haltDecision, type AdminDecisionItem } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface DecisionsAdminPanelProps {
     activeNode: NodeProfile;
@@ -53,7 +54,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
         setError(null);
         try {
             const [list, on] = await Promise.all([
-                fetchAdminDecisions(activeNode.url, activeNode.adminPassword, tfaToken),
+                fetchAdminDecisions(activeNode.url, nodeCredential(activeNode), tfaToken),
                 fetchNodeDecisionsOn(activeNode.url),
             ]);
             setDecisions(list);
@@ -87,7 +88,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
         setHalting(true);
         setHaltError(null);
         try {
-            await haltDecision(activeNode.url, haltTarget.id, trimmed, activeNode.adminPassword, tfaToken);
+            await haltDecision(activeNode.url, haltTarget.id, trimmed, nodeCredential(activeNode), tfaToken);
             setHaltTarget(null);
             setReason('');
             await load();

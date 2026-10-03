@@ -24,6 +24,7 @@ import {
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { downloadedAlert } from '../../lib/backup-shortfall';
 import { usePausablePoll } from '../../lib/activity-pause';
+import { nodeCredential } from '../../lib/profiles';
 
 interface TopologyModuleProps {
     activeNode: NodeProfile;
@@ -76,7 +77,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await getRegistrarPending(
                 activeNode?.url,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setRegistrarAllocations(items);
@@ -92,7 +93,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (activeTab === 'name-claims') {
             loadRegistrar();
         }
-    }, [activeTab, activeNode?.url, activeNode?.adminPassword]);
+    }, [activeTab, activeNode?.url, nodeCredential(activeNode)]);
 
     // Ten seconds while someone is watching the claims list; nothing at all while the tab is
     // hidden or the screen has been sitting untouched (lib/activity-pause). `runOnStart: false`
@@ -101,7 +102,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     usePausablePoll(loadRegistrar, 10000, {
         enabled: activeTab === 'name-claims' && autoRefreshRegistrar,
         runOnStart: false,
-        restartKey: `${activeNode?.url || ''}|${activeNode?.adminPassword || ''}`,
+        restartKey: `${activeNode?.url || ''}|${nodeCredential(activeNode) || ''}`,
     });
 
     const handleApproveClaim = async (name: string) => {
@@ -109,7 +110,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await approveRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
@@ -126,7 +127,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await revokeRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
@@ -143,7 +144,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await revokeRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
@@ -160,7 +161,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setHarvestLoading(true);
         try {
             const data = await fetchHarvesterStatus(
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setHarvesterState(data.harvestState || {});
@@ -173,7 +174,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     // Same fifteen seconds as before, and the same immediate load on mount or on a credential
     // change — but it stops while the tab is hidden or the operator is away.
-    usePausablePoll(loadHarvester, 15000, { restartKey: activeNode?.adminPassword });
+    usePausablePoll(loadHarvester, 15000, { restartKey: nodeCredential(activeNode) });
 
     // Load Snapshots for target node
     const loadSnapshots = async () => {
@@ -182,7 +183,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await fetchNodeSnapshots(
                 targetSnapshotNode.url,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             setSnapshots(items);
@@ -224,7 +225,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     ? '/api/manager/backups/download-db'
                     : '/api/manager/backups/download-identity',
                 { nodeId: slug },
-                node?.adminPassword,
+                nodeCredential(node),
                 // Only a fallback: the server names the file, and `downloadAdminFile` prefers that name.
                 // A readable backup comes back as a tar.gz of the database AND its images, a locked one as
                 // a .bpsealed; `.db` was the name of the thing this used to serve and no longer does.
@@ -258,8 +259,8 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await triggerHarvesterSync(
                 nodeId,
                 node?.url,
-                node?.adminPassword,
-                activeNode?.adminPassword,
+                nodeCredential(node),
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             await loadHarvester();
@@ -277,7 +278,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const notice = await downloadAdminFile(
                 resolveNodeApiUrl(targetSnapshotNode.url, '/api/local/admin/snapshots/download'),
                 { name: snapName },
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 snapName,
                 getTfaSessionToken(targetSnapshotNode.id),
             );
@@ -295,7 +296,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const notice = await downloadAdminFile(
                 '/api/manager/backups/download-history',
                 { nodeId, filename },
-                historyNode?.adminPassword,
+                nodeCredential(historyNode),
                 filename,
                 historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
@@ -314,7 +315,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await fetchNodeHistory(
                 nodeId,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setHistoryList(items);
@@ -332,7 +333,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await createNodeSnapshot(
                 targetSnapshotNode.url,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             await loadSnapshots();
@@ -351,7 +352,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await deleteNodeSnapshot(
                 targetSnapshotNode.url,
                 name,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             await loadSnapshots();
@@ -367,7 +368,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setCadenceSaving(true);
         setCadenceMsg(null);
         try {
-            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setCadenceMsg('✅ Replication cadence updated!');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -382,7 +383,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!activeNode || !confirm(`Force full resync for ${activeNode.name}? This discards drifted rows on standby.`)) return;
         setResyncing(true);
         try {
-            await forceNodeResync(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await forceNodeResync(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             alert('Replication resync requested.');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);

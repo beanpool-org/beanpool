@@ -6,6 +6,8 @@ import type { DiagnosticsResponse } from '../../lib/node-client';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface NodeIdentityPanelProps {
     activeNode: NodeProfile;
@@ -133,7 +135,7 @@ export function NodeIdentityPanel({
                         // How many are waiting is the operator's only, so it is its own admin read.
                         const knocksUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/knocks');
                         const knocksRes = await fetch(knocksUrl, {
-                            headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                            headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         }).catch(() => null);
                         if (knocksRes && knocksRes.ok && mounted) {
                             const knocks = await knocksRes.json().catch(() => ({}));
@@ -150,7 +152,7 @@ export function NodeIdentityPanel({
         // Each is text, or null for none stored; anything else, or no answer, is not the node's contacts.
         const loadContacts = async () => {
             try {
-                const admin = await fetchDiagnostics(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                const admin = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                 const text = (v: unknown) => (typeof v === 'string' ? v : v === null ? '' : undefined);
                 const email = text(admin.contactEmail);
                 const phone = text(admin.contactPhone);
@@ -340,8 +342,8 @@ export function NodeIdentityPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/push');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
@@ -369,7 +371,7 @@ export function NodeIdentityPanel({
         try {
             // 1. Save identity info (/api/local/update-identity)
             const identityPayload: Record<string, unknown> = {
-                password: activeNode.adminPassword,
+                ...passwordField(nodeCredential(activeNode)),
                 callsign: callsign.trim(),
                 communityName: communityName.trim(),
                 // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
@@ -383,7 +385,7 @@ export function NodeIdentityPanel({
             const identityUrl = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const identityRes = await fetch(identityUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(identityPayload),
             });
 
@@ -391,9 +393,9 @@ export function NodeIdentityPanel({
             const configUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/node/config');
             const configRes = await fetch(configUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                     publishLocation,
                     publishMembers,
                     publishContactEmail,

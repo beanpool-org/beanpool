@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { isOncePerPersonVariant } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchOnboardingFunnel, getTfaSessionToken, type FunnelRow } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 export interface OnboardingModuleProps {
     /**
@@ -117,7 +118,7 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
         // shows one community's figures under another community's name.
         setRows(null);
         setOpenDoor(undefined);
-        fetchOnboardingFunnel(active.url, active.adminPassword, days, active ? getTfaSessionToken(active.id) : undefined)
+        fetchOnboardingFunnel(active.url, nodeCredential(active), days, active ? getTfaSessionToken(active.id) : undefined)
             .then(res => {
                 if (cancelled) return;
                 setRows(res.rows);
@@ -126,7 +127,7 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
             .catch(e => { if (!cancelled) setError(e.message || 'Could not reach this node'); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
-    }, [active?.id, active?.url, active?.adminPassword, days]);
+    }, [active?.id, active?.url, nodeCredential(active), days]);
 
     const view = useMemo(() => {
         if (!rows) return null;

@@ -38,6 +38,8 @@ import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -92,8 +94,8 @@ export function ApplianceSection({
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 }).catch(() => null);
                 if (res && res.ok) {
                     const data = await res.json().catch(() => ({}));
@@ -107,7 +109,7 @@ export function ApplianceSection({
         }
         fetchBackupRole();
         return () => { active = false; };
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     const isStandby = propIsStandby !== undefined
         ? propIsStandby
@@ -193,7 +195,7 @@ export function ApplianceSection({
         try {
             const res = await fetchDiskHealth(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             if (res?.diskHealth) {
@@ -211,7 +213,7 @@ export function ApplianceSection({
         try {
             const res = await fetchStorageCleanPreview(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setCleanPreview(res.preview);
@@ -228,7 +230,7 @@ export function ApplianceSection({
         try {
             const res = await cleanStorageAndCompressLogs(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setCleanResult(res);
@@ -246,7 +248,7 @@ export function ApplianceSection({
         try {
             const list = await fetchNodeSnapshots(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setSnapshots(Array.isArray(list) ? list : []);
@@ -261,7 +263,7 @@ export function ApplianceSection({
         try {
             const cfg = await fetchNodeSnapshotSchedule(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             if (cfg) setScheduleConfig(cfg);
@@ -274,7 +276,7 @@ export function ApplianceSection({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/status');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -302,7 +304,7 @@ export function ApplianceSection({
         try {
             await createNodeSnapshot(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             await loadSnapshots();
@@ -319,7 +321,7 @@ export function ApplianceSection({
             await deleteNodeSnapshot(
                 activeNode.url,
                 name,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             await loadSnapshots();
@@ -336,7 +338,7 @@ export function ApplianceSection({
             const updated = await updateNodeSnapshotSchedule(
                 activeNode.url,
                 scheduleConfig,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setScheduleConfig(updated);
@@ -357,7 +359,7 @@ export function ApplianceSection({
             const res = await verifyNodeBackup(
                 activeNode.url,
                 snapshotName,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setVerifyResult(res);
@@ -377,7 +379,7 @@ export function ApplianceSection({
         setRestoreStatus(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             delete headers['Content-Type'];
 
             const res = await fetch(url, {
@@ -429,9 +431,9 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/change-password');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    currentPassword: currentPassword || activeNode.adminPassword,
+                    currentPassword: currentPassword || nodeCredential(activeNode),
                     newPassword,
                 }),
             });
@@ -459,8 +461,8 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/admin/check-update');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -489,7 +491,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -507,7 +509,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/verify');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ totpCode: totpVerifyCode.trim() }),
             });
             const data = await res.json().catch(() => ({}));
@@ -536,7 +538,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ code }),
             });
             if (res.ok) {
@@ -565,7 +567,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/break-glass/issue');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(rolesViewer.kind === 'password' ? { memberPubkey } : {}),
             });
             const data = await res.json().catch(() => ({}));
@@ -591,7 +593,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/backup-codes');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ code }),
             });
             const data = await res.json().catch(() => ({}));
@@ -614,9 +616,9 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                 }),
             });
             if (!res.ok) {

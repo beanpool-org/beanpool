@@ -52,7 +52,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -277,6 +277,8 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
     ctx.body = {
         success: true,
         role: 'owner',
+        // With the node's 2FA off this session opens only the 2FA setup card (admin-auth.ts TOTP_SETUP_ROUTES).
+        totpSetupRequired: passwordSessionNeedsTotpSetup(),
         csrfToken: session.csrfToken,
         hardExpiresAt: session.hardExpiresAt,
         idleExpiresAt: session.idleExpiresAt,
@@ -385,6 +387,7 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
                 isPasswordSession: true,
                 memberPubkey: null,
                 role: 'owner',
+                totpSetupRequired: passwordSessionNeedsTotpSetup(),
                 hardExpiresAt: res.session.hardExpiresAt,
                 idleExpiresAt: res.session.idleExpiresAt,
             };

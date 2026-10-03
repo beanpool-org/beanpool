@@ -3,6 +3,7 @@ import { TIER_LEVELS, tierForCredit, tierIndexForName } from '@beanpool/core';
 import type { NodeProfile } from '../../lib/profiles';
 import { pruneInviteBranch, getTfaSessionToken, reportSubject, type NodeDataPayload, type NodeHealthFlag, type MemberItem } from '../../lib/node-client';
 import { PruneBranchModal } from './PruneBranchModal';
+import { nodeCredential } from '../../lib/profiles';
 
 export interface AncestryTreePanelProps {
     nodeData: Record<string, unknown> | null;
@@ -320,7 +321,7 @@ export function AncestryTreePanel({
             await pruneInviteBranch(
                 activeNode.url,
                 pubkey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             onRefresh?.();

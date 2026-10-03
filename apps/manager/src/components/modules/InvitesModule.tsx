@@ -4,6 +4,7 @@ import { generateNodeInvite, getTfaSessionToken } from '../../lib/node-client';
 import { generateOfflineQrUrl } from '../../lib/qr';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface InvitesModuleProps {
     activeNode: NodeProfile;
@@ -53,7 +54,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                 try {
                     const res = await generateNodeInvite(
                         activeNode.url,
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         inviteTier,
                         activeNode ? getTfaSessionToken(activeNode.id) : undefined
                     );

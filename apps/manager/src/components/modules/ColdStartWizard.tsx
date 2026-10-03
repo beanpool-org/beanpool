@@ -14,6 +14,8 @@ import {
     getTfaSessionToken,
     setTfaSessionToken,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface ColdStartWizardProps {
     activeNode: NodeProfile;
@@ -151,7 +153,7 @@ export function ColdStartWizard({
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/status'), {
                     method: 'GET',
-                    headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                    headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
                 });
                 if (cancelled) return;
                 const data = await res.json().catch(() => ({} as Record<string, unknown>));
@@ -171,7 +173,7 @@ export function ColdStartWizard({
         };
         loadTfaStatus();
         return () => { cancelled = true; };
-    }, [isOwnerKey, activeNode?.id, activeNode?.url, activeNode?.adminPassword, effectiveTfaToken, tfaStatusAttempt]);
+    }, [isOwnerKey, activeNode?.id, activeNode?.url, nodeCredential(activeNode), effectiveTfaToken, tfaStatusAttempt]);
 
     const handleRetryTfaStatus = () => {
         setTfaState('checking');
@@ -241,9 +243,9 @@ export function ColdStartWizard({
         try {
             res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/update-identity'), {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, tfa),
+                headers: buildAdminHeaders(nodeCredential(activeNode), tfa),
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                     communityName: communityName.trim(),
                     callsign: diag?.callsign || 'node-genesis',
                 }),
@@ -329,7 +331,7 @@ export function ColdStartWizard({
         try {
             res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup'), {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
             });
         } catch {
             res = null;
@@ -361,7 +363,7 @@ export function ColdStartWizard({
         try {
             res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/verify'), {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
                 body: JSON.stringify({ code }),
             });
         } catch {
@@ -457,7 +459,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             workingCapitalCeiling: 250,
                             purpose: enterprisePurpose.trim() || undefined,
                         },
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         effectiveTfaToken
                     );
                     if (!res || !res.publicKey) throw new Error('The node did not return the new enterprise');
@@ -470,7 +472,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
 
             if (treasuryPk && keeperPubkey && !keeperAssigned) {
                 try {
-                    await assignTreasuryKeeper(activeNode.url, treasuryPk, keeperPubkey, activeNode.adminPassword, effectiveTfaToken);
+                    await assignTreasuryKeeper(activeNode.url, treasuryPk, keeperPubkey, nodeCredential(activeNode), effectiveTfaToken);
                     setKeeperAssigned(true);
                 } catch (err: unknown) {
                     errors.keeper = reason(err, 'The node could not be reached');
@@ -488,7 +490,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                             credits: Number(firstOfferPrice) || 15,
                             description: `First community offer for ${enterpriseName}`,
                         },
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         effectiveTfaToken
                     );
                     setOfferPosted(true);
@@ -522,7 +524,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                 try {
                     const res = await generateNodeInvite(
                         activeNode.url,
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         'trusted',
                         effectiveTfaToken
                     );

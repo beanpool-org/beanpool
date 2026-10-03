@@ -13,6 +13,7 @@ import {
 } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import type { RolesViewer } from './NodeRolesPanel';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * "Who can unlock this community" — the take-over lock and the printed recovery code (sealed-keys.md §2.6, §3, §4,
@@ -118,7 +119,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         setLoading(true);
         const tfa = getTfaSessionToken(activeNode.id);
         try {
-            setStatus(await fetchTakeoverStatus(activeNode.url, activeNode.adminPassword, tfa));
+            setStatus(await fetchTakeoverStatus(activeNode.url, nodeCredential(activeNode), tfa));
             setStatusError(null);
         } catch (e) {
             setStatus(null);
@@ -127,13 +128,13 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                 : `Could not read who can unlock this community: ${e instanceof Error ? e.message : 'the node did not answer'}.`);
         }
         try {
-            setBackupLock((await fetchBackupLock(activeNode.url, activeNode.adminPassword, tfa)) ?? 'unknown');
+            setBackupLock((await fetchBackupLock(activeNode.url, nodeCredential(activeNode), tfa)) ?? 'unknown');
         } catch {
             setBackupLock('unknown');
         } finally {
             setLoading(false);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     const closeCode = useCallback(() => {
         setShown(null);
@@ -165,14 +166,14 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         setMaking(true);
         setActionError(null);
         try {
-            const made = await makeRecoveryCode(activeNode.url, replace, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const made = await makeRecoveryCode(activeNode.url, replace, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             if (nodeIdRef.current !== forNode) return;
             setConfirmReplace(false);
             setShown(made);
             setWrittenDown(false);
             setStatus(made.status);
             setStatusError(null);
-            fetchBackupLock(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id))
+            fetchBackupLock(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id))
                 .then((l) => setBackupLock(l ?? 'unknown'))
                 .catch(() => setBackupLock('unknown'));
         } catch (e) {
@@ -191,7 +192,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
         setChecking(true);
         setCheckResult(null);
         try {
-            const r = await checkRecoveryCodeApi(activeNode.url, typed, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const r = await checkRecoveryCodeApi(activeNode.url, typed, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             if (r.typo) setCheckResult({ ok: false, text: r.message || 'That is not a recovery code: check what you typed.' });
             else if (r.matches) setCheckResult({ ok: true, text: `Yes — this is recovery code #${r.codeId}. Your paper is right.` });
             else setCheckResult({ ok: false, text: `No — this does not match recovery code #${r.codeId ?? status?.recoveryCode?.codeId ?? '?'}.` });

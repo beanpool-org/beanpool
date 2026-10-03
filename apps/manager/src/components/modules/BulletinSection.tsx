@@ -5,6 +5,7 @@ import { useSectionSubTab } from '../../lib/sections';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface BulletinSectionProps {
     activeNode: NodeProfile;
@@ -55,7 +56,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -83,7 +84,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/announcements');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     title: title.trim() || 'System Notice',
                     body: body.trim(),
@@ -114,7 +115,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
                     url: channelFeedUrl.trim(),
                     category: 'learn',
@@ -143,7 +144,7 @@ export function BulletinSection({ activeNode, onRefresh, initialSubTab = 'announ
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/pulse/channels/remove');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ id: channelId }),
             });
             if (!res.ok) {

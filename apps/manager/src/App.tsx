@@ -1049,8 +1049,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         }
     };
 
-    const handleAddNode = (name: string, url: string, adminPassword?: string) => {
-        const created = addNodeProfile({ name, url, adminPassword });
+    const handleAddNode = (name: string, url: string, adminPassword?: string, automationToken?: string) => {
+        const created = addNodeProfile({ name, url, adminPassword, automationToken });
         const updated = loadNodeProfiles();
         setProfiles(updated);
         setActiveProfileId(created.id);
@@ -1060,7 +1060,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const handleSaveNodeEdit = (id: string, updates: Partial<NodeProfile>) => {
         // If password is being changed, also clear any stored 2FA session token
         // so the operator re-authenticates with TOTP for the new credential.
-        if (updates.adminPassword !== undefined) {
+        if (updates.adminPassword !== undefined || updates.automationToken !== undefined) {
             setTfaSessionToken(id, undefined);
         }
         const updatedProfiles = updateNodeProfile(id, updates);

@@ -39,7 +39,6 @@ import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 let run = 0, passed = 0;
@@ -109,6 +108,10 @@ async function main() {
     await initTls();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (its 403 would come before the
+    // feature check); the admin calls go under an owner's key session.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const ADMIN = ownerSessionHeaders();
 
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -188,7 +191,7 @@ async function main() {
         assert(r.status === 404 && r.body?.code === 'feature_off' && r.body?.feature === 'escrow', `POST ${path} → 404 feature_off (escrow) (${r.status} ${JSON.stringify(r.body)})`);
     }
     for (const path of ['/api/local/admin/disputes', '/api/local/admin/stranded-escrows']) {
-        const r = await call('GET', path, null, null, { 'x-admin-password': ADMIN_PW });
+        const r = await call('GET', path, null, null, ADMIN);
         assert(r.status === 404 && r.body?.code === 'feature_off', `GET ${path} (admin) → 404 feature_off (${r.status})`);
     }
 
@@ -204,7 +207,7 @@ async function main() {
         const r = await call('GET', path, null, carol);
         assert(r.status === 404 && r.body?.code === 'feature_off', `GET ${path} → 404 feature_off (${r.status})`);
     }
-    const adminTreasury = await call('POST', '/api/local/admin/treasury', { name: 'Commons', avatar: AVATAR }, null, { 'x-admin-password': ADMIN_PW });
+    const adminTreasury = await call('POST', '/api/local/admin/treasury', { name: 'Commons', avatar: AVATAR }, null, ADMIN);
     assert(adminTreasury.status === 404 && adminTreasury.body?.code === 'feature_off', `POST /api/local/admin/treasury (admin) → 404 feature_off (${adminTreasury.status})`);
     assert(treasuries() === treasuriesBefore, `no route made a treasury (${treasuriesBefore} system ones before, ${treasuries()} after)`);
 
@@ -253,7 +256,7 @@ async function main() {
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
     // Offboarding, and what still answers
-    const offboard = await call('POST', `/api/local/admin/members/${dave.pubKeyHex}/offboard`, { resolution: 'prune_zero_balance' }, null, { 'x-admin-password': ADMIN_PW });
+    const offboard = await call('POST', `/api/local/admin/members/${dave.pubKeyHex}/offboard`, { resolution: 'prune_zero_balance' }, null, ADMIN);
     assert(offboard.status === 200 && offboard.body?.success, `the offboarding wizard works: a zero balance to settle (${offboard.status} ${JSON.stringify(offboard.body).slice(0, 120)})`);
     const history = await call('GET', `/api/marketplace/transactions?publicKey=${bob.pubKeyHex}`, null, bob);
     assert(history.status === 200 && Array.isArray(history.body) && history.body.length === 0, `a member's own trade list still answers, empty (${history.status})`);

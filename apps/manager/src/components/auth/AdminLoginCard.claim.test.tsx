@@ -12,7 +12,7 @@ vi.mock('../../lib/qr', () => ({
 }));
 
 import { AdminLoginCard } from './AdminLoginCard';
-import { CLAIM_POLL_MS } from '../../lib/node-claim';
+import { CLAIM_POLL_MS, CLAIM_TIMEOUT_MS } from '../../lib/node-claim';
 
 /**
  * The unclaimed card (sign-in step 8, stage B4): before sign-in the page asks GET /api/local/claim, and while the node
@@ -23,7 +23,7 @@ import { CLAIM_POLL_MS } from '../../lib/node-claim';
 const CODE_ID = 'a1b2c3d4';
 const CLAIM_CODE = 'claim-1111-2222-3333-4444'; // what the server holds; must never reach this page's QR
 
-type Answer = { status: number; body?: unknown } | 'network-error';
+type Answer = { status: number; body?: unknown } | 'network-error' | 'not-json' | 'hang';
 
 function stubNode(answers: Answer[]) {
     const claimCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
@@ -34,6 +34,14 @@ function stubNode(answers: Answer[]) {
             claimCalls.push({ url, init });
             const answer = answers[Math.min(i++, answers.length - 1)];
             if (answer === 'network-error') throw new TypeError('Failed to fetch');
+            if (answer === 'hang') {
+                return new Promise<Response>((_, reject) => {
+                    init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+                });
+            }
+            if (answer === 'not-json') {
+                return { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <'); } } as unknown as Response;
+            }
             return {
                 ok: answer.status >= 200 && answer.status < 300,
                 status: answer.status,
@@ -237,5 +245,37 @@ describe('AdminLoginCard: the unclaimed card', () => {
         stubNode([unclaimed({ password: true })]);
         renderCard();
         expect(await screen.findByTestId('claim-password-fold')).toBeInTheDocument();
+    });
+
+    it.each([
+        ['an unreachable node', 'network-error' as Answer],
+        ['a server error', { status: 500, body: { error: 'boom' } } as Answer],
+        ['an older node without the route', { status: 404, body: { error: 'Not Found' } } as Answer],
+        ['an answer that is not JSON (a proxy page)', 'not-json' as Answer],
+        ['an answer of the wrong shape', { status: 200, body: { hello: 'world' } } as Answer],
+    ])('shows today\'s sign-in, and asks no more, after %s', async (_label, answer) => {
+        vi.useFakeTimers({ shouldAdvanceTime: false });
+        const { claimCalls } = stubNode([answer, unclaimed()]);
+        renderCard();
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(claimCalls).toHaveLength(1);
+        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Sign in with your phone/i })).toBeInTheDocument();
+        expect(screen.queryByTestId('claim-card')).toBeNull();
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS * 4); });
+        expect(claimCalls).toHaveLength(1);
+        expect(screen.queryByTestId('claim-card')).toBeNull();
+    });
+
+    it('never waits on the check: the sign-in is there while it is asked, and a check that hangs gives up', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: false });
+        const { claimCalls } = stubNode(['hang']);
+        renderCard();
+        // Before any answer.
+        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_TIMEOUT_MS); });
+        expect((claimCalls[0].init?.signal as AbortSignal).aborted).toBe(true);
+        expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
+        expect(screen.queryByTestId('claim-card')).toBeNull();
     });
 });

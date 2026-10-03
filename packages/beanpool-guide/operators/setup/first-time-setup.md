@@ -24,6 +24,18 @@ The server reads ADMIN_PASSWORD only on its first start. After that it keeps a s
 - **data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.
 - **data/first-admin-password.txt**: only when ADMIN_PASSWORD was empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.
 
+## Claim your community: the address, then your phone
+
+The last step of an install, on the server:
+
+docker compose exec beanpool-node beanpool claim
+
+- It asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.
+- Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.
+- It shows the one-time claim code and a QR code. Open BeanPool on your phone, then **Claim a community**, or scan the QR code. That phone becomes the owner, and the code is used up.
+
+If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told.
+
 ## Open Settings
 
 Go to your server's address followed by **/settings**, for example https://example.org/settings, and sign in with the admin password. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open.

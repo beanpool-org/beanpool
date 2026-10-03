@@ -7,6 +7,8 @@ import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
+import { isNodeOwner } from './engine/node-roles.js';
+import { looksLikeAutomationToken, verifyAutomationToken, noteAutomationTokenUse, isRefusedToEveryToken, isBackupsScopeRoute } from './automation-tokens.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -27,6 +29,11 @@ function getBearerToken(ctx: any): string | null {
 }
 
 export async function checkAdminAuth(ctx: any): Promise<boolean> {
+    // 0. An owner's automation token (automation-tokens.ts), before any session or the password: a bearer value that
+    // starts bp_ is decided here alone, and never falls through to another credential.
+    const bearer = getBearerToken(ctx);
+    if (looksLikeAutomationToken(bearer)) return checkAutomationToken(ctx, bearer!);
+
     // 1. Key-Based Session Authentication (docs/admin-surface.md §2.1, §2.3)
     const keySessionToken =
         (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
@@ -119,6 +126,61 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     }
 
     return checkAdminPasswordAuth(ctx);
+}
+
+export const TOKEN_REFUSED_CODE = 'token_not_allowed';
+export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-only changes: sign in to Settings as an owner';
+
+/**
+ * An automation token's request (design step 7, D8). The token is a credential on its own, as a key session is: it asks
+ * for no 2FA code, because an owner made it with their key (never the password: routes/automation-tokens.ts); and a 2FA
+ * code sent with it changes nothing. Its scope is checked here, before any route runs:
+ *   read     GET/HEAD, and the POSTs that only read (READ_ONLY_POSTS); admin level.
+ *   backups  BACKUPS_SCOPE_ROUTES and nothing else; owner level on those routes alone.
+ *   admin    every route an admin may use; admin level, so every owner-only route refuses it.
+ * No scope reaches signing in, sessions or the tokens themselves (isRefusedToEveryToken), nor an owner-only change
+ * (requireAdminRole, requirePhoneStepUp). What it does is the issuing owner's (ctx.state.actor), marked with the
+ * token's id (ctx.state.viaToken), and every use is logged with the route, never the secret.
+ */
+function checkAutomationToken(ctx: any, presented: string): boolean {
+    const method = String(ctx.method || ctx.request?.method || 'GET').toUpperCase();
+    const reqPath = String(ctx.path || ctx.request?.path || '');
+    const record = verifyAutomationToken(presented);
+    if (!record) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid, revoked or expired automation token' };
+        logger.warn('AUTH', 'Automation token refused', { route: `${method} ${reqPath}`, from: logAddressTag(ctx) });
+        return false;
+    }
+    // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them. A
+    // record whose maker is not a member's key ('owner:password', from before only a key could make one) is refused alike.
+    if (typeof record.createdBy !== 'string' || !isNodeOwner(record.createdBy)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid, revoked or expired automation token' };
+        logger.warn('AUTH', 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
+        return false;
+    }
+    const refuse = (error: string): false => {
+        ctx.status = 403;
+        ctx.body = { error, code: TOKEN_REFUSED_CODE, scope: record.scope };
+        logger.warn('AUTH', 'Automation token outside its scope', { tokenId: record.id, scope: record.scope, route: `${method} ${reqPath}` });
+        return false;
+    };
+    if (isRefusedToEveryToken(method, reqPath)) return refuse('An automation token cannot sign in, open a session or manage tokens');
+    if (record.scope === 'read' && !isReadRequest(ctx)) return refuse('This token can only read');
+    if (record.scope === 'backups' && !isBackupsScopeRoute(method, reqPath)) return refuse('This token can only take and read backups');
+    if (!ctx.state) ctx.state = {};
+    ctx.state.automationTokenId = record.id;
+    ctx.state.viaToken = record.id;
+    ctx.state.tokenScope = record.scope;
+    ctx.state.tokenOwnerRoute = record.scope === 'backups';
+    ctx.state.adminRole = record.scope === 'backups' ? 'owner' : 'admin';
+    ctx.state.actor = record.createdBy;
+    logger.info('AUTH', 'Automation token used', {
+        tokenId: record.id, issuedBy: String(record.createdBy).slice(0, 16), scope: record.scope, route: `${method} ${reqPath}`,
+    });
+    noteAutomationTokenUse(record.id, `${method} ${reqPath}`);
+    return true;
 }
 
 /**
@@ -439,6 +501,12 @@ export function isModeratorRoute(ctx: any): boolean {
  */
 export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error: string): boolean {
     const role = ctx.state?.adminRole;
+    // An owner-only route, for an automation token: refused, except the backups scope's own routes (checkAdminAuth).
+    if (ctx.state?.automationTokenId && !allowed.includes('admin') && !ctx.state.tokenOwnerRoute) {
+        ctx.status = 403;
+        ctx.body = { error: TOKEN_OWNER_ONLY_ERROR, code: TOKEN_REFUSED_CODE };
+        return false;
+    }
     if (allowed.includes(role)) {
         // An owner-only change from the phone's Manage hand-off asks for the phone's unlock again (requirePhoneStepUp).
         // Reads are not asked: Settings must keep showing what it shows.
@@ -477,6 +545,14 @@ function isReadRequest(ctx: any): boolean {
  * other session (the password's, a computer's) passes. Answers 403 and returns false when the step-up is due.
  */
 export function requirePhoneStepUp(ctx: any): boolean {
+    // Every owner-only change asks this, so an automation token stops here: no token satisfies a step-up, and none makes
+    // an owner-only change (the backups scope's routes only are owner level, and are taken before this).
+    if (ctx.state?.automationTokenId) {
+        if (ctx.state.tokenOwnerRoute) return true;
+        ctx.status = 403;
+        ctx.body = { error: TOKEN_OWNER_ONLY_ERROR, code: TOKEN_REFUSED_CODE };
+        return false;
+    }
     if (!ctx.state?.phoneStepUpDue) return true;
     ctx.status = 403;
     ctx.body = { error: STEP_UP_REQUIRED_ERROR, code: STEP_UP_REQUIRED_CODE };

@@ -15,9 +15,16 @@
 // See docs/node-dns-registrar.md.
 //
 // The tunnel's destination is always this server's own loopback (LOOPBACK_ORIGIN): the tunnel runs inside the server.
+//
+// A name asked for at install (`beanpool claim --name`, address-request.ts) counts as PUBLIC_ADDRESS_NAME (the env wins
+// when both are set). The node takes the command's file within ~2 s and asks for the name at once, then every 10 s while
+// the request stands and no address is held; after that the 5-min tick. Taken only while this server holds no address:
+// changing a name it holds stays in Settings, owner-only.
 
 import { getNodeRole, getNodeConfig } from '../state-engine.js';
-import { getLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { dataDir } from '../recover-command.js';
+import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
 import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
@@ -32,10 +39,17 @@ const slug = (s: string | null): string => {
     return cleaned.length < 3 ? `${cleaned}-node` : cleaned;   // NAME_RE requires ≥3 chars
 };
 
-const desiredName = (): string =>
-    (process.env.PUBLIC_ADDRESS_NAME || '').toLowerCase().trim() || slug(getLocalConfig().communityName);
+/** The name `beanpool claim` asked for, while it stands (not refused by the registrar). */
+const requestedName = (): string | null => {
+    const r = getLocalConfig().addressRequest;
+    return r && !r.refused && isAddressLabel(r.name) ? r.name : null;
+};
 
-const isEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
+const desiredName = (): string =>
+    (process.env.PUBLIC_ADDRESS_NAME || '').toLowerCase().trim() || requestedName() || slug(getLocalConfig().communityName);
+
+const envEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
+const isEnabled = (): boolean => envEnabled() || !!requestedName();
 
 /**
  * A tunnel address saved here, live or waiting for approval: Settings' claim, this agent's, or a take-over's. A live one's
@@ -44,6 +58,18 @@ const isEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!pr
 const holdsTunnelAddress = (): boolean => {
     const pa = (getNodeConfig() as any).publicAddress;
     return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct';
+};
+
+/** Any address saved here, live or waiting, tunnel or direct. */
+const holdsAddress = (): boolean => {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !!pa && (pa.status === 'live' || pa.status === 'pending');
+};
+
+/** The registrar holds the requested name for this key now (live or waiting): the request is done. */
+const requestDone = (name: string): void => {
+    const r = getLocalConfig().addressRequest;
+    if (r && r.name === name) updateLocalConfig({ addressRequest: null });
 };
 
 /** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
@@ -55,8 +81,13 @@ export async function reconcile(): Promise<void> {
     let st: any;
     try { st = await addressStatus(); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
 
-    if (st.status === 'live') { await persistAddress(st); return; }
-    if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`); await persistAddress(st); return; }
+    if (st.status === 'live') { await persistAddress(st); if (st.name) requestDone(st.name); return; }
+    if (st.status === 'pending') {
+        console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`);
+        await persistAddress(st);
+        if (st.name) requestDone(st.name);
+        return;
+    }
 
     // A pause of this server's own name that its heal lifts (the sweep's): asked back at once, by proving its key.
     if (await healPausedAddress(st)) return;
@@ -75,9 +106,50 @@ export async function reconcile(): Promise<void> {
     try {
         const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName);
         await persistAddress({ name, mode, communityName, contact, ...res, ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}) }, 'claim');
+        if (res.status === 'live' || res.status === 'pending') requestDone(name);
         if (res.status === 'live') console.log(`[PublicAddr] 🟢 live at ${res.hostname}`);
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
-    } catch (e: any) { console.warn('[PublicAddr] claim failed:', e.message); }
+    } catch (e: any) {
+        console.warn('[PublicAddr] claim failed:', e.message);
+        // The registrar refused the requested name (taken, not allowed): kept with its reason, never asked for again. A
+        // registrar that did not answer leaves the request standing for the next check.
+        const r = getLocalConfig().addressRequest;
+        const status = Number(e?.status);
+        if (!envEnabled() && r && r.name === name && status >= 400 && status < 500) {
+            updateLocalConfig({ addressRequest: { ...r, refused: String(e?.message || `refused (${status})`).slice(0, 300) } });
+        }
+    }
+}
+
+let checking = false;
+let lastRequestCheck = 0;
+
+/**
+ * Every 2 s on a main server: take a file `beanpool claim` left, and while a request stands and no address is held, ask
+ * the registrar every 10 s. A file is dropped while an address is held (Settings changes a held name, owner-only).
+ */
+export async function checkAddressRequest(now = Date.now()): Promise<void> {
+    if (checking || getNodeRole() !== 'primary') return;
+    checking = true;
+    try {
+        const req = takeAddressRequestFile(dataDir());
+        let fresh = false;
+        if (req) {
+            if (holdsAddress()) {
+                console.warn(`[PublicAddr] beanpool claim asked for "${req.name}", but this server already holds an address; change it in Settings.`);
+            } else {
+                updateLocalConfig({ addressRequest: { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null } });
+                console.log(`[PublicAddr] 📡 beanpool claim asked for "${req.name}"`);
+                fresh = true;
+            }
+        }
+        if (!requestedName() || holdsAddress()) return;
+        if (!fresh && now - lastRequestCheck < 10_000) return;
+        lastRequestCheck = now;
+        await reconcile();
+    } finally {
+        checking = false;
+    }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -86,6 +158,7 @@ export function initPublicAddress(): void {
     if (getNodeRole() !== 'primary') { console.log('[PublicAddr] 🔒 skipping — backup replica.'); return; }
     if (isEnabled()) console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
     setTimeout(() => reconcile().catch(() => {}), 20_000);      // after identity/p2p ready
+    setInterval(() => checkAddressRequest().catch(() => {}), 2_000).unref();
     if (timer) clearInterval(timer);
     timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep the token fresh
 }

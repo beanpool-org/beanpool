@@ -42,8 +42,11 @@ export function parseNetwork(value) {
     const gateway = m[7];
     const a = toInt(address);
     const g = toInt(gateway);
-    const first = a >>> 24;
-    if (first === 0 || first === 127 || first >= 224) refuse(value, `${address} is not a host's unicast address`);
+    // Both unicast: with a prefix of /1 to /7 the gateway's first octet can differ from the address's.
+    for (const [ip, n] of [[address, a], [gateway, g]]) {
+        const first = n >>> 24;
+        if (first === 0 || first === 127 || first >= 224) refuse(value, `${ip} is not a host's unicast address`);
+    }
     const mask = prefix === 32 ? 0xffffffff : (~(0xffffffff >>> prefix)) >>> 0;
     if (((a & mask) >>> 0) !== ((g & mask) >>> 0)) refuse(value, `the gateway ${gateway} is not inside ${address}/${prefix}`);
     if (a === g) refuse(value, `the gateway ${gateway} is the address itself`);

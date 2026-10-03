@@ -71,6 +71,22 @@ describe('the image build\'s network setting', () => {
         expect(() => parseNetwork(value)).toThrow(/--network/);
     });
 
+    // With a prefix of /1 to /7 the gateway can have another first octet than the address: it gets the same unicast
+    // check (not 0/8, loopback, multicast, class E or the limited broadcast). For each prefix, every such gateway that a
+    // unicast address can share the prefix with.
+    const notUnicast = ['0.0.0.1', '127.0.0.1', '224.0.0.1', '239.255.255.254', '240.0.0.1', '255.255.255.254', '255.255.255.255'];
+    const gatewayCases = [1, 2, 3, 4, 5, 6, 7].flatMap((prefix) => notUnicast.flatMap((gateway) => {
+        const top = Number(gateway.split('.')[0]) >> (8 - prefix);
+        const first = [...Array(224).keys()].find((o) => o !== 0 && o !== 127 && o >> (8 - prefix) === top);
+        return first === undefined ? [] : [[`static:${first}.0.0.10/${prefix},${gateway}`, gateway]];
+    }));
+    it('has a gateway case for every prefix from /1 to /7', () => {
+        expect(new Set(gatewayCases.map(([v]) => v.split('/')[1].split(',')[0]))).toEqual(new Set(['1', '2', '3', '4', '5', '6', '7']));
+    });
+    it.each(gatewayCases)('refuses %j: the gateway is not unicast', (value, gateway) => {
+        expect(() => parseNetwork(value)).toThrow(`${gateway} is not a host's unicast address`);
+    });
+
     it('build.sh refuses a bad --network before it does anything, and says why', () => {
         const out = path.join(dir, 'out');
         const r = spawnSync('bash', [path.join(image, 'build.sh'), '--custodian-keys', path.join(dir, 'keys.json'), '--version', '0.0.1',

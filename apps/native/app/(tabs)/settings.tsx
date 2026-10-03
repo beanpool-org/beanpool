@@ -941,6 +941,7 @@ export default function SettingsScreen() {
     const [resyncTotalSteps, setResyncTotalSteps] = useState(5);
     const [resyncProgressStage, setResyncProgressStage] = useState('Initializing Database Reset...');
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
+    const onAppLockTurnedOn = React.useCallback(() => setAppLockEnabledState(true), []);
     const [showBlockedModal, setShowBlockedModal] = useState(false);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
@@ -1655,7 +1656,7 @@ export default function SettingsScreen() {
                 {/* A sign-in copy a community still keeps, moved to BeanPool's key vault with one sign-in (utils/vault-move.ts). */}
                 <VaultMoveCard onMoved={() => { void fetchProtectionStatus(); }} />
                 {/* Owners and admins only — the node answers the role; see components/NodeAdminEntry.tsx. */}
-                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} />
+                <NodeAdminEntry styles={styles} fallbackCommunityName={protectionNodeLabel} onAppLockTurnedOn={onAppLockTurnedOn} />
                 {/* Owners only: "Check your 12 words" (sealed-keys.md §7); see components/OwnerWordsCard.tsx. */}
                 <OwnerWordsCard styles={styles} />
                 <Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>

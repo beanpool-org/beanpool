@@ -243,7 +243,7 @@ export function describePairing(pairingId: string, now = Date.now(), viewerAddre
 
 export type ApproveResult =
     | { ok: true; role: MemberNodeRole; confirmCode?: string; confirmExpiresAt?: number }
-    | { ok: false; status: number; error: string; code?: string; totpRequired?: boolean; retryAfter?: number; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'totp' | 'totp-braked' | 'refused' | 'wrong-community' | 'app-too-old' };
+    | { ok: false; status: number; error: string; code?: string; reason: 'unknown' | 'expired' | 'used' | 'bad-signature' | 'not-admin' | 'inactive' | 'refused' | 'wrong-community' | 'app-too-old' };
 
 function refuse(p: Pairing): void {
     p.refusals++;
@@ -279,11 +279,8 @@ export function approvePairing(params: {
     pairingId: string;
     memberPubkey: string;
     signature: string;
-    totpCode?: string;
     /** The host the phone signed for (format 2); absent from an old app. */
     signedFor?: unknown;
-    /** The phone's address (client-ip.ts clientLimiterKey), counted by the 2FA brake beside the key. */
-    source?: string;
     /** The app can show two digits for the page to type (number matching). Absent from an older app. */
     confirm?: boolean;
     now?: number;
@@ -308,25 +305,14 @@ export function approvePairing(params: {
 
     const signer = authorizeKeySigner({
         memberPubkey,
-        totpCode: params.totpCode,
-        source: params.source,
         signatureValid: () => true, // verified just above, over this pairing's message
     });
     if (!signer.ok) {
-        // The 2FA brake (key-signin-brake.ts), shared with the Manage link so a stolen key cannot move its guessing here.
-        // No code was looked at, so the pairing's own count of refusals is not charged.
-        if (signer.braked) {
-            return { ok: false, status: 429, error: signer.error, retryAfter: signer.retryAfter, reason: 'totp-braked' };
-        }
-        if (signer.totpRequired && !signer.wrongTotp) {
-            return { ok: false, status: 401, error: signer.error, totpRequired: true, reason: 'totp' };
-        }
         if (signer.notAdmin) {
             p.notice = 'not-admin';
             logger.warn('AUTH', `Settings sign-in by phone refused: ${who(memberPubkey)} holds no node role (pairing ${p.id.slice(0, 8)})`);
         }
         refuse(p);
-        if (signer.wrongTotp) return { ok: false, status: 401, error: signer.error, totpRequired: true, reason: 'totp' };
         if (signer.notAdmin) return { ok: false, status: 403, error: 'You are not an owner, admin or moderator of this community.', reason: 'not-admin' };
         return { ok: false, status: 403, error: signer.error, reason: 'inactive' };
     }

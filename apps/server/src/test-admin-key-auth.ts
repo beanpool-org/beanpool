@@ -590,8 +590,9 @@ async function main() {
         assert(Boolean(dlCookie && dlCookie.includes('admin_session=')), 'Redirect sets admin_session cookie');
         assert(dlRes.headers.get('location') === '/settings', 'Redirects to /settings');
 
-        // ── 12. TOTP 2FA Verification during Challenge Solving ──
-        console.log('Testing TOTP 2FA verification during challenge solving...');
+        // ── 12. With 2FA on, a key sign-in asks for no code (decision D2, 2026-10-03) ──
+        // The node's code is the password's second factor; the phone's unlock is the key's. A backup code is not spent.
+        console.log('Testing that a key sign-in is not asked for the 2FA code...');
 
         const totpSecret = generateTotpSecret();
         const backupCodes = generateBackupCodes(4);
@@ -603,52 +604,31 @@ async function main() {
             totpBackupCodesHashes: backupHashes,
         });
 
-        const chalTotp = createAdminChallenge();
+        const solveKey = async (code?: string) => {
+            const chal = createAdminChallenge();
+            return fetch(`${base}/api/local/admin/auth/verify-challenge`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    challengeId: chal.challengeId,
+                    memberPubkey: aliceKeys.pub,
+                    signature: aliceKeys.sign(chal.challenge),
+                    ...(code ? { totpCode: code } : {}),
+                }),
+            });
+        };
 
-        // 1. Solving without TOTP code fails with totpRequired: true
-        const solveNoTotp = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalTotp.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalTotp.challenge),
-            }),
-        });
-        assert(solveNoTotp.status === 401, 'Verify challenge without TOTP code returns 401');
+        // 1. Solving without a code succeeds
+        const solveNoTotp = await solveKey();
+        assert(solveNoTotp.status === 200, 'Verify challenge without a TOTP code returns 200 with 2FA on');
         const noTotpBody: any = await solveNoTotp.json();
-        assert(noTotpBody.totpRequired === true, 'Verify challenge response indicates totpRequired: true');
+        assert(typeof noTotpBody.handshakeToken === 'string' && noTotpBody.totpRequired === undefined, 'and hands over a token, asking for no code');
 
-        // 2. Solving with valid 6-digit TOTP code succeeds
-        const totpCode = generateTotpCode(totpSecret);
-        const solveWithTotp = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalTotp.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalTotp.challenge),
-                totpCode,
-            }),
-        });
-        assert(solveWithTotp.status === 200, 'Verify challenge with valid TOTP code returns 200');
-
-        // 3. Solving with single-use backup code succeeds and consumes the backup code
-        const chalBackup = createAdminChallenge();
-        const firstBackupCode = backupCodes[0];
-        const solveWithBackup = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalBackup.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalBackup.challenge),
-                totpCode: firstBackupCode,
-            }),
-        });
-        assert(solveWithBackup.status === 200, 'Verify challenge with backup code returns 200');
+        // 2. A code an older app still sends is not looked at, and a backup code sent that way is not spent
+        const solveWithBackup = await solveKey(backupCodes[0]);
+        assert(solveWithBackup.status === 200, 'Verify challenge carrying a backup code returns 200');
         const remainingHashes = getLocalConfig().totpBackupCodesHashes || [];
-        assert(remainingHashes.length === 3, 'Backup code was consumed and remaining backup hashes is 3');
+        assert(remainingHashes.length === 4, 'A backup code sent with a key sign-in is not spent (4 remain)');
 
         // Clean up TOTP
         updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });

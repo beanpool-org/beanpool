@@ -6,8 +6,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView, Keyboard } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export { ErrorBoundary };
 import * as Haptics from 'expo-haptics';
 import { useIdentity } from './IdentityContext';
 import { useTheme } from './ThemeContext';
@@ -27,8 +29,9 @@ import { TotpCodeDialog, looksLikeTotpCode } from '../components/TotpCodeDialog'
 type Found = { qr: SettingsSigninQr; host: string; look: Extract<PairingLookup, { kind: 'ok' }>; openedAt: number };
 
 export default function SettingsSigninScreen() {
-    const { community } = useLocalSearchParams<{ community?: string }>();
-    const communityName = (typeof community === 'string' && community.trim()) || 'your community';
+    const { community } = useLocalSearchParams<{ community?: string | string[] }>();
+    const communityStr = Array.isArray(community) ? community[0] : community;
+    const communityName = (typeof communityStr === 'string' && communityStr.trim()) || 'your community';
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();

@@ -472,6 +472,9 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
     if (!checked.ok) return copyFailure('copy_stale', NAMES_COPY.copyStale(r.copy.savedAt));
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, r.pin))) return NOT_KEPT;
     await keepCopied(store, identity.publicKey, anchor, { seq: r.copy.seq, part: copiedPart(r.pin), digest: r.copy.boxDigest });
+    // Said once, by the next open that says the kept words (kept on the phone, so also across an app restart).
+    const head = r.pin.chain[r.pin.chain.length - 1];
+    if (head) await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyRestored(r.copy.savedAt, head.n, namesListKeyCode(head.id))]);
     return { ok: true, value: r.pin };
 }
 
@@ -1504,7 +1507,7 @@ function both(names: string[]): string {
  */
 export const NAMES_COPY = {
     title: 'Names list',
-    // The locked copy (design §5); plain here, polished in stage 3b.
+    // The locked copy: the design's §5 table, exact.
     copyUnreachable: 'Couldn’t reach the server for your names-list record. Nothing was changed. Try again.',
     copyBad: 'The copy of your names-list record on the server didn’t check out: it wasn’t saved by this account, or it was changed. Nothing was read.',
     copyStale: (savedAt: string) => `The copy of your names-list record on the server is older than what this account has already done (saved ${shortDate(savedAt)}). Whoever runs the server may have put an old copy back. Nothing was read.`,
@@ -1512,6 +1515,7 @@ export const NAMES_COPY = {
     copyTooBig: 'Your names-list record is too big to keep a copy on the server. Keep this phone signed in, or save the names as a PDF.',
     copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
     copyNewer: 'Another phone signed in as you saved the names list’s record. Use one phone.',
+    copyRestored: (savedAt: string, n: number, code: string) => `Restored your names-list record from the server, saved ${shortDate(savedAt)}, key ${n} (${code}).`,
     startAfresh: 'Start afresh on this phone',
     // Sign Out with the copy not confirmed (design §5): nothing is blocked.
     signOutOnlyCopy: (n: number) => `This phone holds the only copy of the names list’s key ${n}, and the server didn’t confirm its copy. If you sign out now, the names written under it can’t be opened again.`,

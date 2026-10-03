@@ -41,7 +41,7 @@ That is all. A moderator cannot suspend, remove or freeze anyone, see members' d
 
 A moderator whose role is taken away, or changed, is signed out straight away.
 
-If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role.
+A moderator never needs the server's 6-digit code, and nor does an admin or an owner signing in from the app. Their phone's own lock (fingerprint, face or PIN) is their second factor: the app asks for it every time, and a phone with no screen lock can't manage or moderate at all. When someone is given a role, the app turns App Lock on for them once and says why; they can turn it off again in the app's Settings.
 
 ## Owners & admins
 

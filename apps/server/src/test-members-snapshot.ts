@@ -11,7 +11,8 @@
  *   3. The read gate is unchanged: a signed-out read, a key that isn't a member and a bad signature get what the delta
  *      (built per read, as before) gets; a member and an admin get the same bytes, from one build.
  *   4. The ETag is the snapshot's: If-None-Match gets 304; a write moves it once the 5 s floor has passed; until then
- *      the last snapshot stands, and 40 readers at once cost one build.
+ *      the last snapshot stands, and 40 readers at once cost one build. A version move that changes nothing in the
+ *      directory still gets 304: the ETag is the bytes' digest alone.
  *   5. A pruned member is gone from the answer after the rebuild.
  *   6. No contact details (a member's contact value, at every visibility) are in the shared answer, as they aren't in
  *      today's.
@@ -84,6 +85,7 @@ async function main() {
     const { avatarUrlOf } = await import('@beanpool/core');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const snapshot = await import('./members-snapshot.js');
+    const { bumpMembersVersion } = await import('./engine/versions.js');
 
     initAdminPassword();
     await initTls();
@@ -229,6 +231,16 @@ async function main() {
     assert(ceiling.body.toString('utf8').includes('silent-rename'), 'past the ceiling, even a write that moved no version is in the answer');
     const again = await get('/api/members', reader, { 'If-None-Match': String(ceiling.headers.etag) });
     assert(again.status === 304, 'a rebuild at the ceiling that found nothing new keeps the ETag: 304');
+
+    // A write that moves the version but changes nothing in the directory (a member's area, holiday mode, a mute): past
+    // the floor the rebuild has the same bytes, so the same ETag, and a phone holding them gets 304, not all of it again.
+    snapshot.setMembersSnapshotForTests({ minRebuildMs: 0 });
+    const held = await get('/api/members', reader);
+    bumpMembersVersion();
+    const sameBytes = await get('/api/members', reader, { 'If-None-Match': String(held.headers.etag) });
+    const rebuilt = await get('/api/members', reader);
+    assert(sameBytes.status === 304 && snapshot.membersSnapshotBuilds() === 2, `a version move that changed nothing in the directory: rebuilt, and still 304 (${sameBytes.status}, ${snapshot.membersSnapshotBuilds()} builds)`);
+    assert(rebuilt.status === 200 && rebuilt.headers.etag === held.headers.etag && rebuilt.body.equals(held.body), `and the same ETag on the same bytes (${held.headers.etag} → ${rebuilt.headers.etag})`);
 
     // ── 5. A pruned member ───────────────────────────────────────────────────────────────────────────────────────
     console.log('\n── 5. A pruned member is gone after the rebuild');

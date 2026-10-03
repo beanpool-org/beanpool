@@ -10,7 +10,9 @@
  *     forms that are per reader (`lat`/`lng`) or per cursor (`updatedAfter`) never come here.
  *   - It is rebuilt when the version has moved, but at most every MIN_REBUILD_MS, and at least every MAX_AGE_MS even
  *     if the version hasn't moved, so a write that forgot to move the version is stale for a minute at most.
- *   - Its ETag is its own version and a digest of its bytes, so a 304 is never wrong, also across a 60 s rebuild.
+ *   - Its ETag is a digest of its bytes and nothing else, so a 304 is never wrong, also across a 60 s rebuild, and a
+ *     write that moves the version but changes nothing in the answer (a member's area, holiday mode, a mute) still gets
+ *     304 once rebuilt, not the whole directory again. "snapshot" keeps it apart from the route's version-only ETag.
  *   - The gzip copy is made once, on the first reader that accepts gzip, and shared the same way.
  *
  *   - The bytes are sent SEND_CHUNK at a time, each when the socket has taken the last. Sent whole, each reader's socket
@@ -74,7 +76,7 @@ export function membersSnapshotKey(version: number, avatarKeys: boolean): string
 export function storeMembersSnapshot(key: string, bodyStr: string, now = Date.now()): MembersSnapshot {
     const body = Buffer.from(bodyStr, 'utf8');
     const digest = createHash('sha256').update(body).digest('base64url').slice(0, 12);
-    current = { key, builtAt: now, body, etag: `W/"members-${key.split(':')[0]}-${digest}"`, gzip: null };
+    current = { key, builtAt: now, body, etag: `W/"members-snapshot-${digest}"`, gzip: null };
     builds++;
     return current;
 }

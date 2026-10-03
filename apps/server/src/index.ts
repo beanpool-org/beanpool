@@ -55,6 +55,7 @@ scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
 import { initAdminPassword } from './config/local-config.js';
+import { initClaimCode } from './claim-code.js';
 import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
 import { startHttpServer } from './http-server.js';
@@ -140,6 +141,9 @@ async function main() {
         log: message => logger.security('AUTH', message),
         changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
     });
+    // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
+    // (it asks whether there is an owner). Never throws: the admin password works as before either way.
+    initClaimCode();
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
     // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over

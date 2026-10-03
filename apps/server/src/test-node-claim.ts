@@ -26,6 +26,10 @@
  *      signs in; with an owner, the next start has no file and no waiting code.
  *   J. Two keys with the right proof at once: one owner, the other 409.
  *   K. No request this suite sent carried the code.
+ *   L. A stranger sharing the installer's address: 350 requests (GETs and wrong proofs) meet no per-address limiter, only
+ *      the claim's own brake, and the installer's right proof from that address then claims at once. With an owner, a
+ *      claim is 409 before any signature check; the owner's key with a forged signature is checked once, then braked.
+ *      /api/local/claim/x (not the claim) still meets the gateway limiter.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-node-claim.ts
  */
@@ -244,8 +248,10 @@ async function main(): Promise<void> {
     assert(r.status === 421, `B10. a claim made for host A relayed to the node as host B is refused (${r.status} ${r.json.code})`);
     r = await claim(a, { ...forPhish, signedFor: HOST }, '203.0.113.19', HOST);
     assert(r.status === 403, `B11. the relay re-labelled for host B is refused: the signature is over host A (${r.status} ${r.json.code})`);
+    r = await claim(a, { ...forPhish, signedFor: HOST }, '203.0.113.19', HOST);
+    assert(r.status === 429, `B11b. a wrong proof brakes its source even when its signature fails: the next is 429 with no signature check (${r.status} ${r.json.code})`);
     const mallory = newKey();
-    r = await claim(a, { ...forPhish, publicKey: mallory.pub, signedFor: HOST, signature: sign(mallory, HOST, codeId, mallory.pub, forPhish.proof) }, '203.0.113.19');
+    r = await claim(a, { ...forPhish, publicKey: mallory.pub, signedFor: HOST, signature: sign(mallory, HOST, codeId, mallory.pub, forPhish.proof) }, '203.0.113.20');
     assert(r.status === 403 && r.json.code === 'claim_wrong_code', `B12. the relayed proof under the relay's own key is refused (${r.status} ${r.json.code})`);
     assert(fs.existsSync(file), 'B13. none of these claimed: the file is still there');
 
@@ -341,6 +347,55 @@ async function main(): Promise<void> {
     assert(r.status === 200 && r.json.role === 'owner', `H2. then the right proof, from a source the brake holds, claims at once (${r.status}, ${ms} ms)`);
     assert(ms < 2000, `H3. without waiting for any brake (${ms} ms)`);
     await h.stop();
+
+    console.log('\nL. A stranger sharing the installer\'s address cannot hold the claim shut');
+    const dirL = path.join(root, 'l');
+    const l = await boot(dirL, env);
+    const infoL = await claimInfo(l);
+    const codeL = readCode(dirL);
+    codes.push(codeL);
+    // The same Wi-Fi, a carrier NAT, or a proxy that is not trusted: the stranger and the installer are one address.
+    // More than the gateway limiter's 120 a minute and the administrative limiter's 300, in batches.
+    const SHARED = '203.0.113.77';
+    const shared: number[] = [];
+    const tFlood = Date.now();
+    for (let batch = 0; batch < 7; batch++) {
+        const reqs: Promise<{ status: number; json: any }>[] = [];
+        for (let j = 0; j < 25; j++) {
+            reqs.push(request(l, 'GET', '/api/local/claim', undefined, { Host: HOST, 'X-Forwarded-For': SHARED }));
+            reqs.push(claim(l, claimBody(newKey(), wrong, infoL.salt, infoL.codeId), SHARED));
+        }
+        for (const x of await Promise.all(reqs)) shared.push(x.status);
+    }
+    const floodMs = Date.now() - tFlood;
+    const sharedCount = (s: number) => shared.filter((x) => x === s).length;
+    assert(shared.length === 350 && sharedCount(200) === 175 && sharedCount(403) + sharedCount(429) === 175,
+        `L1. ${shared.length} requests from the installer's address: every GET answered, every wrong proof met only the claim's own brake (200×${sharedCount(200)}, 403×${sharedCount(403)}, 429×${sharedCount(429)}; ${floodMs} ms, ${(floodMs / shared.length).toFixed(2)} ms each)`);
+    const tL = Date.now();
+    const installer = newKey();
+    const rightL = claimBody(installer, codeL, infoL.salt, infoL.codeId);
+    r = await claim(l, rightL, SHARED);
+    assert(r.status === 200 && r.json.role === 'owner', `L2. then the installer's right proof from that address claims at once (${r.status} ${JSON.stringify(r.json?.error ?? '')}, ${Date.now() - tL} ms)`);
+    // With an owner, a stranger's claim is 409 before any signature check; the owner's key with the burned code id and a
+    // forged signature is checked once, then braked.
+    const after = await Promise.all(Array.from({ length: 50 }, () => claim(l, claimBody(newKey(), wrong, infoL.salt, infoL.codeId), SHARED)));
+    assert(after.every((x) => x.status === 409), `L4. with an owner, 50 more claims from that address: all 409 (${[...new Set(after.map((x) => x.status))]})`);
+    const forged = { ...rightL, signature: sign(newKey(), HOST, infoL.codeId, installer.pub, rightL.proof) };
+    const f1 = await claim(l, forged, '203.0.113.79');
+    const f2 = await claim(l, forged, '203.0.113.79');
+    const again = await claim(l, rightL, '203.0.113.80');
+    assert(f1.status === 409 && f2.status === 429 && again.status === 200 && again.json.again === true,
+        `L5. the owner's key with a forged signature: 409, then braked 429; the owner's own retry elsewhere: 200 again (${f1.status}, ${f2.status}, ${again.status})`);
+    // Exactly the claim route: a neighbour under the same prefix keeps the gateway limiter.
+    const neighbour: { status: number; json: any }[] = [];
+    for (let batch = 0; batch < 6; batch++) {
+        const reqs: Promise<{ status: number; json: any }>[] = [];
+        for (let j = 0; j < 25; j++) reqs.push(request(l, 'GET', '/api/local/claim/x', undefined, { Host: HOST, 'X-Forwarded-For': '203.0.113.78' }));
+        neighbour.push(...await Promise.all(reqs));
+    }
+    const gated = neighbour.filter((x) => x.status === 429 && /Gateway rate limit/i.test(String(x.json?.error ?? ''))).length;
+    assert(gated > 0, `L3. ${neighbour.length} requests to /api/local/claim/x from one address: the gateway limiter still answers 429 (${gated})`);
+    await l.stop();
 
     console.log('\nI. The password\'s first invite, then the claim');
     const dirI = path.join(root, 'i');

@@ -96,11 +96,20 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
 
         const config = getLocalConfig();
         if (nodeHasOwner()) {
-            const signed = verify();
-            if (signed.ok && config.claim?.id === codeId && claimedByThisKey(key, config)) {
-                const member = getMember(key);
-                ctx.body = { ok: true, role: 'owner', memberPubkey: key, callsign: member?.callsign ?? null, again: true };
-                return;
+            // 409 before any signature check, except for the key the claim made owner with the burned code id (a lost
+            // answer). That one check is braked like a wrong proof when it fails, so it costs a source one verify in 10 s.
+            if (config.claim?.id === codeId && claimedByThisKey(key, config)) {
+                const wait = claimBrakeWait(source);
+                if (wait > 0) {
+                    ctx.set('Retry-After', String(wait));
+                    return refuse(ctx, 429, 'claim_braked', `Too many wrong tries. Wait ${wait} s and try again.`);
+                }
+                if (verify().ok) {
+                    const member = getMember(key);
+                    ctx.body = { ok: true, role: 'owner', memberPubkey: key, callsign: member?.callsign ?? null, again: true };
+                    return;
+                }
+                brakeClaimSource(source);
             }
             return refuse(ctx, 409, 'claim_already_claimed', 'This community already has an owner.');
         }
@@ -117,11 +126,12 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
                 ctx.set('Retry-After', String(wait));
                 return refuse(ctx, 429, 'claim_braked', `Too many wrong tries. Wait ${wait} s and try again.`);
             }
+            // Signed or not, a wrong proof brakes its source before the signature check: one verify a source in 10 s.
+            brakeClaimSource(source);
         }
         const signed = verify();
         if (!signed.ok) return refuse(ctx, signed.status, signed.code || 'claim_bad_signature', signed.error);
         if (!proofRight) {
-            brakeClaimSource(source);
             logger.security('AUTH', `A wrong claim proof was refused (key ${key.slice(0, 12)}…, from ${logAddressTag(source)})`);
             return refuse(ctx, 403, 'claim_wrong_code', 'That claim code is not right. Read it on the server again.');
         }

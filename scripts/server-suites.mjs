@@ -115,6 +115,7 @@ export const SUITES = [
     'test-2fa-reenrol-needs-code',
     'test-breakglass-and-backup-codes',
     'test-beanpool-recover',
+    'test-claim-cli',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',

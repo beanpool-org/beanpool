@@ -11,6 +11,7 @@ import {
     type NodeRoleRecord,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { SignOutEverywhere } from './SignOutEverywhere';
 
 /**
  * Owners & admins — who holds authority over this node (docs/admin-surface.md §1, the-commons.md §9.2).
@@ -34,6 +35,8 @@ interface NodeRolesPanelProps {
     viewer: RolesViewer;
     /** Called after a role changes, so the member directory's badges catch up. */
     onChanged?: () => void;
+    /** A key session only: after "Sign out everywhere" ends this browser's session too, show the sign-in screen. */
+    onSignedOutEverywhere?: () => void;
 }
 
 const ROLE_LABEL: Record<MemberNodeRole, string> = { owner: 'Owner', admin: 'Admin', moderator: 'Moderator' };
@@ -131,7 +134,7 @@ export function breakGlassText(r: Pick<NodeRoleRecord, 'role' | 'has_break_glass
 type Target = { pubkey: string; name: string; currentRole: MemberNodeRole | null };
 type Notice = { kind: 'success' | 'error'; text: string };
 
-export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeRolesPanelProps) {
+export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSignedOutEverywhere }: NodeRolesPanelProps) {
     const [roles, setRoles] = useState<NodeRoleRecord[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -575,6 +578,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                     )}
                 </div>
             )}
+
+            {/* Your own sign-ins: only a key session has any (the password and a fleet profile are nobody's). */}
+            {viewer.kind === 'key' && onSignedOutEverywhere && <SignOutEverywhere onSignedOut={onSignedOutEverywhere} />}
         </div>
     );
 }

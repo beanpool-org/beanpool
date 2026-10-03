@@ -49,6 +49,26 @@ A break-glass code belongs to one owner. It starts with **bg-** and does one thi
 
 Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.
 
+## Automation tokens
+
+An automation token lets a script, or a tool like a fleet manager, use this node's Settings without the admin password. An owner makes one under Access & Security, **Automation tokens**: give it a name that says what will use it, pick what it may do, and, if you like, when it stops working. Admins and moderators do not see this card.
+
+You make a token with your owner key, never with the admin password: open Settings from **Manage** in the app, or sign in on a computer by scanning a code with the app. Signed in with the password, the card lists the tokens and lets you revoke them, but has no form for making one. That way every token belongs to an owner.
+
+What a token may do is its scope:
+
+- **Read**: look, change nothing. Dashboards and checks.
+- **Backups**: take a backup or snapshot, list them, send one off the box and download one. Nothing else: not restoring, not deleting, not changing where backups go.
+- **Admin**: what an admin can do in Settings.
+
+No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup, reset the node or sign anyone in to Settings. Do those signed in as an owner.
+
+- Settings shows the token once, when you make it. Copy it then: the server keeps only a scrambled copy and cannot show it again. If you lose it, revoke it and make a new one.
+- The script sends it in the Authorization header, as Bearer followed by the token (it starts with bp_). It needs no two-factor code: it was made with an owner's key. Keep it as you would the password.
+- What a script does with a token counts as done by the owner who made it, and the server's log records each use with the token's id, never the token itself. The list shows when and where each token was last used.
+- Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.
+- Tokens stay on this server: they are not in backups, standby copies or a take-over.
+
 ## Factory reset
 
 Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and puts it in a new data/first-admin-password.txt, as on the first start. It never prints it in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt

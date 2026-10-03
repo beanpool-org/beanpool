@@ -34,12 +34,18 @@ vi.mock('expo-secure-store', () => ({
 }));
 // For identity.ts (the Sign Out wipe and the 12 words, end to end below).
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+/** On: the phone's copy of its pin is over the 1 MiB cap (makeNamesCopy throws, as core does for a pin that big). */
+const copyTooBig = vi.hoisted(() => ({ on: false }));
+vi.mock('@beanpool/core', async (importOriginal) => {
+    const core = await importOriginal<typeof import('@beanpool/core')>();
+    return { ...core, makeNamesCopy: (...a: Parameters<typeof core.makeNamesCopy>) => { if (copyTooBig.on) throw new Error('too big'); return core.makeNamesCopy(...a); } };
+});
 
 import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, makeNamesGeneration, makeNamesShare, readNamesGeneration,
     readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, emptyNamesPin, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
-    readNamesCopy,
+    readNamesCopy, makeNamesCopy, namesPinForNextCopy,
     type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
@@ -3176,6 +3182,125 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
             expect(m.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
             expect(m.copy.seq).toBe(Math.max(was.copy.seq, phoneB.copy.seq));
             expect(Object.keys(m.ring).sort()).toEqual([...new Set([...Object.keys(was.ring), ...Object.keys(phoneB.ring)])].sort());
+        }
+    });
+});
+
+describe('§5 a copy the node didn\'t take: what the phone says, and nothing is blocked (409, 429, too big, another address, newer)', () => {
+    const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
+    const ownerKey = (node: FakeNode, me: BeanPoolIdentity) => [...node.copies!.keys()].find((k) => k.toLowerCase() === me.publicKey.toLowerCase())!;
+    const isPut = (req: Sent) => req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy';
+    const putSeqs = () => sentAs('PUT', '/api/names/copy').map((x) => readNamesCopy(JSON.parse(x.body)).ok ? (readNamesCopy(JSON.parse(x.body)) as { copy: { seq: number } }).copy.seq : -1);
+    const named = (o: NamesOpened) => openEntries(o.list!, o).map((e) => e.text?.name).filter(Boolean).sort();
+    /** A copy is due on the next open: the node lost Ada's (self-healing). */
+    const due = async () => {
+        const c = await community(['Owen', 'Ada'], true);
+        node2 = c.node;
+        c.node.copies!.delete(ownerKey(c.node, c.phones[1]));
+        return c;
+    };
+    let node2: FakeNode;
+
+    it('409 stale_copy: one retry numbered past the node\'s, then confirmed; a second 409 stops there (two PUTs), said, and the list opens', async () => {
+        const { node, phones: [, ada] } = await due();
+        let first = true;
+        answer = (req) => {
+            if (isPut(req) && first) { first = false; return { status: 409, body: { error: 'stale_copy', code: 'stale_copy', seq: 7 } }; }
+            return node.answer(req);
+        };
+        const ok = await open(ada);
+        expect(putSeqs()).toEqual([2, 8]);
+        expect((await pinOf(ada))!.copy.seq).toBe(8);
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBe(8);
+        expect(ok.plan.kind).toBe('ready');
+        expect(named(ok)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        // Always stale: one retry, no more, the copy unconfirmed and said; the list still opens and reads.
+        node.copies!.delete(ownerKey(node, ada));
+        sent = [];
+        answer = (req) => (isPut(req) ? { status: 409, body: { error: 'stale_copy', code: 'stale_copy', seq: 20 } } : node.answer(req));
+        const held = await open(ada);
+        expect(putSeqs()).toEqual([9, 21]);
+        expect(held.plan.kind).toBe('ready');
+        expect(named(held)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(held.notices).toContain(NAMES_COPY.copyNotSaved);
+        expect(held.notices).not.toContain('stale_copy');
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+    });
+
+    it('429 too_many_copies: the list opens; no copy is sent again for an hour (no hammering), then it is', async () => {
+        const { node, phones: [, ada] } = await due();
+        answer = (req) => (isPut(req) ? { status: 429, body: { error: 'too_many_copies', code: 'too_many_copies' } } : node.answer(req));
+        const first = await open(ada);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(first.plan.kind).toBe('ready');
+        expect(named(first)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(first.notices).toContain(NAMES_COPY.copyNotSaved);
+        expect(first.notices).not.toContain('too_many_copies');
+        answer = (req) => node.answer(req);
+        sent = [];
+        const paused = await open(ada);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(paused.plan.kind).toBe('ready');
+        expect(paused.notices).toContain(NAMES_COPY.copyNotSaved);
+        const later = Date.now() + 61 * 60 * 1000;
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+        try {
+            sent = [];
+            await open(ada);
+            expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+            expect(node.copies!.get(ownerKey(node, ada))).toBeTruthy();
+        } finally { clock.mockRestore(); }
+    });
+
+    it('copy_too_big: said in the §5 words, nothing uploaded, the list opens', async () => {
+        const { phones: [, ada] } = await due();
+        copyTooBig.on = true;
+        try {
+            const o = await open(ada);
+            expect(o.notices).toContain(NAMES_COPY.copyTooBig);
+            expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+            expect(o.plan.kind).toBe('ready');
+            expect(named(o)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        } finally { copyTooBig.on = false; }
+    });
+
+    it('copy_other_address: refused with the address in the §5 words, nothing kept; Start afresh still works', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const pin = namesPinForNextCopy((await pinOf(ada))!);
+        const c = makeNamesCopy({ pin, address: 'https://elsewhere.example.org', me: ada });
+        node.copies!.set(ownerKey(node, ada), { header: c.header, signature: c.signature, box: c.box, seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.boxDigest });
+        wipe(ada);
+        const r = await openNamesList(COMMUNITY, ada, STORE);
+        expect(r.ok).toBe(false);
+        if (r.ok) return;
+        expect(r.code).toBe('copy_other_address');
+        expect(r.message).toBe(NAMES_COPY.copyOtherAddress('https://elsewhere.example.org'));
+        expect(COPY_REFUSED_CODES).toContain(r.code);
+        expect(await pinOf(ada)).toBeNull();
+        const fresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
+        expect(fresh.ok).toBe(true);
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(c.seq);
+    });
+
+    it('copy_newer that can\'t be merged (the fetch fails, or the copy disagrees with the node\'s word): the pin is kept as it is, said, no copy, no shares, the list opens', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const was = (await pinOf(ada))!;
+        const row = node.copies!.get(ownerKey(node, ada))!;
+        node.copies!.set(ownerKey(node, ada), { ...row, seq: was.copy.seq + 5 });
+        for (const failing of [true, false]) {
+            sent = [];
+            answer = (req) => (failing && req.method === 'GET' && new URL(req.url).pathname === '/api/names/copy' ? { status: 502 } : node.answer(req));
+            const o = await open(ada);
+            const now = (await pinOf(ada))!;
+            expect(now.copy.seq).toBe(was.copy.seq);
+            expect(now.chain.map((l) => l.id)).toEqual(was.chain.map((l) => l.id));
+            expect(Object.keys(now.ring).sort()).toEqual(Object.keys(was.ring).sort());
+            expect(o.notices).toContain(NAMES_COPY.copyNewer);
+            expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+            expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+            expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+            expect(o.plan.kind).toBe('ready');
+            expect(named(o)).toEqual([PLANTED[0], PLANTED[1]].sort());
         }
     });
 });

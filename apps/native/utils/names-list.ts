@@ -440,7 +440,8 @@ async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: Names
             return { ok: true, pin: now, mine: { seq: copy.seq, headN: copy.headN, headId: copy.headId, savedAt: copy.savedAt, digest: copy.boxDigest } };
         }
         if (put.code === 'too_many_copies') copiesPausedUntil.set(label, Date.now() + COPY_HOUR_MS);
-        if (!(put.code === 'stale_copy' && typeof put.seq === 'number' && round === 0)) return put;
+        // The phone's words, never the node's code (`stale_copy`, `too_many_copies`); a timeout keeps its own, for the caller.
+        if (!(put.code === 'stale_copy' && typeof put.seq === 'number' && round === 0)) return put.code === NAMES_TIMED_OUT ? put : { ...put, message: NAMES_COPY.copyNotSaved };
         copiesInFlight.delete(label);
         now = { ...now, copy: { seq: Math.max(now.copy.seq, put.seq) } };
     }

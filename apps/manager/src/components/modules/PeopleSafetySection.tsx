@@ -15,6 +15,7 @@ import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
+import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -174,19 +175,13 @@ export function PeopleSafetySection({
                 return;
             }
 
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ postIds: stalePostIds }),
-            });
-            const data = await res.json();
-            if (res.ok) {
-                const count = data.deleted ?? data.deletedCount ?? stalePostIds.length;
-                setBulkDeleteResult(`Deleted ${count} post(s).`);
-                onRefresh();
-            } else {
-                setBulkDeleteResult(`Failed: ${data.error || 'Unknown error'}`);
-            }
+            // The node takes at most BULK_DELETE_BATCH_SIZE ids per request: send them in batches, one after another,
+            // stopping at the first that fails (lib/bulk-delete-posts.ts).
+            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const outcome = await bulkDeleteInBatches(stalePostIds, (batch) => sendBulkDeleteBatch(url, headers, batch));
+            setBulkDeleteResult(describeBulkDeleteOutcome(outcome));
+            // Once, at the end, whenever any batch went through: a partial run changed the list too.
+            if (outcome.batchesDone > 0) onRefresh();
         } catch (e: unknown) {
             setBulkDeleteResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
         } finally {

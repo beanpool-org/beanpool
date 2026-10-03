@@ -2155,21 +2155,35 @@
         window.bulkDeletePosts = async function() {
             if (selectedPostIds.size === 0) return;
             if (!confirm(`Delete ${selectedPostIds.size} post${selectedPostIds.size > 1 ? 's' : ''}? This will refund any pending escrows.`)) return;
-            try {
-                const res = await fetch('/api/local/admin/posts/bulk-delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ postIds: [...selectedPostIds], password: authToken })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    alert(`Deleted ${data.deleted} post${data.deleted !== 1 ? 's' : ''}.`);
-                    selectedPostIds.clear();
-                    loadAdminData();
-                } else {
-                    alert('Bulk delete failed: ' + (data.error || 'Unknown error'));
-                }
-            } catch { alert('Network error'); }
+            // The node takes at most 200 ids per request (MAX_BULK_DELETE_POSTS in src/routes/admin.ts; change both
+            // together), so the selection goes in batches, each sent only after the one before it answered.
+            const BULK_DELETE_BATCH_SIZE = 200;
+            const ids = [...selectedPostIds];
+            let deleted = 0, batchesDone = 0, failure = null, networkError = false;
+            for (let i = 0; i < ids.length; i += BULK_DELETE_BATCH_SIZE) {
+                const batch = ids.slice(i, i + BULK_DELETE_BATCH_SIZE);
+                try {
+                    const res = await fetch('/api/local/admin/posts/bulk-delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ postIds: batch, password: authToken })
+                    });
+                    const data = await res.json();
+                    if (!data.success) { failure = data.error || 'Unknown error'; break; }
+                    deleted += data.deleted ?? data.deletedCount ?? batch.length;
+                    batchesDone++;
+                    batch.forEach(id => selectedPostIds.delete(id));
+                } catch { failure = 'Network error'; networkError = true; break; }
+            }
+            if (failure === null) {
+                alert(`Deleted ${deleted} post${deleted !== 1 ? 's' : ''}.`);
+            } else if (batchesDone === 0) {
+                alert(networkError ? 'Network error' : 'Bulk delete failed: ' + failure);
+            } else {
+                // What went through stays deleted; what was not sent stays selected, to try again.
+                alert(`Deleted ${deleted} of ${ids.length}, then: ${failure}`);
+            }
+            if (batchesDone > 0) loadAdminData();
         };
 
         // Cross-tab: view posts by a specific author

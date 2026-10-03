@@ -96,6 +96,10 @@ import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, typ
 import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
 import { likeContains } from '@beanpool/engine';
 
+// The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
+// node's own settings page (static/settings.js) send longer lists in batches of this size, one after another.
+export const MAX_BULK_DELETE_POSTS = 200;
+
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth, activeConnections, calculateAnalytics } = deps;
@@ -1717,6 +1721,11 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
     if (!Array.isArray(postIds) || postIds.length === 0) {
         ctx.status = 400;
         ctx.body = { error: 'postIds array required' };
+        return;
+    }
+    if (postIds.length > MAX_BULK_DELETE_POSTS) {
+        ctx.status = 400;
+        ctx.body = { error: `Bulk delete limit exceeded (maximum ${MAX_BULK_DELETE_POSTS} posts per request)` };
         return;
     }
     try {

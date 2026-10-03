@@ -65,6 +65,21 @@ describe('RecoveryKitButton', () => {
         expect(screen.queryByText(/printed|saved|success/i)).toBeNull();
     });
 
+    it('names the node the web app talks to (bp_node_url), not the page’s own address (review 4170915988)', async () => {
+        localStorage.setItem('bp_node_url', 'http://192.168.1.20:8080/');
+        try {
+            const { printer, seen } = setup(() => {});
+            fireEvent.click(screen.getByRole('button', { name: 'Print or save your recovery kit' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+            await vi.waitFor(() => expect(printer).toHaveBeenCalledTimes(1));
+            expect(seen[0].html).toContain('Community: <strong>192.168.1.20:8080</strong>');
+            expect(seen[0].html).toContain('Address: <strong>http://192.168.1.20:8080</strong>');
+            expect(seen[0].html).not.toContain(window.location.host);
+        } finally {
+            localStorage.removeItem('bp_node_url');
+        }
+    });
+
     it('when print throws: the frame is still removed, and the failure line shows', async () => {
         setup(() => { throw new Error('no print here'); });
         fireEvent.click(screen.getByRole('button', { name: 'Print or save your recovery kit' }));

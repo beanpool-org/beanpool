@@ -4,14 +4,30 @@
  * has one action. Optional: nothing here gates joining.
  */
 import { recoveryKitHtml, type RecoveryKit } from '@beanpool/core';
+import { getNodeApiUrl } from './api';
 
 export const KIT_WEB_LABEL = 'Print or save your recovery kit';
 export const KIT_WEB_WARNING = 'Keep this page or file off cloud backups and chats. Anyone who has it can sign in as you.';
 export const KIT_WEB_FAILED_LINE = 'The recovery kit couldn’t be made in this browser. Write the 12 words down instead.';
 
-/** The kit for this browser's community: the address the page was opened at, whatever domain or IP that is. */
-export function webKit(words: readonly string[], loc: Pick<Location, 'origin' | 'host'> = window.location): RecoveryKit {
-    return { words, communityName: loc.host, communityAddress: loc.origin, date: new Date() };
+/**
+ * The kit for the community this web app talks to: the detached `bp_node_url` when one is set (Settings → Sovereign
+ * Node Connection), else the address the page was opened at, as lib/api.ts's nodeAddress and webAppHost do (review
+ * 4170915988). Whatever domain or IP that is; the name is its host.
+ */
+export function webKit(
+    words: readonly string[],
+    loc: Pick<Location, 'origin' | 'host'> = window.location,
+    nodeUrl: string = getNodeApiUrl(),
+): RecoveryKit {
+    if (!nodeUrl) return { words, communityName: loc.host, communityAddress: loc.origin, date: new Date() };
+    let host: string;
+    try {
+        host = new URL(nodeUrl).host || nodeUrl;
+    } catch {
+        host = nodeUrl.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/\/.*$/, '') || nodeUrl;
+    }
+    return { words, communityName: host, communityAddress: nodeUrl, date: new Date() };
 }
 
 /**

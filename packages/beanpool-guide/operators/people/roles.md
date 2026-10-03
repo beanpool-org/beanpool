@@ -19,7 +19,8 @@ Owners can do everything in Settings. Only owners can:
 - sign other people out of Settings;
 - switch break-glass mode on or off, and be issued a break-glass code;
 - restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
-- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from.
+- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;
+- claim, rename or take offline the community's public address, and see its tunnel token.
 
 The **admin password** counts as an owner. Anyone who knows it can do all of the above.
 

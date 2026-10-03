@@ -36,8 +36,9 @@ To use Settings on a computer's bigger screen without the password:
 
 - First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.
 - Then, in the phone app, open **Settings** and tap **Manage this community from a computer**, next to Manage. A moderator's says **Moderate this community from a computer**, next to Moderate. Older apps say **Sign in on a computer**. Owners, admins and moderators only. Point the camera at the QR code.
-- The phone shows the 6-character code, your community and which browser asked (for example "Firefox on Windows"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.
-- Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you.
+- The phone asks **Did you just open Settings on a computer?** and says: if someone sent you this code, tap No. Below that it shows the 6-character code, your community, which browser asked (for example "Firefox on Windows"), how long ago it asked, the internet address the server saw it ask from, and how long the code has left. The server gives that address only to the app of an owner, admin or moderator, so someone who sees the QR code doesn't learn it. When the server sees the phone and the computer at the same internet address, it says **same network as this phone**. It never says so when it can't tell them apart: behind a reverse proxy that is not in TRUSTED_PROXIES, or when both reach the server from your local network. Check the code matches the one on the computer. If it doesn't, if the address is a stranger's, or if you did not just open Settings yourself, tap **No, that's not my computer**.
+- Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on.
+- The phone then shows **two digits**: "On the computer, type 47". The computer asks for them. Type them there and press **Confirm**. Only then does the computer open Settings, signed in as you. Someone who sent you a QR code from their own computer never sees your phone, so even if you were talked into tapping Sign in, they would have to guess the two digits: three tries out of a hundred, then the code is used up. Never read the digits out or send them to anyone.
 
 Good to know:
 
@@ -45,7 +46,9 @@ Good to know:
 - The code only signs in the browser that showed it. A photo of the QR code is no use on another computer.
 - The app only accepts a code from its own community. A code from another server is refused, and the phone says which one it was.
 - Five refused tries on one code (wrong key, no role in this community, wrong 6-digit code) use it up.
-- Each approval is written to the server's log, with who approved it and which browser signed in.
+- The two digits last **30 seconds**. Three wrong tries on the computer, or too late, and nobody is signed in: get a new code.
+- A phone with an older app shows no digits. It signs the computer in straight after the unlock, as before. Update the app to get the digits.
+- Each approval is written to the server's log, with who approved it and which browser signed in. So is a code used up by wrong digits.
 - Your key stays on the phone. This is not **Use your account on another device** (older apps: **Link Another Device**), which copies your own account to a browser to use BeanPool there as you.
 
 ## Whose sign-in it is

@@ -514,14 +514,19 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
 export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
     const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
     const kept = extends_ ? other : local;
-    const onKept = new Set([...kept.chain.map((l) => l.id), ...kept.abandoned]);
+    const left = extends_ ? local : other;
+    // A statement either phone of this key abandoned stays abandoned (and its key in the ring). The other side's links off
+    // the kept chain (a fork) are NOT made abandoned here: that would change what the walk takes (names-list-trust.ts).
+    const keptIds = new Set(kept.chain.map((l) => l.id));
+    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned])].filter((id) => !keptIds.has(id));
+    const onKept = new Set([...keptIds, ...abandoned]);
     const ring: Record<string, string> = {};
     for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
     // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
     let pending = kept.pending;
     if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
     else if (local.pending) pending = local.pending;
-    return { ...kept, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
+    return { ...kept, abandoned, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
 }
 
 /**
@@ -543,8 +548,12 @@ async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store:
 /** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
 export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address'];
 
-/** A names pin whose copy the node didn't confirm at Sign Out; `onlyKey`: the list's key N when no other admin holds it. */
-export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null }
+/**
+ * A names pin whose copy the node didn't confirm at Sign Out; `onlyKey`: the list's key N when no other admin may hold it.
+ * `maybe`: the node's holder list wasn't read and this phone's pin still names other admins, who may since have been
+ * removed or re-keyed, so this phone may be the only holder (design §5; the words say "may").
+ */
+export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null; maybe?: boolean }
 
 /**
  * Sign Out's time limits (design §5, "one request, time-limited"): each request at most {@link NAMES_SIGN_OUT_REQUEST_MS},
@@ -567,9 +576,21 @@ export const NAMES_SIGN_OUT_TOTAL_MS = 30_000;
  * link then does nothing when its turn comes. Returns the ones not confirmed; the caller decides the words and never
  * blocks (no hard gates). `anchors`: the community addresses this key keeps a pin for (from the store's labels).
  */
-async function keptOnlyKey(store: NamesPinStore, publicKey: string, anchor: string): Promise<number | null> {
+async function keptUnread(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesCopyUnconfirmed> {
     const kept = await readKeptPin(store, publicKey, anchor);
-    return kept.kind === 'pin' ? onlyKeyOnPin(kept.pin, publicKey.toLowerCase()) : null;
+    return kept.kind === 'pin' ? unreadHolders(anchor, kept.pin, publicKey.toLowerCase()) : { anchor, onlyKey: null };
+}
+
+/**
+ * The node's holder list unread (no time left, the state failed, or let go at the deadline): the pin can't say who
+ * holds the key now (an admin it still trusts may have been removed or re-keyed since this phone's last open), so the
+ * head key is treated as possibly this phone's alone: the PDF is offered, and the words say "may" unless the pin itself
+ * names no other admin. A sole admin is never told another admin will send the keys.
+ */
+function unreadHolders(anchor: string, pin: NamesPin, me: string): NamesCopyUnconfirmed {
+    const head = pin.chain[pin.chain.length - 1];
+    if (!head) return { anchor, onlyKey: null };
+    return onlyKeyOnPin(pin, me) !== null ? { anchor, onlyKey: head.n } : { anchor, onlyKey: head.n, maybe: true };
 }
 
 export async function saveNamesCopiesBeforeLeaving(
@@ -589,14 +610,13 @@ export async function saveNamesCopiesBeforeLeaving(
             if (kept.kind !== 'pin') return null;
             const head = kept.pin.chain[kept.pin.chain.length - 1];
             const me = identity.publicKey.toLowerCase();
-            // The node's holder list unread (no time left, or the state failed): decided from the pin, so a sole admin is
-            // never told another admin will send the keys.
-            const pinOnly = onlyKeyOnPin(kept.pin, me);
-            if (left() <= 0) return { anchor, onlyKey: pinOnly };
+            // The node's holder list unread (no time left, or the state failed): see unreadHolders.
+            if (left() <= 0) return unreadHolders(anchor, kept.pin, me);
             const s = await fetchNamesState(anchor, identity, left());
-            const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
-            const onlyKey = !s.ok ? pinOnly : head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
-            if (!s.ok || s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
+            if (!s.ok) return unreadHolders(anchor, kept.pin, me);
+            const holders = (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase());
+            const onlyKey = head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
+            if (s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
             // Another phone saved a newer copy: merged first, as the open does, so this one is saved past both.
             const pin = s.value.myCopy && s.value.myCopy.seq > kept.pin.copy.seq ? await mergeNewerCopy(anchor, identity, store, s.value, kept.pin, left()) : kept.pin;
             if (left() <= 0) return { anchor, onlyKey };
@@ -611,7 +631,7 @@ export async function saveNamesCopiesBeforeLeaving(
         try {
             const first = await Promise.race([work, deadline]);
             // Let go: decided from the pin as it is kept (read only, no request), as when the state can't be read.
-            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), { anchor, onlyKey: await keptOnlyKey(store, identity.publicKey, anchor) })) : first;
+            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), await keptUnread(store, identity.publicKey, anchor))) : first;
             if (confirmed) out.push(confirmed);
         } finally {
             clearTimeout(timer);
@@ -623,8 +643,10 @@ export async function saveNamesCopiesBeforeLeaving(
 /** §5's words for a Sign Out whose names copy wasn't confirmed: the only-holder case offers the PDF. */
 export function namesSignOutWords(unconfirmed: readonly NamesCopyUnconfirmed[]): { text: string; pdf: boolean } | null {
     if (!unconfirmed.length) return null;
-    const only = unconfirmed.find((u) => u.onlyKey !== null);
-    return only ? { text: NAMES_COPY.signOutOnlyCopy(only.onlyKey ?? 0), pdf: true } : { text: NAMES_COPY.signOutNotConfirmed, pdf: false };
+    const only = unconfirmed.find((u) => u.onlyKey !== null && !u.maybe) ?? unconfirmed.find((u) => u.onlyKey !== null);
+    if (!only) return { text: NAMES_COPY.signOutNotConfirmed, pdf: false };
+    const n = only.onlyKey ?? 0;
+    return { text: only.maybe ? NAMES_COPY.signOutMaybeOnlyCopy(n) : NAMES_COPY.signOutOnlyCopy(n), pdf: true };
 }
 
 /** The community addresses where `publicKey` keeps a names pin on this phone, from the pin labels among `keys`. */
@@ -1633,6 +1655,7 @@ export const NAMES_COPY = {
     startAfresh: 'Start afresh on this phone',
     // Sign Out with the copy not confirmed (design §5): nothing is blocked.
     signOutOnlyCopy: (n: number) => `This phone holds the only copy of the names list’s key ${n}, and the server didn’t confirm its copy. If you sign out now, the names written under it can’t be opened again.`,
+    signOutMaybeOnlyCopy: (n: number) => `The server didn’t answer, so this phone can’t tell whether another admin still holds the names list’s key ${n}. If none does and you sign out now, the names written under it can’t be opened again.`,
     signOutNotConfirmed: 'The server didn’t confirm a copy of your names-list record. After you sign in again, check codes with another admin on a call and their phone will send the keys.',
     tryAgain: 'Try again',
     savePdf: 'Save the names as a PDF',

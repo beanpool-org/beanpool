@@ -2958,14 +2958,29 @@ describe('§8 23. Sign Out saves the copy first; what it says when the node didn
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
     });
 
-    it('the state can\'t be read, another admin trusted on the pin: the general words, and no copy is sent', async () => {
+    it('the state can\'t be read, another admin trusted on the pin (who may since have been removed or re-keyed): "may be the only copy", the PDF, and no copy is sent', async () => {
         const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
         node.copies!.delete(owen.publicKey);
         answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
         const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
-        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
-        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(1), pdf: true });
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('a sole holder with the state unread is never told another admin will send the keys, even when the pin still trusts a removed admin', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const words = namesSignOutWords(await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE));
+        expect(words?.text).not.toBe(NAMES_COPY.signOutNotConfirmed);
+        expect(words?.pdf).toBe(true);
+    });
+
+    it('the words: a sure only copy wins over a "may", and the general words come only from a holder list the node returned', () => {
+        expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: 3 }])).toEqual({ text: NAMES_COPY.signOutOnlyCopy(3), pdf: true });
+        expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: null }])).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(2), pdf: true });
+        expect(namesSignOutWords([{ anchor: 'b', onlyKey: null }])).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
     });
 
     it('a node from before the copies (no myCopy): not confirmed, and nothing is sent to a route it lacks', async () => {
@@ -3144,7 +3159,7 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-trust:'))).toEqual([]);
     });
 
-    it('the pin held by an open at 30 s, another admin trusted on it: decided from the pin, the general words, no request', async () => {
+    it('the pin held by an open at 30 s, another admin trusted on it: decided from the pin, "may be the only copy" and the PDF, no request', async () => {
         const { phones: [, ada] } = await community(['Owen', 'Ada'], true);
         vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
         hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
@@ -3153,8 +3168,8 @@ describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)'
         sent = [];
         const r = timed(saveNamesCopiesBeforeLeaving(ada, [COMMUNITY], STORE));
         await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
-        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
-        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(1), pdf: true });
         expect(sent).toEqual([]);
         hold = null;
         await vi.advanceTimersByTimeAsync(120_000);
@@ -3256,6 +3271,15 @@ describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () =
         const m = mergeNamesPins(local, other);
         expect(m.pending).toEqual(pending);
         expect(m.ring).toEqual({ [K1]: 'k1-key' });
+    });
+
+    it('a statement this phone abandoned stays abandoned, with its key, when the other pin is kept', () => {
+        const X = '33'.repeat(32);
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], abandoned: [X], ring: { [K1]: 'k1-key', [X]: 'x-key' }, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key', [G]: 'g-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.abandoned).toEqual([X]);
+        expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key', [X]: 'x-key' });
     });
 });
 

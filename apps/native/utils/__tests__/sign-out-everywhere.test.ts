@@ -70,7 +70,8 @@ describe('signOutEverywhere', () => {
     });
 
     it('says what it does before, and what happened after, in plain words', () => {
-        expect(signOutEverywhereWarning('Mullum', true)).toBe("This signs you out of Mullum's Settings on every computer and phone, and retires your break-glass code. Your key stays on this phone: Manage signs you in again.");
+        expect(signOutEverywhereWarning('Mullum', true)).toBe("This signs you out of Mullum's Settings on every computer and phone, and retires your break-glass code. Your key stays on this phone: Manage signs you in again. Automation tokens keep working: press Manage, then Automation tokens under Access & Security, and revoke any you didn't make.");
+        expect(signOutEverywhereWarning('Mullum', false)).not.toMatch(/Automation tokens/);
         expect(signOutEverywhereWarning('Mullum', false)).not.toMatch(/break-glass/);
         expect(signOutEverywhereDone({ breakGlassCodeRetired: true })).toMatch(/break-glass code no longer works/);
         expect(signOutEverywhereDone({ breakGlassCodeRetired: false })).toBe('Every Settings sign-in of yours has ended.');

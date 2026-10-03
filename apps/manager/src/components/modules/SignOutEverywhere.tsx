@@ -3,14 +3,15 @@ import { signOutEverywhere } from '../../lib/node-client';
 
 /**
  * "Sign out everywhere", for the person signed in to Settings with their key (Owners & admins). The node ends every
- * Settings session of theirs, on every computer and phone, and retires a break-glass code made from one of them, so a
- * stolen sign-in leaves nothing working behind (#1531). Asks first; on success this browser is signed out too
+ * Settings session of theirs, on every computer and phone, and retires a break-glass code made from one of them (#1531).
+ * Automation tokens are not sign-ins and keep working (#1563 review): the words send an owner to that card to revoke any
+ * token they didn't make. Asks first; on success this browser is signed out too
  * (onSignedOut shows the sign-in screen). Never offered to the password or a fleet profile: they have no key of their own.
  *
  * Operator manual text: packages/beanpool-guide/operators/setup/access-and-security.md — keep the two in step.
  */
 export const SIGN_OUT_EVERYWHERE_WARNING =
-    'This signs you out of Settings on every computer and phone, and retires a break-glass code made from one of those sign-ins. You will need to sign in again here.';
+    'This signs you out of Settings on every computer and phone, and retires a break-glass code made from one of those sign-ins. You will need to sign in again here. Automation tokens are not sign-ins and keep working: if someone else may have signed in as you, check Automation tokens (Access & Security) and revoke any you didn\'t make.';
 
 export function SignOutEverywhere({ onSignedOut }: { onSignedOut: () => void }) {
     const [confirming, setConfirming] = useState(false);

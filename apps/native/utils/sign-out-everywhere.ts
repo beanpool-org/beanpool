@@ -46,12 +46,12 @@ export async function signOutEverywhereOnce(nodeUrl: string, identity: BeanPoolI
 
 /** What the confirm says before anything is sent. */
 export function signOutEverywhereWarning(communityName: string, isOwner: boolean): string {
-    return `This signs you out of ${communityName}'s Settings on every computer and phone${isOwner ? ', and retires your break-glass code' : ''}. Your key stays on this phone: Manage signs you in again.`;
+    return `This signs you out of ${communityName}'s Settings on every computer and phone${isOwner ? ', and retires your break-glass code' : ''}. Your key stays on this phone: Manage signs you in again.${isOwner ? ' Automation tokens keep working: press Manage, then Automation tokens under Access & Security, and revoke any you didn\'t make.' : ''}`;
 }
 
 /** What the result says, plainly. */
 export function signOutEverywhereDone(r: { breakGlassCodeRetired: boolean }): string {
     return r.breakGlassCodeRetired
-        ? 'Every Settings sign-in of yours has ended. Your break-glass code no longer works: make a new one with Break-glass code.'
+        ? 'Every Settings sign-in of yours has ended. Your break-glass code no longer works: make a new one with Break-glass code. Automation tokens still work: check them with Manage, under Access & Security.'
         : 'Every Settings sign-in of yours has ended.';
 }

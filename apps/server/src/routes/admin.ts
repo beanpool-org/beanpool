@@ -305,6 +305,9 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
             return;
         }
+        // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
+        // your own sessions is not asked.
+        if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
         targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so

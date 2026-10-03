@@ -548,6 +548,30 @@ async function main() {
         assert(liftPlain.status === 200 && statusOf(plain.pub) === 'active', `…and lifts it, unasked (got ${liftPlain.status} ${JSON.stringify(liftPlain.body)})`);
     }
 
+    // ── 10. Signing another member out everywhere is owner-only, so asked; signing yourself out is not (4172121324) ──
+    console.log('\n10. revoke-all for someone else from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const epochOf = (pk: string) => (db.prepare('SELECT session_epoch FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.session_epoch ?? null;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const before = epochOf(owner2.pub);
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const other = await postJson('/api/local/admin/auth/revoke-all', { memberPubkey: owner2.pub }, as(stale));
+        assert(isStepUp(other) && epochOf(owner2.pub) === before,
+            `signing a co-owner out everywhere asks and ends nothing (got ${other.status} ${JSON.stringify(other.body)})`);
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const otherFresh = await postJson('/api/local/admin/auth/revoke-all', { memberPubkey: owner2.pub }, as(fresh));
+        assert(otherFresh.status === 200 && epochOf(owner2.pub) === before + 1, `after Manage again it works (got ${otherFresh.status} ${JSON.stringify(otherFresh.body)})`);
+        const ownBefore = epochOf(owner.pub);
+        const own = await postJson('/api/local/admin/auth/revoke-all', { memberPubkey: owner.pub }, as(stale));
+        assert(own.status === 200 && epochOf(owner.pub) === ownBefore + 1, `signing yourself out everywhere six minutes on is not asked (got ${own.status} ${JSON.stringify(own.body)})`);
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        const adminOwn = await postJson('/api/local/admin/auth/revoke-all', {}, as(adminStale));
+        assert(adminOwn.status === 200, `nor is an admin's own, with no member named (got ${adminOwn.status} ${JSON.stringify(adminOwn.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

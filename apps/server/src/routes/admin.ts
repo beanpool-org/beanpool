@@ -468,11 +468,12 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
 /**
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
  * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
- * an owner's or admin's role, cutting short an owner's or admin's removal. From the phone's Manage hand-off it asks for
- * its unlock again (requirePhoneStepUp). Answers 403 and returns false when that is due.
+ * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
+ * admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
+ * engine is given. Answers 403 and returns false when that is due.
  */
-function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string): boolean {
-    return !adminActionNeedsOwner(action, target) || requirePhoneStepUp(ctx);
+function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    return !adminActionNeedsOwner(action, target, actor) || requirePhoneStepUp(ctx);
 }
 
 const handleEnrol = async (ctx: any) => {
@@ -1483,6 +1484,7 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune', ctx.params.pubkey, actor)) return;
     try {
         adminPruneUser(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1496,6 +1498,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune-branch', ctx.params.pubkey, actor)) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -2236,6 +2239,8 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         };
         return;
     }
+    // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).
+    if (!stepUpIfOwnerOnly(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase())) return;
 
     try {
         const result = executeOffboard(

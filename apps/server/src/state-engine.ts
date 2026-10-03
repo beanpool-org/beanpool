@@ -7357,6 +7357,15 @@ export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null 
 }
 
 /**
+ * Whether pruning this member by this actor is a change only an owner may make (assertMayPrune's condition, whoever is
+ * acting): they hold or have held aside an owner or admin role, and it is neither their own leaving nor a community
+ * Decision. The admin routes ask the phone's step-up on exactly this (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function pruneNeedsOwner(publicKey: string, actor: string): boolean {
+    return !!heldPrivilegedRole(publicKey) && actor !== publicKey && actor !== COMMUNITY_DECISION_ACTOR;
+}
+
+/**
  * node_roles: only an owner may grant (so only an owner may take away) an owner or admin role, and pruning
  * takes it away for good. A plain admin gets a 403. Leaving yourself and a community Decision are allowed.
  */
@@ -7746,9 +7755,8 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     return { ok: true, message: 'Account successfully purged from node.' };
 }
 
-export function adminPruneBranch(rootPublicKey: string, actor: string) {
-    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
-    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+/** The member and everyone in their invite subtree: what adminPruneBranch prunes. */
+export function inviteBranchOf(rootPublicKey: string): string[] {
     const branch: string[] = [];
     const seen = new Set<string>();
     function walk(pubkey: string) {
@@ -7759,6 +7767,13 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
         children.forEach(c => walk(c.public_key));
     }
     walk(rootPublicKey);
+    return branch;
+}
+
+export function adminPruneBranch(rootPublicKey: string, actor: string) {
+    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
+    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+    const branch = inviteBranchOf(rootPublicKey);
     for (const pubkey of branch) assertMayPrune(pubkey, actor);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.

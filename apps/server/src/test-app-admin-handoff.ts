@@ -572,6 +572,46 @@ async function main() {
         assert(adminOwn.status === 200, `nor is an admin's own, with no member named (got ${adminOwn.status} ${JSON.stringify(adminOwn.body)})`);
     }
 
+    // ── 11. Removing an owner or admin (prune, prune a branch holding one, offboard) is owner-only in the engine
+    // (state-engine assertMayPrune), so asked; an admin removing a member is not. ──
+    console.log('\n11. Prune, branch prune and offboard of an admin from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status ?? null;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const anAdmin = keypair();
+        seedMember(anAdmin.pub, 'hoAdmin11');
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+        const root = keypair();
+        seedMember(root.pub, 'hoRoot11');
+        db.prepare('UPDATE members SET invited_by = ? WHERE public_key = ?').run(root.pub, anAdmin.pub);
+
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const intact = () => roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active' && statusOf(root.pub) === 'active';
+        const prune = await postJson(`/api/local/admin/users/${anAdmin.pub}/prune`, {}, as(stale));
+        assert(isStepUp(prune) && intact(), `pruning an admin asks and removes nobody (got ${prune.status} ${JSON.stringify(prune.body)})`);
+        const branch = await postJson(`/api/local/admin/branches/${root.pub}/prune`, {}, as(stale));
+        assert(isStepUp(branch) && intact(), `pruning a branch that holds an admin asks (got ${branch.status} ${JSON.stringify(branch.body)})`);
+        const offboard = await postJson(`/api/local/admin/members/${anAdmin.pub}/offboard`, { resolution: 'prune_zero_balance' }, as(stale));
+        assert(isStepUp(offboard) && intact(), `offboarding an admin asks (got ${offboard.status} ${JSON.stringify(offboard.body)})`);
+        const offboardUpper = await postJson(`/api/local/admin/members/${anAdmin.pub.toUpperCase()}/offboard`, { resolution: 'prune_zero_balance' }, as(stale));
+        assert(isStepUp(offboardUpper) && intact(), `…with the key in capitals too (got ${offboardUpper.status} ${JSON.stringify(offboardUpper.body)})`);
+
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const offboardFresh = await postJson(`/api/local/admin/members/${anAdmin.pub}/offboard`, { resolution: 'prune_zero_balance' }, as(fresh));
+        assert(!isStepUp(offboardFresh), `after Manage again, offboarding passes the step-up (got ${offboardFresh.status} ${JSON.stringify(offboardFresh.body)})`);
+
+        // An admin removing a plain member six minutes on is not asked.
+        const plain = keypair();
+        seedMember(plain.pub, 'hoPlain11');
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        const prunePlain = await postJson(`/api/local/admin/users/${plain.pub}/prune`, {}, as(adminStale));
+        assert(!isStepUp(prunePlain) && prunePlain.status === 200, `an admin prunes a member six minutes on, unasked (got ${prunePlain.status} ${JSON.stringify(prunePlain.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

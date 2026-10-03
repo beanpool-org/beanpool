@@ -11,8 +11,9 @@
  * key becomes a member (as an invite's joiner does, engine/members.ts registerMemberInternal) and the owner
  * (grantNodeRole, granted by `claim:<id>`). Then the code is burned and the file deleted.
  *
- * Additive for now: the admin password works exactly as before. A password-made first invite creates the "Admin"
- * placeholder owner, so nodeHasOwner() turns true and the claim closes, as it does once any owner exists.
+ * Additive for now: the admin password works exactly as before. A password-made first invite does NOT make an owner on a
+ * fresh node (the SYSTEM rows already count as members, routes/community.ts), so the claim stays open until someone
+ * holds an owner role, by this claim or by a grant.
  *
  * The hash is the break-glass code's (break-glass-code.ts): scrypt with Node's defaults over the SHA-256 of the code, a
  * fresh 32-byte salt. Each check is braked as a break-glass code is while the password brake holds its source

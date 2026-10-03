@@ -598,6 +598,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     joinedAt: { kind: 'per-server', reason: "when this server's admin password was set" },
     totpPendingSecret: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
     totpPendingBackupCodesHashes: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
+    claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
     backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
     backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
     replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },

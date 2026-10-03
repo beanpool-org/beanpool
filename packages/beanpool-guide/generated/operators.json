@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 96,
-  "hash": "f2f285ad5ad9ff4df90492e36c9edf97502667695228750c4ffe44520df2049d",
+  "version": 97,
+  "hash": "e5cca9a0a648293fd52a94407d7ebb70cb0bdb90ef7f43be57c859f10cf7fd20",
   "sections": [
     {
       "id": "setup",
@@ -1262,7 +1262,7 @@
             "**An admin you add later** sees that nobody they trust holds the keys yet. Make them an admin first, then check each other's code once, on a call or in person. Your phone sends them the keys at once, and every other admin's phone that trusts you sends its keys on its next open.",
             "When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on by a phone that has taken the new key can be read with the keys the person had. What they already saw, they keep, as with a paper list.",
             "When an admin loses their phone, tell another admin the same day: they tap Remove @X's old key. Until that is done, whoever has the phone can read what is written. The admin's new phone's code is checked once, on a call or in person, and the keys are sent to it. Names written under a key that only the lost phone held can't be opened by anyone: the app counts them, and your paper copy is how they come back.",
-            "**The 12 words alone aren't enough for an admin whose phone was lost** rather than broken: whoever has the lost phone has the same key. Remove the old key, have an owner move the account to a new key, and check the new phone's code once. An admin who restores the same 12 words on a new phone after the old one broke only needs the check.",
+            "**The 12 words alone aren't enough for an admin whose phone was lost** rather than broken: whoever has the lost phone has the same key. Remove the old key, have an owner move the account to a new key, and check the new phone's code once. Signing out, reinstalling the app or moving to a new phone after the old one broke keeps your names-list keys: the app keeps a locked copy on your server that only your account opens, so your 12 words open the names list again without a check. Whoever has your 12 words can open the names list as you: if your phone is lost, tell another admin the same day.",
             "**Nothing is sealed again when the key changes.** Each name stays sealed under the key it was written with, and every admin's phone keeps every key it takes for the key history it follows."
           ]
         },

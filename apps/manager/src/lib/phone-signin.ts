@@ -6,6 +6,10 @@
  * cookie that binds the pairing to THIS browser (so nothing here can read or leak it). The page shows the QR,
  * then long-polls. When the owner approves on their phone, the poll answers with the same key session
  * lib/key-session.ts ends up with after the app's one-time link: an admin_session cookie and a CSRF token.
+ *
+ * A newer app shows two digits after its approval; the poll then answers `confirm` and the page must send those
+ * digits (confirmPhoneDigits) before the node gives it the session. Someone who only sent the owner the QR never
+ * sees the phone, so they cannot type them.
  */
 
 import type { KeySession, KeySessionRole } from './key-session';
@@ -24,6 +28,7 @@ export type PairingStart =
 
 export type PhonePoll =
     | { kind: 'waiting'; notice: 'not-admin' | null }
+    | { kind: 'confirm'; seconds: number }
     | { kind: 'signed-in'; session: KeySession; csrfToken: string }
     | { kind: 'expired' }
     | { kind: 'ended'; message: string }
@@ -60,7 +65,13 @@ export const PHONE_SIGNIN_MESSAGES = {
     wrongBrowser: 'That code belongs to another browser or tab. Get a new code here.',
     notAdmin: "The phone that scanned isn't an owner, admin or moderator of this community. Scan with the phone of someone who is.",
     failed: 'The sign-in was not accepted. Get a new code to try again.',
+    confirmLate: 'The two digits were not typed in time. Get a new code to try again.',
 } as const;
+
+/** "Those are not the digits on your phone. 2 tries left." */
+export function wrongDigitsMessage(triesLeft: number): string {
+    return `Those are not the digits on your phone. ${triesLeft} ${triesLeft === 1 ? 'try' : 'tries'} left.`;
+}
 
 function asRole(r: unknown): KeySessionRole | null {
     return r === 'owner' || r === 'admin' || r === 'moderator' ? r : null;
@@ -82,9 +93,34 @@ export async function waitForPhone(pairingId: string, signal?: AbortSignal): Pro
     }
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     if (res.status >= 500 || res.status === 429) return { kind: 'retry' };
+    return pollAnswer(body);
+}
+
+/** The phone's two digits, typed on this page. `wrong` keeps the box open; anything else is the poll's answer. */
+export async function confirmPhoneDigits(pairingId: string, code: string): Promise<PhonePoll | { kind: 'wrong'; triesLeft: number }> {
+    let res: Response;
+    try {
+        res = await fetch(`${PAIRING_PATH}/${encodeURIComponent(pairingId)}/confirm`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code }),
+        });
+    } catch {
+        return { kind: 'retry' };
+    }
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (res.status >= 500 || res.status === 429) return { kind: 'retry' };
+    if (body.status === 'wrong') return { kind: 'wrong', triesLeft: typeof body.triesLeft === 'number' ? body.triesLeft : 0 };
+    return pollAnswer(body);
+}
+
+function pollAnswer(body: Record<string, unknown>): PhonePoll {
     switch (body.status) {
         case 'waiting':
             return { kind: 'waiting', notice: body.notice === 'not-admin' ? 'not-admin' : null };
+        case 'confirm':
+            return { kind: 'confirm', seconds: typeof body.confirmInSeconds === 'number' ? body.confirmInSeconds : 30 };
         case 'signed-in': {
             const role = asRole(body.role);
             if (role && typeof body.memberPubkey === 'string' && typeof body.csrfToken === 'string') {

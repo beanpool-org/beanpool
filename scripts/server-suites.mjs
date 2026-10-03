@@ -356,6 +356,7 @@ export const SUITES = [
     'test-door-setting',
     'test-names-list',
     'test-names-copy',
+    'test-names-access-log-migration',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
     'test-process-handlers',

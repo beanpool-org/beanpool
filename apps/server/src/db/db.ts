@@ -778,6 +778,34 @@ function repackGroups(): void {
 }
 
 // Function to initialize schema
+/** Rebuilds names_access_log when its CHECK lacks 'copy_restored', keeping every row; true when it rebuilt. Idempotent. */
+export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='names_access_log'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('copy_restored')) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS names_access_log_migration;
+            CREATE TABLE names_access_log_migration (
+                id              TEXT PRIMARY KEY,
+                actor_pubkey    TEXT NOT NULL,
+                action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
+                                                                'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings',
+                                                                'copy_restored')),
+                entry_id        TEXT,
+                subject_pubkey  TEXT,
+                at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO names_access_log_migration (id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at)
+                SELECT id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at FROM names_access_log;
+            DROP TABLE names_access_log;
+            ALTER TABLE names_access_log_migration RENAME TO names_access_log;
+            CREATE INDEX IF NOT EXISTS idx_names_access_log_at ON names_access_log(at);
+        `);
+    })();
+    return true;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -1293,6 +1321,14 @@ export function initSchema() {
         }
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
+    }
+
+    // names_access_log: ensure its CHECK allows 'copy_restored' (a table #1411 made has the old CHECK; the locked copy's
+    // restore writes that line). Before schema.sql, which makes its index; the watermark triggers come after, as for any table.
+    try {
+        if (rebuildNamesAccessLogCheck(db)) console.log('[DB] ✅ Migrated names_access_log CHECK constraint to allow copy_restored');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
     }
 
     // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):

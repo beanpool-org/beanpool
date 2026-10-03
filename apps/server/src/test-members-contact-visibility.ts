@@ -323,7 +323,13 @@ async function main() {
 
     console.log('\n── the admin dashboard\'s member list ──');
     {
-        const r = await post('/api/local/admin/data', { password: ADMIN_PW });
+        // Step 7c: with the node's 2FA off the password alone reads nothing; with 2FA on it goes with a fresh code.
+        const alone = await post('/api/local/admin/data', { password: ADMIN_PW });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && secretsIn(alone.text).size === 0,
+            `2FA off: the password alone → 403 password_needs_2fa, no member rows (got ${alone.status} ${alone.body?.code})`);
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        const tfa = turnOn2faForTests(ADMIN_PW);
+        const r = await post('/api/local/admin/data', { password: ADMIN_PW, totpCode: tfa.code() });
         assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
         // The password proves no member, and Community, Trade Partners and Friends all need a member viewer.
         const seen = secretsIn(r.text);

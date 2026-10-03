@@ -34,6 +34,7 @@ import { updateLocalConfig, hashPassword, isBreakGlassMode, setBreakGlassMode, u
 import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, verifyBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { SOURCE_FREE_FAILURES } from './password-brake.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { pairingMessage } from './settings-signin-pairing.js';
@@ -96,7 +97,16 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     console.log('— 1. a break-glass code enrols a key, and does nothing else —');
     resetAdminAuthTarpit();
     const pwHeaders = { 'x-admin-password': PW };
-    const enrolled = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
+    // Step 7c: with the node's 2FA off, the password alone enrols nothing (it used to issue the code); with 2FA on, the
+    // password and a code do. 2FA goes off again after, so the checks below run on a node with 2FA off, as before.
+    const aloneEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
+    assert(aloneEnrol.status === 403 && aloneEnrol.json?.code === 'password_needs_2fa' && !aloneEnrol.json?.breakGlassCode && !getNodeRoleBreakGlassHash(owner.pub),
+        `with 2FA off the password alone enrols nothing and issues no code (${show(aloneEnrol)})`);
+    const twoFa = turnOn2faForTests(PW);
+    const twoFaOff = () => updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
+    resetAdminAuthTarpit();
+    const enrolled = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...twoFa.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
+    twoFaOff();
     const code: string = enrolled.json?.breakGlassCode;
     assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the owner's enrolment issues a code (${enrolled.status})`);
 
@@ -145,17 +155,29 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     assert(fromBraked.status === 200 && roleOf(other.pub) === 'admin', `and from the braked address too, on the enrol route (${show(fromBraked)})`);
 
     // Break-glass mode, turned on as the docs say (an owner, here with the password) and off again with a key session.
-    const on = await req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { enabled: true } });
+    // Step 7c: the password needs 2FA on and a code to turn it on; the rest of the mode's checks run with 2FA off again.
+    const twoFaForMode = turnOn2faForTests(PW);
+    resetAdminAuthTarpit();
+    const on = await req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: { ...twoFaForMode.headers(), ...viaTunnel(freshIp()) }, body: { enabled: true } });
+    twoFaOff();
     assert(on.status === 200 && isBreakGlassMode() === true, `the owner turns break-glass mode on with the password, as before (${show(on)})`);
     const pwElsewhere = await req('/api/local/admin/node-roles', { headers: { ...pwHeaders, ...viaTunnel(freshIp()) } });
     const codeElsewhere = await req('/api/local/admin/node-roles', { headers: { 'x-admin-password': code, ...viaTunnel(freshIp()) } });
     assert(pwElsewhere.status === 403 && pwElsewhere.json?.breakGlassMode === true && codeElsewhere.status === 403,
         `in the mode, the password and the code reach no other route (${pwElsewhere.status}, ${codeElsewhere.status})`);
     const inMode1 = member('BgInMode1'), inMode2 = member('BgInMode2');
-    const pwEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode1.pub, role: 'admin' } });
+    // Step 7c: in the mode, with 2FA off, the password alone no longer enrols (it did); the password and a code do. The
+    // break-glass code is the recovery factor itself and still enrols alone.
+    const pwAloneEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode1.pub, role: 'admin' } });
+    assert(pwAloneEnrol.status === 403 && pwAloneEnrol.json?.code === 'password_needs_2fa' && roleOf(inMode1.pub) === null,
+        `in the mode, with 2FA off, the password alone enrols no key (${show(pwAloneEnrol)})`);
+    const twoFaInMode = turnOn2faForTests(PW);
+    resetAdminAuthTarpit();
+    const pwEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...twoFaInMode.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode1.pub, role: 'admin' } });
+    twoFaOff();
     const codeEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(freshIp()) }, body: { memberPubkey: inMode2.pub, role: 'admin' } });
     assert(pwEnrol.status === 200 && codeEnrol.status === 200 && pwEnrol.json?.alertEmitted === true && roleOf(inMode2.pub) === 'admin',
-        `and both still enrol a key there, with the alert (${pwEnrol.status}, ${codeEnrol.status})`);
+        `and both still enrol a key there, with the alert (the password with a code) (${pwEnrol.status}, ${codeEnrol.status})`);
     const session = await keySession(owner, freshIp());
     const off = await req('/api/local/admin/auth/break-glass-mode', { method: 'POST', headers: { 'x-admin-session': session ?? '', ...viaTunnel(freshIp()) }, body: { enabled: false } });
     assert(session && off.status === 200 && isBreakGlassMode() === false, `the owner's key session turns it off (${show(off)})`);

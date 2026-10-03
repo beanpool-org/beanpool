@@ -154,10 +154,14 @@ async function main() {
     const server = http.createServer(app.callback());
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the snapshot settings (owner only)
+    // are changed under an owner's key session.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const asOwner = ownerSessionHeaders();
     const setConfig = async (body: Record<string, unknown>) => {
         const res = await fetch(`${base}/api/local/admin/snapshots/config`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW },
-            body: JSON.stringify({ password: ADMIN_PW, ...body }),
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner },
+            body: JSON.stringify(body),
         });
         return { status: res.status, body: await res.json().catch(() => ({})) as any };
     };

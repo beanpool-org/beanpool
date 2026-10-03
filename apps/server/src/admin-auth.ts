@@ -5,7 +5,6 @@ import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie } f
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
-import { resetKeySigninBrake } from './key-signin-brake.js';
 import { logger } from './logger.js';
 import { logAddressTag } from './log-address.js';
 
@@ -504,7 +503,6 @@ export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
     resetPasswordBrake();
-    resetKeySigninBrake();
     breakGlassWhileBraked.clear();
     breakGlassWhileBrakedNode = [];
 }

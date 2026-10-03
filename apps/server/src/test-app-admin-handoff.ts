@@ -255,16 +255,31 @@ async function main() {
             { Cookie: `admin_session=${spoofed.sessionId}`, 'X-CSRF-Token': spoofed.body.csrfToken });
         assert(enrolAsOwner.status === 403, 'an admin session cannot act as owner whatever the body says');
 
-        // The node's own 2FA still applies on top of the key.
+        // The node's 2FA code is the password's second factor, not a key's (decision D2, 2026-10-03): the phone's own
+        // unlock is the key's. With 2FA on, a key sign-in asks for no code, from an owner, an admin or a moderator.
         const secret = generateTotpSecret();
         updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
-        const noCode = await requestLink(owner);
-        assert(noCode.status === 401 && noCode.body.totpRequired === true && !noCode.body.handshakeToken,
-            'with 2FA on, a correctly signed request without a code gets no link');
-        const badCode = await requestLink(owner, owner.pub, '000000' === generateTotpCode(secret) ? '111111' : '000000');
-        assert(badCode.status === 401 && !badCode.body.handshakeToken, 'a wrong 2FA code gets no link');
-        const withCode = await requestLink(owner, owner.pub, generateTotpCode(secret));
-        assert(withCode.status === 200 && typeof withCode.body.handshakeToken === 'string', 'the right 2FA code does');
+        const moderator = keypair();
+        seedMember(moderator.pub, 'hoModerator');
+        grantNodeRole(moderator.pub, 'moderator', admin.pub);
+        for (const [who, k, role] of [['an owner', owner, 'owner'], ['an admin', admin, 'admin'], ['a moderator', moderator, 'moderator']] as const) {
+            const noCode = await requestLink(k);
+            assert(noCode.status === 200 && typeof noCode.body.handshakeToken === 'string' && noCode.body.totpRequired === undefined && noCode.body.role === role,
+                `with 2FA on, ${who}'s correctly signed request gets a link without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
+            const ex = await exchange(noCode.body.handshakeToken);
+            assert(ex.status === 200 && !!ex.sessionId && (await sessionInfo(ex.sessionId!)).role === role, `…and ${who}'s link opens a ${role} session`);
+        }
+        // An old app that still sends a code: the code is not looked at, right or wrong.
+        const staleCode = await requestLink(owner, owner.pub, '000000' === generateTotpCode(secret) ? '111111' : '000000');
+        assert(staleCode.status === 200 && typeof staleCode.body.handshakeToken === 'string', 'a code sent by an older app is ignored');
+        // Without the key there is still nothing: 2FA on or off, a signature by another key, or none, gets no link.
+        const forged = await requestLink(member, owner.pub);
+        assert(forged.status !== 200 && !forged.body.handshakeToken && forged.body.totpRequired === undefined,
+            `with 2FA on, a request for the owner signed by another key gets no link and is not asked for a code (got ${forged.status})`);
+        const chalNoSig = await postJson('/api/local/admin/auth/challenge', {});
+        const noSig = await postJson('/api/local/admin/auth/verify-challenge', { challengeId: chalNoSig.body.challengeId, memberPubkey: owner.pub, signature: '' });
+        assert(noSig.status !== 200 && !noSig.body.handshakeToken, `an unsigned request gets no link (got ${noSig.status})`);
+        revokeNodeRole(moderator.pub, 'moderator', admin.pub);
         updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
 
         // Sanity: the direct API agrees about the wrong-key case (no HTTP in between).

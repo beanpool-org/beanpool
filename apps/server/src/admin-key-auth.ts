@@ -43,15 +43,13 @@ import {
     NODE_ROLE_ACTS,
     type MemberNodeRole,
 } from './engine/node-roles.js';
-import { getLocalConfig, isBreakGlassMode, updateLocalConfig } from './config/local-config.js';
-import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
+import { getLocalConfig, isBreakGlassMode } from './config/local-config.js';
 import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
 import { adminSigninText, verifyStatementSignature } from './engine/member-signature.js';
 import { breakGlassCodeMatches, generateBreakGlassCode, hashBreakGlassCode, isBreakGlassCodeShape } from './break-glass-code.js';
-import { CHALLENGE_MAX_WRONG_CODES, keySigninBraked, noteKeySigninFailure, noteKeySigninSuccess } from './key-signin-brake.js';
 
 // ===================== CONSTANTS & TTLs =====================
 export const CHALLENGE_TTL_MS = 60_000;          // 60 seconds challenge freshness
@@ -77,8 +75,6 @@ export interface AdminChallenge {
     createdAt: number;
     expiresAt: number;
     status: 'pending' | 'resolved' | 'expired';
-    /** Wrong 2FA codes sent against this challenge; at CHALLENGE_MAX_WRONG_CODES it is burned (key-signin-brake.ts). */
-    wrongCodes?: number;
     // Deliberately no token, signer or role here: the token goes back only to the signer, in the
     // verify-challenge response. Anything kept on the challenge is one id away from anyone who saw it.
 }
@@ -220,42 +216,31 @@ export function getAdminChallenge(challengeId: string): AdminChallenge | null {
  * - Challenge exists, is pending, and has not expired
  * - Signer is an active member with a node role (owner, admin or moderator)
  * - Cryptographic Ed25519 signature is valid
- * - TOTP code is verified if node has TOTP enabled
+ * The node's 2FA code is not asked for: it is the password's second factor; a key's is the phone's own unlock, which
+ * the app asks for before it signs (decision D2, 2026-10-03). A code an older app still sends is not looked at.
  */
 export function verifyAndSolveChallenge(params: {
     challengeId: string;
     memberPubkey: string;
     signature: string;
-    totpCode?: string;
     /** The host the app signed for (request binding): with it, only the format-2 sign-in text is accepted. */
     signedFor?: unknown;
-    /** The caller's address (client-ip.ts clientLimiterKey), which the 2FA brake counts beside the key. */
-    source?: string;
 }): {
     ok: boolean;
     error?: string;
-    /**
-     * 421 wrong_community or 426 app_too_old (engine/member-signature.ts), 429 while the 2FA brake holds this key or
-     * address, 410 for a challenge burned by wrong codes: when that is why it was refused.
-     */
+    /** 421 wrong_community or 426 app_too_old (engine/member-signature.ts): when that is why it was refused. */
     status?: number;
     code?: string;
-    totpRequired?: boolean;
-    /** With 429: seconds until a code is checked again. */
-    retryAfter?: number;
     handshakeToken?: string;
     expiresAt?: number;
     memberPubkey?: string;
     role?: MemberNodeRole;
 } {
-    const { challengeId, memberPubkey, signature, totpCode } = params;
+    const { challengeId, memberPubkey, signature } = params;
     const challenge = getAdminChallenge(challengeId);
 
     if (!challenge) {
         return { ok: false, error: 'Challenge not found' };
-    }
-    if ((challenge.wrongCodes ?? 0) >= CHALLENGE_MAX_WRONG_CODES) {
-        return { ok: false, error: BURNED_CHALLENGE_ERROR, status: 410 };
     }
     if (challenge.status === 'expired' || Date.now() > challenge.expiresAt) {
         challenge.status = 'expired';
@@ -273,8 +258,6 @@ export function verifyAndSolveChallenge(params: {
     let statement: ReturnType<typeof verifyStatementSignature> | null = null;
     const signer = authorizeKeySigner({
         memberPubkey,
-        totpCode,
-        source: params.source,
         signatureValid: () => {
             statement = verifyStatementSignature({
                 signature,
@@ -291,16 +274,7 @@ export function verifyAndSolveChallenge(params: {
         if (signer.badSignature && refused && !refused.ok && (refused.status === 421 || refused.status === 426)) {
             return { ok: false, error: refused.error, status: refused.status, code: refused.code };
         }
-        if (signer.braked) return { ok: false, error: signer.error, status: 429, retryAfter: signer.retryAfter };
-        if (signer.wrongTotp) {
-            // A wrong code leaves the challenge pending, for a mistyped code, but only a few times: then it is burned.
-            challenge.wrongCodes = (challenge.wrongCodes ?? 0) + 1;
-            if (challenge.wrongCodes >= CHALLENGE_MAX_WRONG_CODES) {
-                challenge.status = 'expired';
-                logger.security('AUTH', `Key sign-in challenge ${challenge.challengeId.slice(0, 8)} burned after ${challenge.wrongCodes} wrong 2FA codes (key ${memberPubkey.slice(0, 12)}…)`);
-            }
-        }
-        return { ok: false, error: signer.error, ...(signer.totpRequired ? { totpRequired: true } : {}) };
+        return { ok: false, error: signer.error };
     }
     const role = signer.role;
     const { handshakeToken, expiresAt } = mintHandshakeToken(memberPubkey, role);
@@ -321,28 +295,25 @@ export function verifyAndSolveChallenge(params: {
 
 export type KeySignerCheck =
     | { ok: true; role: MemberNodeRole }
-    | { ok: false; error: string; totpRequired?: boolean; notAdmin?: boolean; badSignature?: boolean; wrongTotp?: boolean; braked?: boolean; retryAfter?: number };
-
-/** A key sign-in's challenge after CHALLENGE_MAX_WRONG_CODES wrong codes. */
-export const BURNED_CHALLENGE_ERROR = 'Too many wrong 2FA codes for this sign-in. Start again.';
+    | { ok: false; error: string; notAdmin?: boolean; badSignature?: boolean };
 
 /**
  * Everything a key sign-in checks about the signer, shared by the app's one-time link (verifyAndSolveChallenge)
  * and the browser's sign-in by QR (settings-signin-pairing.ts) so the two cannot drift apart: an active member,
  * holding a role in node_roles (owner, admin or moderator; a moderator's session reaches only MODERATOR_ROUTES in
- * admin-auth.ts), whose signature over the flow's own message
- * verifies, and — when the owner turned it on — the node's 2FA code (a used backup code is spent), under the 2FA
- * brake (key-signin-brake.ts), per key and per `source` address: a held key or address is answered `braked` without
- * the code being looked at.
+ * admin-auth.ts), whose signature over the flow's own message verifies.
+ *
+ * Not the node's 2FA code (decision D2, 2026-10-03). That one code is shared by everyone who signs in, so for a key it is
+ * a second shared password, not a second factor. A key's second factor is the phone's own unlock, per person, which the
+ * app asks for before every Manage and every QR approval and refuses without (apps/native/utils/node-admin.ts
+ * requireDeviceUnlock). The code stays on the password path (admin-auth.ts), and on the owner actions that are about it
+ * (requireCurrentSecondFactor). Nothing here can be reached without a signature by the key that holds the role.
  */
 export function authorizeKeySigner(params: {
     memberPubkey: string;
     signatureValid: () => boolean;
-    totpCode?: string;
-    /** The caller's address (client-ip.ts clientLimiterKey), counted by the 2FA brake beside the key. */
-    source?: string;
 }): KeySignerCheck {
-    const { memberPubkey, signatureValid, totpCode, source } = params;
+    const { memberPubkey, signatureValid } = params;
 
     // One key, one spelling (engine/member-key.ts): the signature check decodes the key's hex, which forgives case, so a
     // row a door stored under a member's key in capitals, before that rule, would open a session for that key's holder
@@ -367,42 +338,6 @@ export function authorizeKeySigner(params: {
 
     if (!signatureValid()) {
         return { ok: false, error: 'Invalid cryptographic signature', badSignature: true };
-    }
-
-    // TOTP verification if enabled, under the brake (key-signin-brake.ts). Everything above needs the key, so nothing a
-    // stranger sends reaches here to be counted.
-    const config = getLocalConfig();
-    if (config.totpEnabled && config.totpSecret) {
-        const brake = keySigninBraked(memberPubkey, source);
-        if (brake.braked) {
-            return {
-                ok: false, braked: true, retryAfter: brake.retryAfter,
-                error: `Too many wrong 2FA codes. Try again in ${brake.retryAfter}s.`,
-            };
-        }
-        if (!totpCode) {
-            return { ok: false, error: '2FA code required', totpRequired: true };
-        }
-        const cleanCode = String(totpCode).trim();
-        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
-        const totpUse = useTotpCode(cleanCode, config.totpSecret);
-        let totpOk = totpUse === 'ok';
-        const backupHashes = config.totpBackupCodesHashes || [];
-        if (!totpOk && backupHashes.length > 0) {
-            const idx = verifyAndFindBackupCodeHash(cleanCode, backupHashes);
-            if (idx !== -1) {
-                totpOk = true;
-                const updatedHashes = [...backupHashes];
-                updatedHashes.splice(idx, 1);
-                updateLocalConfig({ totpBackupCodesHashes: updatedHashes });
-                logger.info('AUTH', `Admin authenticated with 2FA backup code (${updatedHashes.length} remaining)`);
-            }
-        }
-        if (!totpOk) {
-            noteKeySigninFailure(memberPubkey, source, `${member.callsign ? `@${member.callsign} ` : ''}(key ${memberPubkey.slice(0, 12)}…)`);
-            return { ok: false, error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true, wrongTotp: true };
-        }
-        noteKeySigninSuccess(memberPubkey, source);
     }
 
     return { ok: true, role };

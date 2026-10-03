@@ -177,11 +177,10 @@ async function runSuite() {
 
     const totpSecret = generateTotpSecret();
     const keySession = (kp: ReturnType<typeof makeKeypair>): string => {
-        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode); this suite opens two sessions a step.
         const chal = createAdminChallenge();
         const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
         const solved = verifyAndSolveChallenge({
-            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, totpCode: generateTotpCode(totpSecret),
+            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature,
         });
         if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
         const ex = consumeHandshakeToken(solved.handshakeToken!);

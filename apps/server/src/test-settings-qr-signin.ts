@@ -317,19 +317,22 @@ async function main() {
     }
 
     // ── 6. The node's 2FA ──
-    console.log("\n6. The node's 2FA code is asked for on the phone");
+    console.log("\n6. The node's 2FA code is not asked for on the phone (decision D2: the phone's unlock is the key's factor)");
     {
         const secret = generateTotpSecret();
         updateLocalConfig({ totpEnabled: true, totpSecret: secret } as any);
         const b = await newPairing();
         const noCode = await approve(b.pairingId, b.shortCode, owner);
-        assert(noCode.status === 401 && noCode.body.totpRequired === true, 'without the code the phone is asked for it');
-        assert((await poll(b)).body.status === 'waiting', 'the pairing is still waiting');
-        const wrong = await approve(b.pairingId, b.shortCode, owner, { totpCode: '000000' === generateTotpCode(secret) ? '111111' : '000000' });
-        assert(wrong.status === 401 && wrong.body.totpRequired === true, 'a wrong code is refused');
-        const right = await approve(b.pairingId, b.shortCode, owner, { totpCode: generateTotpCode(secret) });
-        assert(right.status === 200, 'the right code approves');
+        assert(noCode.status === 200 && noCode.body.totpRequired === undefined, `with 2FA on, the phone approves without a code (got ${noCode.status} ${JSON.stringify(noCode.body)})`);
         assert((await poll(b)).body.status === 'signed-in', 'and the browser is signed in');
+        const b2 = await newPairing();
+        const stale = await approve(b2.pairingId, b2.shortCode, admin, { totpCode: '000000' === generateTotpCode(secret) ? '111111' : '000000' });
+        assert(stale.status === 200, 'a code an older app still sends is not looked at');
+        const b3 = await newPairing();
+        const forged = await approve(b3.pairingId, b3.shortCode, member, { claimed: owner.pub });
+        assert(forged.status === 403 && forged.body.reason === 'bad-signature' && forged.body.totpRequired === undefined,
+            `with 2FA on, an approval signed by another key is still refused (got ${forged.status})`);
+        assert((await poll(b3)).body.status === 'waiting', 'and that pairing is still waiting');
         updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
     }
 

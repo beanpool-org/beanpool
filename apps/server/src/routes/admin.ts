@@ -53,7 +53,6 @@ import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/we
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
 import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
-import { clientLimiterKey } from '../client-ip.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -149,30 +148,26 @@ router.post('/api/local/admin/auth/challenge', async (ctx) => {
  */
 router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const { challengeId, memberPubkey, signature, totpCode, signedFor } = body;
+    const { challengeId, memberPubkey, signature, signedFor } = body;
     if (!challengeId || !memberPubkey || !signature) {
         ctx.status = 400;
         ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
         return;
     }
 
-    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor, source: clientLimiterKey(ctx) });
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, signedFor });
     if (!res.ok) {
         let status = 400;
         if (res.status) {
-            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts); 429 the 2FA brake, 410 a challenge burned
-            // by wrong codes (key-signin-brake.ts)
+            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts)
             status = res.status;
-            if (res.retryAfter) ctx.set('Retry-After', String(res.retryAfter));
-        } else if (res.totpRequired) {
-            status = 401;
         } else if (res.error?.includes('Challenge not found')) {
             status = 404;
         } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
             status = 403;
         }
         ctx.status = status;
-        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
+        ctx.body = { error: res.error, ...(res.code ? { code: res.code } : {}) };
         return;
     }
 

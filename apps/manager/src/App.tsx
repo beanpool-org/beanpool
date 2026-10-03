@@ -61,6 +61,7 @@ import { AiServicesModule } from './components/modules/AiServicesModule';
 import { IS_FLEET_MODE } from './lib/mode';
 import { downloadNotice, downloadedAlert } from './lib/backup-shortfall';
 import { AdminLoginCard } from './components/auth/AdminLoginCard';
+import { TotpSetupGate } from './components/auth/TotpSetupGate';
 import { HomeScreen } from './components/modules/HomeScreen';
 import { PeopleSafetySection } from './components/modules/PeopleSafetySection';
 import { EconomySection } from './components/modules/EconomySection';
@@ -178,6 +179,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      * members' web app shares this origin, so anything kept in its storage is one script away (Fable's web review, M1).
      */
     const [passwordSession, setPasswordSession] = useState<boolean>(false);
+    /**
+     * Design step 6: a password session on a node whose 2FA is off opens only the 2FA setup card (TotpSetupGate) until
+     * a code is confirmed; the node refuses everything else with 403 `totp_setup_required`. Never set for a key session.
+     */
+    const [totpGate, setTotpGate] = useState<boolean>(false);
     // What older builds stored on this origin (the password, its 2FA session) goes on the first load of this one.
     useEffect(() => { forgetStoredAdminSecrets(); }, []);
 
@@ -317,6 +323,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setKeySessionCsrf(null);
         setKeySession(null);
         setPasswordSession(false);
+        setTotpGate(false);
     };
 
     const handleLogout = () => {
@@ -791,6 +798,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     }
                 }
 
+                if (diagRes.status === 403 && !isFleetMode) {
+                    // The password session is held to the 2FA card (2FA was turned off, here or elsewhere).
+                    const body = await diagRes.json().catch(() => null) as Record<string, unknown> | null;
+                    if (body?.code === 'totp_setup_required') {
+                        setTotpGate(true);
+                        return;
+                    }
+                    throw new Error(`HTTP ${diagRes.status}: ${diagRes.statusText}`);
+                }
                 if (!diagRes.ok) {
                     throw new Error(`HTTP ${diagRes.status}: ${diagRes.statusText}`);
                 }
@@ -971,11 +987,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 setKeySessionCsrfToken(res.csrfToken);
                 setKeySessionCsrf(res.csrfToken);
                 if (res.kind === 'session') setKeySession(res.session);
-                else setPasswordSession(true);
+                else {
+                    setPasswordSession(true);
+                    setTotpGate(res.totpSetupRequired);
+                }
                 // The first automatic poll ran before the cookie existed and was refused; clear that
-                // block so polling resumes, then fetch everything with the session.
+                // block so polling resumes, then fetch everything with the session (once the 2FA card is done).
                 authBlockedRef.current = {};
-                setRefreshToken((n) => n + 1);
+                if (!(res.kind === 'password' && res.totpSetupRequired)) setRefreshToken((n) => n + 1);
             } else if (res.kind === 'failed') {
                 setKeySessionNotice(res.message);
             }
@@ -997,6 +1016,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
      * refresh of their own.
      */
     usePausablePoll(() => {
+        // Held to the 2FA card, nothing else would open: ask nothing until a code is confirmed (TotpSetupGate.onDone).
+        if (!isFleetMode && totpGate) return;
         void refreshFleetDiagnostics();
     }, 5000);
 
@@ -1198,14 +1219,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             )}
             <AdminLoginCard
                 nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
-                onPasswordSession={(csrfToken) => {
+                onPasswordSession={(csrfToken, totpSetupRequired) => {
                     // Signed in with the password: the node's session cookie, as a key sign-in gets.
                     setKeySessionNotice(null);
                     setKeySessionCsrfToken(csrfToken);
                     setKeySessionCsrf(csrfToken);
                     setPasswordSession(true);
+                    setTotpGate(totpSetupRequired);
                     authBlockedRef.current = {};
-                    setRefreshToken((n) => n + 1);
+                    if (!totpSetupRequired) setRefreshToken((n) => n + 1);
                 }}
                 onKeySession={(session, csrfToken) => {
                     // Signed in by the phone (QR): the same key session the app's one-time link gives.
@@ -1217,6 +1239,23 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     setRefreshToken((n) => n + 1);
                 }}
             />
+            </div>
+        );
+    }
+
+    if (!isFleetMode && passwordSession && totpGate) {
+        // Nothing else in Settings opens on the password until a second factor is set up (design step 6).
+        return (
+            <div className="bp-settings">
+                <TotpSetupGate
+                    nodeUrl={activeNode?.url || (typeof window !== 'undefined' ? window.location.origin : '')}
+                    onDone={() => {
+                        setTotpGate(false);
+                        authBlockedRef.current = {};
+                        setRefreshToken((n) => n + 1);
+                    }}
+                    onSignOut={handleLogout}
+                />
             </div>
         );
     }

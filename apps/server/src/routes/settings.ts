@@ -19,6 +19,7 @@ import {
 import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
 import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
+import { logger } from '../logger.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
@@ -327,7 +328,9 @@ router.post('/api/local/admin/node/config', async (ctx) => {
     // the member count the community had turned off. Settings sends every field (null clears the service area).
     const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours })
         .filter(([, v]) => v !== undefined));
-    ctx.body = withKnockSetting(updateNodeConfig(sent));
+    // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
+    // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.
+    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent)));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {
@@ -717,6 +720,39 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
     restampPasswordSession(ctx);
     console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
     ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };
+});
+
+/**
+ * POST /api/local/admin/2fa/backup-codes — eight new backup codes, shown once; the old ones stop working. Owner only,
+ * and only with the 6-digit code the authenticator shows right now in `code` or `totpCode`: not a backup code (one of
+ * those must never buy eight more), and not a code this request already spent signing in, so `secondFactorJustVerified`
+ * is not taken here. Stored as SHA-256 hashes like every backup code; the log line never carries a code.
+ */
+router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
+    if (!rateLimit(ctx)) return;
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can see new 2FA backup codes')) return;
+    const config = getLocalConfig();
+    if (!config.totpEnabled || !config.totpSecret) {
+        ctx.status = 409;
+        ctx.body = { error: 'Two-factor sign-in is off, so there are no backup codes. Turn it on first.' };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const code = String(body.code ?? body.totpCode ?? '').trim();
+    if (!/^\d{6}$/.test(code)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Enter the 6-digit code your authenticator app shows now to see new backup codes', totpRequired: true };
+        return;
+    }
+    (ctx.state as any).secondFactorJustVerified = false;
+    if (!(await requireCurrentSecondFactor(ctx, code, 'to see new backup codes'))) return;
+    const backupCodes = generateBackupCodes(8);
+    updateLocalConfig({ totpBackupCodesHashes: backupCodes.map(hashBackupCode) });
+    const by = (ctx.state as any).isKeySession ? `owner ${String((ctx.state as any).actor).slice(0, 12)}…` : 'the admin password';
+    logger.security('AUTH', `New 2FA backup codes were made by ${by}; the old ones no longer work`);
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { success: true, backupCodes };
 });
 
 // NOTE: /api/admin/update (signal-file approach) has been removed.

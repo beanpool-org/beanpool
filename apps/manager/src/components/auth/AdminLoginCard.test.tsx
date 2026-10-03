@@ -87,7 +87,7 @@ describe('AdminLoginCard component', () => {
         fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
 
         await waitFor(() => {
-            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-xyz');
+            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-xyz', false);
         });
         // One request, to the session sign-in, carrying the password in its body and nowhere else.
         expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -133,7 +133,7 @@ describe('AdminLoginCard component', () => {
         fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
 
         await waitFor(() => {
-            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-after-totp');
+            expect(mockOnPasswordSession).toHaveBeenCalledWith('csrf-after-totp', false);
         });
         expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({ password: 'password123', totpCode: '654321' });
         expect(storedText()).not.toContain('password123');

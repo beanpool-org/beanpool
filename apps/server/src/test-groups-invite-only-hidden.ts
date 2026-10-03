@@ -64,6 +64,12 @@ async function call(router: any, method: string, path: string, actor: string | u
         get: () => '',
     };
     await router.routes()(ctx, async () => {});
+    // A roster is sent as a stream of its shared bytes (roster-snapshots.ts): read it back as the JSON it is.
+    if (ctx.body && typeof ctx.body.pipe === 'function') {
+        const chunks: Buffer[] = [];
+        for await (const c of ctx.body) chunks.push(Buffer.from(c));
+        ctx.body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    }
     return ctx;
 }
 

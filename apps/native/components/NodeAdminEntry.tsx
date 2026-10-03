@@ -11,11 +11,14 @@
  * For an owner or admin (not a moderator), "Names list" (app/names-list.tsx): the admins' list of members' real names,
  * sealed on admins' phones (community modes slice 2). Its routes refuse anyone else; the row only decides whether to offer.
  *
+ * Once the node says the member holds a role, App Lock is turned on for them, once (LocalAuth.turnAppLockOnForRole,
+ * decision D3): the phone's lock is a role holder's second factor since key sign-ins stopped asking for the node's code.
+ *
  * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
  * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
  */
 import React, { useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
 import { useTheme } from '../app/ThemeContext';
@@ -24,6 +27,8 @@ import { fetchMyNodeRole, rememberNodeRole, canManageNode, manageLabel, manageSu
 import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { offersNamesList } from '../utils/names-list';
+import { makeBreakGlassCode, keepBreakGlassCode, forgetBreakGlassCode } from '../utils/break-glass';
+import { turnAppLockOnForRole, APP_LOCK_ON_FOR_ROLE } from '../utils/LocalAuth';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
 interface MenuStyles {
@@ -31,7 +36,12 @@ interface MenuStyles {
     menuIconWrap: any; menuIcon: any; menuText: any; menuSub: any; menuChevron: any;
 }
 
-export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: MenuStyles; fallbackCommunityName?: string | null }) {
+export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedOn }: {
+    styles: MenuStyles;
+    fallbackCommunityName?: string | null;
+    /** Settings' App Lock switch, told when this turned App Lock on for a role holder. */
+    onAppLockTurnedOn?: () => void;
+}) {
     const { identity } = useIdentity();
     const { colors } = useTheme();
     const [role, setRole] = useState<ManageRole | null>(null);
@@ -52,12 +62,34 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                 if (cancelled) return;
                 setRole(mine.role);
                 setCommunityName(mine.communityName);
+                if (canManageNode(mine.role) && (await turnAppLockOnForRole()) === 'turned-on' && !cancelled) {
+                    onAppLockTurnedOn?.();
+                    Alert.alert('App Lock is on', APP_LOCK_ON_FOR_ROLE(mine.communityName || fallbackCommunityName || 'your community'));
+                }
             })().catch(() => { if (!cancelled) setRole(null); });
             return () => { cancelled = true; };
-        }, [identity])
+        }, [identity, onAppLockTurnedOn, fallbackCommunityName])
     );
 
     if (!canManageNode(role) || !identity) return null;
+
+    // An owner's break-glass code: shown once, and kept in the secure store only if they say so. A new code retires
+    // the old one, so a copy kept from before is forgotten unless this one is kept in its place.
+    const breakGlass = async (community: string) => {
+        const url = await getAnchorUrl();
+        if (!url || !identity?.privateKey) return;
+        const r = await makeBreakGlassCode(url, identity, community);
+        if (!r.ok) { Alert.alert('No break-glass code', r.message); return; }
+        await forgetBreakGlassCode(url, identity.publicKey).catch(() => {});
+        Alert.alert(
+            'Your break-glass code',
+            `${r.code}\n\nIt adds a new admin key if you lose this phone. Write it down and keep it offline. It is shown only now; any earlier code no longer works.`,
+            [
+                { text: 'I wrote it down', style: 'cancel' },
+                { text: 'Also keep it on this phone', onPress: () => { keepBreakGlassCode(url, identity.publicKey, r.code).catch(() => Alert.alert('Not kept', 'The phone could not keep it. Write it down instead.')); } },
+            ],
+        );
+    };
     const name = communityName || fallbackCommunityName || 'this community';
     const label = manageLabel(role, name);
     const computerLabel = computerSigninLabel(role);
@@ -97,6 +129,23 @@ export function NodeAdminEntry({ styles, fallbackCommunityName }: { styles: Menu
                         <View style={{ flex: 1 }}>
                             <Text style={styles.menuText}>Names list</Text>
                             <Text style={styles.menuSub}>Who your members are, by name · sealed on admins' phones</Text>
+                        </View>
+                        <Text style={styles.menuChevron}>›</Text>
+                    </Pressable>
+                ) : null}
+                {role === 'owner' ? (
+                    <Pressable
+                        style={[styles.menuBtn, { minHeight: 48 }]}
+                        onPress={() => { breakGlass(name).catch(() => {}); }}
+                        disabled={busy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Break-glass code"
+                        accessibilityHint="Asks for your phone's unlock, then shows a new break-glass code once. Your old code stops working"
+                    >
+                        <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚨</Text></View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.menuText}>Break-glass code</Text>
+                            <Text style={styles.menuSub}>A spare way to add a new admin key · shown once</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>

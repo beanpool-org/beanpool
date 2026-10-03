@@ -32,6 +32,8 @@ import {
     adminPruneUser,
     assertMayPrune,
     isSoleOwner,
+    heldPrivilegedRole,
+    isOwnerLevelActor,
     broadcast,
     getBalance,
     getCommonsBalanceExact,
@@ -174,6 +176,19 @@ function shortKey(key: string): string {
     return /^[0-9a-f]{64}$/i.test(key) ? `${key.slice(0, 10)}...` : key;
 }
 
+/**
+ * A re-key moves the member's node role to the new key, and only an owner may change an owner's or admin's role
+ * (node-roles): an owner's or admin's re-key (a role held aside while suspended counts) by anyone but an owner, the
+ * password or the member themselves is refused, 403, before any write. Both steps ask it: a code an owner issued is
+ * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched.
+ */
+function assertMayRekey(cleanOld: string, cleanOperator: string): void {
+    if (!heldPrivilegedRole(cleanOld) || cleanOperator === cleanOld || isOwnerLevelActor(cleanOperator)) return;
+    const err: any = new Error('Only an owner can re-key an owner or admin');
+    err.status = 403;
+    throw err;
+}
+
 export function issueRekeyCode(
     oldPublicKey: string,
     operatorPubkey: string,
@@ -190,6 +205,7 @@ export function issueRekeyCode(
     if (member.status === 'pruned') {
         throw new Error('Cannot re-key a pruned member');
     }
+    assertMayRekey(cleanOld, cleanOperator);
     if (isKeyInvalidated(cleanOld)) {
         const info = getInvalidatedKeyInfo(cleanOld);
         if (info?.rekeyed_to) {
@@ -297,6 +313,9 @@ export function completeRekey(
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
     }
+    // The operator as this call names it: the admin route's session, or the issuer the member's own completion reads
+    // from the code (routes/community.ts), which is the old key itself when a member re-keyed themselves.
+    assertMayRekey(cleanOld, (operatorPubkey || '').trim().toLowerCase());
     // An account deleted by its owner (purgeMemberSelf) or removed (adminPruneUser, by an admin or a community vote)
     // since the code was issued stays that way: issueRekeyCode refuses a pruned member, and this is its other half.
     // Completing used to set the row back to 'active' and hand it to the new key: a deleted account came back emptied
@@ -416,33 +435,51 @@ export function completeRekey(
     };
 }
 
+/** A pending re-key as the status answer gives it: the code only to whoever may have it (getRekeyStatus). */
+export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string };
+/** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
+export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
+
 /**
- * Gets the current rekey status for a member.
+ * Gets the current rekey status for a member, as `viewer` (the admin route's session actor) may read it.
+ *
+ * A pending code is the whole credential on /api/member/re-enroll, which binds the new key with the code's issuer as
+ * operator. For a member who holds or has held aside an owner or admin role, the code goes only to its issuer (the
+ * manager's RekeyMemberWizard re-shows it from here) or an owner, who could re-key them anyway: given to any admin, it
+ * let them finish an owner's re-key with a key they chose and hold the owner role (confirm 3, 4172310632). For any other
+ * member, any admin may re-key them, so their code is read as before. Each answer is an explicit field list.
  */
-export function getRekeyStatus(publicKey: string): {
+export function getRekeyStatus(publicKey: string, viewer?: string): {
     isInvalidated: boolean;
     invalidatedInfo: InvalidatedKeyRow | null;
-    pendingRequest: RekeyRequestRow | null;
-    history: RekeyAuditLogRow[];
+    pendingRequest: RekeyRequestView | null;
+    history: RekeyAuditLogView[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
     const isInvalidated = isKeyInvalidated(cleanPub);
     const invalidatedInfo = getInvalidatedKeyInfo(cleanPub);
 
-    let pendingRequest: RekeyRequestRow | null = (db.prepare(
-        "SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
-    ).get(cleanPub) as RekeyRequestRow | undefined) || null;
+    const pending = (db.prepare(`
+        SELECT id, code, old_pubkey, new_pubkey, operator_pubkey, status, created_at, expires_at, completed_at
+        FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1
+    `).get(cleanPub) as RekeyRequestRow | undefined) || null;
 
-    if (pendingRequest && new Date(pendingRequest.expires_at).getTime() < Date.now()) {
+    let pendingRequest: RekeyRequestView | null = null;
+    if (pending && new Date(pending.expires_at).getTime() < Date.now()) {
         // Marked on a main server. A standby's codes are its main server's (config/node-role.ts assertPlainTablesWritable):
         // it answers one past its time as none, and writes nothing.
-        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
-        pendingRequest = null;
+        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pending.id);
+    } else if (pending) {
+        const { code, ...rest } = pending;
+        const cleanViewer = (viewer || '').trim().toLowerCase();
+        const mayReadCode = !heldPrivilegedRole(cleanPub) || (!!cleanViewer && cleanViewer === pending.operator_pubkey) || isOwnerLevelActor(cleanViewer);
+        pendingRequest = mayReadCode ? { ...rest, code } : rest;
     }
 
-    const history = (db.prepare(
-        'SELECT * FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC'
-    ).all(cleanPub, cleanPub) as RekeyAuditLogRow[]) || [];
+    const history = (db.prepare(`
+        SELECT id, old_pubkey, new_pubkey, operator_pubkey, performed_at, completed_at, details
+        FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC
+    `).all(cleanPub, cleanPub) as RekeyAuditLogView[]) || [];
 
     return {
         isInvalidated,

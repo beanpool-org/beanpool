@@ -20,6 +20,7 @@ import Router from '@koa/router';
 import { getMember, isVisitorKey, nodeRoleOf } from '../state-engine.js';
 import { getAdminQueue } from '../engine/admin-queue.js';
 import { getLocalConfig } from '../config/local-config.js';
+import { issueBreakGlassCode } from '../admin-key-auth.js';
 import type { RouteDeps } from './types.js';
 
 export function createNodeAdminRoutes(_deps: RouteDeps): Router {
@@ -52,6 +53,24 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
             role: nodeRoleOf(actor) ?? null,
             communityName: config.communityName || config.callsign || null,
         };
+    });
+
+    /**
+     * The app's break-glass code: a new one for the signing owner's own key, shown once on the phone, which offers to
+     * keep it in the secure store. The owner's earlier code stops working. An admin, a moderator or a member gets 403
+     * and nothing is stored; there is no way to name another key. Logged without the code (issueBreakGlassCode).
+     */
+    router.post('/api/node-admin/break-glass', async (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const actor = signedMember(ctx);
+        if (!actor) return;
+        if (nodeRoleOf(actor) !== 'owner') {
+            ctx.status = 403;
+            ctx.body = { error: 'Only an owner of this community has a break-glass code' };
+            return;
+        }
+        const code = issueBreakGlassCode(actor, 'their own key, from the app');
+        ctx.body = { success: true, memberPubkey: actor, breakGlassCode: code };
     });
 
     router.get('/api/node-admin/queue', async (ctx) => {

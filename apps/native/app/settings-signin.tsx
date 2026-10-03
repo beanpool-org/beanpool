@@ -3,7 +3,7 @@
  * pass the phone's unlock, and that browser is signed in with your key. Owners, admins and moderators only (the entry is
  * shown only to them, and the node checks the live role again). utils/settings-signin.ts has the steps and the reasons.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Modal, Linking, Alert, ScrollView, Keyboard } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,12 +16,15 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { NO_DEVICE_LOCK_MESSAGE } from '../utils/node-admin';
 import {
     readSigninScan, scanProblemMessage, lookupPairing, approveComputerSignin, declineComputerSignin, formatShortCode,
-    type ApproveOutcome,
+    SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
+    DIGITS_PRIVATE, DIGITS_SHOWN_MS, digitsDone,
+    type ApproveOutcome, type PairingLookup,
 } from '../utils/settings-signin';
 import type { SettingsSigninQr } from '@beanpool/core';
 import { TotpCodeDialog, looksLikeTotpCode } from '../components/TotpCodeDialog';
 
-type Found = { qr: SettingsSigninQr; host: string; browser: string };
+/** `look` is the node's answer; `openedAt` lets "asked … ago" and the time left move while the sheet is open. */
+type Found = { qr: SettingsSigninQr; host: string; look: Extract<PairingLookup, { kind: 'ok' }>; openedAt: number };
 
 export default function SettingsSigninScreen() {
     const { community } = useLocalSearchParams<{ community?: string }>();
@@ -35,6 +38,11 @@ export default function SettingsSigninScreen() {
     const [found, setFound] = useState<Found | null>(null);
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
+    /** The two digits the computer must type (a node with number matching), shown once approved. */
+    const [confirmCode, setConfirmCode] = useState<string | null>(null);
+    /** When the computer's 30 seconds to type them run out, by this phone's clock (a little after the node's). */
+    const [digitsUntil, setDigitsUntil] = useState(0);
+    const [now, setNow] = useState(() => Date.now());
     const [totp, setTotp] = useState<{ continueWith: (code: string) => Promise<ApproveOutcome>; wrongCode: boolean } | null>(null);
     const [code, setCode] = useState('');
     const locked = useRef(false); // one scan at a time: the camera reports the same code many times a second
@@ -61,21 +69,33 @@ export default function SettingsSigninScreen() {
             problem(m.title, m.message);
             return;
         }
-        const look = await lookupPairing(scan.qr);
+        const look = await lookupPairing(scan.qr, identity);
         if (look.kind !== 'ok') {
             problem(look.kind === 'gone' ? 'That code has run out' : "Couldn't check the code", look.message);
             return;
         }
         Haptics.selectionAsync().catch(() => {});
         setChecking(false);
-        setFound({ qr: scan.qr, host: scan.qr.nodeUrl.replace(/^https?:\/\//, ''), browser: look.browser });
+        setFound({ qr: scan.qr, host: scan.qr.nodeUrl.replace(/^https?:\/\//, ''), look, openedAt: Date.now() });
     };
+
+    useEffect(() => {
+        if (!found || (done && !confirmCode)) return;
+        setNow(Date.now());
+        const t = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(t);
+    }, [found, done, confirmCode]);
+    const digitsDoneButton = digitsDone(digitsUntil - now);
+    const openSeconds = found ? Math.max(0, Math.floor((now - found.openedAt) / 1000)) : 0;
 
     const handle = (out: ApproveOutcome) => {
         switch (out.kind) {
             case 'approved':
                 setTotp(null);
                 setCode('');
+                setConfirmCode(out.confirmCode ?? null);
+                setDigitsUntil(Date.now() + DIGITS_SHOWN_MS);
+                setNow(Date.now());
                 setDone(true);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                 return;
@@ -188,13 +208,35 @@ export default function SettingsSigninScreen() {
                     )}
             </View>
 
-            <Modal visible={!!found} transparent animationType="slide" onRequestClose={busy ? () => {} : resumeScanning}>
+            <Modal visible={!!found} transparent animationType="slide" onRequestClose={busy || (done && confirmCode && !digitsDoneButton.enabled) ? () => {} : resumeScanning}>
                 <View style={styles.sheetBackdrop}>
                     <ScrollView
                         style={[styles.sheet, { backgroundColor: colors.surface.card, borderColor: colors.border.default }]}
                         contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20 }}
                     >
-                        {done ? (
+                        {done && confirmCode ? (
+                            <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
+                                <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
+                                    {confirmDigitsLine(confirmCode)}
+                                </Text>
+                                <Text style={[styles.digits, { color: colors.text.heading }]} accessibilityLabel={`Digits ${confirmCode.split('').join(' ')}`}>
+                                    {confirmCode}
+                                </Text>
+                                <Text style={[styles.body, { color: colors.text.secondary }]}>
+                                    The computer opens {communityName}'s Settings only when these are typed there, within 30 seconds. If no computer in front of you is asking for them, do nothing: nobody gets in.
+                                </Text>
+                                <Text style={[styles.body, { color: colors.text.heading, fontWeight: '700' }]}>{DIGITS_PRIVATE}</Text>
+                                <Pressable
+                                    style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, opacity: digitsDoneButton.enabled ? 1 : 0.5 }]}
+                                    onPress={() => router.back()}
+                                    disabled={!digitsDoneButton.enabled}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ disabled: !digitsDoneButton.enabled }}
+                                >
+                                    <Text style={[styles.primaryText, { color: colors.text.inverse }]}>{digitsDoneButton.label}</Text>
+                                </Pressable>
+                            </View>
+                        ) : done ? (
                             <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
                                 <Text style={{ fontSize: 40, marginBottom: 8 }} accessibilityElementsHidden>✅</Text>
                                 <Text style={[styles.title, { color: colors.text.heading }]}>Signed in</Text>
@@ -208,19 +250,27 @@ export default function SettingsSigninScreen() {
                         ) : found ? (
                             <>
                                 <Text style={[styles.title, { color: colors.text.heading }]} accessibilityRole="header">
-                                    Sign in {communityName} Settings on that computer?
+                                    {SIGNIN_QUESTION}
+                                </Text>
+                                <Text style={[styles.body, { color: colors.feedback.danger.solid, fontWeight: '700' }]}>
+                                    {SIGNIN_WARNING}
                                 </Text>
                                 <Text style={[styles.body, { color: colors.text.secondary }]}>
-                                    Only if the computer in front of you shows this code:
+                                    Tap Sign in only if the computer in front of you shows this code:
                                 </Text>
                                 <Text style={[styles.code, { color: colors.text.heading }]} accessibilityLabel={`Code ${found.qr.shortCode.split('').join(' ')}`}>
                                     {formatShortCode(found.qr.shortCode)}
                                 </Text>
                                 <View style={[styles.infoBox, { borderColor: colors.border.default }]}>
                                     <Text style={[styles.infoLine, { color: colors.text.body }]}>Community: {found.host}</Text>
-                                    <Text style={[styles.infoLine, { color: colors.text.body }]}>Computer: {found.browser}</Text>
+                                    {computerLines(found.look, openSeconds).map(line => (
+                                        <Text key={line.slice(0, 6)} style={[styles.infoLine, { color: colors.text.body }]}>{line}</Text>
+                                    ))}
                                     <Text style={[styles.infoLine, { color: colors.text.body }]}>As: {identity?.callsign || 'you'}</Text>
                                 </View>
+                                {found.look.expiresInSeconds !== null && (
+                                    <Text style={[styles.body, { color: colors.text.secondary }]}>{formatTimeLeft(found.look.expiresInSeconds - openSeconds)}</Text>
+                                )}
                                 <Pressable
                                     style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }, busy && { opacity: 0.7 }]}
                                     onPress={approve}
@@ -276,6 +326,7 @@ const styles = StyleSheet.create({
     sheet: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, flexGrow: 0 },
     title: { fontSize: 19, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
     body: { fontSize: 15, lineHeight: 21, textAlign: 'center', marginBottom: 12 },
+    digits: { fontSize: 56, fontWeight: '900', letterSpacing: 8, textAlign: 'center', marginVertical: 12, fontVariant: ['tabular-nums'] },
     code: { fontSize: 32, fontWeight: '900', letterSpacing: 4, textAlign: 'center', marginVertical: 8, fontVariant: ['tabular-nums'] },
     infoBox: { borderWidth: 1, borderRadius: 12, padding: 12, marginVertical: 12, gap: 4 },
     infoLine: { fontSize: 14, lineHeight: 20 },

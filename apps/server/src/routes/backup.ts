@@ -41,7 +41,7 @@ import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
 import {
     checkRecoveryCode, parseRecoveryCode, RecoveryCodeError, SealedEnvelopeError,
     type CodeStanza, type SealedEnvelopeHeader,
@@ -1000,6 +1000,8 @@ router.get('/api/local/admin/snapshots/download', async (ctx) => {
     const headerPassword = ctx.request.header['x-admin-password'];
     if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
     if (!(await ownerOnly(ctx, DOWNLOAD_OWNER_ONLY))) return;
+    // A GET, but the whole community: from the phone it asks for its unlock again, like /backup (requirePhoneStepUp).
+    if (!requirePhoneStepUp(ctx)) return;
     const name = ctx.query.name as string;
     const target = resolveSnapshotPath(name);
     if (!target || !fs.existsSync(target)) {

@@ -38,7 +38,7 @@ import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
 } from '../engine/burst-cleanup.js';
-import { decisionsOn } from '../decisions-engine.js';
+import { decisionsOn, adminActionNeedsOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
 import {
     getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
@@ -52,8 +52,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
-import { clientLimiterKey } from '../client-ip.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -74,6 +73,7 @@ import {
     revokeAllMemberSessions,
     revokeAdminSession,
     enrolAdminOwnerKey,
+    issueBreakGlassCode,
     createPasswordSession,
     setAdminSessionCookie,
     clearAdminSessionCookie,
@@ -149,30 +149,26 @@ router.post('/api/local/admin/auth/challenge', async (ctx) => {
  */
 router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const { challengeId, memberPubkey, signature, totpCode, signedFor } = body;
+    const { challengeId, memberPubkey, signature, signedFor } = body;
     if (!challengeId || !memberPubkey || !signature) {
         ctx.status = 400;
         ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
         return;
     }
 
-    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor, source: clientLimiterKey(ctx) });
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, signedFor });
     if (!res.ok) {
         let status = 400;
         if (res.status) {
-            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts); 429 the 2FA brake, 410 a challenge burned
-            // by wrong codes (key-signin-brake.ts)
+            // 421 wrong_community, 426 app_too_old (engine/member-signature.ts)
             status = res.status;
-            if (res.retryAfter) ctx.set('Retry-After', String(res.retryAfter));
-        } else if (res.totpRequired) {
-            status = 401;
         } else if (res.error?.includes('Challenge not found')) {
             status = 404;
         } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
             status = 403;
         }
         ctx.status = status;
-        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}), ...(res.retryAfter ? { retryAfter: res.retryAfter } : {}) };
+        ctx.body = { error: res.error, ...(res.code ? { code: res.code } : {}) };
         return;
     }
 
@@ -282,6 +278,8 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
     ctx.body = {
         success: true,
         role: 'owner',
+        // With the node's 2FA off this session opens only the 2FA setup card (admin-auth.ts TOTP_SETUP_ROUTES).
+        totpSetupRequired: passwordSessionNeedsTotpSetup(),
         csrfToken: session.csrfToken,
         hardExpiresAt: session.hardExpiresAt,
         idleExpiresAt: session.idleExpiresAt,
@@ -310,6 +308,9 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
             return;
         }
+        // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
+        // your own sessions is not asked.
+        if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
         targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
@@ -387,6 +388,7 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
                 isPasswordSession: true,
                 memberPubkey: null,
                 role: 'owner',
+                totpSetupRequired: passwordSessionNeedsTotpSetup(),
                 hardExpiresAt: res.session.hardExpiresAt,
                 idleExpiresAt: res.session.idleExpiresAt,
             };
@@ -455,6 +457,29 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * Enrols a member key and generates a unique per-owner break-glass code.
  * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
  */
+/**
+ * Whether a role change needs an owner (engine/node-roles.ts): it names 'owner' or 'admin', or its target holds owner or
+ * admin now (a grant replaces the role the target holds, so "grant moderator" to a co-owner removes an owner). Such a
+ * change from the phone's Manage hand-off asks for its unlock again (admin-auth.ts requirePhoneStepUp), as every
+ * owner-only route does; an admin appointing or removing a moderator is not asked.
+ */
+function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
+    if (role === 'owner' || role === 'admin') return true;
+    const held = heldNodeRoleOf(targetPubkey);
+    return held === 'owner' || held === 'admin';
+}
+
+/**
+ * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
+ * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
+ * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) or re-keying an
+ * owner or admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
+ * engine is given. Answers 403 and returns false when that is due.
+ */
+function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    return !adminActionNeedsOwner(action, target, actor) || requirePhoneStepUp(ctx);
+}
+
 const handleEnrol = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -485,6 +510,7 @@ const handleEnrol = async (ctx: any) => {
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
         return;
     }
+    if (roleChangeNeedsOwner(targetPubkey, requestedRole) && !requirePhoneStepUp(ctx)) return;
 
     try {
         const res = enrolAdminOwnerKey({
@@ -513,6 +539,55 @@ router.post('/api/local/admin/auth/enrol', handleEnrol);
 router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
 
 /**
+ * POST /api/local/admin/auth/break-glass/issue
+ * Settings' "Make a break-glass code": a new code for an owner, shown once; the owner's earlier code stops working.
+ * Owners only. A key session makes one for its own key and nobody else's. The password (an owner with no key behind it)
+ * names the owner in `memberPubkey`, which must hold the owner role already: this grants nothing. A break-glass code is
+ * a wrong password here (admin-auth.ts opens only the enrol routes to it), and break-glass mode closes it to the
+ * password, as it does every route but enrolment.
+ */
+router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
+    const state = ctx.state as any;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let target: string;
+    if (state.isKeySession) {
+        target = state.actor;
+        if (body.memberPubkey && body.memberPubkey !== target) {
+            ctx.status = 403;
+            ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
+            return;
+        }
+    } else {
+        target = typeof body.memberPubkey === 'string' ? body.memberPubkey : '';
+        if (!target) {
+            ctx.status = 400;
+            ctx.body = { error: 'memberPubkey is required: name the owner the code is for' };
+            return;
+        }
+        if (!isMemberKeySpelling(target)) {
+            ctx.status = 400;
+            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
+            return;
+        }
+    }
+    try {
+        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password');
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = {
+            success: true,
+            memberPubkey: target,
+            breakGlassCode: code,
+            message: 'Store this break-glass code securely. It will only be shown once.',
+        };
+    } catch (e: any) {
+        ctx.status = Number(e?.status) || 400;
+        ctx.body = { error: e?.message || 'Could not make a break-glass code' };
+    }
+});
+
+/**
  * POST /api/local/admin/auth/break-glass-mode
  * Toggles break-glass mode on or off.
  */
@@ -523,6 +598,8 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
         ctx.body = { error: 'Only node owners can toggle break-glass mode' };
         return;
     }
+    // Owner-only, checked here rather than by requireAdminRole: from the phone it asks for its unlock again too.
+    if (!requirePhoneStepUp(ctx)) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
@@ -1343,6 +1420,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'suspend', ctx.params.pubkey)) return;
     const { reason } = (ctx as any).requestBody || {};
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
@@ -1373,6 +1451,7 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     }
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'lift', ctx.params.pubkey)) return;
     const result = adminLiftSuspension(ctx.params.pubkey, actor);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1458,6 +1537,7 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune', ctx.params.pubkey, actor)) return;
     try {
         adminPruneUser(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1471,6 +1551,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune-branch', ctx.params.pubkey, actor)) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1567,6 +1648,11 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
+        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may (the engine
+        // refuses anyone else, given the actor). Read only to suspend: a moderator, refused that above, is no node admin.
+        const actor = suspendUser ? resolveAdminActor(ctx) : null;
+        if (suspendUser && !actor) return;
+        if (suspendUser && !stepUpIfOwnerOnly(ctx, 'report-suspend', ctx.params.id)) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
@@ -1591,6 +1677,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, {
             reasonCategory,
             onRefundShortfall: s => refundShortfalls.push(s),
+            actor,
         });
         if (!ok) {
             ctx.status = 404;
@@ -1616,7 +1703,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
         if (answerPotPaused(ctx, e)) return;
-        ctx.status = 500;
+        ctx.status = e?.status || 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };
     }
 });
@@ -1732,6 +1819,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
         return;
     }
+    if (!stepUpIfOwnerOnly(ctx, 'halt', ctx.params.id)) return;
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1746,6 +1834,7 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const signedActor = resolveAdminActor(ctx);
     if (!signedActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'accelerate', ctx.params.id)) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1979,6 +2068,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // A change that needs an owner, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(targetPubkey, role) && !requirePhoneStepUp(ctx)) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -2006,6 +2097,8 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // Taking an owner's or an admin's role, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(pubkey, role) && !requirePhoneStepUp(ctx)) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).
@@ -2102,9 +2195,12 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
 
 router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // The reader decides whether a pending owner's or admin's code is in the answer (getRekeyStatus).
+    const viewer = resolveAdminActor(ctx);
+    if (!viewer) return;
     try {
         const { pubkey } = ctx.params;
-        const status = getRekeyStatus(pubkey);
+        const status = getRekeyStatus(pubkey, viewer);
         ctx.body = status;
     } catch (e: any) {
         ctx.status = 400;
@@ -2117,6 +2213,8 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const { pubkey } = ctx.params;
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
         const result = issueRekeyCode(pubkey, effectiveActor);
@@ -2150,6 +2248,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
 
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
         const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
@@ -2205,6 +2304,8 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         };
         return;
     }
+    // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).
+    if (!stepUpIfOwnerOnly(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase())) return;
 
     try {
         const result = executeOffboard(

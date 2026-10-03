@@ -39,14 +39,23 @@ describe('an owner-only action with a token', () => {
         for (const p of ['/api/local/admin/auth/password', '/api/local/admin/automation-tokens', '/api/local/admin/2fa/setup',
             '/api/local/admin/ws-ticket', '/api/local/admin/csrf-token', '/api/local/admin/public-address/claim',
             '/api/local/admin/takeover/open', '/api/local/admin/stranded-escrows/e1/write-off', '/api/local/reset',
-            '/api/local/change-password', '/api/local/admin/offbox-backups/settings', '/api/local/admin/backup-config',
+            '/api/local/change-password', '/api/local/admin/offbox-backups/settings',
+            '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check',
+            '/api/local/admin/takeover/confirm', '/api/local/admin/takeover/cancel',
+            '/api/local/admin/takeover/phone/start', '/api/local/admin/takeover/phone/wait',
             '/proxy/https/node.example/api/local/admin/takeover/open']) {
             expect(tokenCannotReach(p), p).toBe(true);
         }
         // A backups token's own routes go to the node, which decides by the token's scope; so do ordinary admin routes.
         for (const p of ['/api/local/admin/offbox-backups/run', '/api/local/admin/offbox-backups/status', '/api/local/admin/backup',
             '/api/local/admin/snapshots/list', '/api/local/admin/users/abc/freeze', '/api/local/admin/node-data',
-            '/proxy/https/node.example/api/local/admin/offbox-backups/run']) {
+            '/proxy/https/node.example/api/local/admin/offbox-backups/run',
+            // Measured on a real node (deciding review of #1549): an admin token gets 200 on each of these. They are
+            // checkAdminAuth only (takeover status, words-checks, progress; backup-config's cadence), or owner-only
+            // only when the body changes something (snapshots/config), which the node's 403 relay covers.
+            '/api/local/admin/takeover/status', '/api/local/admin/takeover/words-checks', '/api/local/admin/takeover/progress',
+            '/api/local/admin/backup-config', '/api/local/admin/snapshots/config',
+            '/proxy/https/node.example/api/local/admin/takeover/status']) {
             expect(tokenCannotReach(p), p).toBe(false);
         }
     });

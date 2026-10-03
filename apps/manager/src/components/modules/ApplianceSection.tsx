@@ -131,6 +131,8 @@ export function ApplianceSection({
         intervalHours: 24,
         keep: 7,
     });
+    // False until the node has said its schedule: the form's values are then only a starting point, never shown as the node's.
+    const [scheduleKnown, setScheduleKnown] = useState(false);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [scheduleStatusMsg, setScheduleStatusMsg] = useState<string | null>(null);
 
@@ -266,9 +268,11 @@ export function ApplianceSection({
                 nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
-            if (cfg) setScheduleConfig(cfg);
-        } catch {
-            // Keep default
+            setScheduleConfig(cfg);
+            setScheduleKnown(true);
+        } catch (e: unknown) {
+            setScheduleKnown(false);
+            setScheduleStatusMsg(`Couldn't read this node's backup schedule, so it is shown as unknown: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -342,6 +346,7 @@ export function ApplianceSection({
                 getTfaSessionToken(activeNode.id)
             );
             setScheduleConfig(updated);
+            setScheduleKnown(true);
             setScheduleStatusMsg('Backup schedule updated successfully.');
         } catch (e: unknown) {
             setScheduleStatusMsg(e instanceof Error ? e.message : 'Failed to update schedule');
@@ -1130,11 +1135,11 @@ export function ApplianceSection({
                                 </p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                scheduleConfig.enabled
+                                scheduleKnown && scheduleConfig.enabled
                                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                     : 'bg-nature-800 text-nature-400'
                             }`}>
-                                {scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
+                                {!scheduleKnown ? 'Unknown' : scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
                             </span>
                         </div>
 

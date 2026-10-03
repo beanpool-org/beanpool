@@ -1799,11 +1799,13 @@ export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?:
         headers: buildAdminHeaders(adminPassword, tfaToken),
         body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
+    // The node's real schedule or an error: never a made-up default shown as if it were the node's.
     if (!res.ok) {
-        return { enabled: true, intervalHours: 24, keep: 7 };
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     const data = await res.json();
-    return data.config || { enabled: true, intervalHours: 24, keep: 7 };
+    if (!data?.config) throw new Error("The node didn't say its backup schedule");
+    return data.config;
 }
 
 export async function updateNodeSnapshotSchedule(

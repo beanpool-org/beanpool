@@ -129,6 +129,17 @@ describe('the dashboard\'s own /api/manager routes get no credential', () => {
     });
 });
 
+describe('the snapshot schedule', () => {
+    it('is the node\'s real one, and a schedule that can\'t be read is never made up', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ config: { enabled: false, intervalHours: 6, keep: 3 } }), { status: 200 })));
+        await expect(client.fetchNodeSnapshotSchedule(NODE, TOKEN)).resolves.toEqual({ enabled: false, intervalHours: 6, keep: 3 });
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'no' }), { status: 403 })));
+        await expect(client.fetchNodeSnapshotSchedule(NODE, TOKEN)).rejects.toThrow();
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ success: true }), { status: 200 })));
+        await expect(client.fetchNodeSnapshotSchedule(NODE, TOKEN)).rejects.toThrow();
+    });
+});
+
 describe('the token is kept in memory only', () => {
     it('saveNodeProfiles never writes the token to localStorage, and the page still holds it', () => {
         saveNodeProfiles([{ id: 'n1', name: 'N', url: NODE, automationToken: TOKEN }]);

@@ -36,10 +36,12 @@ import {
 import { approximateLocation, roundToRoughly100m } from '@beanpool/core';
 import { startHttpsServer } from './https-server.js';
 import { db, initSchema } from './db/db.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
+let settingsAdmin: Record<string, string> = {}; // an owner's automation token, made in main() (step 7c)
 let BASE = '';
 
 let run = 0, passed = 0;
@@ -179,11 +181,14 @@ async function main() {
             adminHash,
             salt,
         });
+        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' route is called with an
+        // owner's automation token.
+        settingsAdmin = ownerTokenHeaders('admin');
         const adminHttpRes = await fetch(`${BASE}/api/local/admin/treasury/${flock}/location`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-password': 'correct-horse-battery-staple-1234',
+                ...settingsAdmin,
             },
             body: JSON.stringify({ lat: -28.5525, lng: 153.5045 }),
         });
@@ -384,7 +389,7 @@ async function main() {
         const adminAppClearTarget = completedWithCoords('SettingsClearWoundUp', -28.533, 153.523);
         const adminAppClear = await fetch(`${BASE}/api/local/admin/treasury/${adminAppClearTarget}/location`, {
             method: 'DELETE',
-            headers: { 'x-admin-password': 'correct-horse-battery-staple-1234' },
+            headers: settingsAdmin,
         });
         assert(adminAppClear.ok, `Admin clears a completed enterprise's location via the Settings app route (status ${adminAppClear.status})`);
         const adminAppClearedRow = db.prepare('SELECT lat, lng FROM members WHERE public_key = ?').get(adminAppClearTarget) as any;

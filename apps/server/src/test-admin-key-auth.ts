@@ -72,14 +72,14 @@ import {
     pruneExpiredAuthEntries,
     verifyEd25519Signature,
 } from './admin-key-auth.js';
-import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
+import { checkAdminAuth, resetAdminAuthTarpit, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import {
     getLocalConfig,
     updateLocalConfig,
     isBreakGlassMode,
     setBreakGlassMode,
 } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import type { RouteDeps } from './routes/types.js';
@@ -135,6 +135,19 @@ async function main() {
 
     // Set up admin password in local config
     const testPassword = 'SuperSecretAdminPassword123!';
+    // Step 7c: with the node's 2FA off the password alone opens no admin route. The password checks below are about the
+    // password path, so each turns 2FA on for its own request and sends a code with the password, then turns it off again
+    // (the key sign-ins elsewhere in this suite run with 2FA off).
+    const pwTotpSecret = generateTotpSecret();
+    const fetchWithPasswordAndCode = async (url: string, init: { method?: string; headers: Record<string, string>; body?: string }): Promise<Response> => {
+        updateLocalConfig({ totpEnabled: true, totpSecret: pwTotpSecret });
+        forgetUsedTotpCodesForTests();
+        try {
+            return await fetch(url, { ...init, headers: { ...init.headers, 'x-admin-totp': generateTotpCode(pwTotpSecret) } });
+        } finally {
+            updateLocalConfig({ totpEnabled: false, totpSecret: null });
+        }
+    };
     const salt = randomBytes(16).toString('hex');
     const adminHash = scryptSync(testPassword, salt, 64).toString('hex');
     updateLocalConfig({
@@ -423,7 +436,7 @@ async function main() {
         const eveKeys = createKeyPair();
         seedMember(eveKeys.pub, 'EveMember');
 
-        const grantEveRes = await fetch(`${base}/api/local/admin/node-roles`, {
+        const grantEveRes = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -439,10 +452,16 @@ async function main() {
         console.log('Testing unchanged password path (breakGlassMode = false)...');
 
         assert(isBreakGlassMode() === false, 'breakGlassMode defaults to false');
-        const getRolesPassword = await fetch(`${base}/api/local/admin/node-roles`, {
+        const getRolesPasswordAlone = await fetch(`${base}/api/local/admin/node-roles`, {
             headers: { 'x-admin-password': testPassword },
         });
-        assert(getRolesPassword.status === 200, 'GET /api/local/admin/node-roles succeeds with password when breakGlassMode=false');
+        const aloneBody: any = await getRolesPasswordAlone.json().catch(() => ({}));
+        assert(getRolesPasswordAlone.status === 403 && aloneBody.code === PASSWORD_NEEDS_2FA_CODE,
+            `with 2FA off the password alone is refused on /api/local/admin/node-roles (step 7c) (got ${getRolesPasswordAlone.status} ${aloneBody.code})`);
+        const getRolesPassword = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
+            headers: { 'x-admin-password': testPassword },
+        });
+        assert(getRolesPassword.status === 200, 'GET /api/local/admin/node-roles succeeds with password and a code when breakGlassMode=false');
 
         // ── 9. Break-Glass Mode Gating & Route Restriction ──
         console.log('Testing break-glass mode gating and route restriction...');
@@ -504,7 +523,7 @@ async function main() {
         };
         addWsClient(strangerWs);
 
-        const enrolRes = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const enrolRes = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -772,7 +791,7 @@ async function main() {
         // 12.7 Routine password enrolment when breakGlassMode=false does NOT emit alert (Comment 5)
         const graceKeys = createKeyPair();
         seedMember(graceKeys.pub, 'GraceMember');
-        const routineEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const routineEnrol = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -787,7 +806,7 @@ async function main() {
         // 12.7b Non-owner enrolment does NOT return breakGlassCode or populate break_glass_hash (Comment 4021421370)
         const henryKeys = createKeyPair();
         seedMember(henryKeys.pub, 'HenryAdmin');
-        const adminEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const adminEnrol = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -857,7 +876,7 @@ async function main() {
         assert(cookieMutateNoCsrf.status === 403, 'Cookie session mutating POST without CSRF token returns 403');
 
         // 12.13 Expired session cookie falls through to explicit password (Comment 9)
-        const expiredCookieWithPass = await fetch(`${base}/api/local/admin/node-roles`, {
+        const expiredCookieWithPass = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
             headers: {
                 'Cookie': `admin_session=non_existent_or_expired_session_token`,
                 'x-admin-password': testPassword,

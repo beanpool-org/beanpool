@@ -459,6 +459,30 @@ async function main() {
         assert(settings.status === 403 && settings.body.code === 'step_up_required', `changing its settings still asks (got ${settings.status} ${JSON.stringify(settings.body)})`);
     }
 
+    // ── 8. The owner-only bulk downloads are asked although they are GETs (review 4172055079) ──
+    // A snapshot is the whole community (readable when the node has no recovery code); so is an off-box backup.
+    console.log('\n8. Snapshot and off-box downloads from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const get = async (path: string, headers: Record<string, string>) => {
+            const res = await fetch(`${BASE}${path}`, { headers });
+            return { status: res.status, body: await res.json().catch(() => null) as any };
+        };
+        const downloads = [
+            '/api/local/admin/snapshots/download?name=no-such-snapshot.db',
+            '/api/local/admin/offbox-backups/download?destination=no-such-destination&key=x',
+        ];
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        for (const path of downloads) {
+            const old = await get(path, as(stale));
+            assert(old.status === 403 && old.body?.code === 'step_up_required', `${path} six minutes on asks for the phone's unlock (got ${old.status} ${JSON.stringify(old.body)})`);
+            const now = await get(path, as(fresh));
+            assert(now.status !== 403, `${path} just after Manage passes the step-up (got ${now.status} ${JSON.stringify(now.body)})`);
+        }
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

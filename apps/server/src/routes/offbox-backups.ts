@@ -11,7 +11,7 @@ import Router from '@koa/router';
 import crypto from 'node:crypto';
 import { Transform } from 'node:stream';
 import type { RouteDeps } from './types.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
 import {
     getOffboxStatus, listOffboxBackups, openOffboxBackup, runOffboxBackups, updateOffboxSettings,
 } from '../services/offbox-backups.js';
@@ -94,6 +94,8 @@ export function createOffboxBackupRoutes(deps: RouteDeps): Router {
         const headerPassword = ctx.request.header['x-admin-password'];
         if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
         if (!(await ownerOnly(ctx))) return;
+        // A GET, but the whole community: from the phone it asks for its unlock again, like /backup (requirePhoneStepUp).
+        if (!requirePhoneStepUp(ctx)) return;
         let opened: Awaited<ReturnType<typeof openOffboxBackup>>;
         try {
             opened = await openOffboxBackup(ctx.query.destination, ctx.query.key);

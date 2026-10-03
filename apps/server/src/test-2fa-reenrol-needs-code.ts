@@ -305,27 +305,42 @@ async function main() {
         }
 
         // ── 5. Change password: current password required, one scrypt ──
+        // Step 7c: with the node's 2FA off, the password alone (header, or a body-only client's currentPassword) changes
+        // nothing: 403 password_needs_2fa. The rest of this section runs with 2FA on, each password with a code.
         set2fa(false);
         resetAdminAuthTarpit();
         {
+            const hashBefore = getLocalConfig().adminHash;
+            const headerAlone = await call('/api/local/change-password', { 'X-Admin-Password': PW }, { currentPassword: PW, newPassword: 'ChangedPw456!' });
+            assert(headerAlone.status === 403 && headerAlone.body?.code === 'password_needs_2fa',
+                `2FA off: password caller alone → 403 password_needs_2fa (got ${headerAlone.status} ${headerAlone.body?.code})`);
+            const bodyAlone = await call('/api/local/change-password', {}, { currentPassword: PW, newPassword: 'ChangedPw456!' });
+            assert(bodyAlone.status === 403 && bodyAlone.body?.code === 'password_needs_2fa',
+                `2FA off: body-only client alone → 403 password_needs_2fa (got ${bodyAlone.status} ${bodyAlone.body?.code})`);
+            assert(getLocalConfig().adminHash === hashBefore, '…and the password is unchanged');
+        }
+        set2fa(true);
+        resetAdminAuthTarpit();
+        {
             const NEW = 'ChangedPw456!';
+            const pwAndCode = (pw: string) => ({ 'X-Admin-Password': pw, 'X-Admin-TOTP': generateTotpCode(SECRET) });
             scryptRuns = 0;
-            const ok = await call('/api/local/change-password', { 'X-Admin-Password': PW }, { currentPassword: PW, newPassword: NEW });
+            const ok = await call('/api/local/change-password', pwAndCode(PW), { currentPassword: PW, newPassword: NEW });
             assert(ok.status === 200, `password caller, right current password → 200 (got ${ok.status})`);
             assert(scryptRuns === 1, `…with one scrypt run (got ${scryptRuns})`);
             // The body-only client: currentPassword is its sign-in.
             scryptRuns = 0;
-            const bodyOnly = await call('/api/local/change-password', {}, { currentPassword: NEW, newPassword: PW });
+            const bodyOnly = await call('/api/local/change-password', {}, { currentPassword: NEW, newPassword: PW, totpCode: generateTotpCode(SECRET) });
             assert(bodyOnly.status === 200 && scryptRuns === 1, `body-only client → 200 with one scrypt run (got ${bodyOnly.status}, ${scryptRuns})`);
 
             // The rule holds: the header password is right but currentPassword is wrong.
             scryptRuns = 0;
-            const wrongCurrent = await call('/api/local/change-password', { 'X-Admin-Password': PW }, { currentPassword: 'NotTheOne1!', newPassword: NEW });
+            const wrongCurrent = await call('/api/local/change-password', pwAndCode(PW), { currentPassword: 'NotTheOne1!', newPassword: NEW });
             assert(wrongCurrent.status === 401 && scryptRuns === 2, `right sign-in, wrong currentPassword → 401 (both checked: ${scryptRuns} scrypt runs)`);
-            const missing = await call('/api/local/change-password', { 'X-Admin-Password': PW }, { newPassword: NEW });
+            const missing = await call('/api/local/change-password', pwAndCode(PW), { newPassword: NEW });
             assert(missing.status === 401, `right sign-in, no currentPassword → 401 (got ${missing.status})`);
             // Surrounding space: sign-in trims it, currentPassword is checked as sent.
-            const spaced = await call('/api/local/change-password', { 'X-Admin-Password': PW }, { currentPassword: ` ${PW}`, newPassword: NEW });
+            const spaced = await call('/api/local/change-password', pwAndCode(PW), { currentPassword: ` ${PW}`, newPassword: NEW });
             assert(spaced.status === 401, `currentPassword with a leading space is checked as sent → 401 (got ${spaced.status})`);
             // A key session is not proof of the password.
             const keyNo = await call('/api/local/change-password', asOwner, { newPassword: NEW });

@@ -126,7 +126,6 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
 
     try {
         // ── 1. A main server that never took over ──
@@ -160,9 +159,11 @@ async function main(): Promise<void> {
         assert(pulled.resync.ok && pulled.envelope === 'stored', 'the standby copied the database and holds the keys');
         await old.kill('SIGKILL');
 
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         assert(opened.status === 200 && opened.body.preview?.peerId === mainPeerId, `the code opens the keys (${opened.status})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status})`);
         assert((await standby.exited) === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });

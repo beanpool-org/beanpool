@@ -266,7 +266,8 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
         ctx.body = { error: 'Enter the admin password' };
         return;
     }
-    if (!(await checkAdminPasswordAuth(ctx as any))) return;
+    // opensSession: this session is held to the 2FA setup card while the node's 2FA is off (admin-auth.ts step 7c).
+    if (!(await checkAdminPasswordAuth(ctx as any, { opensSession: true }))) return;
     // checkAdminAuth hands a header client a 2FA session for its next requests (X-Admin-2FA-Session); this sign-in's
     // next requests ride the cookie, so it is not handed out.
     const tfa = (ctx.state as any)?.tfaSessionToken;

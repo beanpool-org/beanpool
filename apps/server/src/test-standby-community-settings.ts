@@ -316,8 +316,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -328,7 +331,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -456,7 +459,10 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        // Step 7c: the password alone opens no admin route with 2FA off: M's Settings calls go under an owner's key session
+        // M makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: mOwner, body });
         for (const who of [ann, bo]) {
             const inv = built(`Gwen makes an invite for ${who.name}`, await api(m, 'POST', '/api/invite/generate', { as: gwen, body: { publicKey: gwen.pk } }));
             built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
@@ -649,7 +655,9 @@ async function main(): Promise<void> {
         let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
         nodes.push(standby3);
         await standby3.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
-        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, { 'X-Admin-Password': PW_STANDBY3 });
+        // Step 7c: S3's admin calls go under an owner's key session S3 makes (in memory, so it holds until S3 restarts).
+        const s3Owner: Record<string, string> = await standby3.send('owner-session');
+        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, s3Owner);
         require_(s3Off.status === 200 && s3Off.body?.config?.enabled === false, `S3 turns its own snapshots off (${s3Off.status} ${j(s3Off.body)})`);
         const s3Pull = await standby3.send('pull');
         require_(s3Pull.ok === true && s3Pull.envelope === 'stored', `S3's copy lands, with the locked keys (${s3Pull.ok ? `imported; keys ${s3Pull.envelope}` : s3Pull.error})`);
@@ -665,13 +673,15 @@ async function main(): Promise<void> {
         await main.kill('SIGKILL');
         const registry = await directoryRegistry();
         closers.push(registry.close);
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
         assert(!missing.some((line) => /settings/i.test(line) && !/notification settings/.test(line)),
             `the preview no longer says the community's settings will be missing (${j(missing)})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup', { DIRECTORY_REGISTRY_URL: registry.url }));
@@ -734,10 +744,12 @@ async function main(): Promise<void> {
 
         // ── 9. A take-over finished at the next start ──
         console.log('\n— 9. a take-over cut off before its community-settings step, finished at the next start —');
-        const opened3 = await post(standby3.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY3 });
+        // Step 7c: under an owner's key session S3 makes now, after its copy brought the community's members.
+        const s3Takeover: Record<string, string> = await standby3.send('owner-session');
+        const opened3 = await post(standby3.base, '/api/local/admin/takeover/open', { code: setup.code }, s3Takeover);
         require_(opened3.status === 200 && opened3.body.success, `the code opens the keys on S3 (${opened3.status} ${j(opened3.body).slice(0, 160)})`);
         // The process dies inside this request, the moment `open-door` is recorded: there may be no answer.
-        await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY3 });
+        await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, s3Takeover);
         await standby3.exited;
         standby3 = await spawnNode(SCRIPT, dir('standby3'), { ...s3Env, ...asMain });
         nodes.push(standby3);

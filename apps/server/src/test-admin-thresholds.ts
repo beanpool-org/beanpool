@@ -16,6 +16,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword, getThresholds, DEFAULT_THRESHOLDS } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -35,13 +36,23 @@ async function main() {
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    // Step 7c: with the node's 2FA off the password alone opens no admin route (header or body); from then on 2FA is on
+    // and each password goes with a code.
+    const aloneHeader = await fetch(`${BASE}/api/admin/thresholds/get`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': PW } });
+    const aloneHeaderBody = await aloneHeader.json() as any;
+    assert(aloneHeader.status === 403 && aloneHeaderBody.code === 'password_needs_2fa' && aloneHeaderBody.thresholds === undefined,
+        `2FA off: thresholds/get with the password header alone → 403 password_needs_2fa (got ${aloneHeader.status})`);
+    const aloneBody = await fetch(`${BASE}/api/admin/thresholds`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: PW, circulationRate: 0.07 }) });
+    assert(aloneBody.status === 403 && getThresholds().circulationRate !== 0.07,
+        `2FA off: thresholds update with the body password alone → 403, nothing changed (got ${aloneBody.status})`);
+    const tfa = turnOn2faForTests(PW);
 
     // 1. Test POST /api/admin/thresholds/get with valid admin header auth
     const getResOk = await fetch(`${BASE}/api/admin/thresholds/get`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-admin-password': PW,
+            ...tfa.headers(),
         },
     });
     assert(getResOk.status === 200, `POST /api/admin/thresholds/get with valid auth returns 200 (got ${getResOk.status})`);
@@ -68,7 +79,7 @@ async function main() {
     const postResOk = await fetch(`${BASE}/api/admin/thresholds`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, circulationRate: 0.08, unknownKey: 999 }),
+        body: JSON.stringify({ password: PW, totpCode: tfa.code(), circulationRate: 0.08, unknownKey: 999 }),
     });
     assert(postResOk.status === 200, `POST /api/admin/thresholds with valid password returns 200 (got ${postResOk.status})`);
     const postBodyOk = await postResOk.json() as any;

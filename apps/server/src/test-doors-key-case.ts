@@ -57,6 +57,7 @@ import { authorizeKeySigner } from './admin-key-auth.js';
 import { cacheRemoteListings } from './federation-listings.js';
 import { handlePurchaseRequest } from './federation-settlement-exchange.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
@@ -72,7 +73,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 let BASE = '';
-const ADMIN_PW = 'DoorsKeyCase123!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -143,7 +143,10 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
-const admin = (method: string, path: string, body?: unknown) => call(method, null, path, body, undefined, { 'X-Admin-Password': ADMIN_PW });
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The operator's calls go under an
+// owner's key session, opened in main() before anything is looked at.
+let operator: Record<string, string> = {};
+const admin = (method: string, path: string, body?: unknown) => call(method, null, path, body, undefined, operator);
 
 /** A /ws socket signed by `id` as `as`, and everything it is sent; rejects when the upgrade is refused. */
 type Sock = { ws: WebSocket; events: any[] };
@@ -212,6 +215,7 @@ async function main(): Promise<void> {
     seedGenesisMember(founder.pk, founder.name);
     const alice = makeMember('Alice');
     const bob = makeMember('Bob');
+    operator = ownerSessionHeaders();
     const offer = (m: Id, t: string) => createPost('offer', 'produce', t, `${t}, fresh`, 5, 'fixed', m.pk)!;
     offer(alice, 'Alice seedlings'); offer(bob, 'Bob seedlings');
     // A completed trade each, so both may send Beans (the send gate).

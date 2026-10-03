@@ -608,7 +608,9 @@ async function diagnosticsAndHealthTests(): Promise<void> {
     assert(!summary.lastMessage?.includes(SECRET_HEX), 'the stored message does not carry the key that was in the error text');
     assert(summary.lastMessage?.includes('[REDACTED_HEX_KEY_64]') === true, 'it was redacted, not dropped, so the shape of the failure is still readable');
 
-    const res = await fetch(`${BASE}/api/local/admin/diagnostics`, { headers: { 'x-admin-password': PW } });
+    // Step 7c: the password alone opens no admin route with 2FA off; the owner reads it with an automation token.
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+    const res = await fetch(`${BASE}/api/local/admin/diagnostics`, { headers: ownerTokenHeaders('admin') });
     const body = await res.json() as any;
     assert(res.status === 200, `admin diagnostics answers 200 (got ${res.status})`);
     assert(body?.unhandledRejections?.count === summary.count, `diagnostics reports the count (got ${body?.unhandledRejections?.count})`);

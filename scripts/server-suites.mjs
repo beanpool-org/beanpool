@@ -148,6 +148,7 @@ export const SUITES = [
     'test-app-admin-handoff',
     'test-web-manager-hardening',
     'test-password-totp-gate',
+    'test-password-needs-2fa',
     'test-automation-tokens',
     'test-settings-qr-signin',
     'test-challenge-token-leak',

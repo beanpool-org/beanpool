@@ -267,7 +267,9 @@ async function main(): Promise<void> {
         nodes.push(N);
         const setup = await N.send('setup', { ownerSeedHex, replicationToken });
         const nBase: string = setup.https;
-        const admin = { 'X-Admin-Password': PW_N };
+        // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls go under an owner's key session the
+        // node makes (takeover-test-harness.ts owner-session).
+        const admin: Record<string, string> = await N.send('owner-session');
         const statusOpen = () => call(nBase, 'GET', '/api/local/admin/public-address/status', admin);
         const bound = async (node: NodeProc, hosts: string[]) => {
             await settled();
@@ -402,7 +404,7 @@ async function main(): Promise<void> {
             const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, ADMIN_PASSWORD: PW_U, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
             nodes.push(U);
             const uSetup = await U.send('setup', { ownerSeedHex });
-            const uAdmin = { 'X-Admin-Password': PW_U };
+            const uAdmin: Record<string, string> = await U.send('owner-session');
             reg.status = live('uname');
             const first = await call(uSetup.https, 'GET', '/api/local/admin/public-address/status', uAdmin);
             assert(first.status === 200 && first.body?.status === 'live', `U stores uname (${show(first)})`);
@@ -425,9 +427,10 @@ async function main(): Promise<void> {
             const pull2 = await standby.send('pull');
             assert(pull2.envelope === 'stored' && pull2.held.at(-1) === flushed.envelopeId, `the standby holds N's newest keys (${pull2.envelope}, ${flushed.envelopeId})`);
             await N.kill('SIGKILL');
-            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+            const standbyOwner: Record<string, string> = await standby.send('owner-session');
+            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
             assert(opened.status === 200 && opened.body?.preview?.sessionId, `the recovery code opens the keys (${opened.status})`);
-            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
             assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
             assert((await standby.exited) === 0, 'the standby restarts itself');
             standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });

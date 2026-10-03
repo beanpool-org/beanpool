@@ -48,11 +48,14 @@ import { getFunnel } from './engine/funnel.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const ADMIN_PW = 'Invites-Off-Admin-Pw-71!';
-const PASSWORD = { 'X-Admin-Password': ADMIN_PW };
+// Step 7c: with 2FA off the password alone opens no admin route, so main() turns 2FA on and every password call carries
+// a fresh code beside it (turnOn2faForTests; no member is seeded, so the "fresh node" checks below stay exact).
+let PASSWORD: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -176,6 +179,14 @@ async function main(): Promise<void> {
     primeJwks();
     _clearNoncesForTests();
 
+    // Step 7c: with 2FA off, the password alone is refused on an admin route (and writes nothing); with 2FA on and a code
+    // it is the owner's password again, as the rest of this suite uses it.
+    const alone = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: 'f'.repeat(64), role: 'owner' }, { 'X-Admin-Password': ADMIN_PW });
+    assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !db.prepare('SELECT 1 FROM node_roles').get(),
+        `with 2FA off the admin password alone is refused: 403 password_needs_2fa, no role written (${show(alone)})`);
+    const twoFa = turnOn2faForTests(ADMIN_PW);
+    PASSWORD = twoFa.headers;
+
     // ── 1. a fresh global node, and how its owner is made ─────────────────────────────────────────
     console.log('── 1. a fresh global node: no invites, and the owner comes in through the door ──');
     const fresh = await info();
@@ -187,7 +198,7 @@ async function main(): Promise<void> {
     const genesisMembers = () => (db.prepare("SELECT COUNT(*) AS n FROM members WHERE invited_by = 'genesis' AND public_key != 'SYSTEM'").get() as { n: number }).n;
     assert(genesisMembers() === 0 && (db.prepare("SELECT COUNT(*) AS n FROM members WHERE COALESCE(is_treasury, 0) = 0 AND public_key != 'SYSTEM'").get() as { n: number }).n === 0,
         'the node is fresh: no member yet, and no genesis member');
-    const seedFresh = await call(null, 'POST', '/api/admin/seed-invite', { type: 'elder' }, PASSWORD);
+    const seedFresh = await call(null, 'POST', '/api/admin/seed-invite', { type: 'elder' }, PASSWORD());
     assert(invitesOff(seedFresh), `the seed invite on the empty node, with the admin password → 404 feature_off invites (${show(seedFresh)})`);
     assert(rowsNow() === rowsBefore && genesisMembers() === 0 && codeCount() === 0 && !db.prepare('SELECT 1 FROM node_roles').get(),
         `...and writes nothing: no "Admin" genesis member, no code, no role (codes ${codeCount()}, genesis members ${genesisMembers()})`);
@@ -196,7 +207,7 @@ async function main(): Promise<void> {
     const martyJoins = await joinThroughDoor(marty, 'marty-google-sub-0001');
     assert(martyJoins.status === 200 && memberRow(marty.pk)?.invited_by === 'open:google' && memberRow(marty.pk)?.invite_code === null,
         `Marty joins through the open door with a sign-in, no invite (${show(martyJoins)})`);
-    const grant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: marty.pk, role: 'owner' }, PASSWORD);
+    const grant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: marty.pk, role: 'owner' }, PASSWORD());
     assert(grant.status === 200 && roleOf(marty.pk) === 'owner', `the admin password makes him owner (${show(grant)}; role ${roleOf(marty.pk)})`);
     const martySession = await keySession(marty);
     const roles = martySession.session
@@ -205,7 +216,7 @@ async function main(): Promise<void> {
         `his own key opens Settings as owner, as the app's Manage button does (${martySession.why}; ${roles ? show(roles) : 'no session'})`);
     const seedByOwner = martySession.session
         ? await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, { 'x-admin-session': martySession.session }) : null;
-    const seedByPassword = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD);
+    const seedByPassword = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
     const ownGenerate = await generate(marty);
     assert(!!seedByOwner && invitesOff(seedByOwner) && invitesOff(seedByPassword) && invitesOff(ownGenerate) && codeCount() === 0,
         `as owner he makes none: the seed invite under his key session and under the password, and a member's generate, each 404 (${seedByOwner ? show(seedByOwner) : '-'} | ${show(seedByPassword)} | ${show(ownGenerate)})`);
@@ -216,7 +227,7 @@ async function main(): Promise<void> {
     const ada = newId('Ada');
     assert((await joinThroughDoor(nia, 'nia-google-sub-0002')).status === 200 && (await joinThroughDoor(ada, 'ada-google-sub-0003')).status === 200,
         'Nia and Ada join through the door');
-    const adminGrant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, PASSWORD);
+    const adminGrant = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: ada.pk, role: 'admin' }, PASSWORD());
     assert(adminGrant.status === 200 && roleOf(ada.pk) === 'admin', `Ada is made an admin (${show(adminGrant)})`);
     const niaMakes = await generate(nia);
     const adaMakes = await generate(ada);
@@ -314,7 +325,7 @@ async function main(): Promise<void> {
     const samJoins = await redeemTicket(sam, samTicket);
     assert(samCheck.status === 200 && samCheck.body?.valid === true && samJoins.status === 200 && memberRow(sam.pk)?.status === 'active',
         `the pre-flight says an offline ticket is good, and it joins someone (${show(samCheck)} | ${show(samJoins)})`);
-    const localSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'trusted' }, PASSWORD);
+    const localSeed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'trusted' }, PASSWORD());
     assert(localSeed.status === 200 && typeof localSeed.body?.code === 'string', `the seed invite works with the password (${show(localSeed)})`);
 
     // A member of the global node asks to join this community, a member here answers, and the invite minted here lets

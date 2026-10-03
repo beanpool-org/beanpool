@@ -22,6 +22,7 @@ import { addChannel } from './engine/creator-channels.js';
 import { initStateEngine } from './state-engine.js';
 import { initAdminPassword } from './config/local-config.js';
 import { checkAdminAuth } from './admin-auth.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { createAdminRoutes } from './routes/admin.js';
 import {
     ensureBeanPoolIdentity,
@@ -125,7 +126,9 @@ async function main(): Promise<void> {
         assert(noAuth.status === 401, 'POST /api/local/admin/pulse/channels rejects missing auth with 401');
     }
 
-    const authHeaders = { 'x-admin-password': ADMIN_PW };
+    // Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token.
+    // (Lower-cased: this suite's ctx looks its headers up that way.)
+    const authHeaders = Object.fromEntries(Object.entries(ownerTokenHeaders('admin')).map(([k, v]) => [k.toLowerCase(), v]));
 
     // ── 2. Adding a channel-shaped YouTube URL yields autolist = 1 & BeanPool ownership
     console.log('\n--- 2. Add Channel-Shaped YouTube URL ---');

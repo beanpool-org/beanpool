@@ -412,7 +412,10 @@ async function main(): Promise<void> {
             assert(keyIn(bytes, key).length === 0, `…and none of the key, in the bytes as sent (${keyIn(bytes, key).join(', ') || 'none'})`);
         }
 
-        const backup = await getBytes(`${main.base}/api/local/admin/backup`, { 'X-Admin-Password': PW_MAIN }, 'POST');
+        // Step 7c: the password alone opens no admin route with 2FA off: the backup and the restore go under an owner's key
+        // session each node makes (takeover-test-harness.ts owner-session).
+        const mainOwner: Record<string, string> = await main.send('owner-session');
+        const backup = await getBytes(`${main.base}/api/local/admin/backup`, mainOwner, 'POST');
         require_(backup.status === 200 && backup.bytes.length > 0, `a backup downloads (${backup.status}, ${backup.bytes.length} bytes)`);
         const isGz = backup.bytes[0] === 0x1f && backup.bytes[1] === 0x8b;
         const tar = isGz ? zlib.gunzipSync(backup.bytes) : backup.bytes;
@@ -449,8 +452,9 @@ async function main(): Promise<void> {
         nodes.push(restored);
         const ownKey = Buffer.from(await restored.send('make-own-key') as string, 'base64');
         require_(ownKey.length === 32 && !ownKey.equals(key), 'the new server made a key of its own at the door\'s first use');
+        const restoredOwner: Record<string, string> = await restored.send('owner-session');
         const answer = await fetch(`${restored.base}/api/local/admin/restore`, {
-            method: 'POST', headers: { 'X-Admin-Password': PW_RESTORED, 'Content-Type': 'application/octet-stream' }, body: fs.readFileSync(plainBackup),
+            method: 'POST', headers: { ...restoredOwner, 'Content-Type': 'application/octet-stream' }, body: fs.readFileSync(plainBackup),
         });
         const restoreBody = await answer.json() as any;
         require_(answer.status === 200 && restoreBody.success === true && restoreBody.sealed === false, `the plain backup restores (${answer.status} ${restoreBody.error ?? ''})`);

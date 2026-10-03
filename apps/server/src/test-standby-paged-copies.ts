@@ -367,7 +367,9 @@ async function main(): Promise<void> {
             const st10 = await standby.send('staging');
             const pid = st10.building?.pid ?? null;
             require_(st10.previous, `the database S's last swap replaced is there (${JSON.stringify(st10)})`);
-            const pw = { 'X-Admin-Password': PW_STANDBY };
+            // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session
+            // the standby makes (takeover-test-harness.ts owner-session).
+            const pw: Record<string, string> = await standby.send('owner-session');
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: env10.code }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             const p10 = await pulling;

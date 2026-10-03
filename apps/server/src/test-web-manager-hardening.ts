@@ -40,7 +40,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engin
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword, setBreakGlassMode, updateGatewayConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
-import { resetAdminAuthTarpit, validateCsrfToken } from './admin-auth.js';
+import { resetAdminAuthTarpit, validateCsrfToken, issueCsrfToken, PASSWORD_CSRF_BINDING, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import { mintHandshakeToken, createPasswordSession, validateAdminSession, revokeAdminSession, MAX_PASSWORD_SESSIONS } from './admin-key-auth.js';
 import { APP_DOCUMENT_CSP, DOCUMENT_CSP } from './app-document-csp.js';
 
@@ -337,8 +337,12 @@ async function main(): Promise<void> {
         const o = await keySignIn(owner);
         const m = await keySignIn(mod);
         const pw = await signIn(PW);
-        const pwCaller = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: { 'X-Admin-Password': PW } });
-        assert(o.status === 200 && m.status === 200 && pw.status === 200 && pwCaller.status === 200, `owner, moderator and password sessions open (${o.status}, ${m.status}, ${pw.status}, ${pwCaller.status})`);
+        // A caller sending the password per request: this node's 2FA is off, so it is refused (step 7c); the token such a
+        // caller is handed (with 2FA on) is bound to PASSWORD_CSRF_BINDING, made here as csrf-token makes it.
+        const pwRefused = await call('POST', '/api/local/admin/csrf-token', { body: {}, headers: { 'X-Admin-Password': PW } });
+        assert(pwRefused.status === 403 && pwRefused.body?.code === PASSWORD_NEEDS_2FA_CODE, `with 2FA off the password per request gets no CSRF token (${show(pwRefused)})`);
+        const pwCaller = { body: { csrfToken: issueCsrfToken(PASSWORD_CSRF_BINDING) } };
+        assert(o.status === 200 && m.status === 200 && pw.status === 200, `owner, moderator and password sessions open (${o.status}, ${m.status}, ${pw.status})`);
         const ownWorks = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(o.sessionId, o.body?.csrfToken) });
         assert(ownWorks.status === 200, `the owner's own token on the owner's cookie → 200 (${ownWorks.status})`);
         for (const [label, token] of [["the moderator's", m.body?.csrfToken], ["another password session's", pw.body?.csrfToken], ["a password caller's", pwCaller.body?.csrfToken]] as const) {

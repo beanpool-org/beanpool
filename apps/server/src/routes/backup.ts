@@ -1139,7 +1139,9 @@ async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-p
         if (copyPasswordRemembered(password)) return 'admin-pw';
         const { adminHash, salt } = cfg;
         (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) {
+        // legacyCopy: a copy route takes the password while token-only is off, 2FA or not (admin-auth.ts step 7c), as
+        // before: a legacy standby keeps copying until its owner makes a replication token.
+        if (await checkAdminAuth(ctx as any, { legacyCopy: true })) {
             // A key session wins over the header in checkAdminAuth, so an admin's session with any X-Admin-Password
             // got here too: only an owner's copies the whole ledger (the password is owner level).
             if (!requireAdminRole(ctx, ['owner'], COPY_OWNER_ONLY)) {

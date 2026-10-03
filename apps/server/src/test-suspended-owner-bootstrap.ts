@@ -55,6 +55,7 @@ import { nodeHasOwner } from './engine/node-roles.js';
 import { adminEmergencySuspend, adminLiftSuspension } from './decisions-engine.js';
 import { checkAdminAuth } from './admin-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { createAdminRoutes } from './routes/admin.js';
 import type { RouteDeps } from './routes/types.js';
 
@@ -251,9 +252,21 @@ async function main() {
         // — 4. The admin PASSWORD is owner-level: the node is never stranded —
         console.log('\nTesting the operator password on the same node...');
 
-        const passwordGrant = await fetch(`${base}/api/local/admin/node-roles`, {
+        // Step 7c: with 2FA off the password alone opens no admin route, this one included...
+        const passwordAlone = await fetch(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'x-admin-password': testPassword },
+            body: JSON.stringify({ pubkey: priya.pub, role: 'owner' }),
+        });
+        const passwordAloneBody: any = await passwordAlone.json().catch(() => ({}));
+        assert(passwordAlone.status === 403 && passwordAloneBody.code === 'password_needs_2fa',
+            `with 2FA off, the password alone is refused (password_needs_2fa) (got ${passwordAlone.status} ${passwordAloneBody.code})`);
+        assert(nodeRoleOf(priya.pub) === null, 'and no role is written');
+        // ...so the operator's way out is the password with a code, as an owner with an authenticator signs in.
+        const twoFactor = turnOn2faForTests(testPassword);
+        const passwordGrant = await fetch(`${base}/api/local/admin/node-roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...twoFactor.headers() },
             body: JSON.stringify({ pubkey: priya.pub, role: 'owner' }),
         });
         assert(passwordGrant.status === 200, `the password-authenticated session may still appoint an owner (got ${passwordGrant.status})`);

@@ -429,8 +429,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -441,7 +444,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -506,7 +509,9 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        // Step 7c: M's admin calls go under an owner's key session M makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: mOwner, body });
         const S_ = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         const invite = async () => {
             const inv = built('Gwen makes an invite', await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
@@ -632,7 +637,9 @@ async function main(): Promise<void> {
         // ── 4. On S, nothing of these is written ──
         console.log('\n— 4. the standby writes none of it itself —');
         const sv = `https://localhost:${await standby.send('serve')}`;
-        const onS = (who: Id | null, route: string, body: unknown = {}) => api(sv, 'POST', route, who ? { as: who, body } : { admin: PW_STANDBY, body });
+        // Step 7c: S's admin calls go under an owner's key session S makes, so each refusal below is S's, not a refused credential.
+        const sOwner: Record<string, string> = await standby.send('owner-session');
+        const onS = (who: Id | null, route: string, body: unknown = {}) => api(sv, 'POST', route, who ? { as: who, body } : { admin: sOwner, body });
         const routes: [string, Promise<Answer>][] = [
             ['an invite made', onS(gwen, '/api/invite/generate', { publicKey: gwen.pk })],
             ['an invite redeemed', (() => { const x = newId('X'); return api(sv, 'POST', '/api/invite/redeem', { as: x, body: { code: unused, publicKey: x.pk, callsign: 'Stranger' } }); })()],
@@ -708,12 +715,13 @@ async function main(): Promise<void> {
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
         assert(!missing.some((line) => /Decisions|invites|keeper changes/.test(line)), `the preview no longer says Decisions, invites or keeper changes will be missing (${JSON.stringify(missing).slice(0, 200)})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
@@ -726,7 +734,9 @@ async function main(): Promise<void> {
         assert(standingDiff.length === 0, `the promoted server's members, keepers and pledges are M's, as it copied them (differing: ${standingDiff.join(', ') || 'none'})`);
         const p = `https://localhost:${await standby.send('serve')}`;
         const P_ = (who: Id, route: string, body: unknown = {}) => api(p, 'POST', route, { as: who, body });
-        const PA = (route: string, body: unknown) => api(p, 'POST', route, { admin: PW_MAIN, body });
+        // The promoted server's admin calls: an owner's key session it makes (the community's owner, from M's keys).
+        const pOwner: Record<string, string> = await standby.send('owner-session');
+        const PA = (route: string, body: unknown) => api(p, 'POST', route, { admin: pOwner, body });
 
         // ── 8. The promoted server carries it all on ──
         console.log('\n— 8. the promoted server carries it all on —');

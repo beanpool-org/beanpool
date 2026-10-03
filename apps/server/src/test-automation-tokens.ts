@@ -195,9 +195,11 @@ async function main(): Promise<void> {
             const byPwOff = await make(asCookie(pwOff.sessionId, pwOff.body?.csrfToken), { name: 'pw made', scope: 'admin' });
             assert(byPwOff.status === 403 && ['totp_setup_required', TOKEN_NEEDS_KEY_CODE].includes(byPwOff.body?.code), `2FA off: the password session cannot make one (${show(byPwOff)})`);
             const byHeaderOff = await make({ 'X-Admin-Password': PW }, { name: 'pw made', scope: 'admin' });
-            assert(needsKey(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
+            // Step 7c: with 2FA off the password per request is refused before the route runs (password_needs_2fa).
+            const refusedOff = (r: Reply) => r.status === 403 && ['password_needs_2fa', TOKEN_NEEDS_KEY_CODE].includes(r.body?.code);
+            assert(refusedOff(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
             const byBodyOff = await make({}, { name: 'pw made', scope: 'admin', password: PW });
-            assert(needsKey(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
+            assert(refusedOff(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
         } finally {
             updateLocalConfig({ totpEnabled: true });
         }

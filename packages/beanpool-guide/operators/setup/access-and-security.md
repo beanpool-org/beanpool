@@ -19,7 +19,14 @@ If the server made up the first password (ADMIN_PASSWORD was empty), changing it
 
 Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. Settings asks for it with the password. On a server where it is off, signing in with the password opens one card only, which says "Set up two-factor sign-in to open Settings: the admin password alone is not enough." Nothing else in Settings opens until the server accepts a code from your new authenticator; then Settings opens at once, without signing in again. Meanwhile the server keeps running and serving members, the card always opens for the password, and **Log Out** is on it. If two-factor sign-in is switched off later, the next thing the password does brings that card back. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
 
-**Until two-factor sign-in is on, the card protects Settings only.** Tools that send the password with every request instead of signing in (a standby that still copies with the password, scripts, a fleet manager given the password rather than a token) can still do everything with the password alone. Turning two-factor sign-in on closes that too: from then on they need a code as well. So set it up as soon as the card appears, and keep the password as private as before.
+**Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with "Turn on two-factor sign-in in Settings, or use an automation token made from your phone". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before.
+
+Two things still take the password alone while two-factor sign-in is off:
+
+- A standby that still copies with the password keeps copying, until you make copying take the replication token only (Live Backup Server). It cannot swap its password for a replication token on its own any more: its log says to make one on this server from the owner's phone (Replication Access) and paste it into the standby.
+- A break-glass code still adds an admin key (below): the code is itself the thing you hold.
+
+**Before you update a server whose two-factor sign-in is off:** turn two-factor sign-in on, or move every tool that sends the password onto an automation token, and give each standby that copies with the password a replication token. Otherwise those tools stop working once the server is updated.
 
 - Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.
 - Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.
@@ -45,7 +52,7 @@ A break-glass code belongs to one owner. It starts with **bg-** and does one thi
 - The server's log records that a code was made and for whom, never the code itself.
 - Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.
 - The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
-- If two-factor sign-in is on, it still asks for the code.
+- If two-factor sign-in is on, it still asks for the code. If it is off, the code alone is enough: the admin password alone does not add a key.
 - When an owner signs out all of their own sessions at once (from their key, or from the app), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out, or signing out with the password, leaves codes alone.
 - Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.
 - In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one.

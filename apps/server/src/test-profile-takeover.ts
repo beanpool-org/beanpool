@@ -126,9 +126,11 @@ async function refusedInPlace(standbyDir: string, dir: string, code: string, mai
     const node = await spawnNode(SCRIPT, dir, { ...unsafe, BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'roles' });
     try {
         assert(node.ready.role === 'backup', 'the standby starts with ENFORCE_READ_AUTH=false (it only copies)');
-        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: under an owner's key session the node makes, not the password alone (refused with 2FA off).
+        const nodeOwner: Record<string, string> = await node.send('owner-session');
+        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, nodeOwner);
         assert(opened.status === 200, `the code opens (${opened.status})`);
-        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, nodeOwner);
         await node.exited;
     } finally {
         await node.kill();
@@ -166,7 +168,9 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
+    // Step 7c: the password alone opens no admin route with 2FA off: each take-over call goes under an owner's key session
+    // the standby makes (takeover-test-harness.ts owner-session; in memory, so asked again after each start).
+    const asOwner = async (n: NodeProc): Promise<Record<string, string>> => n.send('owner-session');
     const LOCAL = { NODE_PROFILE: '' };
     const GLOBAL = { NODE_PROFILE: 'global' };
 
@@ -210,7 +214,7 @@ async function main(): Promise<void> {
         // ── 3. The main server dies; a take-over from the wrong kind of server is refused ──
         console.log('\n— 3. take-over on a standby whose NODE_PROFILE is local —');
         await main.kill('SIGKILL');
-        const refused = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        const refused = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, await asOwner(standby));
         assert(refused.status === 409 && refused.body?.profileMismatch === true && /NODE_PROFILE=global/.test(refused.body?.error ?? ''),
             `refused 409, saying to set NODE_PROFILE=global (${refused.status} ${refused.body?.error})`);
         assert(refused.body?.communityProfile === 'global' && refused.body?.thisServerProfile === 'local', 'naming both profiles');
@@ -235,10 +239,11 @@ async function main(): Promise<void> {
         await standby.kill('SIGTERM');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
         nodes.push(standby);
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        const standbyOwner = await asOwner(standby);
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         assert(opened.status === 200 && opened.body?.preview?.profile?.community === 'global' && opened.body?.preview?.profile?.thisServer === 'global',
             `the code opens, and the preview names the profile (${opened.status} ${JSON.stringify(opened.body?.preview?.profile ?? opened.body)})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);

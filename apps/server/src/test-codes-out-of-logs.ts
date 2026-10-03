@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
 import { addLogClient } from './logger.js';
@@ -120,6 +121,9 @@ async function main() {
     const othersBefore = new Map(logRows().filter((r) => otherIds.includes(r.id)).map((r) => [r.id, JSON.stringify(r)]));
 
     const PORT = await startHttpsServer(0); // boots: the scrub of older log lines runs here
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (no member is seeded for a token:
+    // step 2 needs a fresh node). 2FA is on and each password goes with a code.
+    const tfa = turnOn2faForTests(PW);
     BASE = `https://localhost:${PORT}`;
 
     console.log('\n1. The boot step scrubs codes from lines already written');
@@ -147,14 +151,14 @@ async function main() {
     // ── 2. Seed invites: a fresh node's (genesis path), then a node with members ──
     console.log('\n2. Seed invites');
     const codes: string[] = [];
-    const fresh = await postJson('/api/admin/seed-invite', { password: PW, type: 'ambassador' });
+    const fresh = await postJson('/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'ambassador' });
     assert(fresh.status === 200 && /^INV-/.test(fresh.body.code ?? ''), 'the admin gets the fresh node\'s seed invite in the answer');
     codes.push(fresh.body.code);
     const aliceKp = newKeyPair();
     const alice = aliceKp.pubKeyHex;
     const redeem = await redeemAs(aliceKp, { code: fresh.body.code, publicKey: alice, callsign: 'AliceLogs' });
     assert(redeem.status === 200 && redeem.body.success === true, 'the seed invite redeems');
-    const elder = await postJson('/api/admin/seed-invite', { password: PW, type: 'elder' });
+    const elder = await postJson('/api/admin/seed-invite', { password: PW, totpCode: tfa.code(), type: 'elder' });
     assert(elder.status === 200 && /^INV-/.test(elder.body.code ?? ''), 'the admin gets a seed invite on a node with members');
     codes.push(elder.body.code);
     const elderLine = logRows().find((r) => (r.message ?? '').startsWith('Seed invite generated') && (r.message ?? '').includes(tagOf(elder.body.code)));
@@ -168,15 +172,14 @@ async function main() {
 
     // ── 4. A re-key code, issued and used ──
     console.log('\n4. A re-key code');
-    const pwHeader = { 'X-Admin-Password': PW };
-    const issued = await postJson(`/api/local/admin/members/${alice}/rekey/issue-code`, {}, pwHeader);
+    const issued = await postJson(`/api/local/admin/members/${alice}/rekey/issue-code`, {}, tfa.headers());
     assert(issued.status === 200 && /^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(issued.body.code ?? ''), `the admin gets the re-key code in the answer (${issued.status})`);
     const rk: string = issued.body.code ?? 'RK-none';
     codes.push(rk);
     const issueLine = logRows().find((r) => r.id > planted.seed && (r.message ?? '').includes('[Rekey]') && (r.message ?? '').includes('issued'));
     assert(!!issueLine && issueLine.message!.includes(alice.slice(0, 10)) && issueLine.message!.includes('AliceLogs'),
         `the re-key line says a code was made and for whom, by a short key prefix (${issueLine?.message})`);
-    const done = await postJson(`/api/local/admin/members/${alice}/rekey/complete`, { code: rk, newPubkey: newKey() }, pwHeader);
+    const done = await postJson(`/api/local/admin/members/${alice}/rekey/complete`, { code: rk, newPubkey: newKey() }, tfa.headers());
     assert(done.status === 200, `the re-key completes with the code (${done.status})`);
 
     // Give the log lines and the stream a moment.

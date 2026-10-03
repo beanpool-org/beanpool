@@ -111,6 +111,10 @@ async function fresh(): Promise<void> {
     const pw = 'Fresh-Offbox-Pw-318!';
     const { hash, salt } = hashPassword(pw);
     updateLocalConfig({ adminHash: hash, salt });
+    // Step 7c: with 2FA off the password alone opens no admin route. A fresh server's operator turns 2FA on and sends the
+    // password with a code (a fresh server has no member yet, so no owner key to sign in with).
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(pw);
     const ownCommunity = JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf8')).communityId;
     setRestoreRestartForTests(() => { /* the test reads the data dir instead of restarting */ });
     await initTls();
@@ -119,7 +123,7 @@ async function fresh(): Promise<void> {
     const call = async (method: string, route: string, body?: unknown, extra: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
         https.resetAdminRateLimit();
-        const headers: Record<string, string> = { 'X-Admin-Password': pw, ...extra };
+        const headers: Record<string, string> = { ...twoFa.headers(), ...extra };
         let payload: BodyInit | undefined;
         if (Buffer.isBuffer(body)) { headers['Content-Type'] = 'application/x-www-form-urlencoded'; payload = new Uint8Array(body); }
         else if (method !== 'GET') { headers['Content-Type'] = 'application/json'; payload = JSON.stringify(body ?? {}); }
@@ -566,11 +570,20 @@ async function main(): Promise<void> {
     await new Promise((r) => setTimeout(r, 200));
     assert(fs.readFileSync(settingsFile, 'utf8') === settingsBefore && (await storeA.log()).length === 0 && (await storeB.log()).length === 0,
         '8. …nothing changed, and no store was asked anything');
-    for (const [who, creds] of [["an owner's key session", asOwner], ['the node password', asPassword]] as const) {
-        const s = await call('POST', '/api/local/admin/offbox-backups/status', creds);
-        const l = await call('POST', '/api/local/admin/offbox-backups/list', creds, { destination: idB });
+    // Step 7c: with the node's 2FA off, the password alone reads nothing (it used to read both); with 2FA on, the
+    // password and a code read them as the owner's key session does. 2FA goes off again after.
+    const aloneS = await call('POST', '/api/local/admin/offbox-backups/status', asPassword);
+    const aloneL = await call('POST', '/api/local/admin/offbox-backups/list', asPassword, { destination: idB });
+    assert(aloneS.status === 403 && aloneS.json?.code === 'password_needs_2fa' && aloneL.status === 403 && aloneL.json?.code === 'password_needs_2fa' && !aloneL.json?.backups,
+        `8. with 2FA off the node password alone is refused (${aloneS.status} ${aloneS.json?.code}, ${aloneL.status} ${aloneL.json?.code})`);
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(PW);
+    for (const [who, creds] of [["an owner's key session", () => asOwner], ['the node password with a code', () => twoFa.headers()]] as const) {
+        const s = await call('POST', '/api/local/admin/offbox-backups/status', creds());
+        const l = await call('POST', '/api/local/admin/offbox-backups/list', creds(), { destination: idB });
         assert(s.status === 200 && l.status === 200 && l.json.backups.length > 0, `8. ${who} reads the status and the list (${s.status}, ${l.status})`);
     }
+    updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
     const run = await call('POST', '/api/local/admin/offbox-backups/run', asOwner);
     assert(run.status === 200 && run.json?.started === true, '8. an owner sends one now');
     for (let i = 0; i < 100 && (await status()).running; i++) await new Promise((r) => setTimeout(r, 100));

@@ -5,7 +5,7 @@
  * and harvest state load/save in isolated temporary data directory.
  * Then harvests a real (in-process, local HTTP) node (sealed keys slice 3, sealed-keys.md §6.3–6.4, seal review
  * round 1: never produce a backup that no shipped tool can open):
- * - no recovery code (no owner; then an owner) → the node sends its readable backup, the harvester keeps it as it
+ * - no recovery code (the fleet's token owner only; then a second owner) → the node sends its readable backup, the harvester keeps it as it
  *   always did (state.db + history/), the status says "not locked yet", and the seal-old pass deletes NOTHING;
  *   locking to owners only is refused outright, touching nothing;
  * - a recovery code but no pinned node key, or a pin that does not match → nothing deleted, and why;
@@ -58,6 +58,7 @@ import { createBackupRoutes } from './routes/backup.js';
 import { hashPassword, updateLocalConfig, setReplicationToken, getLocalConfig } from './config/local-config.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { issueAutomationToken } from './automation-tokens.js';
+import { seedOwnerForTests } from './admin-auth-test-harness.js';
 import type { RouteDeps } from './routes/types.js';
 
 let run = 0;
@@ -292,11 +293,14 @@ async function harvestLocalNode(): Promise<void> {
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     try {
-        // The fleet manager's usual entry: the node's token and its password, both sent. A backup is an owner's to
-        // download (routes/backup.ts, 2026-10-01): the password is what lets this harvest in, and the token alone no
-        // longer does. Until then this entry held the token only, and every harvest below went in on it — the leak
-        // Fable's replication review found (HIGH-1): a standby's token took the whole readable database.
-        const localNode: FleetNodeConfig = { id: 'tok-node', name: 'Token Node', url, replicationToken: TOKEN, adminPassword: PW };
+        // The fleet manager's entry since #1550: an owner's automation token with the backups scope, sent as a bearer and
+        // nothing beside it. A backup is an owner's to download (routes/backup.ts, 2026-10-01): the replication token alone
+        // does not take one (the leak Fable's replication review found, HIGH-1: a standby's token took the whole readable
+        // database), and since sign-in step 7c neither does the admin password alone on a node whose 2FA is off. Both stay
+        // configured here, and neither is sent with the token.
+        const fleetTok = issueAutomationToken({ name: 'fleet harvester', scope: 'backups', createdBy: seedOwnerForTests('fleetOwner') });
+        if (!fleetTok.ok) throw new Error('the fleet owner\'s backups token was not made');
+        const localNode: FleetNodeConfig = { id: 'tok-node', name: 'Token Node', url, automationToken: fleetTok.token, replicationToken: TOKEN, adminPassword: PW };
         const slug = nodeSlug(localNode);
         const nodeDir = path.join(dataDir, 'backups', slug);
         const sealedDir = path.join(nodeDir, 'sealed');
@@ -305,14 +309,14 @@ async function harvestLocalNode(): Promise<void> {
         // ── The token alone takes no backup, readable or locked ──
         {
             resetAdminAuthTarpit();
-            const tokenAlone = await harvestNode({ ...localNode, adminPassword: undefined }, true);
+            const tokenAlone = await harvestNode({ ...localNode, automationToken: undefined, adminPassword: undefined }, true);
             assert(tokenAlone.status === 'error' && /HTTP 401/.test(tokenAlone.error || '') && !fs.existsSync(path.join(nodeDir, 'state.db')),
                 `the replication token alone is refused a backup, and nothing is kept (got ${tokenAlone.status}: ${tokenAlone.error})`);
             // The steps below start from a node never harvested, as they did.
             fs.rmSync(path.join(dataDir, 'harvester-state.json'), { force: true });
         }
 
-        // ── No recovery code, no owner: readable, kept as before, flagged ──
+        // ── No recovery code, only the owner whose token the fleet holds (step 7c: a node with no owner cannot be harvested): readable, kept as before, flagged ──
         resetAdminAuthTarpit();
         const none = await harvestNode(localNode, true);
         assert(none.status === 'ok' && none.error === null, `no code: the harvest succeeds (got ${none.status}: ${none.error})`);
@@ -347,7 +351,7 @@ async function harvestLocalNode(): Promise<void> {
         assert(!!n2.sealOld?.error && /not locked yet/.test(n2.sealOld.error) && /Nothing was deleted/.test(n2.sealOld.error) && n2.sealOld.sealed.length === 0,
             `no code: sealOld.error says why ("${n2.sealOld?.error}")`);
 
-        // ── An owner, still no code (probably the live nodes): the same — readable, nothing deleted ──
+        // ── Another owner, still no code (probably the live nodes): the same — readable, nothing deleted ──
         const ownerSeed = crypto.randomBytes(32);
         const ownerPub = Buffer.from(ed25519.getPublicKey(ownerSeed)).toString('hex');
         seedGenesisMember(ownerPub, 'Olive');
@@ -428,7 +432,8 @@ async function harvestLocalNode(): Promise<void> {
         assert(a.dbSizeBytes === pulled!.size, 'dbSizeBytes is the sealed file\'s size');
         assert(a.identityStatus === 'secured' && a.identityNote === null, `token-only node: identity secured, inside the sealed backup (got ${a.identityStatus}: ${a.identityNote})`);
         assert(a.sealedBackup?.state === 'sealed' && a.sealedBackup.codeIds.includes(made.codeId), 'the new status names the recovery code the file opens with');
-        assert(/^Sealed backup held: sealed .* locked to 1 owner \+ recovery code #\d+\.$/.test(a.sealedBackup?.message || ''), `…in words: "${a.sealedBackup?.message}"`);
+        // 2 owners: Olive and the owner whose backups token the fleet holds (step 7c).
+        assert(/^Sealed backup held: sealed .* locked to 2 owners \+ recovery code #\d+\.$/.test(a.sealedBackup?.message || ''), `…in words: "${a.sealedBackup?.message}"`);
         const opened = await openEnvelope(new Uint8Array(pulledBytes), { type: 'code', code: made.code }, { kind: 'backup' });
         const extract = fs.mkdtempSync(path.join(os.tmpdir(), 'harvest-open-'));
         fs.writeFileSync(path.join(extract, 'b.tar.gz'), opened.payload);
@@ -489,11 +494,18 @@ async function harvestLocalNode(): Promise<void> {
         const todays = listSealedBackups(localNode).filter(f => !f.identity && new Date(f.mtimeMs).toISOString().slice(0, 10) === today);
         assert(todays.length === 1, `a second run: one backup kept for today, the newest (${todays.map(f => f.file).join(', ')})`);
 
-        // The admin password alone works the same way.
-        const withPw: FleetNodeConfig = { ...localNode, replicationToken: undefined, adminPassword: PW };
+        // Step 7c: the admin password alone takes no backup from a node whose 2FA is off (403 password_needs_2fa), and the
+        // harvester sends no 2FA code: a password-only entry is refused with the reason, and nothing new is kept.
+        const withPw: FleetNodeConfig = { ...localNode, automationToken: undefined, replicationToken: undefined, adminPassword: PW };
+        const keptBeforePw = listSealedBackups(localNode).length;
         resetAdminAuthTarpit();
         const c = await harvestNode(withPw, true);
-        assert(c.status === 'ok' && c.identityStatus === 'secured', `with the admin password: a sealed backup, identity secured (got ${c.status}/${c.identityStatus})`);
+        assert(c.status === 'error' && /HTTP 403/.test(c.error || '') && /two-factor/i.test(c.error || '') && listSealedBackups(localNode).length === keptBeforePw,
+            `with the admin password alone (2FA off): refused, 403 password_needs_2fa, nothing new kept (got ${c.status}: ${c.error})`);
+        // The owner's token takes it: a sealed backup, identity secured.
+        resetAdminAuthTarpit();
+        const cTok = await harvestNode(localNode, true);
+        assert(cTok.status === 'ok' && cTok.identityStatus === 'secured', `with the backups token: a sealed backup, identity secured (got ${cTok.status}/${cTok.identityStatus})`);
 
         // ── A node whose pull fails: backed off, not pulled every minute ──
         assert(backoffDelayMs(1) === 5 * 60_000 && backoffDelayMs(2) === 10 * 60_000 && backoffDelayMs(20) === 6 * 3_600_000, 'back-off: 5 min, doubling, at most 6 hours');
@@ -640,7 +652,7 @@ async function harvestLocalNode(): Promise<void> {
             `a readable backup that holds no address is kept byte for byte, as before (${h2.status}: ${h2.error})`);
 
         // A wrong admin password: the harvest reports it; nothing crashes.
-        const wrongPw: FleetNodeConfig = { ...localNode, replicationToken: undefined, adminPassword: 'wrong-password-1!' };
+        const wrongPw: FleetNodeConfig = { ...localNode, automationToken: undefined, replicationToken: undefined, adminPassword: 'wrong-password-1!' };
         resetAdminAuthTarpit();
         const e = await harvestNode(wrongPw, true);
         assert(e.status === 'error' && /HTTP 401/.test(e.error || ''), `a refused admin password: error with the reason (got ${e.status}: ${e.error})`);

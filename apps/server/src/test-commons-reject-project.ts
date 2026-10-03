@@ -20,10 +20,10 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const PW = 'TestRejectAdmin123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -44,6 +44,8 @@ async function main() {
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route; an owner's automation token does.
+    const ADMIN = ownerTokenHeaders('admin');
 
     const proposer = 'proposer-' + Date.now();
     seedMember(proposer);
@@ -65,7 +67,7 @@ async function main() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-admin-password': PW,
+            ...ADMIN,
         },
         body: JSON.stringify({}),
     });
@@ -76,7 +78,7 @@ async function main() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-admin-password': PW,
+            ...ADMIN,
         },
         body: JSON.stringify({ projectId: 'non-existent-project-id' }),
     });
@@ -87,7 +89,7 @@ async function main() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-admin-password': PW,
+            ...ADMIN,
         },
         body: JSON.stringify({ projectId }),
     });

@@ -393,8 +393,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -405,7 +408,7 @@ async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: strin
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -544,7 +547,9 @@ async function main(): Promise<void> {
         nodes.push(main);
         await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        // Step 7c: M's admin calls go under an owner's key session M makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: mOwner, body });
         const S_ = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip]) {
@@ -824,7 +829,7 @@ async function main(): Promise<void> {
         // Gwen and Yan joined a month ago: their trades are with each other only, and a new pair's would be a flagged cluster
         // with no earned credit, so each of Yan's sends (steps 11 and 17) would pass only on a wash analysis cached before it.
         require_(await main0.send('backdate-members', { publicKeys: [gwen0.pk, yan.pk], days: 30 }) === 2, 'M0: Gwen and Yan joined a month ago');
-        built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: PW_MAIN, body: { grant: true } }));
+        built('M0: the admin makes Gwen an Elder', await api(z, 'POST', `/api/local/admin/users/${gwen0.pk}/elder`, { admin: await main0.send('owner-session'), body: { grant: true } }));
         const offer0 = async (who: Id, title: string, credits: number) => built(`M0: ${who.name} offers ${title}`, await Z_(who, '/api/marketplace/posts', {
             type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed', authorPublicKey: who.pk,
         })).post;
@@ -1160,7 +1165,10 @@ async function main(): Promise<void> {
         await unchanged('the trade');
 
         const payEngine = await format1.send('engine-move', { kind: 'commons-pay', publicKey: gwen0.pk, amount: 50 });
-        const pruneHttp = await api(f, 'POST', `/api/local/admin/users/${zed.pk}/prune`, { admin: PW_STANDBY, body: {} });
+        // Step 7c: S0's admin calls go under an owner's key session S0 makes, so each refusal is S0's 409 standby, not a
+        // refused credential.
+        const fOwner: Record<string, string> = await format1.send('owner-session');
+        const pruneHttp = await api(f, 'POST', `/api/local/admin/users/${zed.pk}/prune`, { admin: fOwner, body: {} });
         assert(engineRefusal(payEngine) && standbyRefusal(pruneHttp),
             `a payment from the Commons on S0 is refused, and so is an admin's prune, which pays a debt from it (${JSON.stringify(payEngine)}; ${brief(pruneHttp)})`);
         await unchanged('the Commons payment');
@@ -1191,7 +1199,7 @@ async function main(): Promise<void> {
         ];
         const notRefused: string[] = [];
         for (const [who, route] of moneyRoutes) {
-            const r = who === 'admin' ? await api(f, 'POST', route, { admin: PW_STANDBY, body: {} }) : await F_(who, route, {});
+            const r = who === 'admin' ? await api(f, 'POST', route, { admin: fOwner, body: {} }) : await F_(who, route, {});
             if (!standbyRefusal(r)) notRefused.push(`${route} ${brief(r)}`);
         }
         for (const route of [`/api/treasury/${gwen0.pk}/pledge`, `/api/enterprise/${gwen0.pk}/backing`]) {
@@ -1202,7 +1210,7 @@ async function main(): Promise<void> {
         const read17 = await api(f, 'GET', `/api/ledger/balance/${yan2.pk}`, { as: yan2 });
         assert(read17.status === 200 && typeof read17.body?.balance === 'number', `a read still answers on S0 (${brief(read17)})`);
         // The admin's Decisions list is a POST that only reads (#1268 review 4118052544): it answers on a standby too.
-        const decisions17 = await api(f, 'POST', '/api/local/admin/decisions', { admin: PW_STANDBY, body: {} });
+        const decisions17 = await api(f, 'POST', '/api/local/admin/decisions', { admin: fOwner, body: {} });
         assert(decisions17.status === 200 && Array.isArray(decisions17.body?.decisions), `the admin's Decisions list still answers on S0 (${brief(decisions17)})`);
         await unchanged('all of them');
 

@@ -39,10 +39,14 @@ import { approveKnock, declineKnock } from './engine/knocks.js';
 import { getFunnel } from './engine/funnel.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let BASE = '';
 const ADMIN_PW = 'Door-Setting-Admin-Pw-48!';
-const PASSWORD = { 'X-Admin-Password': ADMIN_PW };
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The owner's password goes with a
+// fresh code once main() has turned 2FA on.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+const PASSWORD = (): Record<string, string> => (tfa ? tfa.headers() : { 'X-Admin-Password': ADMIN_PW });
 
 let run = 0, passed = 0;
 function assert(cond: unknown, msg: string): void {
@@ -138,8 +142,13 @@ async function main(): Promise<void> {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
+    const alone = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
+    assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.success,
+        `2FA off: the owner's password alone → 403 password_needs_2fa, no invite (${show(alone)})`);
+    tfa = turnOn2faForTests(ADMIN_PW);
+
     // The community: Owen (owner), Ada (admin), Mo (moderator), Mel (a member).
-    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD);
+    const seed = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
     const owen = newId('Owen');
     require_(seed.status === 200 && (await redeem(owen, seed.body?.code)).status === 200, `Owen joins with the fresh node's seed invite (${show(seed)})`);
     const [ada, mo, mel] = ['Ada', 'Mo', 'Mel'].map(newId);
@@ -148,7 +157,7 @@ async function main(): Promise<void> {
         require_(made.status === 200 && (await redeem(who, made.body?.invite?.code)).status === 200, `${who.name} joins with Owen's invite`);
     }
     for (const [who, role] of [[owen, 'owner'], [ada, 'admin'], [mo, 'moderator']] as const) {
-        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD);
+        const granted = await call(null, 'POST', '/api/local/admin/node-roles', { pubkey: who.pk, role }, PASSWORD());
         require_(granted.status === 200, `${who.name} is made ${role} (${show(granted)})`);
     }
 
@@ -180,11 +189,11 @@ async function main(): Promise<void> {
     const byAdmin = await setDoorAs({ 'x-admin-session': adaSession! }, { door: 'admins', publishHealth: false });
     assert(byAdmin.status === 403 && /Only an owner/.test(byAdmin.body?.error ?? '') && doorRow() === null && publishHealthNow() === before,
         `an admin's key session → 403 (an owner's choice), and nothing in that request is written (${show(byAdmin)})`);
-    const open = await setDoorAs(PASSWORD, { door: 'open' });
+    const open = await setDoorAs(PASSWORD(), { door: 'open' });
     assert(open.status === 409 && open.body?.code === 'door_open_refused' && /strangers would hold credit/.test(open.body?.error ?? '') && doorRow() === null,
         `the owner asking for an open door on a community with Beans → 409, and why (${show(open)})`);
     for (const bad of ['everyone', 'ADMINS', 1, null, true]) {
-        const r = await setDoorAs(PASSWORD, { door: bad });
+        const r = await setDoorAs(PASSWORD(), { door: bad });
         assert(r.status === 400 && r.body?.code === 'bad_door' && doorRow() === null, `door ${JSON.stringify(bad)} → 400 (${show(r)})`);
     }
     const owenSession = await keySession(owen);
@@ -261,7 +270,7 @@ async function main(): Promise<void> {
     const tomJoins = await redeemTicket(tom, adaTicket);
     assert(adaTicketCheck.body?.valid === true && tomJoins.status === 200 && memberRow(tom.pk)?.invited_by === ada.pk,
         `a ticket the admin signed passes the pre-flight and joins someone (${show(adaTicketCheck)} | ${show(tomJoins)})`);
-    const seedNow = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD);
+    const seedNow = await call(null, 'POST', '/api/admin/seed-invite', { type: 'standard' }, PASSWORD());
     assert(seedNow.status === 200 && typeof seedNow.body?.code === 'string', `the seed invite works as on every door (${show(seedNow)})`);
 
     // Underneath the routes. Uma's knock is planted: this address has knocked 3 times today, the most it may.
@@ -280,7 +289,7 @@ async function main(): Promise<void> {
 
     // ── 4. back to members ───────────────────────────────────────────────────────────────────────
     console.log('\n── 4. back to any member ──');
-    const back = await setDoorAs(PASSWORD, { door: 'members' });
+    const back = await setDoorAs(PASSWORD(), { door: 'members' });
     assert(back.status === 200 && back.body?.door === 'members' && doorRow() === null && (await info())?.features?.door === 'members',
         `the owner (password) sets members again: the row goes, and info says members (${show(back)})`);
     const melAgain = await generate(mel);
@@ -295,8 +304,8 @@ async function main(): Promise<void> {
     process.env.NODE_PROFILE = 'global';
     const g = await info();
     const gConfig = await nodeConfig();
-    const gSet = await setDoorAs(PASSWORD, { door: 'admins' });
-    const gOpen = await setDoorAs(PASSWORD, { door: 'open' });
+    const gSet = await setDoorAs(PASSWORD(), { door: 'admins' });
+    const gOpen = await setDoorAs(PASSWORD(), { door: 'open' });
     assert(g?.features?.door === 'open' && g?.features?.invites === false && gConfig?.door === 'open',
         `info and config say open (${JSON.stringify({ door: g?.features?.door, invites: g?.features?.invites, config: gConfig?.door })})`);
     assert(gSet.status === 409 && gSet.body?.code === 'door_set_by_profile' && gOpen.status === 409 && doorRow() === null,

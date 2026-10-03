@@ -153,7 +153,6 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const stored = STORED[sc.value];
     const potRow = sc.account === 'COMMONS_POOL';
     const DUST = 'escrow_dust-of-a-settled-deal';
@@ -175,9 +174,12 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
 
         console.log('\n— 2. the main server dies; the standby takes over with the code —');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
+        // standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         assert(opened.status === 200 && opened.body?.preview?.sessionId, `the code opens the keys (${opened.status})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200 && /^[0-9a-f]{64}$/.test(confirmed.body?.progressToken),
             `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
         const progressToken = confirmed.body.progressToken;
@@ -246,13 +248,14 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
         // the account and how to mend it; the rebaseline refuses with 409 and names it too.
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
         const httpsBase = `https://localhost:${await standby.send('serve')}`;
-        const route = await post(httpsBase, '/api/local/admin/ledger-audit', {}, pw(PW_MAIN));
+        const newMainOwner: Record<string, string> = await standby.send('owner-session'); // step 7c, as above
+        const route = await post(httpsBase, '/api/local/admin/ledger-audit', {}, newMainOwner);
         const listed = (route.body?.brokenBalances ?? []) as { account: string; callsign: string | null; holds: string }[];
         assert(route.status === 200 && route.body?.ok === false && route.body?.badBalances === 1
             && listed.length === 1 && listed[0].account === key && listed[0].holds === stored.holds
             && listed[0].callsign === (sc.account === 'ben' ? 'Ben' : 'the Commons pot') && /^Stop the server/.test(String(route.body?.repair)),
             `the admin ledger audit answers 200 and names ${sc.account} (${route.status} ${JSON.stringify(route.body).slice(0, 400)})`);
-        const rebase = await post(httpsBase, '/api/local/admin/ledger-rebaseline', { reason: 'checking the refusal names it' }, pw(PW_MAIN));
+        const rebase = await post(httpsBase, '/api/local/admin/ledger-rebaseline', { reason: 'checking the refusal names it' }, newMainOwner);
         assert(rebase.status === 409 && String(rebase.body?.error).includes(`${key} (${listed[0].callsign}) holds ${stored.holds}`),
             `the rebaseline is refused with 409 and names it (${rebase.status} ${String(rebase.body?.error).slice(0, 300)})`);
 
@@ -279,7 +282,7 @@ async function takeOver(root: string, sc: Scenario, nodes: NodeProc[]): Promise<
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', CF_RECORD_NAME: undefined });
         nodes.push(standby);
         const second = standby.output();
-        const again = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
+        const again = await post(standby.base, '/api/local/admin/takeover/progress', {}, await standby.send('owner-session'));
         assert(!/Boot check failed/.test(second) && standby.ready.role === 'primary' && again.status === 200 && again.body?.state === 'complete',
             `the second start: no boot check failed, still the main server, still complete (${again.status} ${again.body?.state})`);
 

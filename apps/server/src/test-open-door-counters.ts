@@ -29,6 +29,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engine.js';
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { _resetJwksCacheForTests, _clearNoncesForTests } from './sso.js';
@@ -166,7 +167,10 @@ async function main(): Promise<void> {
     PORT = await startHttpsServer(0);
     primeJwks();
     _clearNoncesForTests();
-    const owner = () => { resetAdminAuthTarpit(); return send('GET', ROUTE, { 'X-Admin-Password': PW }); };
+    // Step 7c: the password alone opens no admin route with 2FA off; the owner reads with an automation token made from
+    // Olive's key (the genesis member, the owner), as an owner makes one from the phone.
+    const asOwner = ownerTokenHeaders('admin', olive.pk);
+    const owner = () => { resetAdminAuthTarpit(); return send('GET', ROUTE, asOwner); };
 
     // ── 1. a local community ─────────────────────────────────────────────────────────────────────
     console.log('── 1. a local community: the door is shut ──');
@@ -226,7 +230,7 @@ async function main(): Promise<void> {
         `an admin's session: 200, the same counts (got ${r.status})`);
     resetAdminAuthTarpit();
     const raw = JSON.stringify({ days: 7 });
-    r = await send('POST', ROUTE, { 'X-Admin-Password': PW, 'Content-Type': 'application/json' }, raw);
+    r = await send('POST', ROUTE, { ...asOwner, 'Content-Type': 'application/json' }, raw);
     assert(r.status === 200 && r.json?.days === 7 && r.json?.openDoor === true && same(counts(r.json.rows, 'open_join_attempt'), { google: 4, apple: 1 }),
         `POST { days: 7 }: 7 days, openDoor, the same counts (got ${r.status} ${r.json?.days})`);
 

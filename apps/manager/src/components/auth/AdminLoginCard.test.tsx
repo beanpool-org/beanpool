@@ -3,6 +3,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AdminLoginCard } from './AdminLoginCard';
 
+// These tests are about the password form on a node that has an owner. The claim check (useClaimState) answers that
+// without a request, so each test's fetch mock sees only the password sign-in. AdminLoginCard.claim.test.tsx covers
+// the check itself.
+vi.mock('../../lib/node-claim', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../lib/node-claim')>()),
+    fetchClaimState: vi.fn(async () => ({ kind: 'claimed' })),
+}));
+
 describe('AdminLoginCard component', () => {
     const mockOnPasswordSession = vi.fn();
     const nodeUrl = 'http://localhost:3000';

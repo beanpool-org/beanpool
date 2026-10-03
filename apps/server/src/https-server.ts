@@ -585,6 +585,27 @@ function broadcastWsAnalytics() {
 
 const PONG_PAYLOAD = JSON.stringify({ type: 'pong' });
 
+/** How much of a frame's start wsTrafficLine looks at to name its type. */
+const FRAME_TYPE_PROBE = 64;
+/**
+ * A frame that opens `{"type":"<name>"`: the name, if it is one short plain word (no spaces, at most 48 characters, so
+ * never a whole key). The node's own frames all open so; a frame a socket sends in can name only its own word here.
+ */
+const LEADING_FRAME_TYPE = /^\s*\{\s*"type"\s*:\s*"([A-Za-z0-9_.:-]{1,48})"/;
+
+/**
+ * The admin connection log's line for one frame (the `ws_traffic` event on /ws/logs): which socket, which way, how big,
+ * when, and what kind of frame (its leading top-level `type`, else 'json' or 'other'). Never what it says: it carried the
+ * frame's first 150 bytes, so any admin watching saw who paid whom, the amounts and notes, and who messaged whom (#1534;
+ * balances and trades are private by default). The type, size, direction and timing are enough to debug a socket.
+ * `head` is the frame's first FRAME_TYPE_PROBE characters.
+ */
+function wsTrafficLine(id: string, direction: 'in' | 'out', size: number, head: string): string {
+    const m = LEADING_FRAME_TYPE.exec(head);
+    const frameType = m ? m[1] : /^\s*[{[]/.test(head) ? 'json' : 'other';
+    return JSON.stringify({ type: 'ws_traffic', data: { id, direction, size, frameType, at: Date.now() } });
+}
+
 function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http').IncomingMessage) {
     const id = 'ws_' + crypto.randomBytes(8).toString('hex');
     const ip = getIpAddress(req);
@@ -623,24 +644,17 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
         if (conn) {
             conn.msgSentCount++;
             conn.lastActivityAt = Date.now();
-            
-            const dataStr = typeof data === 'string' ? data : data.toString();
-            let preview = dataStr.slice(0, 150);
-            if (dataStr.length > 150) preview += '...';
-            
-            const trafficPayload = JSON.stringify({
-                type: 'ws_traffic',
-                data: {
-                    id,
-                    direction: 'out',
-                    size: dataStr.length,
-                    preview
-                }
-            });
 
-            for (const client of logClients) {
-                if (client.readyState === 1 && client !== ws) { // OPEN
-                    try { client.send(trafficPayload); } catch {}
+            let watching = false;
+            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (watching) {
+                const dataStr = typeof data === 'string' ? data : data.toString();
+                // What kind of frame, how big, which way and when: never what it says (wsTrafficLine).
+                const trafficPayload = wsTrafficLine(id, 'out', dataStr.length, dataStr.slice(0, FRAME_TYPE_PROBE));
+                for (const client of logClients) {
+                    if (client.readyState === 1 && client !== ws) { // OPEN
+                        try { client.send(trafficPayload); } catch {}
+                    }
                 }
             }
         }
@@ -665,26 +679,14 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             conn.lastActivityAt = Date.now();
 
             // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
-            // admin log's preview only from its first bytes, and only while someone is watching the log.
+            // admin log's line reads only its first bytes, for its type, and only while someone is watching the log.
             const bytes: Buffer = Buffer.isBuffer(data) ? data
                 : typeof data === 'string' ? Buffer.from(data)
                     : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
             let watching = false;
             for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
-                let preview = bytes.subarray(0, 150).toString('utf8');
-                if (bytes.length > 150) preview += '...';
-
-                const trafficPayload = JSON.stringify({
-                    type: 'ws_traffic',
-                    data: {
-                        id,
-                        direction: 'in',
-                        size: bytes.length,
-                        preview
-                    }
-                });
-
+                const trafficPayload = wsTrafficLine(id, 'in', bytes.length, bytes.subarray(0, FRAME_TYPE_PROBE).toString('utf8'));
                 for (const client of logClients) {
                     if (client.readyState === 1 && client !== ws) { // OPEN
                         try { client.send(trafficPayload); } catch {}

@@ -1361,7 +1361,8 @@ function importGroupPicture(groupId: string, stored: unknown): void {
     const row = db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(groupId) as { updated_at: string | null } | undefined;
     if (!row) return;
     if (!setGroupPicture(db, groupId, stored)) return;
-    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(row.updated_at, groupId);
+    // Only when the picture's write moved it (an update that changes nothing makes the touch trigger stamp afresh).
+    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ? AND updated_at IS NOT ?').run(row.updated_at, groupId, row.updated_at);
 }
 
 /**

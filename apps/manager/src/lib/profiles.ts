@@ -8,6 +8,11 @@ export interface NodeProfile {
     adminPassword?: string;
     /** Same: memory only. */
     replicationToken?: string;
+    /**
+     * An owner automation token (bp_<id>_<secret>, made in Settings from an owner's phone), memory only like the password.
+     * When set it is the profile's only credential: requests carry it as a bearer and never the password (nodeCredential).
+     */
+    automationToken?: string;
     isPrimary?: boolean;
 }
 
@@ -19,12 +24,13 @@ const PROFILES_KEY = 'bp_fleet_profiles';
  * (Fable's web review, M1). So the list is saved without them, and anything an older build saved is taken out
  * on load (loadNodeProfiles saves the list back). A reload asks for them again.
  */
-const heldCredentials = new Map<string, { adminPassword?: string; replicationToken?: string }>();
+const heldCredentials = new Map<string, { adminPassword?: string; replicationToken?: string; automationToken?: string }>();
 
 function withoutCredentials(p: NodeProfile): NodeProfile {
     const copy = { ...p };
     delete copy.adminPassword;
     delete copy.replicationToken;
+    delete copy.automationToken;
     return copy;
 }
 
@@ -93,7 +99,9 @@ export function saveActiveProfileId(id: string): void {
 
 export function saveNodeProfiles(profiles: NodeProfile[]): void {
     for (const p of profiles) {
-        if (p.adminPassword || p.replicationToken) heldCredentials.set(p.id, { adminPassword: p.adminPassword, replicationToken: p.replicationToken });
+        if (p.adminPassword || p.replicationToken || p.automationToken) {
+            heldCredentials.set(p.id, { adminPassword: p.adminPassword, replicationToken: p.replicationToken, automationToken: p.automationToken });
+        }
         else heldCredentials.delete(p.id);
     }
     localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles.map(withoutCredentials)));
@@ -121,4 +129,12 @@ export function removeNodeProfile(id: string): void {
     const profiles = loadNodeProfiles().filter(p => p.id !== id);
     heldCredentials.delete(id);
     saveNodeProfiles(profiles);
+}
+
+/**
+ * The one credential a profile's requests carry: its automation token when it has one, else its password (a profile from
+ * before tokens). Never both: node-client sends a token as a bearer and leaves the password out of headers and bodies.
+ */
+export function nodeCredential(p: Pick<NodeProfile, 'adminPassword' | 'automationToken'> | null | undefined): string | undefined {
+    return p?.automationToken || p?.adminPassword || undefined;
 }

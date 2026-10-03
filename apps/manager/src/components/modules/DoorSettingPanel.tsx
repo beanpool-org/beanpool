@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { GATED_LOOK, gatedProps, guardGated } from '../../lib/gated-control';
 import { buildAdminHeaders, fetchNodeRoles, getTfaSessionToken, resolveNodeApiUrl } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 /**
  * People & Safety → Invites & QR → "Who may invite": the door (community modes slice 1; apps/server config/door.ts).
@@ -75,7 +77,7 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         setNobodyCanAct(null);
         (async () => {
             try {
-                const roles = await fetchNodeRoles(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                const roles = await fetchNodeRoles(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                 if (mounted) setNobodyCanAct(!roles.some((r) => r.role === 'owner' || r.role === 'admin'));
             } catch { /* the warning is a courtesy; no answer, no warning */ }
         })();
@@ -100,8 +102,8 @@ export function DoorSettingPanel({ activeNode, viewer }: { activeNode: NodeProfi
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/node/config'), {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword, door: choice }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), door: choice }),
             });
             const body = await res.json().catch(() => ({})) as { error?: unknown; totpRequired?: unknown };
             if (res.ok) {

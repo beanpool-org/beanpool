@@ -12,6 +12,7 @@ import {
     type OffboxDestinationInput,
     type OffboxListedBackup,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * Off-box backups (apps/server services/offbox-backups.ts): where the main server sends its locked backups, how often
@@ -67,7 +68,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
     const [saving, setSaving] = useState(false);
     const [listing, setListing] = useState<{ id: string; backups: OffboxListedBackup[] } | null>(null);
 
-    const creds = useCallback(() => [activeNode.adminPassword, getTfaSessionToken(activeNode.id)] as const, [activeNode.id, activeNode.adminPassword]);
+    const creds = useCallback(() => [nodeCredential(activeNode), getTfaSessionToken(activeNode.id)] as const, [activeNode.id, nodeCredential(activeNode)]);
 
     const load = useCallback(async () => {
         try {

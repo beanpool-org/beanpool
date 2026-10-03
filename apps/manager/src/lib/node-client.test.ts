@@ -171,14 +171,12 @@ describe('resolveNodeApiUrl', () => {
     });
 });
 
-describe('harvester helpers send the manager credential', () => {
-    // These three call /api/manager/* on the same origin, and every one of those routes is
-    // behind checkAdminAuth. They previously sent no credential at all, so each answered 401
-    // and the Harvested Fleet Backups tab sat permanently empty.
+describe('harvester helpers send no credential', () => {
+    // These call /api/manager/* on the same origin: the server behind this dashboard, not a node. A profile's
+    // credential belongs to its own node only (node sign-in step 7b-1), so none goes there, token or password.
     let fetchMock: ReturnType<typeof vi.fn>;
 
     const lastCall = () => fetchMock.mock.calls[0];
-    const headersOf = (init?: RequestInit) => (init?.headers ?? {}) as Record<string, string>;
 
     beforeEach(() => {
         fetchMock = vi.fn().mockResolvedValue({
@@ -191,48 +189,28 @@ describe('harvester helpers send the manager credential', () => {
         vi.stubGlobal('fetch', fetchMock);
     });
 
-    it('fetchHarvesterStatus sends X-Admin-Password', async () => {
-        await fetchHarvesterStatus('manager-secret');
+    it('fetchHarvesterStatus sends no credential', async () => {
+        await fetchHarvesterStatus();
         const [url, init] = lastCall();
         expect(url).toBe('/api/manager/backups/status');
-        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
+        expect(init).toBeUndefined();
     });
 
-    it('fetchNodeHistory sends X-Admin-Password', async () => {
-        await fetchNodeHistory('mullum', 'manager-secret');
+    it('fetchNodeHistory sends no credential', async () => {
+        await fetchNodeHistory('mullum');
         const [url, init] = lastCall();
         expect(url).toContain('/api/manager/backups/history');
-        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
+        expect(init).toBeUndefined();
     });
 
-    it('omits the header entirely when no password is held', async () => {
-        await fetchHarvesterStatus(undefined);
-        expect(headersOf(lastCall()[1])).not.toHaveProperty('X-Admin-Password');
+    it('says plainly when the server behind the dashboard holds no harvested backups', async () => {
+        fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) });
+        await expect(fetchHarvesterStatus()).rejects.toThrow(/No harvested backups here/);
     });
 
-    it('never puts the credential in the URL', async () => {
-        await fetchNodeHistory('mullum', 'manager-secret');
-        expect(String(lastCall()[0])).not.toContain('manager-secret');
-    });
-
-    it('triggerHarvesterSync authenticates with the MANAGER password, not the target node\'s', async () => {
-        // Two different secrets. The header authenticates us to the local manager API; the body
-        // carries the target node's own credential for the server to forward. The server resolves
-        // the target as `body.adminPassword || body.password || found.adminPassword`, so leaking
-        // the manager password into `password` would override the configured per-node credential.
-        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret', 'manager-secret');
-        const [, init] = lastCall();
-        expect(headersOf(init)['X-Admin-Password']).toBe('manager-secret');
-
-        const body = JSON.parse((init as any).body);
-        expect(body.adminPassword).toBe('node-secret');
-        expect(body.password).toBe('node-secret');
-        expect(JSON.stringify(body)).not.toContain('manager-secret');
-    });
-
-    it('falls back to the node password when no manager password is held', async () => {
-        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret');
-        expect(headersOf(lastCall()[1])['X-Admin-Password']).toBe('node-secret');
+    it('triggerHarvesterSync has nothing to send, says so, and sends nothing', async () => {
+        await expect(triggerHarvesterSync('mullum')).rejects.toThrow(/No harvested backups here/);
+        expect(fetchMock).not.toHaveBeenCalled();
     });
 });
 
@@ -329,37 +307,19 @@ describe('2FA session token transmission in node client admin actions', () => {
             blob: async () => new Blob(['test']),
         });
 
-        await downloadAdminFile('/api/manager/backups/download-db', { nodeId: 'test' }, 'secret123', 'test.db', 'tfa-sess-123');
+        await downloadAdminFile('/proxy/https/node.example.com/api/local/admin/snapshots/download', { name: 'test' }, 'secret123', 'test.db', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
 
         URL.createObjectURL = origCreate;
         URL.revokeObjectURL = origRevoke;
     });
 
-    it('harvester and registrar helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
+    it('registrar helpers send X-Admin-2FA-Session header when tfaToken is provided', async () => {
         const {
-            fetchHarvesterStatus,
-            triggerHarvesterSync,
-            fetchNodeHistory,
             getRegistrarPending,
             approveRegistrarClaim,
             revokeRegistrarClaim,
         } = await import('./node-client');
-
-        await fetchHarvesterStatus('secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
-
-        fetchMock.mockClear();
-
-        await triggerHarvesterSync('mullum', 'https://mullum.example', 'node-secret', 'manager-secret', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
-
-        fetchMock.mockClear();
-
-        await fetchNodeHistory('mullum', 'secret123', 'tfa-sess-123');
-        expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');
-
-        fetchMock.mockClear();
 
         await getRegistrarPending('https://node.example.com', 'secret123', 'tfa-sess-123');
         expect(headersOf(lastCall()[1])['X-Admin-2FA-Session']).toBe('tfa-sess-123');

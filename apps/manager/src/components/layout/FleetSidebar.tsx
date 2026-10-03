@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { IS_FLEET_MODE } from '../../lib/mode';
+import { isAutomationToken } from '../../lib/node-client';
+import { TOKEN_REPLACE_ADVICE } from '../../lib/token-guard';
 import { useManual } from '../manual/Manual';
 import { SECTION_SUB_TABS, isSettingsSection } from '../../lib/sections';
 import type { SidebarMode } from '../../lib/sidebar-mode';
@@ -436,7 +438,7 @@ export function FleetSidebar({
                                                 // Static amber: not red, because the node is up and answering — it is
                                                 // this manager that has the wrong password. Not the pulsing amber of
                                                 // `warning` either, since nothing is in progress; it waits on a person.
-                                                <span title="Admin password needed" className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                                                <span title={isAutomationToken(p.automationToken) ? `Token refused. ${TOKEN_REPLACE_ADVICE}` : 'Admin password needed'} className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                                             ) : (
                                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 animate-pulse"></span>
                                             )}

@@ -222,4 +222,43 @@ describe('RekeyMemberWizard', () => {
             expect(screen.queryByText('RK-ACTIVE-CODE')).toBeNull();
         });
     });
+
+    it('asks for Manage again when the node holds the code back, and shows it on the re-read (#1534)', async () => {
+        const pending = {
+            id: 3,
+            old_pubkey: mockMember.publicKey,
+            new_pubkey: null,
+            operator_pubkey: 'b'.repeat(64),
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+            status: 'pending',
+            created_at: new Date().toISOString(),
+        };
+        const spy = vi.spyOn(nodeClient, 'fetchRekeyStatusApi')
+            .mockResolvedValueOnce({ isInvalidated: true, invalidatedInfo: null, pendingRequest: { ...pending, codeNeedsStepUp: true }, history: [] })
+            .mockResolvedValueOnce({ isInvalidated: true, invalidatedInfo: null, pendingRequest: { ...pending, code: 'RK-AFTER-STEPUP' }, history: [] });
+
+        render(
+            <RekeyMemberWizard
+                member={mockMember}
+                nodeUrl="http://localhost:3000"
+                onClose={() => {}}
+            />
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('rekey-code-needs-step-up')).toBeDefined();
+            expect(screen.getByText(/Press Manage in the BeanPool app again/)).toBeDefined();
+        });
+        expect(screen.queryByText('RK-AFTER-STEPUP')).toBeNull();
+        fireEvent.change(screen.getByPlaceholderText(/64 hex characters/), { target: { value: 'c'.repeat(64) } });
+        expect((screen.getByRole('button', { name: /Complete Re-Keying/ }) as HTMLButtonElement).disabled).toBe(true);
+
+        fireEvent.click(screen.getByRole('button', { name: /Show the code/ }));
+        await waitFor(() => {
+            expect(screen.getByText('RK-AFTER-STEPUP')).toBeDefined();
+            expect(screen.queryByTestId('rekey-code-needs-step-up')).toBeNull();
+        });
+        expect(spy).toHaveBeenCalledTimes(2);
+        expect((screen.getByRole('button', { name: /Complete Re-Keying/ }) as HTMLButtonElement).disabled).toBe(false);
+    });
 });

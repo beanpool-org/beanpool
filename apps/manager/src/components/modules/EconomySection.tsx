@@ -24,6 +24,7 @@ import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -175,7 +176,7 @@ export function EconomySection({
     const loadTreasuries = async () => {
         setLoadingTreasuries(true);
         try {
-            const list = await fetchNodeTreasuries(activeNode.url, activeNode.adminPassword, effectiveTfaToken);
+            const list = await fetchNodeTreasuries(activeNode.url, nodeCredential(activeNode), effectiveTfaToken);
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned
@@ -196,7 +197,7 @@ export function EconomySection({
                             const keepers = await fetchTreasuryKeepers(
                                 activeNode.url,
                                 t.publicKey,
-                                activeNode.adminPassword,
+                                nodeCredential(activeNode),
                                 effectiveTfaToken
                             );
                             return { pubkey: t.publicKey, keepers: Array.isArray(keepers) ? keepers : [] };
@@ -227,7 +228,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/projects');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -261,7 +262,7 @@ export function EconomySection({
                     workingCapitalCeiling: ceilingNum,
                     purpose: newEnterprisePurpose.trim() || undefined,
                 },
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
 
@@ -272,7 +273,7 @@ export function EconomySection({
                         activeNode.url,
                         res.publicKey,
                         newEnterpriseKeeper.trim(),
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         effectiveTfaToken
                     );
                 } catch (assignErr) {
@@ -312,7 +313,7 @@ export function EconomySection({
             const keepers = await fetchTreasuryKeepers(
                 activeNode.url,
                 t.publicKey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({ ...prev, [t.publicKey]: Array.isArray(keepers) ? keepers : [] }));
@@ -337,7 +338,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 targetPubkey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({
@@ -374,7 +375,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 keeperPubkey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({
@@ -404,7 +405,7 @@ export function EconomySection({
                     credits: Number(offerCredits) || 10,
                     description: `${seedOfferTreasury.name} community offer`,
                 },
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setSeedOfferTreasury(null);
@@ -424,7 +425,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/reject');
             await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
                 body: JSON.stringify({ projectId }),
             });
             await loadCommonsData();

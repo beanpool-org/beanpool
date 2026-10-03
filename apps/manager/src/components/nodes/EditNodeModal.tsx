@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
-import { normalizeNodeUrl, fetchDiagnostics } from '../../lib/node-client';
+import { normalizeNodeUrl, fetchDiagnostics, isAutomationToken } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
+import { AutomationTokenField } from './AutomationTokenField';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface EditNodeModalProps {
@@ -13,6 +15,8 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
     const [name, setName] = useState(node.name);
     const [url, setUrl] = useState(node.url);
     const [password, setPassword] = useState(node.adminPassword || '');
+    const [token, setToken] = useState(node.automationToken || '');
+    const tokenOk = token.trim() === '' || isAutomationToken(token.trim());
     const [showPassword, setShowPassword] = useState(false);
     const [testStatus, setTestStatus] = useState<string | null>(null);
     const [testLoading, setTestLoading] = useState(false);
@@ -22,7 +26,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
         setTestStatus(null);
         try {
             const cleanUrl = normalizeNodeUrl(url);
-            const data = await fetchDiagnostics(cleanUrl, password.trim() || undefined);
+            const data = await fetchDiagnostics(cleanUrl, nodeCredential({ automationToken: token.trim() || undefined, adminPassword: password.trim() || undefined }));
             setTestStatus(`✅ Connection OK! Status: ${data.status.toUpperCase()} (${data.communityName || 'BeanPool Node'})`);
         } catch (e: unknown) {
             const errMessage = e instanceof Error ? e.message : String(e);
@@ -34,10 +38,12 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        if (!tokenOk) return;
         onSave(node.id, {
             name: name.trim() || node.name,
             url: normalizeNodeUrl(url),
             adminPassword: password.trim() || undefined,
+            automationToken: token.trim() || undefined,
         });
         onClose();
     };
@@ -82,8 +88,12 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                             className="w-full bg-nature-950 border border-nature-800 px-3.5 py-2.5 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500 shadow-inner"
                         />
                     </div>
+                    <AutomationTokenField value={token} onChange={setToken} />
                     <div>
-                        <label className="block text-nature-300 font-semibold mb-1">Node Admin Password</label>
+                        <label className="block text-nature-300 font-semibold mb-1">Node Admin Password (old nodes)</label>
+                        {token.trim() !== '' && (
+                            <p className="text-nature-400 mt-0 mb-1">Not sent while a token is set.</p>
+                        )}
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
@@ -110,7 +120,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-2 border-t border-nature-800/80">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-nature-800/80">
                         <button
                             type="button"
                             onClick={handleTestConnection}
@@ -130,6 +140,7 @@ export function EditNodeModal({ node, onClose, onSave }: EditNodeModalProps) {
                             </button>
                             <button
                                 type="submit"
+                                disabled={!tokenOk}
                                 className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold transition-all shadow-md active:scale-95"
                             >
                                 Save Settings

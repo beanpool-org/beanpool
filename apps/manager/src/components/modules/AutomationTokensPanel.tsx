@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import type { RolesViewer } from './NodeRolesPanel';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * "Automation tokens" (node sign-in design step 7, D8; the server is apps/server routes/automation-tokens.ts). An owner makes
@@ -73,8 +74,8 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
     const tokenRef = useRef<HTMLParagraphElement | null>(null);
 
     const headers = useCallback(
-        () => buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-        [activeNode.adminPassword, activeNode.id],
+        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        [nodeCredential(activeNode), activeNode.id],
     );
 
     const load = useCallback(async () => {

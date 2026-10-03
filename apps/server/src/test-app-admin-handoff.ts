@@ -709,6 +709,46 @@ async function main() {
         }
     }
 
+    // ── 14. Suspending through a report takes the subject's role: on an owner or admin only an owner may
+    // (state-engine actionReport), so an admin's fresh session is refused by the engine; actioning the report without
+    // suspending stays the admin's, as does suspending a plain member (confirm 2, 4172228479). ──
+    console.log('\n14. Report action with suspendUser on an owner or admin from an admin\'s fresh session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status ?? null;
+        const reportStatus = (id: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(id) as any)?.status ?? null;
+        const isOwnerOnly = (r: { status: number; body: any }) => r.status === 403 && r.body?.code !== 'step_up_required' && /Only an owner can suspend an owner or admin/.test(r.body?.error ?? '');
+        const coOwner = keypair(), anAdmin = keypair(), plain = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner14');
+        seedMember(anAdmin.pub, 'hoAdmin14');
+        seedMember(plain.pub, 'hoPlain14');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+        const report = (id: string, target: string) => db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
+                    VALUES (?, ?, ?, NULL, 'spam', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(id, member.pub, target);
+        report('ho-r14o', coOwner.pub);
+        report('ho-r14a', anAdmin.pub);
+        report('ho-r14p', plain.pub);
+
+        const adminFresh = await exchange((await requestLink(admin)).body.handshakeToken);
+        const onOwner = await postJson('/api/local/admin/reports/ho-r14o/action', { suspendUser: true }, as(adminFresh));
+        assert(isOwnerOnly(onOwner) && roleOf(coOwner.pub) === 'owner' && statusOf(coOwner.pub) === 'active' && reportStatus('ho-r14o') !== 'actioned',
+            `an admin suspending an owner through a report is refused; role, status and report untouched (got ${onOwner.status} ${JSON.stringify(onOwner.body)})`);
+        const onAdmin = await postJson('/api/local/admin/reports/ho-r14a/action', { suspendUser: true }, as(adminFresh));
+        assert(isOwnerOnly(onAdmin) && roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active' && reportStatus('ho-r14a') !== 'actioned',
+            `…and another admin (got ${onAdmin.status} ${JSON.stringify(onAdmin.body)})`);
+        const noSuspend = await postJson('/api/local/admin/reports/ho-r14a/action', {}, as(adminFresh));
+        assert(noSuspend.status === 200 && reportStatus('ho-r14a') === 'actioned' && roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active',
+            `actioning that report without suspending still goes through (got ${noSuspend.status} ${JSON.stringify(noSuspend.body)})`);
+        const onPlain = await postJson('/api/local/admin/reports/ho-r14p/action', { suspendUser: true }, as(adminFresh));
+        assert(onPlain.status === 200 && statusOf(plain.pub) === 'suspended', `an admin suspends a plain member through a report (got ${onPlain.status} ${JSON.stringify(onPlain.body)})`);
+        const ownerFresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const byOwner = await postJson('/api/local/admin/reports/ho-r14o/action', { suspendUser: true }, as(ownerFresh));
+        assert(byOwner.status === 200 && roleOf(coOwner.pub) === null && statusOf(coOwner.pub) === 'suspended',
+            `an owner's fresh session suspends the co-owner through it, as today (got ${byOwner.status} ${JSON.stringify(byOwner.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

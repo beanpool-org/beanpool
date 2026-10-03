@@ -1595,7 +1595,10 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
-        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may.
+        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may (the engine
+        // refuses anyone else, given the actor). Read only to suspend: a moderator, refused that above, is no node admin.
+        const actor = suspendUser ? resolveAdminActor(ctx) : null;
+        if (suspendUser && !actor) return;
         if (suspendUser && !stepUpIfOwnerOnly(ctx, 'report-suspend', ctx.params.id)) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
@@ -1621,6 +1624,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, {
             reasonCategory,
             onRefundShortfall: s => refundShortfalls.push(s),
+            actor,
         });
         if (!ok) {
             ctx.status = 404;
@@ -1646,7 +1650,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             : { success: true, message: 'Report actioned successfully' };
     } catch (e: any) {
         if (answerPotPaused(ctx, e)) return;
-        ctx.status = 500;
+        ctx.status = e?.status || 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };
     }
 });

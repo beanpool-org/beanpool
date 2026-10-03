@@ -6473,8 +6473,8 @@ function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id
 
 /**
  * Whether actioning this report with suspendUser takes an owner's or admin's role away: actionReport deletes the
- * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts). The route asks
- * the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
+ * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts), so actionReport
+ * refuses it to anyone else. The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
  */
 export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
     const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
@@ -6489,7 +6489,7 @@ export function actionReport(
     deletePost: boolean = false,
     suspendUser: boolean = false,
     removePulseItem: boolean = false,
-    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null },
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
@@ -6504,6 +6504,16 @@ export function actionReport(
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
+        // Suspending takes the subject's node role away (below), and only an owner may take away an owner's or admin's
+        // role (node-roles; adminEmergencySuspend refuses an owner target the same way). Refused, 403, before any write,
+        // so the report stays as it was; actioning it without suspendUser is untouched. `actor` is the authenticated
+        // admin actor (routes/admin.ts resolveAdminActor), a pubkey or 'owner:password'; none given counts as no owner.
+        const subjectToSuspend = suspendUser ? reportSubjectOf(report) : null;
+        if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && heldPrivilegedRole(subjectToSuspend) && !isOwnerLevelActor(opts?.actor)) {
+            const err: any = new Error('Only an owner can suspend an owner or admin');
+            err.status = 403;
+            throw err;
+        }
         const wasOpen = report.status === 'pending' || report.status == null;
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);

@@ -898,6 +898,8 @@ router.post('/api/local/admin/replication-token/status', async (ctx) => {
 });
 
 router.post('/api/local/admin/replication-token/generate', async (ctx) => {
+    // The answer is the standby's token: never cached, refusals included (#1548 NB3, as enrol and break-glass answer).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     const token = generateReplicationToken();
     setReplicationToken(token);

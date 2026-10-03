@@ -6,7 +6,9 @@ import type { RolesViewer } from './NodeRolesPanel';
 /**
  * "Automation tokens" (node sign-in design step 7, D8; the server is apps/server routes/automation-tokens.ts). An owner makes
  * a token so a script or the fleet manager can use this node's Settings without the password. It never does an owner-only
- * change. Owners only: the card is not drawn for anyone else (the node refuses them as well).
+ * change. Owners only: the card is not drawn for anyone else (the node refuses them as well). Only an owner's KEY session
+ * makes one (the node answers token_needs_key to the password): a password session sees the list and Revoke, and in place
+ * of the form one line saying where to make one.
  *
  * The token is shown ONCE. It lives in this component's state and nowhere else (never localStorage, sessionStorage, a log
  * or the list) and is dropped the moment Done is pressed, or the card goes away.
@@ -56,6 +58,7 @@ function scopeLabel(scope: string): string {
 
 export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' } }: AutomationTokensPanelProps) {
     const isOwner = viewer.kind === 'password' || viewer.role === 'owner';
+    const canMake = viewer.kind === 'key' && viewer.role === 'owner';
 
     const [tokens, setTokens] = useState<AutomationTokenRecord[] | null>(null);
     const [listMessage, setListMessage] = useState('');
@@ -226,6 +229,10 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                         </button>
                     </div>
                 </div>
+            ) : !canMake ? (
+                <p className="text-xs text-nature-400 m-0 break-words" data-testid="automation-token-needs-key">
+                    Tokens are made with an owner&rsquo;s key, never the password: use Manage in the app, or sign in on a computer by scanning a code.
+                </p>
             ) : (
                 <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3">
                     <span className="text-xs font-semibold text-nature-300">Make a token</span>

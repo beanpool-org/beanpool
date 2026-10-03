@@ -45,7 +45,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, namesSignOutWords, namesPinAddresses, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -2886,5 +2886,83 @@ describe('§8 16-20. The locked copy on the node (design §3, §5)', () => {
         sent = [];
         await open(owen);
         expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+});
+
+describe('§8 23. Sign Out saves the copy first; what it says when the node didn\'t confirm it (design §5)', () => {
+    const putCopyFails = (node: FakeNode) => { answer = (req) => (req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy' ? { status: 502 } : node.answer(req)); };
+    const anchorsOf = (me: BeanPoolIdentity) => namesPinAddresses([...mem.keys()], me.publicKey);
+
+    it('the pin labels give the addresses to save, for this key only', async () => {
+        const { phones: [owen, ada] } = await community(['Owen', 'Ada'], true);
+        expect(anchorsOf(owen)).toEqual([COMMUNITY]);
+        expect(anchorsOf(ada)).toEqual([COMMUNITY]);
+        expect(namesPinAddresses([...mem.keys()], 'ef'.repeat(32))).toEqual([]);
+    });
+
+    it('a copy the node already confirmed: no words, nothing sent but the state', async () => {
+        const { phones: [owen] } = await community(['Owen', 'Ada'], true);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([]);
+        expect(namesSignOutWords(out)).toBeNull();
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('a copy the node lost is saved again and confirmed: no words', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([]);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(node.copies!.get(owen.publicKey)).toBeDefined();
+    });
+
+    it('the only holder of the key, its copy not confirmed: the three-button words with the key\'s number', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        putCopyFails(node);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+        expect(NAMES_COPY.signOutOnlyCopy(1)).toContain('the only copy of the names list’s key 1');
+        // Nothing is wiped or blocked here: the pin is still on the phone, for "Try again".
+        expect(await pinOf(owen)).not.toBeNull();
+    });
+
+    it('another admin holds the key too: the two-button words (check codes after signing in)', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(ada.publicKey);
+        putCopyFails(node);
+        const out = await saveNamesCopiesBeforeLeaving(ada, anchorsOf(ada), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+    });
+
+    it('the state can\'t be read: not confirmed, with the general words, and no copy is sent', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        expect(namesSignOutWords(out)!.pdf).toBe(false);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('a node from before the copies (no myCopy): not confirmed, and nothing is sent to a route it lacks', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies = null;
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('Settings asks, and never blocks: "Sign out anyway" signs out with the copies already tried', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
+        const after = src.slice(src.indexOf('async function signOutAfterNamesCopies'));
+        expect(after).toContain('namesSignOutWords(await namesCopiesBeforeSignOut(identity))');
+        expect(after).toMatch(/if \(!words\) return signOutNow\(\);/);
+        expect(after).toMatch(/text: NAMES_COPY\.signOutAnyway, style: 'destructive' as const, onPress: \(\) => void signOutNow\(\)/);
+        expect(after).toMatch(/text: NAMES_COPY\.tryAgain, onPress: \(\) => void signOutAfterNamesCopies\(\)/);
+        expect(after).toMatch(/words\.pdf \? \[\{ text: NAMES_COPY\.savePdf/);
+        expect(src).toContain('await signOutOfThisPhone(identity, { namesCopiesSaved: true });');
     });
 });

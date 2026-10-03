@@ -1595,6 +1595,8 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
+        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may.
+        if (suspendUser && !stepUpIfOwnerOnly(ctx, 'report-suspend', ctx.params.id)) return;
         const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down

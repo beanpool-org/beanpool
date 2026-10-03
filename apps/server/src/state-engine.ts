@@ -6471,6 +6471,19 @@ function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id
     return report.target_pubkey || null;
 }
 
+/**
+ * Whether actioning this report with suspendUser takes an owner's or admin's role away: actionReport deletes the
+ * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts). The route asks
+ * the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    if (!report) return false;
+    const subject = reportSubjectOf(report);
+    return !!subject && !isClosedAccountKey(subject) && !!heldPrivilegedRole(subject);
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,

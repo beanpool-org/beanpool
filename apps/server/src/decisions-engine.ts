@@ -61,6 +61,7 @@ import {
     heldPrivilegedRole,
     pruneNeedsOwner,
     inviteBranchOf,
+    reportSuspensionTakesPrivilegedRole,
     broadcast,
     isNodeAdmin,
     isSoleOwner,
@@ -1597,11 +1598,12 @@ function haltRestoresRole(decision: { status: string; effect: string }): boolean
         || decision.effect === 'keep_suspension';
 }
 
-export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch';
+export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend';
 
 /**
- * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root) or Decision (halt,
- * accelerate) is one only an owner may make: the conditions on which the engine refuses it to an admin
+ * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root), Decision (halt,
+ * accelerate) or report (report-suspend: actioning it with suspendUser, which takes the subject's role) is one only an
+ * owner may make: the conditions on which the engine refuses it to an admin
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
  * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard), whoever is acting. No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
@@ -1612,6 +1614,7 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (action === 'suspend') return isNodeOwner(target);
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
+    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
     if (action === 'lift') {
         const openKeeps = db.prepare(
             "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"

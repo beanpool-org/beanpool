@@ -612,6 +612,32 @@ async function main() {
         assert(!isStepUp(prunePlain) && prunePlain.status === 200, `an admin prunes a member six minutes on, unasked (got ${prunePlain.status} ${JSON.stringify(prunePlain.body)})`);
     }
 
+    // ── 12. Actioning a report with suspendUser takes the subject's role: an owner's or admin's is asked ──
+    console.log('\n12. Report action with suspendUser on an admin from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const anAdmin = keypair();
+        seedMember(anAdmin.pub, 'hoAdmin12');
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+        const plain = keypair();
+        seedMember(plain.pub, 'hoPlain12');
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
+                    VALUES ('ho-r12a', ?, ?, NULL, 'spam', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(member.pub, anAdmin.pub);
+        db.prepare(`INSERT INTO abuse_reports (id, reporter_pubkey, target_pubkey, target_post_id, reason, created_at)
+                    VALUES ('ho-r12b', ?, ?, NULL, 'spam', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(member.pub, plain.pub);
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const onAdmin = await postJson('/api/local/admin/reports/ho-r12a/action', { suspendUser: true }, as(stale));
+        assert(isStepUp(onAdmin) && roleOf(anAdmin.pub) === 'admin', `suspending an admin through a report asks and keeps the role (got ${onAdmin.status} ${JSON.stringify(onAdmin.body)})`);
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const onAdminFresh = await postJson('/api/local/admin/reports/ho-r12a/action', { suspendUser: true }, as(fresh));
+        assert(onAdminFresh.status === 200 && roleOf(anAdmin.pub) === null, `after Manage again it goes through (got ${onAdminFresh.status} ${JSON.stringify(onAdminFresh.body)})`);
+        const onPlain = await postJson('/api/local/admin/reports/ho-r12b/action', { suspendUser: true }, as(stale));
+        assert(onPlain.status === 200, `suspending a plain member through a report six minutes on is not asked (got ${onPlain.status} ${JSON.stringify(onPlain.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

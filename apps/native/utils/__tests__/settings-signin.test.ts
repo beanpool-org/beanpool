@@ -30,6 +30,7 @@ import { buildSettingsSigninQr, settingsSigninText, signedRequestBytes, utf8Byte
 import {
     readSigninScan, scanProblemMessage, lookupPairing, buildSigninRequest, signinMessage,
     approveComputerSignin, declineComputerSignin, formatShortCode,
+    SIGNIN_QUESTION, SIGNIN_WARNING, computerLines, formatTimeLeft, confirmDigitsLine,
 } from '../settings-signin';
 import { rememberRequestSigning, resetRequestSigningForTests } from '../request-signing-version';
 
@@ -115,8 +116,22 @@ describe('asking the node about the pairing', () => {
 
     it('returns which browser asked when the short code matches', async () => {
         const calls = mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Firefox on Windows', expiresAt: 5 } }]);
-        expect(await lookupPairing(qr)).toEqual({ kind: 'ok', browser: 'Firefox on Windows', expiresAt: 5 });
+        expect(await lookupPairing(qr)).toEqual({
+            kind: 'ok', browser: 'Firefox on Windows', expiresAt: 5,
+            expiresInSeconds: null, askedSecondsAgo: null, fromAddress: null, sameNetwork: false,
+        });
         expect(calls[0].url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}`);
+    });
+
+    it('returns where and when the computer asked, as the node saw it, and the time left', async () => {
+        mockFetch([{ status: 200, body: {
+            shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5,
+            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true,
+        } }]);
+        expect(await lookupPairing(qr)).toEqual({
+            kind: 'ok', browser: 'Chrome on macOS', expiresAt: 5,
+            expiresInSeconds: 95, askedSecondsAgo: 25, fromAddress: '203.0.113.9', sameNetwork: true,
+        });
     });
 
     it('refuses a QR whose short code the node does not recognise (a doctored code)', async () => {
@@ -145,7 +160,7 @@ describe('the approval request', () => {
         expect(init.method).toBe('POST');
         expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
         const body = JSON.parse(init.body as string);
-        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org' });
+        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), signedFor: 'mullum.beanpool.org', confirm: true });
         expect(signedBy(body.signature, signedRequestBytes(settingsSigninText('mullum.beanpool.org', 'approve', ID, 'K7F3QX')))).toBe(true);
         // Not the old unbound text, which any community could relay.
         expect(signedBy(body.signature, utf8Bytes(signinMessage('approve', qr)))).toBe(false);
@@ -155,7 +170,7 @@ describe('the approval request', () => {
         rememberRequestSigning('https://mullum.beanpool.org', 1);
         const { init } = await buildSigninRequest('approve', qr, identity);
         const body = JSON.parse(init.body as string);
-        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String) });
+        expect(body).toEqual({ memberPubkey: identity.publicKey, signature: expect.any(String), confirm: true });
         expect(signinMessage('approve', qr)).toBe(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`);
         expect(signedBy(body.signature, utf8Bytes(`beanpool-settings-signin:v1:approve:${ID}:K7F3QX`))).toBe(true);
     });
@@ -195,6 +210,13 @@ describe('the "Sign in" press', () => {
         expect(calls).toHaveLength(0);
     });
 
+    it('a node that asks for number matching hands back two digits for the computer', async () => {
+        mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '47', confirmExpiresAt: 9 } }]);
+        expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved', confirmCode: '47' });
+        mockFetch([{ status: 200, body: { success: true, role: 'owner', confirmCode: '4x7' } }]);
+        expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved' });
+    });
+
     it('approves after the unlock', async () => {
         const calls = mockFetch([{ status: 200, body: { success: true, role: 'owner' } }]);
         expect(await approveComputerSignin(opts)).toEqual({ kind: 'approved' });
@@ -223,5 +245,40 @@ describe('the "Sign in" press', () => {
     it('decline is best effort and never throws', async () => {
         (globalThis as any).fetch = vi.fn(async () => { throw new Error('offline'); });
         await expect(declineComputerSignin(qr, identity)).resolves.toBeUndefined();
+    });
+});
+
+describe('what the approval screen says', () => {
+    it('asks the question that names the trick, and says what to do if someone sent the code', () => {
+        expect(SIGNIN_QUESTION).toBe('Did you just open Settings on a computer?');
+        expect(SIGNIN_WARNING).toBe('If someone sent you this code, tap No.');
+    });
+
+    it('counts down the time left', () => {
+        expect(formatTimeLeft(95)).toBe('1:35 left');
+        expect(formatTimeLeft(5)).toBe('0:05 left');
+        expect(formatTimeLeft(-3)).toBe('0:00 left');
+    });
+
+    it('says how long ago the computer asked, from which address, and "same network" only when it is', () => {
+        const base = { kind: 'ok' as const, browser: 'Firefox on Windows', expiresAt: 0, expiresInSeconds: 100 };
+        expect(computerLines({ ...base, askedSecondsAgo: 40, fromAddress: '203.0.113.9', sameNetwork: true }, 0)).toEqual([
+            'Computer: Firefox on Windows',
+            'Asked 40 seconds ago',
+            'From 203.0.113.9 (same network as this phone)',
+        ]);
+        expect(computerLines({ ...base, askedSecondsAgo: 1, fromAddress: '198.51.100.4', sameNetwork: false }, 0)).toEqual([
+            'Computer: Firefox on Windows',
+            'Asked 1 second ago',
+            'From 198.51.100.4',
+        ]);
+        // The seconds the sheet has been open count on.
+        expect(computerLines({ ...base, askedSecondsAgo: 40, fromAddress: '203.0.113.9', sameNetwork: false }, 65)[1]).toBe('Asked 1 min 45 s ago');
+        // An older node tells none of it: only the browser.
+        expect(computerLines({ ...base, askedSecondsAgo: null, fromAddress: null, sameNetwork: false, expiresInSeconds: null }, 0)).toEqual(['Computer: Firefox on Windows']);
+    });
+
+    it('tells the owner which two digits to type on the computer', () => {
+        expect(confirmDigitsLine('47')).toBe('On the computer, type 47');
     });
 });

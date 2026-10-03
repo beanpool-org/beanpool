@@ -71,7 +71,16 @@ export function formatShortCode(code: string): string {
 const pairingPath = (id: string) => `/api/local/admin/auth/pairing/${id}`;
 
 export type PairingLookup =
-    | { kind: 'ok'; browser: string; expiresAt: number }
+    | {
+        kind: 'ok'; browser: string; expiresAt: number;
+        /** From the node, relative, so this phone's clock can be wrong. Null from a node older than these. */
+        expiresInSeconds: number | null;
+        askedSecondsAgo: number | null;
+        /** The computer's address as the node saw it — learned from the node, never from the QR. */
+        fromAddress: string | null;
+        /** The node saw this phone's lookup come from the computer's network. */
+        sameNetwork: boolean;
+    }
     | { kind: 'gone'; message: string }
     | { kind: 'error'; message: string };
 
@@ -79,7 +88,10 @@ export type PairingLookup =
 export async function lookupPairing(qr: SettingsSigninQr): Promise<PairingLookup> {
     try {
         const res = await fetch(`${qr.nodeUrl}${pairingPath(qr.pairingId)}`, { headers: { Accept: 'application/json' } });
-        const body = await res.json().catch(() => ({})) as { shortCode?: unknown; browser?: unknown; expiresAt?: unknown; error?: unknown };
+        const body = await res.json().catch(() => ({})) as {
+            shortCode?: unknown; browser?: unknown; expiresAt?: unknown; error?: unknown;
+            expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown;
+        };
         if (res.ok) {
             if (body.shortCode !== qr.shortCode) {
                 return { kind: 'gone', message: "The code on the computer doesn't match this QR. Get a new code on the computer and scan again." };
@@ -88,6 +100,10 @@ export async function lookupPairing(qr: SettingsSigninQr): Promise<PairingLookup
                 kind: 'ok',
                 browser: typeof body.browser === 'string' && body.browser ? body.browser : 'A browser',
                 expiresAt: typeof body.expiresAt === 'number' ? body.expiresAt : 0,
+                expiresInSeconds: seconds(body.expiresInSeconds),
+                askedSecondsAgo: seconds(body.askedSecondsAgo),
+                fromAddress: typeof body.fromAddress === 'string' && body.fromAddress && body.fromAddress !== 'unknown' ? body.fromAddress.slice(0, 64) : null,
+                sameNetwork: body.sameNetwork === true,
             };
         }
         const message = typeof body.error === 'string' ? body.error : `The node did not answer (${res.status}).`;
@@ -95,6 +111,39 @@ export async function lookupPairing(qr: SettingsSigninQr): Promise<PairingLookup
     } catch (e: any) {
         return { kind: 'error', message: e?.message || 'Could not reach the node.' };
     }
+}
+
+const seconds = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
+
+/** The approval sheet's heading: name the trick, so a story ("scan this to verify your account") gets a No. */
+export const SIGNIN_QUESTION = 'Did you just open Settings on a computer?';
+export const SIGNIN_WARNING = 'If someone sent you this code, tap No.';
+
+/** "1:35 left" */
+export function formatTimeLeft(secondsLeft: number): string {
+    const s = Math.max(0, Math.ceil(secondsLeft));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} left`;
+}
+
+function ago(s: number): string {
+    if (s < 60) return `Asked ${s} ${s === 1 ? 'second' : 'seconds'} ago`;
+    return `Asked ${Math.floor(s / 60)} min ${s % 60} s ago`;
+}
+
+/**
+ * What the sheet says about the computer: the browser, how long ago it asked (plus the seconds the sheet has been
+ * open), and the address it asked from, with "same network as this phone" only when the node saw both on one network.
+ */
+export function computerLines(look: Extract<PairingLookup, { kind: 'ok' }>, openSeconds: number): string[] {
+    const lines = [`Computer: ${look.browser}`];
+    if (look.askedSecondsAgo !== null) lines.push(ago(look.askedSecondsAgo + Math.max(0, Math.floor(openSeconds))));
+    if (look.fromAddress) lines.push(`From ${look.fromAddress}${look.sameNetwork ? ' (same network as this phone)' : ''}`);
+    return lines;
+}
+
+/** After the approval, on a node with number matching. */
+export function confirmDigitsLine(code: string): string {
+    return `On the computer, type ${code}`;
 }
 
 /** The old text, for a node older than request binding. Must match its pairingMessage() in settings-signin-pairing.ts. */
@@ -120,13 +169,15 @@ export async function buildSigninRequest(
                 signature: signed.signature,
                 ...(signed.signedFor ? { signedFor: signed.signedFor } : {}),
                 ...(action === 'approve' && totpCode ? { totpCode: totpCode.trim() } : {}),
+                // This app shows the node's two digits, so the computer must type them (number matching).
+                ...(action === 'approve' ? { confirm: true } : {}),
             }),
         },
     };
 }
 
 export type ApproveOutcome =
-    | { kind: 'approved' }
+    | { kind: 'approved'; confirmCode?: string }
     | { kind: 'no-device-lock' }
     | { kind: 'unlock-failed' }
     | { kind: 'totp-required'; wrongCode: boolean; continueWith: (code: string) => Promise<ApproveOutcome> }
@@ -151,8 +202,12 @@ export async function approveComputerSignin(opts: {
         try {
             const { url, init } = await buildSigninRequest('approve', opts.qr, opts.identity, totpCode);
             const res = await fetch(url, init);
-            const body = await res.json().catch(() => ({})) as { success?: boolean; totpRequired?: boolean; error?: string; reason?: string };
-            if (res.ok && body.success) return { kind: 'approved' };
+            const body = await res.json().catch(() => ({})) as { success?: boolean; totpRequired?: boolean; error?: string; reason?: string; confirmCode?: unknown };
+            if (res.ok && body.success) {
+                return typeof body.confirmCode === 'string' && /^\d{2}$/.test(body.confirmCode)
+                    ? { kind: 'approved', confirmCode: body.confirmCode }
+                    : { kind: 'approved' };
+            }
             if (body.totpRequired) return { kind: 'totp-required', wrongCode: !!totpCode, continueWith: attempt };
             if (body.reason === 'not-admin') return { kind: 'refused', message: `You are not an owner, admin or moderator of ${opts.communityName}, so you can't open its Settings.` };
             if (res.status === 403 || res.status === 404 || res.status === 409 || res.status === 410) {

@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, ErrorBoundary } from 'expo-router';
+import { claimRouteFor, parseClaimLink } from '../utils/node-claim';
 import * as Haptics from 'expo-haptics';
 
 export { ErrorBoundary };
@@ -318,6 +319,13 @@ export default function PairDeviceScreen() {
 
     async function handleBarcodeScanned(result: BarcodeScanningResult) {
         if (isScanningLocked.current || isTransferring || scannedData) return;
+        // A server's claim QR (`beanpool claim`): the claim screen, which offers the claim only while that server has no owner.
+        const claim = parseClaimLink(result.data);
+        if (claim) {
+            isScanningLocked.current = true;
+            router.replace(claimRouteFor(claim) as any);
+            return;
+        }
         const parsed = parsePairingUri(result.data);
         if (parsed) {
             isScanningLocked.current = true;

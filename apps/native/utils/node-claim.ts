@@ -78,6 +78,18 @@ export function claimNodeOrigin(raw: unknown): string | null {
     return origin;
 }
 
+/**
+ * Find a community's search box: the origin to ask GET /api/local/claim, only when what was typed is an address (a dot,
+ * a colon or a scheme in it), never a bare word: a word is a name to search for, and asking `<word>.beanpool.org` on
+ * every keystroke would tell that server what the member typed.
+ */
+export function claimProbeOrigin(typed: unknown): string | null {
+    if (typeof typed !== 'string') return null;
+    const s = typed.trim();
+    if (!/[.:/]/.test(s)) return null;
+    return claimNodeOrigin(s);
+}
+
 export interface ClaimLink {
     /** The node's origin, or null when the link named none (or a bad one): the screen then asks for the address. */
     node: string | null;

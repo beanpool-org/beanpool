@@ -12,7 +12,7 @@ vi.mock('expo-crypto', async () => {
 
 import {
     APP_CLAIM_SCRYPT, buildClaimBody, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
-    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, type OwnerCheck,
+    claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, type OwnerCheck,
 } from '../node-claim';
 
 // core's fixed vectors (packages/beanpool-core/src/__tests__/claim-proof.test.ts), made with Node's crypto.
@@ -323,5 +323,17 @@ describe('the system hands the app a claim link', () => {
         expect(claimRouteFromSystemPath('/post/claim')).toBeNull();
         expect(claimRouteFromSystemPath('https://a.example/claim?node=x')).toBeNull();
         expect(claimRouteFromSystemPath('beanpool://claim?node=javascript%3Aalert(1)')).toBe('/claim-community?refused=1');
+    });
+});
+
+describe('Find a community: a typed address is asked, a name is not', () => {
+    it('asks only for an address, never for a bare word or a hostile one', () => {
+        expect(claimProbeOrigin('beans.example.org')).toBe('https://beans.example.org');
+        expect(claimProbeOrigin('https://beans.example.org/')).toBe('https://beans.example.org');
+        expect(claimProbeOrigin('192.168.1.20:8443')).toBe('http://192.168.1.20:8443');
+        expect(claimProbeOrigin('mullum')).toBeNull();
+        expect(claimProbeOrigin('bean town')).toBeNull();
+        expect(claimProbeOrigin('javascript:alert(1)')).toBeNull();
+        expect(claimProbeOrigin('user@evil.example')).toBeNull();
     });
 });

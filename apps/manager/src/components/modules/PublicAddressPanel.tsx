@@ -18,6 +18,8 @@ export interface PublicAddressStatus {
     hostname?: string;
     mode?: 'tunnel' | 'direct' | string;
     tunnelToken?: string;
+    /** The server has a tunnel token but shows it only to an owner (the admin password counts as one). */
+    tunnelTokenOwnerOnly?: boolean;
     pubkey?: string;
     cached?: boolean;
     error?: string;
@@ -470,6 +472,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const hostname = typeof statusData?.hostname === 'string' ? statusData.hostname : '';
     const mode = typeof statusData?.mode === 'string' ? statusData.mode : 'tunnel';
     const tunnelToken = typeof statusData?.tunnelToken === 'string' ? statusData.tunnelToken : '';
+    const tunnelTokenOwnerOnly = !tunnelToken && statusData?.tunnelTokenOwnerOnly === true;
     const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
     const tunnelLine = mode === 'tunnel' ? describeTunnel(statusData?.tunnel) : null;
     const tunnelOk = statusData?.tunnel?.state === 'connected';
@@ -588,6 +591,12 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                     className={`text-xs break-words ${tunnelOk ? 'text-emerald-400' : 'text-amber-400'}`}
                                 >
                                     Tunnel: {tunnelLine}
+                                </div>
+                            )}
+
+                            {tunnelTokenOwnerOnly && (
+                                <div data-testid="public-address-token-owner-only" className="text-xs text-nature-400 break-words">
+                                    Only an owner can see the tunnel token.
                                 </div>
                             )}
 

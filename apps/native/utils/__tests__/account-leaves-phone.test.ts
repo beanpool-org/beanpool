@@ -41,6 +41,20 @@ vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => 
 vi.mock('expo-sqlite', () => ({ defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
 vi.mock('expo-file-system/legacy', () => ({ deleteAsync: vi.fn(async () => {}) }));
 vi.mock('../../services/pillar-sync', () => ({ resetSyncFingerprints: vi.fn() }));
+// The names list's copies (names-list.ts, tested end to end through its FakeNode in names-list.test.ts): here, only that
+// Sign Out asks for them before the wipe.
+const namesSave = vi.hoisted(() => ({ calls: [] as { anchors: readonly string[]; pinThere: boolean; keyThere: boolean }[] }));
+vi.mock('../names-list', async (importOriginal) => {
+    const real = await importOriginal<typeof import('../names-list')>();
+    return {
+        ...real,
+        saveNamesCopiesBeforeLeaving: vi.fn(async (identity: { publicKey: string }, anchors: readonly string[]) => {
+            const label = `beanpool:names-trust:${identity.publicKey.toLowerCase()}:${anchors[0]}`;
+            namesSave.calls.push({ anchors, pinThere: mem.async.has(label), keyThere: mem.secure.has('sovereign-identity') });
+            return [];
+        }),
+    };
+});
 
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -233,6 +247,35 @@ describe('Sign Out (Device Only)', () => {
         expect(fetch).not.toHaveBeenCalled();
         expect(await loadIdentity()).toBeNull();
         expect(mem.secure.has(PUSH_TOKEN_STORE_KEY)).toBe(false);
+    });
+});
+
+describe('Sign Out saves the names list\'s locked copies before the wipe (design-locked-copy §5)', () => {
+    const pinLabel = () => `beanpool:names-trust:${kim.publicKey.toLowerCase()}:${MULLUM}`;
+    beforeEach(() => { namesSave.calls = []; });
+
+    // The wipe itself (every `beanpool:names-` key and each pin's sealing key) is wipe-identity-storage.test.ts's: identity.ts
+    // reaches AsyncStorage through `require`, which no vi.mock here reaches.
+    it('without namesCopiesSaved (the delete-here purge, the update block\'s way out) the copies are still saved first, while the pin and the key are on the phone', async () => {
+        await kimsPhone();
+        mem.async.set(pinLabel(), 'sealed');
+        await signOutOfThisPhone(kim);
+        expect(namesSave.calls).toEqual([{ anchors: [MULLUM], pinThere: true, keyThere: true }]);
+        expect(mem.secure.has(IDENTITY_KEY)).toBe(false);
+    });
+
+    it('with namesCopiesSaved (Settings asked first) they aren\'t saved twice, and Sign Out still goes on to the wipe', async () => {
+        await kimsPhone();
+        mem.async.set(pinLabel(), 'sealed');
+        await signOutOfThisPhone(kim, { namesCopiesSaved: true });
+        expect(namesSave.calls).toEqual([]);
+        expect(mem.secure.has(IDENTITY_KEY)).toBe(false);
+    });
+
+    it('no names pin: nothing to save, nothing asked', async () => {
+        await kimsPhone();
+        await signOutOfThisPhone(kim);
+        expect(namesSave.calls).toEqual([]);
     });
 });
 

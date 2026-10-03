@@ -27,9 +27,13 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => secrets.get(key) ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { secrets.delete(key); }),
 }));
+// For identity.ts (the Sign Out wipe and the 12 words, end to end below).
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 
 import { getPublicKey } from '@noble/ed25519';
 import {
@@ -2964,5 +2968,103 @@ describe('§8 23. Sign Out saves the copy first; what it says when the node didn
         expect(after).toMatch(/text: NAMES_COPY\.tryAgain, onPress: \(\) => void signOutAfterNamesCopies\(\)/);
         expect(after).toMatch(/words\.pdf \? \[\{ text: NAMES_COPY\.savePdf/);
         expect(src).toContain('await signOutOfThisPhone(identity, { namesCopiesSaved: true });');
+    });
+});
+
+describe('§5 the restored line, and Sign Out then sign in with the same 12 words (design-locked-copy §5)', () => {
+    const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
+    const restoredIn = (words: readonly string[]) => words.filter((w) => w.startsWith('Restored your names-list record from the server')).length;
+    const named = (o: NamesOpened) => openEntries(o.list!, o).map((e) => e.text?.name).filter(Boolean).sort();
+
+    it('said once, on the open that restored, with the saved date and the key\'s number and code; not on the next', async () => {
+        const { node, phones: [, ada], k1 } = await community(['Owen', 'Ada'], true);
+        const held = node.copies!.get(ada.publicKey)!;
+        wipe(ada);
+        const first = await open(ada);
+        expect(restoredIn(first.notices)).toBe(1);
+        expect(first.notices).toContain(NAMES_COPY.copyRestored(held.savedAt, 1, namesListKeyCode(k1)));
+        expect(restoredIn((await open(ada)).notices)).toBe(0);
+        expect(restoredIn((await open(ada)).notices)).toBe(0);
+    });
+
+    it('an open whose list read fails keeps it: said once after an app restart (the kept words are on the phone)', async () => {
+        const { phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        wipe(ada);
+        drop = (req) => (new URL(req.url).pathname === '/api/names/entries' ? 'before' : null);
+        const cut = await openNamesList(COMMUNITY, ada, STORE);
+        expect(cut.ok).toBe(false);
+        drop = null;
+        // The app restarts: the module's memory is gone, the phone's storage stays.
+        vi.resetModules();
+        const fresh = await import('../names-list');
+        const again = await fresh.openNamesList(COMMUNITY, ada, STORE);
+        expect(again.ok && restoredIn(again.value.notices)).toBe(1);
+        const third = await fresh.openNamesList(COMMUNITY, ada, STORE);
+        expect(third.ok && restoredIn(third.value.notices)).toBe(0);
+    });
+
+    it('not said for a node with no copy (404), nor after Start afresh', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const held = node.copies!.get(ada.publicKey)!;
+        node.copies!.delete(ada.publicKey);
+        wipe(ada);
+        const none = await openNamesList(COMMUNITY, ada, STORE);
+        expect(none.ok && restoredIn(none.value.notices)).toBe(0);
+        // A refused copy, then Start afresh: nothing was restored, so nothing says so.
+        wipe(ada);
+        const tag = (held.box as { copyTag: string }).copyTag;
+        node.copies!.set(ada.publicKey, { ...held, seq: held.seq + 5, box: { ...(held.box as object), copyTag: (tag[0] === 'A' ? 'B' : 'A') + tag.slice(1) } });
+        const bad = await openNamesList(COMMUNITY, ada, STORE);
+        expect(bad.ok).toBe(false);
+        const afresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
+        expect(afresh.ok && restoredIn(afresh.value.notices)).toBe(0);
+        const after = await openNamesList(COMMUNITY, ada, STORE);
+        expect(after.ok && restoredIn(after.value.notices)).toBe(0);
+    });
+
+    it('end to end: Ada signs out (copies saved, the real wipe), signs in with the same 12 words, and her list is back with no code check', async () => {
+        const { createIdentityFromMnemonic, wipeIdentityScopedStorage } = await import('../identity');
+        const { generateMnemonic } = await import('../crypto');
+        const words = generateMnemonic();
+        const owen = await admin('Owen');
+        const ada = await createIdentityFromMnemonic(words, 'Ada');
+        const node = new FakeNode();
+        node.copies = new Map();
+        node.admins = [role(owen, 'owner'), role(ada)];
+        answer = (req) => node.answer(req);
+        await open(owen);
+        await meet(node, owen, ada);
+        for (let i = 0; i < 2; i++) for (const p of [owen, ada]) await openNamesList(COMMUNITY, p, STORE);
+        expect((await open(ada)).plan.kind).toBe('ready');
+        const k1 = node.current()!.id;
+        const key = await keyOf(owen, k1);
+        node.add(key, k1, PLANTED[0]);
+        node.add(key, k1, PLANTED[2]);
+        const label = namesTrustStoreKey(ada.publicKey, COMMUNITY);
+        expect(secrets.has(namesPinSecretName(label))).toBe(true);
+
+        // Sign Out: the copies first (confirmed: no words), then the wipe as identity.ts does it.
+        expect(namesSignOutWords(await saveNamesCopiesBeforeLeaving(ada, namesPinAddresses([...mem.keys()], ada.publicKey), STORE))).toBeNull();
+        const storage = {
+            getAllKeys: async () => [...mem.keys()],
+            multiRemove: async (keys: string[]) => { keys.forEach((k) => mem.delete(k)); },
+            removeItem: async (k: string) => { mem.delete(k); },
+        };
+        await wipeIdentityScopedStorage(storage, { deleteSecret: async (n) => { secrets.delete(n); } });
+        expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-') && k.includes(ada.publicKey.toLowerCase()))).toEqual([]);
+        expect(secrets.has(namesPinSecretName(label))).toBe(false);
+        expect(await pinOf(ada)).toBeNull();
+
+        // Signed in again with the same words: the same key, and the list opens with nobody checking codes.
+        const back = await createIdentityFromMnemonic(words, 'Ada');
+        expect(back.publicKey).toBe(ada.publicKey);
+        sent = [];
+        const opened = await open(back);
+        expect(opened.plan.kind).toBe('ready');
+        expect(named(opened)).toEqual([PLANTED[0], PLANTED[2]].sort());
+        expect(restoredIn(opened.notices)).toBe(1);
+        expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+        expect(sent.every(nothingReadable)).toBe(true);
     });
 });

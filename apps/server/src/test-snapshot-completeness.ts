@@ -119,9 +119,13 @@ function extract(tarPath: string, into: string): string {
     return into;
 }
 
+// Step 7c: the password alone opens no admin route with 2FA off; the operator's calls go under an owner's key session
+// (backups and snapshots are an owner's).
+let ADMIN: Record<string, string> = {};
+
 /** Download a route to a file, with the headers it answered. */
 async function download(url: string, to: string): Promise<{ status: number; headers: Headers; body: Buffer }> {
-    const res = await fetch(url, { method: 'GET', headers: { 'X-Admin-Password': ADMIN_PW } });
+    const res = await fetch(url, { method: 'GET', headers: { ...ADMIN } });
     const body = Buffer.from(await res.arrayBuffer());
     if (res.ok) fs.writeFileSync(to, body);
     return { status: res.status, headers: res.headers, body };
@@ -228,6 +232,7 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(DATA_DIR, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
+    ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     const store = getImageStore();
@@ -487,7 +492,7 @@ async function main(): Promise<void> {
         'and a locked one, the same way');
 
     const anyway = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     const anywayBytes = Buffer.from(await anyway.arrayBuffer());
     assert(anyway.status === 200, `the route answers with the backup rather than an error (got ${anyway.status})`);
@@ -546,7 +551,7 @@ async function main(): Promise<void> {
     assert(fs.existsSync(survivorImages), 'the surviving snapshot keeps its own');
 
     const deleted = await fetch(`${BASE}/api/local/admin/snapshots/delete`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: ADMIN_PW, name: survivor.name }),
     });
     assert(deleted.status === 200, 'the delete route deletes a snapshot');
@@ -640,7 +645,7 @@ async function main(): Promise<void> {
 
     // The route the harvester and both UIs use. No parameter, no opt-in, no retry.
     const shortRes = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     const shortBody = Buffer.from(await shortRes.arrayBuffer());
     assert(shortRes.status === 200, `a node with a lost object still produces a backup (got ${shortRes.status})`);
@@ -676,7 +681,7 @@ async function main(): Promise<void> {
     assert(wholeAgain.images.missing.length === 0 && wholeAgain.images.staged === wholeAgain.images.referenced,
         'with the object back, the very same call takes an ordinary complete backup and labels nothing');
     const wholeRes = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     await wholeRes.arrayBuffer();
     assert(wholeRes.headers.get('x-backup-contents') === 'database+images'

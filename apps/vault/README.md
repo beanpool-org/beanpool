@@ -115,6 +115,7 @@ the chain there: the API takes nothing after it, and the custodian tool refuses 
 vault-custodian release status                       # the chain as the vault will see it
 vault-custodian release propose --version 1.1.0 --same-image --same-custodians \
     --api-bundle out/bundles/vault-api.mjs --out proposal/          # or --image out/image.json for a new image
+                                                    # (built with --network static:…? add --notes "network static:…")
 vault-custodian release sign --dir proposal/ --key my-key.json      # each of two custodians; shows every line first
 vault-custodian release verify --dir proposal/                      # "the vault would take it"
 gh release create vault-v1.1.0 proposal/vault-release.json proposal/vault-release.sigs.json proposal/vault-api.mjs
@@ -239,19 +240,25 @@ pinned container (`--network`: below):
 DHCP, with IPv6 router advertisements: the default, `--network dhcp`. A host that hands out no address (1984 VPS #1:
 measured 2026-10-03, no DHCP lease; its Debian has a static address) is built with
 `--network static:<ipv4>/<prefix>,<gateway>`: that file is written instead with the address and gateway (router
-advertisements kept, no DHCP sections; `image/image-settings.mjs`). The value is checked strictly (an IPv4 address,
-a prefix of 1 to 32, a gateway inside it that is neither the address nor the network or broadcast address) and
+advertisements kept, no DHCP sections; `image/image-settings.mjs`). The value is checked strictly (a unicast IPv4 address,
+a prefix of 1 to 32, a unicast gateway inside it that is neither the address nor the network or broadcast address) and
 anything else refuses to build. It is public and part of the reproducible build: it changes the image and its hash,
 and `image.json` records it as `"network": "static:…"` (a dhcp build's `image.json` has no `network` field, as
 before). The firewall's DHCP rules stay in both forms: with a static address networkd sends nothing to the DHCP
 ports, so they are harmless.
 
-**Checking a build.** Build it yourself with the release's custodian keys and version, and the same `--network` as
-the release's `image.json` (none there means dhcp, the default), and compare: `image.json`
+**Checking a build.** Build it yourself with the release's custodian keys and version, and the same `--network` the
+release was built with, and compare: `image.json`
 (`{version, ukiSha256, roothash, imageHash}`, and `network` when it is not dhcp) must be the release's `image` and
 `imageHash`, and every file the same bytes. `root-files.txt`, `uki-sections.txt`, `initrd-files.txt`, `esp-files.txt` and `partitions.txt` list every file
 of the system tree, the UKI and its initrd, the ESP and the install image's partitions with their hashes, to find
 where two builds differ.
+
+Where to read a release's `--network`: a release doesn't publish `image.json` (`release propose --image` keeps only
+its version and hashes), so its notes state it (`--notes "network static:…"` above, signed in the manifest's
+`notes`). The image itself holds it in any case: the published `vault-root.raw` (the system partition, erofs; mount
+it read-only) has it in `/etc/systemd/network/80-wan.network`, as `Address=` and `Gateway=` lines under a first
+line naming the exact `--network` string; `DHCP=yes` there and no such lines means dhcp, the default.
 
 - **Across machines** (checked 2026-09-29): an arm64 Mac (Docker Desktop, the image's x86-64 package scripts through
   Rosetta) and GitHub's x86-64 runner built every file byte for byte the same with the same keys: `vault.efi`, the

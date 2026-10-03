@@ -11,7 +11,7 @@ import { signOutEverywhere } from '../../lib/node-client';
  * Operator manual text: packages/beanpool-guide/operators/setup/access-and-security.md — keep the two in step.
  */
 export const SIGN_OUT_EVERYWHERE_WARNING =
-    'This signs you out of Settings on every computer and phone, and retires a break-glass code made from one of those sign-ins. You will need to sign in again here. Automation tokens are not sign-ins and keep working: if someone else may have signed in as you, check Automation tokens (Access & Security) and revoke any you didn\'t make.';
+    'This signs you out of Settings on every computer and phone, and retires a break-glass code made from one of those sign-ins. You will need to sign in again here. Automation tokens are not sign-ins and keep working: if someone else may have signed in as you, an owner should check Automation tokens (Access & Security) and revoke any nobody recognises.';
 
 export function SignOutEverywhere({ onSignedOut }: { onSignedOut: () => void }) {
     const [confirming, setConfirming] = useState(false);

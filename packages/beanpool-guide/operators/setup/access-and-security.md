@@ -68,7 +68,7 @@ Lost a phone, or signed in to Settings on a computer that isn't yours? **Sign ou
 - An owner's break-glass code stops working too. Make a new one afterwards.
 - Your key stays on your phone: press **Manage** in the app to sign in again.
 - It ends only your own sign-ins. Settings opened with the admin password has no sign-ins of anyone's to end, so it doesn't show the button, and the server refuses an automation token here.
-- Automation tokens are not sign-ins: tokens made earlier keep working afterwards. If someone else may have signed in as you, open **Automation tokens** (below) and revoke any token you didn't make.
+- Automation tokens are not sign-ins: tokens made earlier keep working afterwards. If someone else may have signed in as you, an owner should open **Automation tokens** (below) and revoke any token nobody recognises. Only owners see that card.
 
 ## Automation tokens
 

@@ -16,6 +16,11 @@
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
  *   GET    /api/names/log?limit&offset              → { log, total, limit, offset }
  *   POST   /api/names/settings                      { twoAdminsToConfirm?, namesShownToMembers? } (an owner)
+ *   GET    /api/names/copy                          → { header, signature, box } of the signer's own locked copy (logged:
+ *                                                     copy_restored) | 404 no_copy
+ *   PUT    /api/names/copy                          { header, signature, box } → { seq } | { seq, code: exists }; 400 bad_copy |
+ *                                                     other_community, 403 not_yours, 409 stale_copy { seq }, 413 copy_too_big,
+ *                                                     429 too_many_copies (30 an hour per admin)
  *
  * Refusals, before anything is read or written: unsigned 401; a key that isn't an active member's here 403
  * `not_member`; a member, a moderator or a visitor 403 `admins_only`; the global node 404 `feature_off` (it keeps no
@@ -30,6 +35,7 @@ import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
     NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
     addGeneration, addShare, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
+    readNamesCopyOf, saveNamesCopy,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 
@@ -77,7 +83,11 @@ function admin(ctx: any): string | null {
 }
 
 function respond(ctx: any, e: unknown): void {
-    if (e instanceof NamesListError) return answer(ctx, e.status, e.message, e.code);
+    if (e instanceof NamesListError) {
+        answer(ctx, e.status, e.message, e.code);
+        if (e.extra) ctx.body = { ...e.extra, ...ctx.body };
+        return;
+    }
     if ((e as { code?: unknown })?.code === STANDBY_CODE) return answer(ctx, 409, STANDBY_NAMES, STANDBY_CODE);
     throw e;
 }
@@ -134,6 +144,13 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }));
 
     router.post('/api/names/settings', (ctx) => asAdmin(ctx, (actor, body) => setNamesSettings(actor, body)));
+
+    // The signer's own locked copy, and nobody else's: no parameter names an owner.
+    router.get('/api/names/copy', (ctx) => asAdmin(ctx, (actor) => readNamesCopyOf(actor)));
+    router.put('/api/names/copy', (ctx) => asAdmin(ctx, (actor, body) => {
+        const out = saveNamesCopy(actor, body);
+        return out.exists ? { seq: out.seq, code: 'exists' } : { seq: out.seq };
+    }));
 
     return router;
 }

@@ -38,6 +38,7 @@ import * as SecureStore from 'expo-secure-store';
 import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
+import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
 import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
 import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
@@ -52,6 +53,10 @@ const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
 
 type LeavingAccount = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
+
+interface WipeStorage {
+    getAllKeys(): Promise<readonly string[]>;
+}
 
 interface Storage {
     getItem(key: string): Promise<string | null>;
@@ -232,12 +237,34 @@ export async function releaseAccountFromPhone(account: LeavingAccount | null, st
 }
 
 /**
+ * Before Sign Out wipes them (identity.ts `wipeIdentityScopedStorage`): each names-list pin this key keeps on the phone has
+ * its locked copy saved on the node and confirmed (names-list.ts `saveNamesCopiesBeforeLeaving`, design §5). Returns the
+ * ones not confirmed, for the words (a store that fails counts as one); never throws and never blocks.
+ */
+export async function namesCopiesBeforeSignOut(
+    account: LeavingAccount | null, storage: Pick<WipeStorage, 'getAllKeys'> = AsyncStorage, store?: NamesPinStore,
+): Promise<NamesCopyUnconfirmed[]> {
+    if (!account?.publicKey || !account.privateKey) return [];
+    try {
+        const anchors = namesPinAddresses(await storage.getAllKeys(), account.publicKey);
+        if (!anchors.length) return [];
+        return await saveNamesCopiesBeforeLeaving(account as BeanPoolIdentity, anchors, store);
+    } catch (e) {
+        console.warn('[Names] The names-list copies could not be saved before Sign Out', e instanceof Error ? e.message : e);
+        return [{ anchor: '', onlyKey: null }];
+    }
+}
+
+/**
  * "Sign Out (Device Only)", and the phone's half of the self-delete purge at the member's last community on the phone
  * once the node has answered (settings.tsx, delete-here.ts `planDelete`):
  * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
  * app storage go (identity.ts `wipeIdentity`).
  */
-export async function signOutOfThisPhone(account: LeavingAccount | null): Promise<void> {
+export async function signOutOfThisPhone(account: LeavingAccount | null, opts: { namesCopiesSaved?: boolean } = {}): Promise<void> {
+    // The names list's pins go with the wipe: their locked copies are saved on the node first (best effort; Settings asks
+    // before this and passes `namesCopiesSaved`, so the copies aren't saved twice).
+    if (!opts.namesCopiesSaved) await namesCopiesBeforeSignOut(account);
     const { clearDB } = await import('./db');
     await clearDB();
     await releaseAccountFromPhone(account);

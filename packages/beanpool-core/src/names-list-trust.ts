@@ -91,7 +91,8 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { toEd25519Seed } from './ed25519-key.js';
 import {
     isNamesKeyId, isNamesEntryId, isNamesRingBox, namesBoxDigest, newNamesListKey, openNamesRing, sealNamesRing, NAMES_LIMITS,
-    type NamesRingBox,
+    isNamesCopyAddress, isNamesCopyBox, namesCopyBoxDigest, openNamesCopy, sealNamesCopy,
+    type NamesRingBox, type NamesCopyBox,
 } from './names-list-crypto.js';
 
 /** What a generation's signed bytes start with: the domain its signature is for, and nothing else. */
@@ -357,11 +358,13 @@ export interface NamesPin {
      * `NAMES_LIMITS.entries`. On the next ready read, an id here that is neither on the server nor deleted is a loss.
      */
     seen: string[];
+    /** The number of the newest locked copy this phone saved on the node (DESIGN-names-locked-copy §3); 0 before the first. */
+    copy: { seq: number };
 }
 
 /** A pin that trusts no one yet but this phone. */
 export function emptyNamesPin(communityId: string, me: string): NamesPin {
-    return { v: 3, communityId, me: lower(me), trusted: [lower(me)], dropped: {}, chain: [], abandoned: [], ring: {}, pending: null, manualDrops: [], seen: [] };
+    return { v: 3, communityId, me: lower(me), trusted: [lower(me)], dropped: {}, chain: [], abandoned: [], ring: {}, pending: null, manualDrops: [], seen: [], copy: { seq: 0 } };
 }
 
 function readLink(raw: unknown): NamesChainLink | null {
@@ -411,9 +414,11 @@ export function readNamesPin(raw: unknown, me: string): NamesPin | null {
             if (link && typeof key === 'string' && HEX_KEY.test(key)) pending = { ...link, key };
         }
         const seen = Array.isArray(p.seen) ? [...new Set(p.seen.filter((id): id is string => isNamesEntryId(id)))].slice(0, NAMES_LIMITS.entries) : [];
+        const seq = (p.copy as { seq?: unknown } | undefined)?.seq;
         return {
             v: 3, communityId: p.communityId as string, me: lower(me), trusted: [...new Set([...trusted, lower(me)])].sort(), dropped, chain, abandoned, ring, pending,
             manualDrops: normaliseNamesKeys(p.manualDrops, 10_000), seen,
+            copy: { seq: typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0 && seq <= 999_999_999 ? seq : 0 },
         };
     } catch {
         return null;
@@ -727,6 +732,7 @@ export function syncNames(input: { pin: NamesPin | null; state: NamesServerState
     const toDrop = [...new Set([...[...T].filter((k) => k !== me && !listed.has(k)), ...manualDrops, ...standing])].sort().slice(0, NAMES_TRUST_BOUNDS.keys);
     const pin: NamesPin = {
         v: 3, communityId, me, trusted: [...T].sort(), dropped: D, chain, abandoned, ring, pending, manualDrops, seen: [...(pin0.seen ?? [])],
+        copy: { seq: pin0.copy?.seq ?? 0 },
     };
     return { pin, plan: planNames(pin, state, toDrop, gens), toDrop, notices, generations: gens };
 }
@@ -996,4 +1002,176 @@ export function namesKeyCheckMatches(text: unknown, pubkey: string): boolean {
     if (!read || !HEX_KEY.test(pubkey.toLowerCase())) return false;
     if (read.kind === 'key') return read.pubkey === pubkey.toLowerCase();
     return read.digits === namesKeyCode(pubkey).replace(/\D/g, '');
+}
+
+// ── The locked copy (scratch/global-node/DESIGN-names-locked-copy-opus.md §2, §3) ────────────────
+
+/** What a locked copy's signed header starts with: no other statement starts with this line. */
+export const NAMES_COPY_STATEMENT = 'beanpool-names-copy-v1';
+/** The version the copy's payload carries (`{ v, pin }`). */
+export const NAMES_COPY_VERSION = 1;
+const SAVED_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const WHOLE0 = /^(0|[1-9][0-9]{0,8})$/;
+
+/** What a copy's header says. `headId` is null with an empty chain ("-" in the header). */
+export interface NamesCopyClaim {
+    communityId: string;
+    address: string;
+    owner: string;
+    seq: number;
+    headN: number;
+    headId: string | null;
+    /** The phone's clock, ISO 8601 UTC to the second: shown to the admin, never compared. */
+    savedAt: string;
+    boxDigest: string;
+}
+
+/** A copy as read: the header's claim, its signed bytes and signature, and the box its digest names. */
+export interface NamesCopy extends NamesCopyClaim {
+    header: string;
+    signature: string;
+    box: NamesCopyBox;
+}
+
+/**
+ * Why a copy is refused (design §5's words): `bad_copy` (signature, box, shape, another account or community, a pin that
+ * disagrees with its header), `other_address` (saved for another address), `stale_copy` (fails a §3 cross-check). The
+ * `detail` names the check.
+ */
+export type NamesCopyRefusal =
+    | { ok: false; reason: 'bad_copy'; detail: 'shape' | 'version' | 'signature' | 'box' | 'digest' | 'not_mine' | 'other_community' | 'pin' | 'head' | 'seq' }
+    | { ok: false; reason: 'other_address'; detail: 'other_address'; address: string }
+    | { ok: false; reason: 'stale_copy'; detail: 'own_statement' | 'own_share_head' | 'own_share_key' | 'own_share_trust' | 'node_seq' };
+
+/** The bytes a copy's owner signs, as text (lines joined by `\n`, no trailing newline). */
+export function namesCopyHeader(c: NamesCopyClaim): string {
+    if (!isNamesCommunityId(c.communityId)) throw new Error('A community id is needed for a copy.');
+    if (!isNamesCopyAddress(c.address)) throw new Error('A copy names the community’s http(s) address.');
+    if (!HEX_KEY.test(c.owner) || !HEX_KEY.test(c.boxDigest)) throw new Error('A copy names its owner and box digest in 64 hexadecimal characters.');
+    if (!Number.isSafeInteger(c.seq) || !WHOLE.test(String(c.seq))) throw new Error('A copy’s number is a whole number from 1.');
+    if (!Number.isSafeInteger(c.headN) || !WHOLE0.test(String(c.headN)) || (c.headN === 0) !== (c.headId === null)) throw new Error('A copy names its head, or 0 and "-" with none.');
+    if (c.headId !== null && !HEX_KEY.test(c.headId)) throw new Error('A copy’s head is a generation id.');
+    if (!SAVED_AT.test(c.savedAt)) throw new Error('A copy’s time is ISO 8601 UTC to the second.');
+    return [NAMES_COPY_STATEMENT, c.communityId, c.address, c.owner, String(c.seq), String(c.headN), c.headId ?? '-', c.savedAt, c.boxDigest].join('\n');
+}
+
+/** The pin with its copy number moved on: written into the pin before the upload, so a retry reuses it (design §3). */
+export function namesPinForNextCopy(pin: NamesPin): NamesPin {
+    return { ...pin, copy: { seq: pin.copy.seq + 1 } };
+}
+
+/**
+ * This phone's locked copy of `pin`, for `address`: `{ v: 1, pin }` without `seen`, sealed to `me`'s own key and signed by
+ * it under a header naming the pin's head and `pin.copy.seq` (move it on first with {@link namesPinForNextCopy}). Throws a
+ * NamesListCryptoError ("too big") for a pin over the 1 MiB cap: the phone says so and doesn't upload.
+ */
+export function makeNamesCopy(opts: { pin: NamesPin; address: string; me: NamesSigner; savedAt?: string | Date }): NamesCopy {
+    const owner = lower(opts.me.publicKey);
+    if (opts.pin.me !== owner) throw new Error('A copy is of this phone’s own pin.');
+    const kept: Partial<NamesPin> = { ...opts.pin };
+    delete kept.seen;
+    const seq = opts.pin.copy.seq;
+    const box = sealNamesCopy(JSON.stringify({ v: NAMES_COPY_VERSION, pin: kept }), { communityId: opts.pin.communityId, address: opts.address, owner, seq });
+    const head = headOf(opts.pin);
+    const when = opts.savedAt === undefined ? new Date() : opts.savedAt;
+    const savedAt = typeof when === 'string' ? when : when.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const claim: NamesCopyClaim = {
+        communityId: opts.pin.communityId, address: opts.address, owner, seq, headN: head?.n ?? 0, headId: head?.id ?? null, savedAt, boxDigest: namesCopyBoxDigest(box),
+    };
+    const header = namesCopyHeader(claim);
+    return { ...claim, header, signature: sign(header, opts.me), box };
+}
+
+/**
+ * A copy from what the node sent or a phone uploaded (`{ header, signature, box }`): the header parsed in its one form,
+ * the signature checked for the owner it names (strict RFC 8032), the box's shape and its digest against the header.
+ * What the node checks on upload, and the first half of {@link restoreNamesCopy}. Never a partial result.
+ */
+export function readNamesCopy(raw: unknown): { ok: true; copy: NamesCopy } | Extract<NamesCopyRefusal, { reason: 'bad_copy' }> {
+    const bad = (detail: Extract<NamesCopyRefusal, { reason: 'bad_copy' }>['detail']) => ({ ok: false as const, reason: 'bad_copy' as const, detail });
+    if (!raw || typeof raw !== 'object') return bad('shape');
+    const { header, signature, box } = raw as { header?: unknown; signature?: unknown; box?: unknown };
+    if (typeof header !== 'string' || header.length > 2000) return bad('shape');
+    const lines = header.split('\n');
+    if (lines.length !== 9 || lines[0] !== NAMES_COPY_STATEMENT) return bad('shape');
+    const [, communityId, address, owner, seqText, headNText, headIdText, savedAt, boxDigest] = lines;
+    if (!isNamesCommunityId(communityId) || !isNamesCopyAddress(address) || !HEX_KEY.test(owner) || !WHOLE.test(seqText) || !WHOLE0.test(headNText)) return bad('shape');
+    const headN = Number(headNText);
+    const headId = headIdText === '-' ? null : headIdText;
+    if ((headN === 0) !== (headId === null) || (headId !== null && !HEX_KEY.test(headId)) || !SAVED_AT.test(savedAt) || !HEX_KEY.test(boxDigest)) return bad('shape');
+    if (typeof signature !== 'string' || !verify(header, lower(signature), owner)) return bad('signature');
+    if (!isNamesCopyBox(box)) return bad('box');
+    if (namesCopyBoxDigest(box) !== boxDigest) return bad('digest');
+    return {
+        ok: true,
+        copy: { communityId, address, owner, seq: Number(seqText), headN, headId, savedAt, boxDigest, header, signature: lower(signature), box },
+    };
+}
+
+/**
+ * A wiped phone's restore (design §2, in its order): the copy read ({@link readNamesCopy}); its owner this phone's key;
+ * its community the state's and its address this phone's own; the box opened with `me`'s key; the payload's `v` 1; the pin
+ * read with {@link readNamesPin} (every chain link re-verified); its community, head n and head id the header's; and its
+ * `copy.seq` the header's. Then the phone runs {@link checkNamesCopyAgainst}. Any failure is a refusal, never a partial pin.
+ */
+export function restoreNamesCopy(
+    raw: unknown, ctx: { me: NamesSigner; communityId: string; address: string },
+): { ok: true; pin: NamesPin; copy: NamesCopy } | Exclude<NamesCopyRefusal, { reason: 'stale_copy' }> {
+    const read = readNamesCopy(raw);
+    if (!read.ok) return read;
+    const { copy } = read;
+    const bad = (detail: Extract<NamesCopyRefusal, { reason: 'bad_copy' }>['detail']) => ({ ok: false as const, reason: 'bad_copy' as const, detail });
+    const me = lower(ctx.me.publicKey);
+    if (copy.owner !== me) return bad('not_mine');
+    if (copy.communityId !== ctx.communityId) return bad('other_community');
+    if (copy.address !== ctx.address) return { ok: false, reason: 'other_address', detail: 'other_address', address: copy.address };
+    let text: string;
+    try {
+        text = openNamesCopy(copy.box, ctx.me.privateKey, { communityId: copy.communityId, address: copy.address, owner: copy.owner, seq: copy.seq });
+    } catch {
+        return bad('box');
+    }
+    let payload: { v?: unknown; pin?: unknown };
+    try { payload = JSON.parse(text) as typeof payload; } catch { return bad('box'); }
+    if (!payload || typeof payload !== 'object' || payload.v !== NAMES_COPY_VERSION) return bad('version');
+    const pin = readNamesPin(payload.pin, me);
+    if (!pin || pin.communityId !== copy.communityId) return bad('pin');
+    const head = headOf(pin);
+    if ((head?.n ?? 0) !== copy.headN || (head?.id ?? null) !== copy.headId) return bad('head');
+    if (pin.copy.seq !== copy.seq) return bad('seq');
+    return { ok: true, pin: { ...pin, seen: [] }, copy };
+}
+
+/**
+ * The §3 cross-checks for a wiped phone: the restored copy against everything on the node this admin signed, and the
+ * node's own word. Every statement on the node made by this key is on the copy's chain, abandoned, or its pending one;
+ * every share header from this key names a head on the chain or abandoned, keys all in the ring, and trusts only keys the
+ * copy trusts or dropped; and the node's `myCopy.seq` is the copy's. Statements and headers whose signatures don't check
+ * are nobody's and are skipped. The history itself (the copy's head on the node's) is left to {@link syncNames}, unchanged:
+ * a node behind the copy is `rolled_back` there, and the pin is kept for when it catches up.
+ *
+ * What it can't catch (design §3, tested): a node that serves a freshly wiped phone a whole consistent past.
+ */
+export function checkNamesCopyAgainst(
+    pin: NamesPin, copy: Pick<NamesCopy, 'seq'>, state: Pick<NamesServerState, 'generations' | 'shares'>, myCopy: { seq: number } | null,
+): { ok: true } | Extract<NamesCopyRefusal, { reason: 'stale_copy' }> {
+    const stale = (detail: Extract<NamesCopyRefusal, { reason: 'stale_copy' }>['detail']) => ({ ok: false as const, reason: 'stale_copy' as const, detail });
+    if (!myCopy || myCopy.seq !== copy.seq) return stale('node_seq');
+    const on = new Set([...pin.chain.map((l) => l.id), ...pin.abandoned]);
+    const gens = Array.isArray(state.generations) ? state.generations.slice(0, NAMES_TRUST_BOUNDS.generations) : [];
+    for (const raw of gens) {
+        const g = readNamesGeneration(raw, pin.communityId);
+        if (!g || g.maker !== pin.me) continue;
+        if (!on.has(g.id) && pin.pending?.id !== g.id) return stale('own_statement');
+    }
+    const accounted = new Set([...pin.trusted, ...Object.keys(pin.dropped)]);
+    const shares = Array.isArray(state.shares) ? state.shares.slice(0, NAMES_TRUST_BOUNDS.shares) : [];
+    for (const raw of shares) {
+        const s = readNamesShare(raw, pin.communityId);
+        if (!s || s.from !== pin.me) continue;
+        if (!on.has(s.headId)) return stale('own_share_head');
+        if (s.keyIds.some((id) => !(id in pin.ring))) return stale('own_share_key');
+        if (s.trusts.some((k) => !accounted.has(k))) return stale('own_share_trust');
+    }
+    return { ok: true };
 }

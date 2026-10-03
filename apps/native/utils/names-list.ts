@@ -36,6 +36,7 @@ import {
     readNamesKeyCheck, namesKeyQr, namesKeyCode, syncNames, readNamesPin, emptyNamesPin, checkNamesKeyInPerson, removeNamesKey,
     makeNamesGenerationFor, namesSharesToSend, namesReplay, namesRingKeys, namesKeyLabel, readNamesGeneration,
     sealNamesPinBlob, openNamesPinBlob, namesStatementId, followNamesServer, namesListKeyCode, readNamesShare, namesSeenAfterRead, namesSelfClaim,
+    namesPinForNextCopy, makeNamesCopy, restoreNamesCopy, checkNamesCopyAgainst, type NamesCopy,
     type NamesEntryText, type NamesPin, type NamesPlan, type NamesNotice, type NamesServerState, type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { buildSignedHeaders, bytesToHex } from './crypto';
@@ -76,7 +77,11 @@ export interface NamesState extends NamesServerState {
     settings: { twoAdminsToConfirm: boolean; namesShownToMembers: boolean };
     counts: { entries: number; confirmed: number; awaitingSecond: number; byKey: Record<string, number>; locked: number };
     me: { pubkey: string; role: 'owner' | 'admin' | null; owner: boolean };
+    /** The node's word on this admin's own locked copy (design §3), null when it holds none. */
+    myCopy?: NamesMyCopy | null;
 }
+
+export interface NamesMyCopy { seq: number; headN: number; headId: string | null; savedAt: string; digest: string }
 
 export interface SealedEntryRow {
     id: string;
@@ -131,7 +136,7 @@ export interface NamesLogLine {
 /** An answer: the node's body, or its refusal in its own words (and its code, which the screen acts on). */
 export type NamesResult<T> =
     | { ok: true; value: T }
-    | { ok: false; status: number; code: string | null; message: string };
+    | { ok: false; status: number; code: string | null; message: string; seq?: number };
 
 export const UNREACHABLE = "Couldn't reach your community. Check your connection and try again.";
 /** The code of a request let go at its time limit (status 0, like any lost connection; round 14: the open stops at it). */
@@ -197,6 +202,7 @@ async function send<T>(anchorUrl: string, identity: BeanPoolIdentity, method: 'G
                 ok: false, status: res.status,
                 code: typeof parsed?.code === 'string' ? parsed.code : null,
                 message: typeof parsed?.error === 'string' && parsed.error.trim() ? parsed.error : UNREACHABLE,
+                ...(typeof parsed?.seq === 'number' ? { seq: parsed.seq } : {}),
             };
         }
         if (parsed === null) return { ok: false, status: res.status, code: null, message: UNREACHABLE };
@@ -206,7 +212,8 @@ async function send<T>(anchorUrl: string, identity: BeanPoolIdentity, method: 'G
     }
 }
 
-export const fetchNamesState = (anchor: string, id: BeanPoolIdentity) => call<NamesState>(anchor, id, 'GET', `${NAMES_PATH}/state`, undefined, stateTimeoutMs);
+/** `limitMs`: a shorter limit than the state's own (Sign Out's, {@link NAMES_SIGN_OUT_REQUEST_MS}). */
+export const fetchNamesState = (anchor: string, id: BeanPoolIdentity, limitMs?: number) => call<NamesState>(anchor, id, 'GET', `${NAMES_PATH}/state`, undefined, limitMs ?? stateTimeoutMs);
 /** Every entry, sealed, and every confirmation. The node logs it as a read, or, for an export, as an export. */
 export const fetchNamesList = (anchor: string, id: BeanPoolIdentity, forExport = false, entries = 2000) =>
     call<NamesListBody>(anchor, id, 'GET', `${NAMES_PATH}/entries${forExport ? '?for=export' : ''}`, undefined, listTimeoutMs(entries));
@@ -234,6 +241,10 @@ export const setNamesSettings = (anchor: string, id: BeanPoolIdentity, settings:
 
 const postGeneration = (anchor: string, id: BeanPoolIdentity, g: Pick<NamesGeneration, 'statement' | 'signature'>, replay = false) =>
     call<{ id: string; n: number; code?: string }>(anchor, id, 'POST', `${NAMES_PATH}/generations`, { statement: g.statement, signature: g.signature, ...(replay ? { replay: true } : {}) });
+const putCopy = (anchor: string, id: BeanPoolIdentity, c: NamesCopy, limitMs?: number) =>
+    call<{ seq: number; code?: string }>(anchor, id, 'PUT', `${NAMES_PATH}/copy`, { header: c.header, signature: c.signature, box: c.box }, limitMs);
+/** Every fetch is logged on the node as `copy_restored` and other admins see it: only ever for a restore, never to check. */
+const getCopy = (anchor: string, id: BeanPoolIdentity, limitMs?: number) => call<unknown>(anchor, id, 'GET', `${NAMES_PATH}/copy`, undefined, limitMs);
 const postShare = (anchor: string, id: BeanPoolIdentity, s: NamesShare) =>
     call<{ to: string }>(anchor, id, 'POST', `${NAMES_PATH}/shares`, { header: s.header, signature: s.signature, box: s.box });
 
@@ -343,6 +354,309 @@ export async function writeNamesPinTo(store: NamesPinStore, publicKey: string, a
 }
 
 const fromHex = (hex: string): Uint8Array => Uint8Array.from(hex.match(/../g) ?? [], (b) => parseInt(b, 16));
+
+// ── The locked copy on the node (design §3, §5) ──────────────────────────────────────────────
+
+/** What a copy holds of a pin, as a digest: everything but `seen` and the copy's own number. */
+const copiedPart = (pin: NamesPin): string => namesStatementId(JSON.stringify({ ...pin, seen: [], copy: { seq: 0 } }));
+/** The last copy the node confirmed for this pin: its number, what it held and its box digest. Public values only. */
+const copiedLabel = (publicKey: string, anchor: string) => `beanpool:names-copied:${publicKey.toLowerCase()}:${communityAddress(anchor) ?? anchor}`;
+type Copied = { seq: number; part: string; digest: string };
+async function lastCopied(store: NamesPinStore, publicKey: string, anchor: string): Promise<Copied | null> {
+    try {
+        const raw = await store.getItem(copiedLabel(publicKey, anchor));
+        const c = raw ? JSON.parse(raw) as Copied : null;
+        return c && typeof c.seq === 'number' && typeof c.part === 'string' && typeof c.digest === 'string' ? c : null;
+    } catch {
+        return null;
+    }
+}
+async function keepCopied(store: NamesPinStore, publicKey: string, anchor: string, c: Copied): Promise<void> {
+    try { await store.setItem(copiedLabel(publicKey, anchor), JSON.stringify(c)); } catch { /* the next open saves again */ }
+}
+/** A copy made and not yet confirmed, by pin label: a retry sends the very same one (the same header gets `exists`). */
+const copiesInFlight = new Map<string, { part: string; copy: NamesCopy }>();
+/** 429 `too_many_copies`: no copy is sent for that pin until this time (an hour); the list still opens. */
+const copiesPausedUntil = new Map<string, number>();
+const COPY_HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Whether the node needs a new copy of this pin (design §3's table): `no` when its copy is this pin's, `yes` when it
+ * holds an older one or none (self-healing) or the pin changed since the last copy it confirmed, `higher` when it holds a
+ * newer one (another phone signed in with this key; stage 3b merges it), `off` when the node keeps no copies (no myCopy).
+ */
+async function copyDue(store: NamesPinStore, publicKey: string, anchor: string, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<'no' | 'yes' | 'higher' | 'off'> {
+    if (state.myCopy === undefined) return 'off';
+    const mine = state.myCopy;
+    if (mine && mine.seq > pin.copy.seq) return 'higher';
+    if (!mine || mine.seq < pin.copy.seq) return 'yes';
+    const last = await lastCopied(store, publicKey, anchor);
+    return last && last.seq === pin.copy.seq && last.digest === mine.digest && last.part === copiedPart(pin) ? 'no' : 'yes';
+}
+
+const copyFailure = (code: string, message: string): NamesFailure => ({ ok: false, status: 0, code, message });
+
+/**
+ * The open's copy rule (`copyHeld`, design §3 item 2) for a request that sends statements or shares outside an open:
+ * the copy first, when due. A copy that fails is returned, and the caller sends nothing. The pin as kept otherwise.
+ */
+async function copyFirst(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<NamesResult<NamesPin>> {
+    const due = await copyDue(store, identity.publicKey, anchor, pin, state);
+    if (due !== 'yes' && due !== 'higher') return { ok: true, value: pin };
+    const copied = await saveCopy(anchor, identity, store, pin, state);
+    return copied.ok ? { ok: true, value: copied.pin } : copied;
+}
+
+/**
+ * Saves this pin's locked copy on the node, unless the node already confirmed this very copy (on the pin's chain; the
+ * caller holds it). The pin with its copy number moved on is kept on this phone first, so a retry reuses the number and
+ * the same copy (`exists`); a 409 `stale_copy` moves past the node's number once. A failure is returned, never thrown:
+ * the caller then sends neither the generation nor the shares that depend on it (design §9.4). Returns the pin as kept,
+ * and the node's copy as it now stands (`mine`), for a later step of the same request to pass on. `limitMs`: each PUT's
+ * limit, asked as it goes out (Sign Out's, which shrinks to its deadline); the request limit otherwise.
+ */
+/**
+ * The address a copy is sealed to and checked against, at save, restore and merge alike: `communityAddress`, with the
+ * scheme and host in lower case and a default port dropped, so one community typed two ways is one address.
+ */
+function copyAddress(anchor: string): string | null {
+    const a = communityAddress(anchor);
+    const m = a?.match(/^(https?):\/\/([^/?#]+)(.*)$/i);
+    if (!a || !m) return a;
+    const scheme = m[1].toLowerCase();
+    return `${scheme}://${m[2].toLowerCase().replace(scheme === 'https' ? /:443$/ : /:80$/, '')}${m[3]}`;
+}
+
+async function saveCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>, limitMs?: () => number): Promise<{ ok: true; pin: NamesPin; mine: NamesMyCopy | null | undefined } | NamesFailure> {
+    if (state.myCopy === undefined) return { ok: true, pin, mine: undefined };
+    const label = namesTrustStoreKey(identity.publicKey, anchor);
+    const part = copiedPart(pin);
+    const last = await lastCopied(store, identity.publicKey, anchor);
+    // Already there: the node's own word matches the copy this phone last saw confirmed, and the pin is unchanged since.
+    const mine = state.myCopy;
+    if (last && mine && last.seq === pin.copy.seq && last.part === part && mine.seq === last.seq && mine.digest === last.digest) return { ok: true, pin, mine };
+    // A newer copy on the node is another phone's (design §3, "higher seq"): never written over before stage 3b's merge.
+    if (state.myCopy && state.myCopy.seq > pin.copy.seq) return copyFailure('copy_newer', NAMES_COPY.copyNewer);
+    if ((copiesPausedUntil.get(label) ?? 0) > Date.now()) return copyFailure('too_many_copies', NAMES_COPY.copyNotSaved);
+    const address = copyAddress(anchor);
+    if (!address) return copyFailure('copy_not_saved', NAMES_COPY.copyNotSaved);
+    let now = pin;
+    for (let round = 0; round < 2; round++) {
+        const flying = copiesInFlight.get(label);
+        let copy: NamesCopy;
+        if (flying && flying.part === part && flying.copy.seq === now.copy.seq) copy = flying.copy;
+        else {
+            const next = namesPinForNextCopy(now);
+            if (!(await writeNamesPinTo(store, identity.publicKey, anchor, next))) return NOT_KEPT;
+            now = next;
+            try {
+                copy = makeNamesCopy({ pin: now, address, me: identity });
+            } catch {
+                return copyFailure('copy_too_big', NAMES_COPY.copyTooBig);
+            }
+            copiesInFlight.set(label, { part, copy });
+        }
+        const put = await putCopy(anchor, identity, copy, limitMs?.());
+        if (put.ok) {
+            copiesInFlight.delete(label);
+            await keepCopied(store, identity.publicKey, anchor, { seq: copy.seq, part, digest: copy.boxDigest });
+            return { ok: true, pin: now, mine: { seq: copy.seq, headN: copy.headN, headId: copy.headId, savedAt: copy.savedAt, digest: copy.boxDigest } };
+        }
+        if (put.code === 'too_many_copies') copiesPausedUntil.set(label, Date.now() + COPY_HOUR_MS);
+        // The phone's words, never the node's code (`stale_copy`, `too_many_copies`); a timeout keeps its own, for the caller.
+        if (!(put.code === 'stale_copy' && typeof put.seq === 'number' && round === 0)) return put.code === NAMES_TIMED_OUT ? put : { ...put, message: NAMES_COPY.copyNotSaved };
+        copiesInFlight.delete(label);
+        now = { ...now, copy: { seq: Math.max(now.copy.seq, put.seq) } };
+    }
+    return copyFailure('copy_not_saved', NAMES_COPY.copyNotSaved);
+}
+
+/**
+ * No pin on this phone for this key and address (design §5): the node's copy, fetched, checked (§2, and §3 against the
+ * state just fetched) and kept, to sync from. `null`: a fresh pin, only when the node holds no copy or the admin asked to
+ * start afresh (the fresh-pin rule). Any other outcome is a failure, with nothing written and nothing uploaded: a node
+ * that is down is "try again", never a fresh start.
+ */
+async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, afresh: boolean): Promise<NamesResult<NamesPin | null>> {
+    const mine = state.myCopy ?? null;
+    if (!mine) return { ok: true, value: null };
+    // "Start afresh on this phone" (asked first): a fresh pin numbered past the node's copy, so its first copy replaces it.
+    if (afresh) return { ok: true, value: { ...emptyNamesPin(state.communityId, identity.publicKey), copy: { seq: mine.seq } } };
+    const got = await getCopy(anchor, identity);
+    if (!got.ok) {
+        if (got.status === 404 && got.code === 'no_copy') return { ok: true, value: null };
+        return got.status === 0 ? { ...got, code: got.code ?? 'copy_unreachable', message: NAMES_COPY.copyUnreachable } : got;
+    }
+    const address = copyAddress(anchor) ?? anchor;
+    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address });
+    if (!r.ok) {
+        return r.reason === 'other_address'
+            ? copyFailure('copy_other_address', NAMES_COPY.copyOtherAddress(r.address))
+            : copyFailure('copy_bad', NAMES_COPY.copyBad);
+    }
+    const checked = checkNamesCopyAgainst(r.pin, r.copy, state, mine);
+    if (!checked.ok) return copyFailure('copy_stale', NAMES_COPY.copyStale(r.copy.savedAt));
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, r.pin))) return NOT_KEPT;
+    await keepCopied(store, identity.publicKey, anchor, { seq: r.copy.seq, part: copiedPart(r.pin), digest: r.copy.boxDigest });
+    // Said once, by the next open that says the kept words (kept on the phone, so also across an app restart).
+    const head = r.pin.chain[r.pin.chain.length - 1];
+    if (head) await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyRestored(r.copy.savedAt, head.n, namesListKeyCode(head.id))]);
+    return { ok: true, value: r.pin };
+}
+
+/**
+ * Two phones with one key (design §3 "higher seq", §5 "Merging"): `local` is this phone's pin, `other` the newer copy
+ * another phone saved. `other` is kept when its chain extends this phone's (same links, as far or further); otherwise
+ * this phone's pin is. Either way the rings are united (restricted to the kept pin's chain and `abandoned`, as
+ * `readNamesPin` holds), and the copy number is the higher one, so the next copy is numbered past both. `seen` stays
+ * this phone's. Never a pin numbered lower than either.
+ */
+export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
+    const extends_ = other.chain.length >= local.chain.length && local.chain.every((l, i) => other.chain[i]?.id === l.id);
+    const kept = extends_ ? other : local;
+    const left = extends_ ? local : other;
+    // A statement either phone of this key abandoned stays abandoned (and its key in the ring). The other side's links off
+    // the kept chain (a fork) are NOT made abandoned here: that would change what the walk takes (names-list-trust.ts).
+    const keptIds = new Set(kept.chain.map((l) => l.id));
+    const abandoned = [...new Set([...kept.abandoned, ...left.abandoned])].filter((id) => !keptIds.has(id));
+    const onKept = new Set([...keptIds, ...abandoned]);
+    const ring: Record<string, string> = {};
+    for (const [id, key] of [...Object.entries(other.ring), ...Object.entries(local.ring)]) if (onKept.has(id) && !ring[id]) ring[id] = key;
+    // This phone's pending key: into the ring when its statement landed on the kept chain, else still pending.
+    let pending = kept.pending;
+    if (local.pending && onKept.has(local.pending.id)) ring[local.pending.id] ??= local.pending.key;
+    else if (local.pending) pending = local.pending;
+    return { ...kept, abandoned, ring, pending, seen: local.seen, copy: { seq: Math.max(local.copy.seq, other.copy.seq) } };
+}
+
+/**
+ * This phone has a pin and the node holds a newer copy of this key's (another phone signed in as this admin and saved
+ * after this one): fetched, checked (§2) and merged ({@link mergeNamesPins}), kept, and said once. Any failure keeps
+ * this phone's pin as it is (never rolled back); the copy then waits (`copy_newer`) and no shares go.
+ */
+async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin, limitMs?: number): Promise<NamesPin> {
+    const got = await getCopy(anchor, identity, limitMs);
+    if (!got.ok) return local;
+    const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: copyAddress(anchor) ?? anchor });
+    if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
+    const merged = mergeNamesPins(local, r.pin);
+    if (!(await writeNamesPinTo(store, identity.publicKey, anchor, merged))) return local;
+    await keepUnsaid(store, identity.publicKey, anchor, [NAMES_COPY.copyNewer]);
+    return merged;
+}
+
+/** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
+export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address'];
+
+/**
+ * A names pin whose copy the node didn't confirm at Sign Out; `onlyKey`: the list's key N when no other admin may hold it.
+ * `maybe`: the node's holder list wasn't read and this phone's pin still names other admins, who may since have been
+ * removed or re-keyed, so this phone may be the only holder (design §5; the words say "may").
+ */
+export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null; maybe?: boolean }
+
+/**
+ * Sign Out's time limits (design §5, "one request, time-limited"): each request at most {@link NAMES_SIGN_OUT_REQUEST_MS},
+ * and the whole save, every community's included, at most {@link NAMES_SIGN_OUT_TOTAL_MS} (a request never runs past it).
+ * A copy not confirmed by then is said, and Sign Out goes on: the admin chooses, nothing waits for a slow node.
+ */
+export const NAMES_SIGN_OUT_REQUEST_MS = 10_000;
+
+/** The head key's number when the pin trusts no other undropped admin (this phone its only holder); null otherwise. */
+function onlyKeyOnPin(pin: NamesPin, me: string): number | null {
+    const head = pin.chain[pin.chain.length - 1];
+    return head && !pin.trusted.some((k) => k !== me && !(k in pin.dropped)) ? head.n : null;
+}
+export const NAMES_SIGN_OUT_TOTAL_MS = 30_000;
+
+/**
+ * Sign Out (design §5): for each community where this key keeps a names pin, the copy saved (or found already saved) and
+ * the node's `myCopy.digest` confirmed against the copy this phone last saw confirmed. On the pin's chain, so nothing
+ * writes the pin after the wipe that follows; a chain still held by something else at the deadline is let go, and this
+ * link then does nothing when its turn comes. Returns the ones not confirmed; the caller decides the words and never
+ * blocks (no hard gates). `anchors`: the community addresses this key keeps a pin for (from the store's labels).
+ */
+async function keptUnread(store: NamesPinStore, publicKey: string, anchor: string): Promise<NamesCopyUnconfirmed> {
+    const kept = await readKeptPin(store, publicKey, anchor);
+    return kept.kind === 'pin' ? unreadHolders(anchor, kept.pin, publicKey.toLowerCase()) : { anchor, onlyKey: null };
+}
+
+/**
+ * The node's holder list unread (no time left, the state failed, or let go at the deadline): the pin can't say who
+ * holds the key now (an admin it still trusts may have been removed or re-keyed since this phone's last open), so the
+ * head key is treated as possibly this phone's alone: the PDF is offered, and the words say "may" unless the pin itself
+ * names no other admin. A sole admin is never told another admin will send the keys.
+ */
+function unreadHolders(anchor: string, pin: NamesPin, me: string): NamesCopyUnconfirmed {
+    const head = pin.chain[pin.chain.length - 1];
+    if (!head) return { anchor, onlyKey: null };
+    return onlyKeyOnPin(pin, me) !== null ? { anchor, onlyKey: head.n } : { anchor, onlyKey: head.n, maybe: true };
+}
+
+export async function saveNamesCopiesBeforeLeaving(
+    identity: BeanPoolIdentity, anchors: readonly string[], store: NamesPinStore = DEVICE_NAMES_STORE,
+    limits: { requestMs: number; totalMs: number } = { requestMs: NAMES_SIGN_OUT_REQUEST_MS, totalMs: NAMES_SIGN_OUT_TOTAL_MS },
+): Promise<NamesCopyUnconfirmed[]> {
+    const until = Date.now() + limits.totalMs;
+    const left = () => Math.max(0, Math.min(limits.requestMs, until - Date.now()));
+    const out: NamesCopyUnconfirmed[] = [];
+    for (const anchor of anchors) {
+        let gaveUp = false;
+        let started = false;
+        const work = withPin(identity.publicKey, anchor, async (): Promise<NamesCopyUnconfirmed | null> => {
+            if (gaveUp) return null;
+            started = true;
+            const kept = await readKeptPin(store, identity.publicKey, anchor);
+            if (kept.kind !== 'pin') return null;
+            const head = kept.pin.chain[kept.pin.chain.length - 1];
+            const me = identity.publicKey.toLowerCase();
+            // The node's holder list unread (no time left, or the state failed): see unreadHolders.
+            if (left() <= 0) return unreadHolders(anchor, kept.pin, me);
+            const s = await fetchNamesState(anchor, identity, left());
+            if (!s.ok) return unreadHolders(anchor, kept.pin, me);
+            // An empty or missing holder list says nothing about who holds the key: its words are the unread ones (the
+            // copy is still saved below).
+            const holders = (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase());
+            const notSaved: NamesCopyUnconfirmed = holders.length === 0 ? unreadHolders(anchor, kept.pin, me)
+                : { anchor, onlyKey: head && holders.every((k) => k === me) ? head.n : null };
+            if (s.value.myCopy === undefined || left() <= 0) return notSaved;
+            // Another phone saved a newer copy: merged first, as the open does, so this one is saved past both.
+            const pin = s.value.myCopy && s.value.myCopy.seq > kept.pin.copy.seq ? await mergeNewerCopy(anchor, identity, store, s.value, kept.pin, left()) : kept.pin;
+            if (left() <= 0) return notSaved;
+            const saved = await saveCopy(anchor, identity, store, pin, s.value, left);
+            if (!saved.ok) return notSaved;
+            const last = await lastCopied(store, identity.publicKey, anchor);
+            return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : notSaved;
+        });
+        // The chain may be held by an open still waiting on its own (longer) limits: past the deadline, this one is let go.
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<'late'>((resolve) => { timer = setTimeout(() => resolve('late'), Math.max(0, until - Date.now())); });
+        try {
+            const first = await Promise.race([work, deadline]);
+            // Let go: decided from the pin as it is kept (read only, no request), as when the state can't be read.
+            const confirmed = first === 'late' ? (started ? await work : ((gaveUp = true), await keptUnread(store, identity.publicKey, anchor))) : first;
+            if (confirmed) out.push(confirmed);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    return out;
+}
+
+/** §5's words for a Sign Out whose names copy wasn't confirmed: the only-holder case offers the PDF. */
+export function namesSignOutWords(unconfirmed: readonly NamesCopyUnconfirmed[]): { text: string; pdf: boolean } | null {
+    if (!unconfirmed.length) return null;
+    const only = unconfirmed.find((u) => u.onlyKey !== null && !u.maybe) ?? unconfirmed.find((u) => u.onlyKey !== null);
+    if (!only) return { text: NAMES_COPY.signOutNotConfirmed, pdf: false };
+    const n = only.onlyKey ?? 0;
+    return { text: only.maybe ? NAMES_COPY.signOutMaybeOnlyCopy(n) : NAMES_COPY.signOutOnlyCopy(n), pdf: true };
+}
+
+/** The community addresses where `publicKey` keeps a names pin on this phone, from the pin labels among `keys`. */
+export function namesPinAddresses(keys: readonly string[], publicKey: string): string[] {
+    const prefix = `beanpool:names-trust:${publicKey.toLowerCase()}:`;
+    return keys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+}
 
 type NamesFailure = Extract<NamesResult<never>, { ok: false }>;
 const NOT_KEPT: NamesFailure = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
@@ -614,19 +928,28 @@ async function forgetSaid(store: NamesPinStore, publicKey: string, anchor: strin
  * The node's state, the sync, the pin kept. `say`: an open says the notices itself; anything else keeps them for the next
  * open. `landed`: this phone's own statement, if this sync took it and the pin keeping that was saved (round 16, :690).
  */
-async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false): Promise<NamesResult<Synced & { kept: boolean; landed: MadeKey | null }>> {
+async function look(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, say = false, afresh = false): Promise<NamesResult<Synced & { kept: boolean; landed: MadeKey | null }>> {
     const s = await fetchNamesState(anchor, identity);
     if (!s.ok) return s;
     // The same for an open (round 15): a pin that a store failed to read this time is never synced from empty and saved.
     const was = await readKeptPin(store, identity.publicKey, anchor);
     if (was.kind === 'unreadable') return NOT_READ;
-    const r = syncNames({ pin: was.kind === 'pin' ? was.pin : null, state: s.value, me: identity });
+    let from: NamesPin | null = was.kind === 'pin' ? was.pin : null;
+    if (!from) {
+        // None kept, or one that will never open: the node's locked copy first (design §5).
+        const restored = await restoreFromCopy(anchor, identity, store, s.value, afresh);
+        if (!restored.ok) return restored;
+        from = restored.value;
+    } else if (s.value.myCopy && s.value.myCopy.seq > from.copy.seq) {
+        from = await mergeNewerCopy(anchor, identity, store, s.value, from);
+    }
+    const r = syncNames({ pin: from, state: s.value, me: identity });
     if (r.plan.kind === 'refused' && r.plan.reason === 'other_community') {
         return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept: true, landed: null } };
     }
     const kept = await writeNamesPinTo(store, identity.publicKey, anchor, r.pin);
     // A pin not saved still holds the statement as pending: the next sync takes it again, and says it there.
-    const landed = kept ? landedKey(was.kind === 'pin' ? was.pin : null, r.pin, r.generations) : null;
+    const landed = kept ? landedKey(from, r.pin, r.generations) : null;
     if (!say) await keepUnsaid(store, identity.publicKey, anchor, [...(landed ? madeKeyWords(s.value, landed, '') : []), ...noticeWords(r.notices, s.value)]);
     return { ok: true, value: { state: s.value, pin: r.pin, plan: r.plan, notices: r.notices, generations: r.generations, kept, landed } };
 }
@@ -652,24 +975,32 @@ function neverLanded(r: { status: number; code: string | null }): boolean {
  * answer) it stays: the next sync takes it if the node has it, sends it again while the node is where it was, and drops
  * it once the node moved on (409 `stale` included: the sync then takes the winner).
  */
-async function sendGeneration(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, g: Pick<NamesGeneration, 'statement' | 'signature'>): Promise<NamesResult<true>> {
+async function sendGeneration(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, g: Pick<NamesGeneration, 'statement' | 'signature'>, state: Pick<NamesState, 'myCopy'>): Promise<NamesResult<true>> {
+    // The copy before the statement (design §3, item 1): a copy that fails sends nothing, and the key stays pending here.
+    const copied = await saveCopy(anchor, identity, store, pin, state);
+    if (!copied.ok) return copied;
     const sent = await postGeneration(anchor, identity, g);
     if (sent.ok) return { ok: true, value: true };
-    if (neverLanded(sent)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...pin, pending: null });
+    if (neverLanded(sent)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...copied.pin, pending: null });
     return sent;
 }
 
 async function makeAndSend(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, synced: Pick<Synced, 'pin' | 'state'>, drops: string[]): Promise<NamesResult<true>> {
     const made = makeNamesGenerationFor(synced.pin, identity, drops);
     if (!(await writeNamesPinTo(store, identity.publicKey, anchor, made.pin))) return NOT_KEPT;
+    // The copy, with the new key pending in it, before the statement (design §3, item 1; §9.4): a copy that fails sends
+    // neither the statement nor a claim, and the key stays pending here for the next open (a retry, never a key that
+    // exists only on a phone that may be wiped).
+    const copied = await saveCopy(anchor, identity, store, made.pin, synced.state);
+    if (!copied.ok) return copied;
     const first = await postGeneration(anchor, identity, made.generation);
     if (first.ok) return { ok: true, value: true };
     // The node counts a holder on its own word (design Addendum 4): a phone that took the head's key from a box but has
     // sent no header since isn't one, and its own new key is refused (409 `ask_for_share`). It says so by sending its
     // signed header to the admins it trusts (never to a key this statement drops), then sends the statement once more.
     const claim = first.code === 'ask_for_share' ? await claimHeldKey(anchor, identity, synced, drops) : false;
-    if (claim === true) return sendGeneration(anchor, identity, store, made.pin, made.generation);
-    if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...made.pin, pending: null });
+    if (claim === true) return sendGeneration(anchor, identity, store, copied.pin, made.generation, { myCopy: copied.mine });
+    if (neverLanded(first)) await writeNamesPinTo(store, identity.publicKey, anchor, { ...copied.pin, pending: null });
     // A claim that ran out of time (round 15, :574): the open stops on it, as on a statement's own (one limit per open).
     return claim === false ? first : claim;
 }
@@ -714,8 +1045,8 @@ export async function openNamesList(anchor: string, identity: BeanPoolIdentity, 
 }
 
 /** The open, on the pin's chain (the caller holds it). */
-async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore): Promise<NamesResult<NamesOpened>> {
-    let l = await look(anchor, identity, store, true);
+async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, afresh = false): Promise<NamesResult<NamesOpened>> {
+    let l = await look(anchor, identity, store, true, afresh);
     if (!l.ok) return l;
     const unsaid = await peekUnsaid(store, identity.publicKey, anchor);
     const notices: NamesNotice[] = [...l.value.notices];
@@ -741,7 +1072,7 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
     const cur = l.value.state.current?.id ?? '-';
     if (pend && pend.statement.split('\n')[3] === cur && !(l.value.plan.kind === 'refused' && l.value.plan.reason === 'other_community')) {
         // Ours, never landed, and the node is still where it was: the same statement again (never a second key).
-        const sent = await sendGeneration(anchor, identity, store, l.value.pin, pend);
+        const sent = await sendGeneration(anchor, identity, store, l.value.pin, pend, l.value.state);
         if (!sent.ok && sent.status === 0) return failed(sent);
         l = await look(anchor, identity, store, true);
         if (!l.ok) return failed(l);
@@ -761,8 +1092,22 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
     const { state, pin, plan, generations } = l.value;
     seen = state;
     const sentTo: string[] = [];
-    const kept = pin;
-    const toSend = plan.kind === 'ready' ? namesSharesToSend(pin, state, identity) : [];
+    let kept = pin;
+    let toSend = plan.kind === 'ready' ? namesSharesToSend(pin, state, identity) : [];
+    // The copy at the end of the open, before the shares (design §3, items 2-4): when this pin changed since the copy the
+    // node confirmed (a sync, a check, a Remove, a put-back or a follow), or the node's is older or gone. Not for `seen`.
+    // One that fails sends no shares; the list still opens.
+    let copyHeld = '';
+    if (!(plan.kind === 'refused' && plan.reason === 'other_community')) {
+        const due = await copyDue(store, identity.publicKey, anchor, pin, state);
+        const copied = due === 'yes' || due === 'higher' ? await saveCopy(anchor, identity, store, pin, state) : null;
+        if (copied?.ok) kept = copied.pin;
+        else if (copied && copied.code === NAMES_TIMED_OUT) return failed(copied);
+        else if (copied) {
+            toSend = [];
+            copyHeld = copied.message;
+        }
+    }
     const due = toSend.map((s) => s.to);
     for (const share of toSend) {
         const done = await postShare(anchor, identity, share);
@@ -776,6 +1121,7 @@ async function openUnlocked(anchor: string, identity: BeanPoolIdentity, store: N
         : '';
     const words = [...madeWords(state, sending), ...unsaid, ...noticeWords(notices, state)];
     if (askedFor) words.push(askedFor);
+    if (copyHeld) words.push(copyHeld);
     // The rolled-back card's estimate, before anything is read; the exact count comes on the ready read after it.
     const estimate = plan.kind === 'refused' && plan.reason === 'rolled_back' ? Math.max(0, pin.seen.length - (state.counts?.entries ?? 0)) : 0;
     if (estimate) words.push(NAMES_COPY.lostSinceCopy(estimate));
@@ -887,7 +1233,9 @@ export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity,
         const l = await look(anchor, identity, store);
         if (!l.ok) return l;
         if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'rolled_back')) return openUnlocked(anchor, identity, store);
-        for (const link of namesReplay(l.value.pin, l.value.state)) {
+        const copied = await copyFirst(anchor, identity, store, l.value.pin, l.value.state);
+        if (!copied.ok) return copied;
+        for (const link of namesReplay(copied.value, l.value.state)) {
             const sent = await postGeneration(anchor, identity, link, true);
             if (!sent.ok) return sent;
         }
@@ -929,13 +1277,24 @@ async function followUnlocked(anchor: string, identity: BeanPoolIdentity, store:
     return { ok: true, value: { ...opened.value, notices: [...new Set([...said, ...opened.value.notices])] } };
 }
 
+/**
+ * "Start afresh on this phone" (asked first; design §5): offered only when the node's copy of this admin's record was
+ * refused (COPY_REFUSED_CODES). The only path on which a phone with no pin starts from a fresh one while the node holds
+ * a copy, and its first copy replaces that one. Then the list opens as on a new phone: check codes with another admin.
+ */
+export async function startAfreshOnThisPhone(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesResult<NamesOpened>> {
+    return readTheList(anchor, identity, store, await withPin(identity.publicKey, anchor, () => openUnlocked(anchor, identity, store, true)));
+}
+
 /** "Send the keys to @X again": the same share the open sends, now, to one admin this phone trusts. */
 export function sendKeysAgain(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, to: string): Promise<NamesResult<{ to: string }>> {
     return withPin(identity.publicKey, anchor, async (): Promise<NamesResult<{ to: string }>> => {
         const l = await look(anchor, identity, store);
         if (!l.ok) return l;
         if (l.value.plan.kind !== 'ready') return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.notReady };
-        const share = namesSharesToSend(l.value.pin, l.value.state, identity, to)[0];
+        const copied = await copyFirst(anchor, identity, store, l.value.pin, l.value.state);
+        if (!copied.ok) return copied;
+        const share = namesSharesToSend(copied.value, l.value.state, identity, to)[0];
         if (!share) return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(callsignIn(l.value.state, to.toLowerCase())) };
         return postShare(anchor, identity, share);
     });
@@ -1287,6 +1646,23 @@ function both(names: string[]): string {
  */
 export const NAMES_COPY = {
     title: 'Names list',
+    // The locked copy: the design's §5 table, exact.
+    copyUnreachable: 'Couldn’t reach the server for your names-list record. Nothing was changed. Try again.',
+    copyBad: 'The copy of your names-list record on the server didn’t check out: it wasn’t saved by this account, or it was changed. Nothing was read.',
+    copyStale: (savedAt: string) => `The copy of your names-list record on the server is older than what this account has already done (saved ${shortDate(savedAt)}). Whoever runs the server may have put an old copy back. Nothing was read.`,
+    copyOtherAddress: (address: string) => `This record was saved for ${address}, not this community.`,
+    copyTooBig: 'Your names-list record is too big to keep a copy on the server. Keep this phone signed in, or save the names as a PDF.',
+    copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
+    copyNewer: 'Another phone signed in as you saved the names list’s record. Use one phone.',
+    copyRestored: (savedAt: string, n: number, code: string) => `Restored your names-list record from the server, saved ${shortDate(savedAt)}, key ${n} (${code}).`,
+    startAfresh: 'Start afresh on this phone',
+    // Sign Out with the copy not confirmed (design §5): nothing is blocked.
+    signOutOnlyCopy: (n: number) => `This phone holds the only copy of the names list’s key ${n}, and the server didn’t confirm its copy. If you sign out now, the names written under it can’t be opened again.`,
+    signOutMaybeOnlyCopy: (n: number) => `The server didn’t answer, so this phone can’t tell whether another admin still holds the names list’s key ${n}. If none does and you sign out now, the names written under it can’t be opened again.`,
+    signOutNotConfirmed: 'The server didn’t confirm a copy of your names-list record. After you sign in again, check codes with another admin on a call and their phone will send the keys.',
+    tryAgain: 'Try again',
+    savePdf: 'Save the names as a PDF',
+    signOutAnyway: 'Sign out anyway',
     // §9, exact.
     who: 'Only this community’s owners and admins can read these names, on their own phones. The server keeps them scrambled: '
         + 'a backup, a copy or a stolen database holds nothing readable. This phone gives the list’s keys only to admins whose phones '

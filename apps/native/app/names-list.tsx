@@ -34,7 +34,7 @@ import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
-    putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
+    putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
@@ -69,6 +69,8 @@ export default function NamesListScreen() {
     const openedRef = useRef<NamesOpened | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** The node's copy of this admin's record was refused (design §5): "Start afresh on this phone" is offered. */
+    const [copyRefused, setCopyRefused] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
     const [mode, setMode] = useState<Mode>({ kind: 'list' });
     const [query, setQuery] = useState('');
@@ -103,12 +105,14 @@ export default function NamesListScreen() {
         if (!result.ok) {
             // A Remove this phone couldn't keep (round 16, :186): its own card says so and offers it again, in place of the list.
             if (result.code === 'remove_not_kept') return;
+            setCopyRefused(COPY_REFUSED_CODES.includes(result.code ?? ''));
             setError(result.status === 404 ? 'This community keeps no names list.' : result.message);
             // Show the state the pin is in, not the last list: a Remove whose open failed still stands.
             if (openedRef.current) setStale(await pendingRemovals(STORE, identity, url, openedRef.current.state).catch(() => []));
             return;
         }
         setStale(null);
+        setCopyRefused(false);
         setOpened(result.value);
         if (result.value.notices.length) setNotice(result.value.notices.join('\n\n'));
         if (!result.value.list) return;
@@ -189,6 +193,14 @@ export default function NamesListScreen() {
         if (!identity || !anchor) return;
         ask(COPY.removeKeyTitle(admin.callsign), COPY.removeKey(admin.callsign), COPY.removeKeyButton(admin.callsign), () => {
             void run((url) => removeOldKeyAndOpen(url, identity, STORE, admin));
+        });
+    };
+
+    /** "Start afresh on this phone" (design §5): asked first; the only way a fresh record replaces the node's copy. */
+    const startAfresh = () => {
+        if (!identity) return;
+        ask(COPY.startAfresh, 'This phone starts the names list from nothing, and the copy on the server is replaced. Then check codes with another admin and their phone will send the keys.', COPY.startAfresh, () => {
+            void run((url) => startAfreshOnThisPhone(url, identity, STORE));
         });
     };
 
@@ -447,6 +459,7 @@ export default function NamesListScreen() {
             {error ? (
                 <View style={styles.error} accessibilityLiveRegion="assertive">
                     <Text style={styles.errorText}>{error}</Text>
+                    {copyRefused ? <View style={styles.buttonRow}>{btn(COPY.startAfresh, startAfresh, 'danger')}</View> : null}
                 </View>
             ) : null}
         </>

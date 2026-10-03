@@ -5,6 +5,7 @@ vi.mock('expo-secure-store', () => ({ WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6, getItem
 vi.mock('expo-crypto', () => ({ randomUUID: () => 'test-uuid', getRandomBytes: vi.fn() }));
 
 import { wipeIdentityScopedStorage } from '../identity';
+import { namesPinSecretName } from '../names-list';
 
 function fakeStorage(seed: Record<string, string>) {
     const data = new Map(Object.entries(seed));
@@ -69,5 +70,61 @@ describe('wipeIdentityScopedStorage', () => {
             `bp_tier_${'cd'.repeat(32)}`,
             'some_ui_pref',
         ]);
+    });
+});
+
+describe('§8 22. the names list leaves with the account (design-locked-copy §5)', () => {
+    const ME = 'ab'.repeat(32);
+    const OTHER = 'cd'.repeat(32);
+    const pinA = `beanpool:names-trust:${ME}:mullum.beanpool.org`;
+    const pinB = `beanpool:names-trust:${OTHER}:test.beanpool.org`;
+    const namesKeys = {
+        [pinA]: 'sealed-pin-a',
+        [pinB]: 'sealed-pin-b',
+        [`beanpool:names-checked:${ME}:mullum.beanpool.org`]: '{}',
+        [`beanpool:names-unsaid:${ME}:mullum.beanpool.org`]: '[]',
+        [`beanpool:names-copied:${ME}:mullum.beanpool.org`]: '{}',
+    };
+    /** The order the wipe touched things in: `secret:<name>` and `blob:<label>`. */
+    function recorded(seed: Record<string, string>, failSecret: string | null = null) {
+        const order: string[] = [];
+        const storage = fakeStorage(seed);
+        const removeItem = storage.removeItem;
+        storage.removeItem = async (key: string) => { if (key.startsWith('beanpool:names-')) order.push(`blob:${key}`); await removeItem(key); };
+        const secrets = {
+            gone: [] as string[],
+            deleteSecret: async (name: string) => {
+                order.push(`secret:${name}`);
+                if (name === failSecret) throw new Error('the keystore said no');
+                secrets.gone.push(name);
+            },
+        };
+        return { storage, secrets, order };
+    }
+
+    it('removes every beanpool:names- key, and each pin\'s sealing key before its blob', async () => {
+        const { storage, secrets, order } = recorded({ ...namesKeys, some_ui_pref: 'dark' });
+        await wipeIdentityScopedStorage(storage, secrets);
+        expect([...storage.data.keys()]).toEqual(['some_ui_pref']);
+        expect(secrets.gone.sort()).toEqual([namesPinSecretName(pinA), namesPinSecretName(pinB)].sort());
+        for (const label of [pinA, pinB]) {
+            expect(order.indexOf(`secret:${namesPinSecretName(label)}`)).toBeGreaterThan(-1);
+            expect(order.indexOf(`secret:${namesPinSecretName(label)}`)).toBeLessThan(order.indexOf(`blob:${label}`));
+        }
+    });
+
+    it('a sealing key that fails to delete still lets its blob go, and the warning names no key', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { storage, secrets } = recorded(namesKeys, namesPinSecretName(pinA));
+            await wipeIdentityScopedStorage(storage, secrets);
+            expect([...storage.data.keys()]).toEqual([]);
+            expect(secrets.gone).toEqual([namesPinSecretName(pinB)]);
+            expect(warn).toHaveBeenCalled();
+            const logged = JSON.stringify(warn.mock.calls);
+            for (const k of [ME, OTHER, namesPinSecretName(pinA), 'sealed-pin-a']) expect(logged).not.toContain(k);
+        } finally {
+            warn.mockRestore();
+        }
     });
 });

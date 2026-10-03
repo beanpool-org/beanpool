@@ -27,14 +27,25 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => secrets.get(key) ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => { secrets.set(key, value); }),
+    deleteItemAsync: vi.fn(async (key: string) => { secrets.delete(key); }),
 }));
+// For identity.ts (the Sign Out wipe and the 12 words, end to end below).
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+/** On: the phone's copy of its pin is over the 1 MiB cap (makeNamesCopy throws, as core does for a pin that big). */
+const copyTooBig = vi.hoisted(() => ({ on: false }));
+vi.mock('@beanpool/core', async (importOriginal) => {
+    const core = await importOriginal<typeof import('@beanpool/core')>();
+    return { ...core, makeNamesCopy: (...a: Parameters<typeof core.makeNamesCopy>) => { if (copyTooBig.on) throw new Error('too big'); return core.makeNamesCopy(...a); } };
+});
 
 import { getPublicKey } from '@noble/ed25519';
 import {
     newNamesListKey, sealNamesEntry, openNamesEntry, newNamesEntryId, makeNamesGeneration, makeNamesShare, readNamesGeneration,
     readNamesShare, namesKeyQr, namesKeyCode, namesListKeyCode, namesBoxDigest, emptyNamesPin, namesShareHeader, sealNamesRing, NAMES_REFUSAL_REASONS, toEd25519Pkcs8,
+    readNamesCopy, makeNamesCopy, namesPinForNextCopy,
     type NamesGeneration, type NamesShare,
 } from '@beanpool/core';
 import { bytesToHex } from '../crypto';
@@ -44,7 +55,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -121,6 +132,8 @@ class FakeNode {
     views = new Map<string, View>();
     /** The names keys went by before a re-key (the server follows rekey_audit_log to the member's callsign). */
     former: Record<string, string> = {};
+    /** The locked copies (design §4), by owner; null: a node from before them (no `myCopy`, no route). */
+    copies: Map<string, { header: string; signature: string; box: unknown; seq: number; headN: number; headId: string | null; savedAt: string; digest: string }> | null = null;
     /** Called before each request is answered: lets a test make something land first. */
     onRequest: ((req: Sent) => void) | null = null;
     /** Set when the node makes one branch of a fork its current (then each statement it takes moves it on). */
@@ -188,6 +201,7 @@ class FakeNode {
             settings: { twoAdminsToConfirm: false, namesShownToMembers: false },
             counts: { entries: this.entries.length, confirmed: 0, awaitingSecond: 0, byKey, locked: 0 },
             me: { pubkey: me, role: meRow?.role ?? null, owner: meRow?.role === 'owner' },
+            ...(this.copies ? { myCopy: ((c) => (c ? { seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.digest } : null))(this.copies.get(me)) } : {}),
         };
     }
     put(g: NamesGeneration): void { this.gens.set(g.id, g); }
@@ -259,6 +273,24 @@ class FakeNode {
             row.keyId = body.keyId;
             return { status: 200, body: { id } };
         }
+        if (this.copies && req.method === 'PUT' && pathname === '/api/names/copy') {
+            // As apps/server engine/names-list.ts saveNamesCopy: read, owner, exists, stale, upsert; no log line.
+            const r = readNamesCopy(body);
+            if (!r.ok) return err(400, 'bad_copy');
+            const c = r.copy;
+            if (c.owner !== who) return err(403, 'not_yours');
+            const old = this.copies.get(who);
+            if (old && old.header === c.header) return { status: 200, body: { seq: c.seq, code: 'exists' } };
+            if (old && c.seq <= old.seq) return { status: 409, body: { error: 'stale_copy', code: 'stale_copy', seq: old.seq } };
+            this.copies.set(who, { header: c.header, signature: c.signature, box: c.box, seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.boxDigest });
+            return { status: 200, body: { seq: c.seq } };
+        }
+        if (this.copies && req.method === 'GET' && pathname === '/api/names/copy') {
+            const c = this.copies.get(who);
+            if (!c) return err(404, 'no_copy');
+            this.log.push({ actor: who, action: 'copy_restored', subject: null });
+            return { status: 200, body: { header: c.header, signature: c.signature, box: c.box } };
+        }
         return err(404, 'not_found');
     }
 }
@@ -287,9 +319,10 @@ async function rekey(node: FakeNode, from: BeanPoolIdentity): Promise<BeanPoolId
 }
 
 /** Owen makes the list's first key; he and Ada meet; both phones open; both hold key 1 and read two planted names. */
-async function community(names = ['Owen', 'Ada']): Promise<{ node: FakeNode; phones: BeanPoolIdentity[]; k1: string }> {
+async function community(names = ['Owen', 'Ada'], copies = false): Promise<{ node: FakeNode; phones: BeanPoolIdentity[]; k1: string }> {
     const phones = await Promise.all(names.map((n) => admin(n)));
     const node = new FakeNode();
+    if (copies) node.copies = new Map();
     node.admins = phones.map((p, i) => role(p, i === 0 ? 'owner' : 'admin'));
     answer = (req) => node.answer(req);
     expect((await open(phones[0])).plan.kind).toBe('ready');
@@ -2737,6 +2770,690 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('F8 the n
             const back = String(spec[bg].backgroundColor);
             expect(fg.startsWith('#') && back.startsWith('#'), `${text} on ${bg}: ${fg} / ${back}`).toBe(true);
             expect(contrast(fg, back), `${text} (${fg}) on ${bg} (${back})`).toBeGreaterThanOrEqual(4.5);
+        }
+    });
+});
+
+describe('§8 16-20. The locked copy on the node (design §3, §5)', () => {
+    /** Sign Out, as far as the names list goes: every `beanpool:names-` key of this phone's member key is gone. */
+    const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
+    const route = (x: Sent) => `${x.method} ${new URL(x.url).pathname}`;
+    const named = (o: NamesOpened) => openEntries(o.list!, o).map((e) => e.text?.name).filter(Boolean).sort();
+
+    it('16 Sign Out then open, with another admin: today the phone needs a check; with the copy it is READY and the ring is back', async () => {
+        const { node, phones: [, ada], k1 } = await community(['Owen', 'Ada'], true);
+        wipe(ada);
+        const back = await open(ada);
+        expect(back.plan.kind).toBe('ready');
+        expect(Object.keys(back.ring)).toContain(k1);
+        expect(named(back)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+        expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+        // Today (a node with no copies): the same Sign Out leaves Ada to check codes again.
+        const old = await community(['Owen', 'Ada']);
+        wipe(old.phones[1]);
+        const today = await open(old.phones[1]);
+        expect(today.plan.kind).not.toBe('ready');
+    });
+
+    it('17 the sole admin: Sign Out then open reads every entry', async () => {
+        const { phones: [owen] } = await community(['Owen'], true);
+        wipe(owen);
+        const back = await open(owen);
+        expect(back.plan.kind).toBe('ready');
+        expect(named(back)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(sentAs('POST', '/api/names/generations')).toEqual([]);
+    });
+
+    it('18 order: a copy is saved before the generation and before the shares; a failed copy sends neither', async () => {
+        // A fresh community, every request recorded from the first open on.
+        const owen = await admin('Owen');
+        const ada = await admin('Ada');
+        const n2 = new FakeNode();
+        n2.copies = new Map();
+        n2.admins = [role(owen, 'owner'), role(ada)];
+        answer = (req) => n2.answer(req);
+        sent = [];
+        await open(owen);
+        await meet(n2, owen, ada);
+        for (let i = 0; i < 2; i++) for (const p of [owen, ada]) await openNamesList(COMMUNITY, p, STORE);
+        const order = sent.map(route);
+        const firstGen = order.indexOf('POST /api/names/generations');
+        expect(firstGen).toBeGreaterThan(-1);
+        expect(order.slice(0, firstGen)).toContain('PUT /api/names/copy');
+        // Every share follows a copy of its sender's that the node confirmed, saved after the sender's last sync.
+        sent.forEach((x, i) => {
+            if (route(x) !== 'POST /api/names/shares') return;
+            const by = x.headers['X-Public-Key'];
+            const before = sent.slice(0, i).filter((y) => y.headers['X-Public-Key'] === by);
+            expect(before.map(route).lastIndexOf('PUT /api/names/copy')).toBeGreaterThan(before.map(route).lastIndexOf('GET /api/names/state'));
+        });
+        // A copy that fails: no statement, no share, and the key stays pending on the phone for the next open.
+        const bea = await admin('Bea');
+        const n3 = new FakeNode();
+        n3.copies = new Map();
+        n3.admins = [role(bea, 'owner')];
+        answer = (req) => (req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy' ? { status: 502 } : n3.answer(req));
+        sent = [];
+        await openNamesList(COMMUNITY, bea, STORE);
+        expect(sentAs('PUT', '/api/names/copy').length).toBeGreaterThan(0);
+        expect(sentAs('POST', '/api/names/generations')).toEqual([]);
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+        expect((await readNamesPinFrom(STORE, bea.publicKey, COMMUNITY))!.pending).not.toBeNull();
+        answer = (req) => n3.answer(req);
+        expect((await open(bea)).plan.kind).toBe('ready');
+        expect(n3.copies.get(bea.publicKey)!.seq).toBeGreaterThan(0);
+    });
+
+    it('19 the fresh-pin rule: no pin and the node down, or a bad copy, uploads nothing until Start afresh', async () => {
+        const { node, phones: [owen, ada] } = await community(['Owen', 'Ada'], true);
+        const held = node.copies!.get(ada.publicKey)!;
+        wipe(ada);
+        drop = (req) => (new URL(req.url).pathname === '/api/names/copy' ? 'before' : null);
+        sent = [];
+        const down = await openNamesList(COMMUNITY, ada, STORE);
+        expect(down.ok).toBe(false);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+        expect(sentAs('POST', '/api/names/generations')).toEqual([]);
+        expect(await readNamesPinFrom(STORE, ada.publicKey, COMMUNITY)).toBeNull();
+        expect(node.copies!.get(ada.publicKey)).toBe(held);
+        // A copy changed on the node (its box's tag): refused, nothing kept or uploaded; Start afresh is offered.
+        drop = null;
+        const tag = (held.box as { copyTag: string }).copyTag;
+        node.copies!.set(ada.publicKey, { ...held, box: { ...(held.box as object), copyTag: (tag[0] === 'A' ? 'B' : 'A') + tag.slice(1) } });
+        sent = [];
+        const bad = await openNamesList(COMMUNITY, ada, STORE);
+        expect(bad.ok).toBe(false);
+        expect(COPY_REFUSED_CODES).toContain(!bad.ok && bad.code);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+        expect(await readNamesPinFrom(STORE, ada.publicKey, COMMUNITY)).toBeNull();
+        // Start afresh: the fresh record's copy replaces the node's, numbered past it.
+        const afresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
+        expect(afresh.ok).toBe(true);
+        expect(node.copies!.get(ada.publicKey)!.seq).toBeGreaterThan(held.seq);
+        void owen;
+    });
+
+    it('20 a node that lost the copy, or holds an older one, gets a new one on the next open', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        const first = node.copies!.get(owen.publicKey)!;
+        node.copies!.delete(owen.publicKey);
+        sent = [];
+        await open(owen);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        const now = node.copies!.get(owen.publicKey)!;
+        expect(now.seq).toBeGreaterThan(first.seq);
+        // An older copy put back (a standby that took over from an older copy): saved again, past it.
+        const older = { ...first, seq: Math.max(0, now.seq - 1) };
+        node.copies!.set(owen.publicKey, older);
+        sent = [];
+        await open(owen);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(node.copies!.get(owen.publicKey)!.seq).toBeGreaterThan(now.seq);
+        // The same copy as the pin's: nothing sent.
+        sent = [];
+        await open(owen);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+});
+
+describe('§8 23. Sign Out saves the copy first; what it says when the node didn\'t confirm it (design §5)', () => {
+    const putCopyFails = (node: FakeNode) => { answer = (req) => (req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy' ? { status: 502 } : node.answer(req)); };
+    const anchorsOf = (me: BeanPoolIdentity) => namesPinAddresses([...mem.keys()], me.publicKey);
+
+    it('the pin labels give the addresses to save, for this key only', async () => {
+        const { phones: [owen, ada] } = await community(['Owen', 'Ada'], true);
+        expect(anchorsOf(owen)).toEqual([COMMUNITY]);
+        expect(anchorsOf(ada)).toEqual([COMMUNITY]);
+        expect(namesPinAddresses([...mem.keys()], 'ef'.repeat(32))).toEqual([]);
+    });
+
+    it('a copy the node already confirmed: no words, nothing sent but the state', async () => {
+        const { phones: [owen] } = await community(['Owen', 'Ada'], true);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([]);
+        expect(namesSignOutWords(out)).toBeNull();
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('a copy the node lost is saved again and confirmed: no words', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([]);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(node.copies!.get(owen.publicKey)).toBeDefined();
+    });
+
+    it('the only holder of the key, its copy not confirmed: the three-button words with the key\'s number', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        putCopyFails(node);
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+        expect(NAMES_COPY.signOutOnlyCopy(1)).toContain('the only copy of the names list’s key 1');
+        // Nothing is wiped or blocked here: the pin is still on the phone, for "Try again".
+        expect(await pinOf(owen)).not.toBeNull();
+    });
+
+    it('another admin holds the key too: the two-button words (check codes after signing in)', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(ada.publicKey);
+        putCopyFails(node);
+        const out = await saveNamesCopiesBeforeLeaving(ada, anchorsOf(ada), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: null }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+    });
+
+    it('the state can\'t be read, a sole admin with no copy on the node: decided from the pin, the only-copy words and the PDF', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('the state can\'t be read, another admin trusted on the pin (who may since have been removed or re-keyed): "may be the only copy", the PDF, and no copy is sent', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(out)).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(1), pdf: true });
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('a sole holder with the state unread is never told another admin will send the keys, even when the pin still trusts a removed admin', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => (new URL(req.url).pathname === '/api/names/state' ? { status: 503 } : node.answer(req));
+        const words = namesSignOutWords(await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE));
+        expect(words?.text).not.toBe(NAMES_COPY.signOutNotConfirmed);
+        expect(words?.pdf).toBe(true);
+    });
+
+    it('the node answers with an empty holder list and the copy isn\'t saved: the unread words and the PDF, never the general words', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => {
+            const path = new URL(req.url).pathname;
+            if (req.method === 'PUT' && path === '/api/names/copy') return { status: 502 };
+            const r = node.answer(req);
+            return path === '/api/names/state' && r.status === 200 ? { ...r, body: { ...(r.body as object), holdersOfCurrent: [] } } : r;
+        };
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(sentAs('PUT', '/api/names/copy').length).toBeGreaterThan(0);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(out)?.pdf).toBe(true);
+    });
+
+    it('an empty holder list still lets the copy be saved and confirmed', async () => {
+        const { node, phones: [owen] } = await community(['Owen', 'Ada'], true);
+        node.copies!.delete(owen.publicKey);
+        answer = (req) => {
+            const r = node.answer(req);
+            return new URL(req.url).pathname === '/api/names/state' && r.status === 200 ? { ...r, body: { ...(r.body as object), holdersOfCurrent: [] } } : r;
+        };
+        expect(await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE)).toEqual([]);
+    });
+
+    it('the words: a sure only copy wins over a "may", and the general words come only from a holder list the node returned', () => {
+        expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: 3 }])).toEqual({ text: NAMES_COPY.signOutOnlyCopy(3), pdf: true });
+        expect(namesSignOutWords([{ anchor: 'a', onlyKey: 2, maybe: true }, { anchor: 'b', onlyKey: null }])).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(2), pdf: true });
+        expect(namesSignOutWords([{ anchor: 'b', onlyKey: null }])).toEqual({ text: NAMES_COPY.signOutNotConfirmed, pdf: false });
+    });
+
+    it('a node from before the copies (no myCopy): not confirmed, and nothing is sent to a route it lacks', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies = null;
+        const out = await saveNamesCopiesBeforeLeaving(owen, anchorsOf(owen), STORE);
+        expect(out).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+    });
+
+    it('Settings asks, and never blocks: "Sign out anyway" signs out with the copies already tried', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8');
+        const after = src.slice(src.indexOf('async function signOutAfterNamesCopies'));
+        expect(after).toContain('namesSignOutWords(await namesCopiesBeforeSignOut(identity))');
+        expect(after).toMatch(/if \(!words\) return signOutNow\(\);/);
+        expect(after).toMatch(/text: NAMES_COPY\.signOutAnyway, style: 'destructive' as const, onPress: \(\) => void signOutNow\(\)/);
+        expect(after).toMatch(/text: NAMES_COPY\.tryAgain, onPress: \(\) => void signOutAfterNamesCopies\(\)/);
+        expect(after).toMatch(/words\.pdf \? \[\{ text: NAMES_COPY\.savePdf/);
+        expect(src).toContain('await signOutOfThisPhone(identity, { namesCopiesSaved: true });');
+    });
+});
+
+describe('§5 the restored line, and Sign Out then sign in with the same 12 words (design-locked-copy §5)', () => {
+    const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
+    const restoredIn = (words: readonly string[]) => words.filter((w) => w.startsWith('Restored your names-list record from the server')).length;
+    const named = (o: NamesOpened) => openEntries(o.list!, o).map((e) => e.text?.name).filter(Boolean).sort();
+
+    it('said once, on the open that restored, with the saved date and the key\'s number and code; not on the next', async () => {
+        const { node, phones: [, ada], k1 } = await community(['Owen', 'Ada'], true);
+        const held = node.copies!.get(ada.publicKey)!;
+        wipe(ada);
+        const first = await open(ada);
+        expect(restoredIn(first.notices)).toBe(1);
+        expect(first.notices).toContain(NAMES_COPY.copyRestored(held.savedAt, 1, namesListKeyCode(k1)));
+        expect(restoredIn((await open(ada)).notices)).toBe(0);
+        expect(restoredIn((await open(ada)).notices)).toBe(0);
+    });
+
+    it('an open whose list read fails keeps it: said once after an app restart (the kept words are on the phone)', async () => {
+        const { phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        wipe(ada);
+        drop = (req) => (new URL(req.url).pathname === '/api/names/entries' ? 'before' : null);
+        const cut = await openNamesList(COMMUNITY, ada, STORE);
+        expect(cut.ok).toBe(false);
+        drop = null;
+        // The app restarts: the module's memory is gone, the phone's storage stays.
+        vi.resetModules();
+        const fresh = await import('../names-list');
+        const again = await fresh.openNamesList(COMMUNITY, ada, STORE);
+        expect(again.ok && restoredIn(again.value.notices)).toBe(1);
+        const third = await fresh.openNamesList(COMMUNITY, ada, STORE);
+        expect(third.ok && restoredIn(third.value.notices)).toBe(0);
+    });
+
+    it('not said for a node with no copy (404), nor after Start afresh', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const held = node.copies!.get(ada.publicKey)!;
+        node.copies!.delete(ada.publicKey);
+        wipe(ada);
+        const none = await openNamesList(COMMUNITY, ada, STORE);
+        expect(none.ok && restoredIn(none.value.notices)).toBe(0);
+        // A refused copy, then Start afresh: nothing was restored, so nothing says so.
+        wipe(ada);
+        const tag = (held.box as { copyTag: string }).copyTag;
+        node.copies!.set(ada.publicKey, { ...held, seq: held.seq + 5, box: { ...(held.box as object), copyTag: (tag[0] === 'A' ? 'B' : 'A') + tag.slice(1) } });
+        const bad = await openNamesList(COMMUNITY, ada, STORE);
+        expect(bad.ok).toBe(false);
+        const afresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
+        expect(afresh.ok && restoredIn(afresh.value.notices)).toBe(0);
+        const after = await openNamesList(COMMUNITY, ada, STORE);
+        expect(after.ok && restoredIn(after.value.notices)).toBe(0);
+    });
+
+    it('end to end: Ada signs out (copies saved, the real wipe), signs in with the same 12 words, and her list is back with no code check', async () => {
+        const { createIdentityFromMnemonic, wipeIdentityScopedStorage } = await import('../identity');
+        const { generateMnemonic } = await import('../crypto');
+        const words = generateMnemonic();
+        const owen = await admin('Owen');
+        const ada = await createIdentityFromMnemonic(words, 'Ada');
+        const node = new FakeNode();
+        node.copies = new Map();
+        node.admins = [role(owen, 'owner'), role(ada)];
+        answer = (req) => node.answer(req);
+        await open(owen);
+        await meet(node, owen, ada);
+        for (let i = 0; i < 2; i++) for (const p of [owen, ada]) await openNamesList(COMMUNITY, p, STORE);
+        expect((await open(ada)).plan.kind).toBe('ready');
+        const k1 = node.current()!.id;
+        const key = await keyOf(owen, k1);
+        node.add(key, k1, PLANTED[0]);
+        node.add(key, k1, PLANTED[2]);
+        const label = namesTrustStoreKey(ada.publicKey, COMMUNITY);
+        expect(secrets.has(namesPinSecretName(label))).toBe(true);
+
+        // Sign Out: the copies first (confirmed: no words), then the wipe as identity.ts does it.
+        expect(namesSignOutWords(await saveNamesCopiesBeforeLeaving(ada, namesPinAddresses([...mem.keys()], ada.publicKey), STORE))).toBeNull();
+        const storage = {
+            getAllKeys: async () => [...mem.keys()],
+            multiRemove: async (keys: string[]) => { keys.forEach((k) => mem.delete(k)); },
+            removeItem: async (k: string) => { mem.delete(k); },
+        };
+        await wipeIdentityScopedStorage(storage, { deleteSecret: async (n) => { secrets.delete(n); } });
+        expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-') && k.includes(ada.publicKey.toLowerCase()))).toEqual([]);
+        expect(secrets.has(namesPinSecretName(label))).toBe(false);
+        expect(await pinOf(ada)).toBeNull();
+
+        // Signed in again with the same words: the same key, and the list opens with nobody checking codes.
+        const back = await createIdentityFromMnemonic(words, 'Ada');
+        expect(back.publicKey).toBe(ada.publicKey);
+        sent = [];
+        const opened = await open(back);
+        expect(opened.plan.kind).toBe('ready');
+        expect(named(opened)).toEqual([PLANTED[0], PLANTED[2]].sort());
+        expect(restoredIn(opened.notices)).toBe(1);
+        expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+        expect(sent.every(nothingReadable)).toBe(true);
+    });
+});
+
+describe('§5 Sign Out never waits long on a node (10 s a request, 30 s in all)', () => {
+    afterEach(() => { vi.useRealTimers(); });
+    const never = () => new Promise<void>(() => {});
+    /** Starts the save under fake timers and says when it settled, in fake ms. */
+    function timed<T>(p: Promise<T>) {
+        const t0 = Date.now();
+        const r: { at: number | null; value: T | null } = { at: null, value: null };
+        p.then((v) => { r.at = Date.now() - t0; r.value = v; });
+        return r;
+    }
+
+    it('a node that never answers the state: not confirmed at 10 s (not 120 s); a sole admin gets the only-copy words', async () => {
+        const { phones: [owen] } = await community(['Owen'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_REQUEST_MS - 1);
+        expect(r.at).toBeNull();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(r.at).toBe(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+    });
+
+    it('the state comes, the copy\'s PUT never answers: not confirmed 10 s later, with the only-holder words', async () => {
+        const { node, phones: [owen] } = await community(['Owen'], true);
+        node.copies!.delete(owen.publicKey);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy' ? never() : null);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(r.at).toBe(NAMES_SIGN_OUT_REQUEST_MS);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+    });
+
+    it('the pin held by an open still waiting on its 120 s state: let go at 30 s; when the open ends, the let-go save sends and writes nothing', async () => {
+        const { phones: [owen] } = await community(['Owen'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        void openNamesList(COMMUNITY, owen, STORE); // takes the pin's chain and waits on the state
+        await vi.advanceTimersByTimeAsync(0);
+        const r = timed(saveNamesCopiesBeforeLeaving(owen, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
+        expect(r.at).toBe(NAMES_SIGN_OUT_TOTAL_MS);
+        // Let go, but decided from the pin read as it is kept (no request): Owen is its only admin, so the only-copy words.
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1 }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutOnlyCopy(1), pdf: true });
+        // Sign Out wipes the pin; the open's state then fails at its own limit, and the let-go link runs: nothing.
+        for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-')) mem.delete(k);
+        hold = null;
+        sent = [];
+        await vi.advanceTimersByTimeAsync(120_000);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(sentAs('GET', '/api/names/state')).toEqual([]);
+        expect([...mem.keys()].filter((k) => k.startsWith('beanpool:names-trust:'))).toEqual([]);
+    });
+
+    it('the pin held by an open at 30 s, another admin trusted on it: decided from the pin, "may be the only copy" and the PDF, no request', async () => {
+        const { phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        hold = (req) => (new URL(req.url).pathname === '/api/names/state' ? never() : null);
+        void openNamesList(COMMUNITY, ada, STORE);
+        await vi.advanceTimersByTimeAsync(0);
+        sent = [];
+        const r = timed(saveNamesCopiesBeforeLeaving(ada, [COMMUNITY], STORE));
+        await vi.advanceTimersByTimeAsync(NAMES_SIGN_OUT_TOTAL_MS);
+        expect(r.value).toEqual([{ anchor: COMMUNITY, onlyKey: 1, maybe: true }]);
+        expect(namesSignOutWords(r.value!)).toEqual({ text: NAMES_COPY.signOutMaybeOnlyCopy(1), pdf: true });
+        expect(sent).toEqual([]);
+        hold = null;
+        await vi.advanceTimersByTimeAsync(120_000);
+    });
+});
+
+describe('§8 21. Two phones, one key: the higher-seq copy is merged, never rolled back (design §3, §5 "Merging")', () => {
+    /** One phone's names storage for this key: its AsyncStorage keys and its pin's sealing secret. */
+    const takePhone = (me: BeanPoolIdentity) => ({
+        mem: new Map([...mem].filter(([k]) => k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase()))),
+        secret: secrets.get(namesPinSecretName(namesTrustStoreKey(me.publicKey, COMMUNITY))),
+    });
+    const putPhone = (me: BeanPoolIdentity, p: ReturnType<typeof takePhone>) => {
+        for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k);
+        for (const [k, v] of p.mem) mem.set(k, v);
+        const s = namesPinSecretName(namesTrustStoreKey(me.publicKey, COMMUNITY));
+        if (p.secret === undefined) secrets.delete(s); else secrets.set(s, p.secret);
+    };
+    const nodeCopy = (node: FakeNode, me: BeanPoolIdentity) => node.copies!.get(me.publicKey) ?? node.copies!.get(me.publicKey.toLowerCase());
+
+    it('Sign Out on phone A after phone B saved a newer copy: A merges it, saves past both, confirmed; signed in again, both keys are back', async () => {
+        const { node, phones: [owen, ada, bea], k1 } = await community(['Owen', 'Ada', 'Bea'], true);
+        const phoneA = takePhone(ada);
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        expect((await open(ada)).plan.kind).toBe('ready');
+        node.admins = [role(owen, 'owner'), role(ada)];
+        await removeOldKey(STORE, owen, COMMUNITY, bea.publicKey);
+        for (let i = 0; i < 2; i++) { await open(owen); await open(ada); }
+        const k2 = node.current()!.id;
+        const newer = nodeCopy(node, ada)!.seq;
+        putPhone(ada, phoneA);
+        const out = await saveNamesCopiesBeforeLeaving(ada, [COMMUNITY], STORE);
+        expect(out).toEqual([]);
+        expect(nodeCopy(node, ada)!.seq).toBe(newer + 1);
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        const back = await open(ada);
+        expect(Object.keys(back.ring)).toEqual(expect.arrayContaining([k1, k2]));
+    });
+
+    it('21 phone A, back after phone B saved a newer copy with a key A lacks: A takes it, keeps both keys, saves past both, says it once', async () => {
+        const { node, phones: [owen, ada, bea], k1 } = await community(['Owen', 'Ada', 'Bea'], true);
+        const phoneA = takePhone(ada);
+        const was = (await pinOf(ada))!;
+        // Phone B: the same 12 words on a new phone (no pin): restored from the copy.
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        expect((await open(ada)).plan.kind).toBe('ready');
+        // Owen removes Bea: a new key reaches phone B only, and B saves a newer copy.
+        node.admins = [role(owen, 'owner'), role(ada)];
+        await removeOldKey(STORE, owen, COMMUNITY, bea.publicKey);
+        for (let i = 0; i < 2; i++) { await open(owen); await open(ada); }
+        const k2 = node.current()!.id;
+        expect(k2).not.toBe(k1);
+        const phoneB = (await pinOf(ada))!;
+        expect(Object.keys(phoneB.ring)).toContain(k2);
+        const newer = nodeCopy(node, ada)!.seq;
+        expect(newer).toBeGreaterThan(was.copy.seq);
+        // Phone A opens again.
+        putPhone(ada, phoneA);
+        sent = [];
+        const a = await open(ada);
+        const after = (await pinOf(ada))!;
+        expect(after.copy.seq).toBe(newer + 1);
+        expect(nodeCopy(node, ada)!.seq).toBe(after.copy.seq);
+        expect(after.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
+        expect(Object.keys(after.ring)).toEqual(expect.arrayContaining([k1, k2]));
+        expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+        expect(a.notices).toContain(NAMES_COPY.copyNewer);
+        expect((await open(ada)).notices).not.toContain(NAMES_COPY.copyNewer);
+        // The merge itself: the further chain kept whichever side holds it, never a lower number, no key of either lost.
+        const ab = mergeNamesPins(was, phoneB);
+        const ba = mergeNamesPins(phoneB, was);
+        for (const m of [ab, ba]) {
+            expect(m.chain.map((l) => l.id)).toEqual(phoneB.chain.map((l) => l.id));
+            expect(m.copy.seq).toBe(Math.max(was.copy.seq, phoneB.copy.seq));
+            expect(Object.keys(m.ring).sort()).toEqual([...new Set([...Object.keys(was.ring), ...Object.keys(phoneB.ring)])].sort());
+        }
+    });
+});
+
+describe('§5 merging keeps this phone\'s pending key (review 4171117464)', () => {
+    const link = (id: string, n: number) => ({ statement: `s-${id}`, signature: `g-${id}`, id, n });
+    const K1 = '11'.repeat(32);
+    const G = '22'.repeat(32);
+    const me = 'aa'.repeat(32);
+
+    it('the other pin\'s chain holds the pending statement: its key goes into the ring under that id', () => {
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending: { ...link(G, 2), key: 'g-key' }, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.chain.map((l) => l.id)).toEqual([K1, G]);
+        expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key' });
+        expect(m.copy.seq).toBe(6);
+    });
+
+    it('the pending statement isn\'t on the kept chain: the pending is kept', () => {
+        const pending = { ...link(G, 2), key: 'g-key' };
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, pending, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], ring: { [K1]: 'k1-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.pending).toEqual(pending);
+        expect(m.ring).toEqual({ [K1]: 'k1-key' });
+    });
+
+    it('a statement this phone abandoned stays abandoned, with its key, when the other pin is kept', () => {
+        const X = '33'.repeat(32);
+        const local = { ...emptyNamesPin(CID, me), chain: [link(K1, 1)], abandoned: [X], ring: { [K1]: 'k1-key', [X]: 'x-key' }, copy: { seq: 5 } };
+        const other = { ...emptyNamesPin(CID, me), chain: [link(K1, 1), link(G, 2)], ring: { [K1]: 'k1-key', [G]: 'g-key' }, copy: { seq: 6 } };
+        const m = mergeNamesPins(local, other);
+        expect(m.abandoned).toEqual([X]);
+        expect(m.ring).toEqual({ [K1]: 'k1-key', [G]: 'g-key', [X]: 'x-key' });
+    });
+});
+
+describe('§5 a copy the node didn\'t take: what the phone says, and nothing is blocked (409, 429, too big, another address, newer)', () => {
+    const wipe = (me: BeanPoolIdentity) => { for (const k of [...mem.keys()]) if (k.startsWith('beanpool:names-') && k.includes(me.publicKey.toLowerCase())) mem.delete(k); };
+    const ownerKey = (node: FakeNode, me: BeanPoolIdentity) => [...node.copies!.keys()].find((k) => k.toLowerCase() === me.publicKey.toLowerCase())!;
+    const isPut = (req: Sent) => req.method === 'PUT' && new URL(req.url).pathname === '/api/names/copy';
+    const putSeqs = () => sentAs('PUT', '/api/names/copy').map((x) => readNamesCopy(JSON.parse(x.body)).ok ? (readNamesCopy(JSON.parse(x.body)) as { copy: { seq: number } }).copy.seq : -1);
+    const named = (o: NamesOpened) => openEntries(o.list!, o).map((e) => e.text?.name).filter(Boolean).sort();
+    /** A copy is due on the next open: the node lost Ada's (self-healing). */
+    const due = async () => {
+        const c = await community(['Owen', 'Ada'], true);
+        c.node.copies!.delete(ownerKey(c.node, c.phones[1]));
+        return c;
+    };
+
+    it('409 stale_copy: one retry numbered past the node\'s, then confirmed; a second 409 stops there (two PUTs), said, and the list opens', async () => {
+        const { node, phones: [, ada] } = await due();
+        let first = true;
+        answer = (req) => {
+            if (isPut(req) && first) { first = false; return { status: 409, body: { error: 'stale_copy', code: 'stale_copy', seq: 7 } }; }
+            return node.answer(req);
+        };
+        const ok = await open(ada);
+        expect(putSeqs()).toEqual([2, 8]);
+        expect((await pinOf(ada))!.copy.seq).toBe(8);
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBe(8);
+        expect(ok.plan.kind).toBe('ready');
+        expect(named(ok)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        // Always stale: one retry, no more, the copy unconfirmed and said; the list still opens and reads.
+        node.copies!.delete(ownerKey(node, ada));
+        sent = [];
+        answer = (req) => (isPut(req) ? { status: 409, body: { error: 'stale_copy', code: 'stale_copy', seq: 20 } } : node.answer(req));
+        const held = await open(ada);
+        expect(putSeqs()).toEqual([9, 21]);
+        expect(held.plan.kind).toBe('ready');
+        expect(named(held)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(held.notices).toContain(NAMES_COPY.copyNotSaved);
+        expect(held.notices).not.toContain('stale_copy');
+        expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+    });
+
+    it('429 too_many_copies: the list opens; no copy is sent again for an hour (no hammering), then it is', async () => {
+        const { node, phones: [, ada] } = await due();
+        answer = (req) => (isPut(req) ? { status: 429, body: { error: 'too_many_copies', code: 'too_many_copies' } } : node.answer(req));
+        const first = await open(ada);
+        expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+        expect(first.plan.kind).toBe('ready');
+        expect(named(first)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        expect(first.notices).toContain(NAMES_COPY.copyNotSaved);
+        expect(first.notices).not.toContain('too_many_copies');
+        answer = (req) => node.answer(req);
+        sent = [];
+        const paused = await open(ada);
+        expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+        expect(paused.plan.kind).toBe('ready');
+        expect(paused.notices).toContain(NAMES_COPY.copyNotSaved);
+        const later = Date.now() + 61 * 60 * 1000;
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+        try {
+            sent = [];
+            await open(ada);
+            expect(sentAs('PUT', '/api/names/copy').length).toBe(1);
+            expect(node.copies!.get(ownerKey(node, ada))).toBeTruthy();
+        } finally { clock.mockRestore(); }
+    });
+
+    it('copy_too_big: said in the §5 words, nothing uploaded, the list opens', async () => {
+        const { phones: [, ada] } = await due();
+        copyTooBig.on = true;
+        try {
+            const o = await open(ada);
+            expect(o.notices).toContain(NAMES_COPY.copyTooBig);
+            expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+            expect(o.plan.kind).toBe('ready');
+            expect(named(o)).toEqual([PLANTED[0], PLANTED[1]].sort());
+        } finally { copyTooBig.on = false; }
+    });
+
+    it('copy_other_address: refused with the address in the §5 words, nothing kept; Start afresh still works', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const pin = namesPinForNextCopy((await pinOf(ada))!);
+        const c = makeNamesCopy({ pin, address: 'https://elsewhere.example.org', me: ada });
+        node.copies!.set(ownerKey(node, ada), { header: c.header, signature: c.signature, box: c.box, seq: c.seq, headN: c.headN, headId: c.headId, savedAt: c.savedAt, digest: c.boxDigest });
+        wipe(ada);
+        const r = await openNamesList(COMMUNITY, ada, STORE);
+        expect(r.ok).toBe(false);
+        if (r.ok) return;
+        expect(r.code).toBe('copy_other_address');
+        expect(r.message).toBe(NAMES_COPY.copyOtherAddress('https://elsewhere.example.org'));
+        expect(COPY_REFUSED_CODES).toContain(r.code);
+        expect(await pinOf(ada)).toBeNull();
+        const fresh = await startAfreshOnThisPhone(COMMUNITY, ada, STORE);
+        expect(fresh.ok).toBe(true);
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(c.seq);
+    });
+
+    it('Send the keys again after a check: the copy is saved before the share, so the node\'s copy covers it and a wiped phone restores', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        // Bea joins the admins; Ada checks her in person (Ada's pin changes), then sends her the keys at once.
+        const bea = await admin('Bea');
+        node.admins.push(role(bea));
+        await meet(node, ada, bea);
+        const before = node.copies!.get(ownerKey(node, ada))!.seq;
+        sent = [];
+        const r = await sendKeysAgain(COMMUNITY, ada, STORE, bea.publicKey);
+        expect(r.ok ? 'ok' : r.code).toBe('ok');
+        const order = sent.map((x) => `${x.method} ${new URL(x.url).pathname}`);
+        expect(order).toContain('POST /api/names/shares');
+        expect(order.indexOf('PUT /api/names/copy')).toBeGreaterThan(-1);
+        expect(order.indexOf('PUT /api/names/copy')).toBeLessThan(order.indexOf('POST /api/names/shares'));
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(before);
+        wipe(ada);
+        const back = await openNamesList(COMMUNITY, ada, STORE);
+        expect(back.ok ? 'ok' : back.code).toBe('ok');
+        expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+    });
+
+    for (const typed of ['https://mullum.beanpool.org/', 'https://MULLUM.BeanPool.org', 'https://mullum.beanpool.org:443', 'HTTPS://Mullum.beanpool.org:443/']) {
+        it(`the address saved under and the one restored with are normalised the same: saved at ${COMMUNITY}, restored at ${typed}`, async () => {
+            const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+            wipe(ada);
+            const r = await openNamesList(typed, ada, STORE);
+            expect(r.ok ? 'ok' : r.code).toBe('ok');
+            if (!r.ok) return;
+            expect(r.value.plan.kind).toBe('ready');
+            expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+        });
+    }
+
+    it('copy_newer that can\'t be merged (the fetch fails, or the copy disagrees with the node\'s word): the pin is kept as it is, said, no copy, no shares, the list opens', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        const was = (await pinOf(ada))!;
+        const row = node.copies!.get(ownerKey(node, ada))!;
+        node.copies!.set(ownerKey(node, ada), { ...row, seq: was.copy.seq + 5 });
+        for (const failing of [true, false]) {
+            sent = [];
+            answer = (req) => (failing && req.method === 'GET' && new URL(req.url).pathname === '/api/names/copy' ? { status: 502 } : node.answer(req));
+            const o = await open(ada);
+            const now = (await pinOf(ada))!;
+            expect(now.copy.seq).toBe(was.copy.seq);
+            expect(now.chain.map((l) => l.id)).toEqual(was.chain.map((l) => l.id));
+            expect(Object.keys(now.ring).sort()).toEqual(Object.keys(was.ring).sort());
+            expect(o.notices).toContain(NAMES_COPY.copyNewer);
+            expect(sentAs('GET', '/api/names/copy').length).toBe(1);
+            expect(sentAs('PUT', '/api/names/copy')).toEqual([]);
+            expect(sentAs('POST', '/api/names/shares')).toEqual([]);
+            expect(o.plan.kind).toBe('ready');
+            expect(named(o)).toEqual([PLANTED[0], PLANTED[1]].sort());
         }
     });
 });

@@ -15,6 +15,7 @@ import {
 } from './storage-keys';
 import { Platform } from 'react-native';
 import { communitySwitched } from './community-switch';
+import { namesPinSecretName } from './names-list';
 
 const isWeb = Platform.OS === 'web';
 const onIPhone = Platform.OS === 'ios';
@@ -400,6 +401,11 @@ async function saveIdentity(identity: BeanPoolIdentity): Promise<void> {
     announceAccountOnPhone(identity.publicKey);
 }
 
+interface WipeableSecrets {
+    deleteSecret(name: string): Promise<void>;
+}
+const DEVICE_SECRETS: WipeableSecrets = { deleteSecret: (name) => SecureStore.deleteItemAsync(name) };
+
 interface WipeableStorage {
     getAllKeys(): Promise<readonly string[]>;
     multiRemove(keys: string[]): Promise<void>;
@@ -442,8 +448,13 @@ interface WipeableStorage {
  * Not app storage, but the account's all the same: the TikTok and Instagram sign-ins its Pulse channels connected
  * (pulse-token-store.ts), live platform tokens that outlived Sign Out and Replace, and that the next account on the
  * phone read back for the same channel (FABLE-sec-native MEDIUM-2, 2026-10-01). They go first, and never hold the rest up.
+ *
+ * And the names list's pins (names-list.ts, design-locked-copy §5): every `beanpool:names-` key (the pins, the checks, the
+ * unsaid words, the copies confirmed), and for each pin its sealing key in the secure store, which can't be listed, so
+ * its name comes from the pin's label. The secret goes first, then the blob: a wipe cut short leaves a blob that reads as
+ * damaged, never a readable pin. Sign Out saves the pins' locked copies on the node before this (account-leaves-phone.ts).
  */
-export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promise<void> {
+export async function wipeIdentityScopedStorage(storage: WipeableStorage, secrets: WipeableSecrets = DEVICE_SECRETS): Promise<void> {
     homeAccountLeft();
     await forgetAllPulseTokens();
     await storage.removeItem('beanpool_anchor_url');
@@ -462,9 +473,17 @@ export async function wipeIdentityScopedStorage(storage: WipeableStorage): Promi
     await storage.removeItem(FAV_CATEGORIES_STORE_KEY);
 
     const allKeys = await storage.getAllKeys();
+    for (const label of allKeys.filter((k: string) => k.startsWith('beanpool:names-trust:'))) {
+        try {
+            await secrets.deleteSecret(namesPinSecretName(label));
+        } catch (e) {
+            console.warn('[Names] A names-list pin\'s sealing key could not be removed', e instanceof Error ? e.message : e);
+        }
+        await storage.removeItem(label);
+    }
     // Home's copies hold the account's own Beans, deals and who wrote to it (utils/home-store.ts).
     const accountKeys = allKeys.filter((k: string) =>
-        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX));
+        k.startsWith('pillar_sync_') || k.startsWith('pillar:') || k.startsWith('beanpool:names-') || k.startsWith('bp_offline_invites_') || k.startsWith(HOME_STORE_PREFIX));
     if (accountKeys.length > 0) {
         await storage.multiRemove(accountKeys);
     }

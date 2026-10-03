@@ -1332,7 +1332,7 @@ async function main(): Promise<void> {
             'GET /api/messages/:conversationId', 'GET /api/messages/:id/attachment', 'POST /api/messages/conversation',
             'GET /api/messages/conversations/:publicKey', 'POST /api/messages/delete', 'POST /api/messages/edit', 'POST /api/messages/mark-read',
             'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/send',
-            'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
+            'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'GET /api/node-admin/me', 'GET /api/node-admin/queue',

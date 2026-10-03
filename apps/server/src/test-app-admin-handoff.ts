@@ -21,8 +21,10 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
-import { startHttpsServer } from './https-server.js';
+import { initStateEngine, grantNodeRole, revokeNodeRole, adminSendMessage } from './state-engine.js';
+import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
+import { issueAutomationToken } from './automation-tokens.js';
+import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
@@ -841,6 +843,124 @@ async function main() {
             assert(own.status === 200 && done.status === 200 && roleOf(nk.pub) === role && statusOf(nk.pub) === 'active' && roleOf(me.pub) === null,
                 `${who} re-keys themselves: issue-code on their own key, finish on /api/member/re-enroll, the new key is ${role} (got ${own.status}/${done.status} ${JSON.stringify(done.body)})`);
         }
+    }
+
+    // ── 16. The code an owner's or admin's pending re-key answers is as strong as completing it: /api/member/re-enroll
+    // takes it with a key of the caller's choosing. Completing it from a stale phone session is asked (13), so reading it
+    // is too: a stale session sees the re-key pending, without its code, and `codeNeedsStepUp`; Manage again (a fresh
+    // session) reads it. Issuer or not (#1534, confirm 4 of #1530, 4172426084). ──
+    console.log('\n16. Re-key status: a stale phone session reads no owner\'s or admin\'s code');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const issue = (pk: string, s: any) => postJson(`/api/local/admin/members/${pk}/rekey/issue-code`, {}, as(s));
+        const readStatus = async (pk: string, s: any) => {
+            const res = await fetch(`${BASE}/api/local/admin/members/${pk}/rekey/status`, { headers: as(s) });
+            return { status: res.status, body: await res.json() as any };
+        };
+        const reEnroll = (code: string, nk: Identity) => {
+            const bodyString = JSON.stringify({ code, newPublicKey: nk.pub, signature: signText(nk, code) });
+            const ts = Date.now();
+            const nonce = crypto.randomBytes(16).toString('hex');
+            return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
+                'X-Public-Key': nk.pub,
+                'X-Signature': signText(nk, `POST\n/api/member/re-enroll\n${ts}\n${nonce}\n${bodyString}`),
+                'X-Timestamp': String(ts),
+                'X-Nonce': nonce,
+            });
+        };
+        const coOwner = keypair(), coOwnerB = keypair(), anAdmin = keypair(), plain = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner16');
+        seedMember(coOwnerB.pub, 'hoCoOwnerB16');
+        seedMember(anAdmin.pub, 'hoAdmin16');
+        seedMember(plain.pub, 'hoPlain16');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        grantNodeRole(coOwnerB.pub, 'owner', owner.pub);
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+
+        for (const [who, target, role] of [['a co-owner', coOwner, 'owner'], ['an admin', anAdmin, 'admin']] as const) {
+            // The issuer's session issues the code fresh, then goes stale; another owner's session is stale too.
+            const issuer = await exchange((await requestLink(owner)).body.handshakeToken);
+            const issued = await issue(target.pub, issuer);
+            assert(issued.status === 200 && typeof issued.body.code === 'string', `a fresh owner issues ${who}'s code (got ${issued.status} ${JSON.stringify(issued.body)})`);
+            const code = issued.body.code as string;
+            backdateAdminSessionForTests(issuer.sessionId!, 6 * 60_000);
+            const otherStale = await exchange((await requestLink(coOwnerB)).body.handshakeToken);
+            backdateAdminSessionForTests(otherStale.sessionId!, 6 * 60_000);
+
+            for (const [label, s] of [['the issuer\'s', issuer], ['another owner\'s', otherStale]] as const) {
+                const st = await readStatus(target.pub, s);
+                const p = st.body?.pendingRequest;
+                assert(st.status === 200 && !!p && !('code' in p) && p.codeNeedsStepUp === true && !JSON.stringify(st.body).includes(code),
+                    `${label} stale session sees ${who}'s re-key pending, no code, codeNeedsStepUp (got ${st.status} ${JSON.stringify(st.body)})`);
+                assert(!!p && p.old_pubkey === target.pub && typeof p.expires_at === 'string' && p.operator_pubkey === owner.pub && Array.isArray(st.body.history),
+                    `…and everything else in the answer as before (got ${JSON.stringify(p)})`);
+                const fromStale = await reEnroll(String(p?.code ?? ''), keypair());
+                assert(fromStale.status >= 400 && roleOf(target.pub) === role,
+                    `…so it cannot finish it on /api/member/re-enroll; the role stays on the old key (got ${fromStale.status} ${JSON.stringify(fromStale.body)})`);
+            }
+
+            // Manage again: the issuer's fresh session, and another owner's, read it, with no flag.
+            const again = await exchange((await requestLink(owner)).body.handshakeToken);
+            const reread = await readStatus(target.pub, again);
+            assert(reread.status === 200 && reread.body.pendingRequest?.code === code && !('codeNeedsStepUp' in reread.body.pendingRequest),
+                `after Manage again the issuer reads ${who}'s code (got ${JSON.stringify(reread.body.pendingRequest)})`);
+            const otherFresh = await exchange((await requestLink(coOwnerB)).body.handshakeToken);
+            const byOther = await readStatus(target.pub, otherFresh);
+            assert(byOther.body.pendingRequest?.code === code, `…and so does another owner's fresh session (got ${JSON.stringify(byOther.body.pendingRequest)})`);
+
+            // An automation token never reads it, whatever its scope or maker: a token is never a fresh phone session (#1546).
+            for (const scope of ['read', 'admin'] as const) {
+                const made = issueAutomationToken({ name: `rekey-${scope}`, scope, createdBy: owner.pub });
+                assert(made.ok, `a ${scope} token is made for the check`);
+                const t = made.ok ? made.token : '';
+                const res = await fetch(`${BASE}/api/local/admin/members/${target.pub}/rekey/status`, { headers: { Authorization: `Bearer ${t}` } });
+                const text = await res.text();
+                assert(!text.includes(code), `a ${scope} token does not read ${who}'s code (got ${res.status} ${text.slice(0, 160)})`);
+            }
+            resetAdminRateLimit();   // these four reads would push the later sections over the admin limiter
+        }
+
+        // A plain member's code is not an owner's or admin's: a stale admin session that issued it still reads it.
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        const plainIssued = await issue(plain.pub, adminStale);
+        const plainSt = await readStatus(plain.pub, adminStale);
+        assert(plainIssued.status === 200 && plainSt.body.pendingRequest?.code === plainIssued.body.code && !('codeNeedsStepUp' in plainSt.body.pendingRequest),
+            `a stale admin session still reads a plain member's code it issued, unflagged (got ${plainIssued.status} ${JSON.stringify(plainSt.body.pendingRequest)})`);
+    }
+
+    // ── 17. The node's inbox (POST /api/local/admin/inbox) is the first owner's own conversations: who they talk to, when,
+    // unread counts. An admin reads none of the members' replies there (they are encrypted to that owner's key) and
+    // already knows the node lines they sent, so only an owner, or that member themselves, reads it. Sending a notice
+    // (inbox/send) stays an admin's (#1534). ──
+    console.log('\n17. The node\'s inbox: owners only');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const pen = keypair();
+        seedMember(pen.pub, 'hoPen17');
+        adminSendMessage(pen.pub, 'A notice from the node (17)');
+        const firstOwner = getFirstNodeAdminPubkey();
+        assert(firstOwner === owner.pub, `the inbox is the first owner's (got ${firstOwner})`);
+
+        const adminFresh = await exchange((await requestLink(admin)).body.handshakeToken);
+        const byAdmin = await postJson('/api/local/admin/inbox', {}, as(adminFresh));
+        const leaked = JSON.stringify(byAdmin.body ?? {});
+        assert(byAdmin.status === 403 && !leaked.includes(pen.pub) && !leaked.includes(owner.pub) && !('conversations' in (byAdmin.body ?? {})),
+            `an admin's session reads no conversation list or metadata (got ${byAdmin.status} ${leaked.slice(0, 300)})`);
+
+        // owner2 is an admin by now (section 3): another owner is a co-owner made here.
+        const coOwner = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner17');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        for (const [who, s] of [['the first owner', await exchange((await requestLink(owner)).body.handshakeToken)], ['another owner', await exchange((await requestLink(coOwner)).body.handshakeToken)]] as const) {
+            const r = await postJson('/api/local/admin/inbox', {}, as(s));
+            const conv = (r.body?.conversations ?? []).find((c: any) => c.participants?.includes(pen.pub));
+            assert(r.status === 200 && !!conv && r.body.adminPubkey === owner.pub, `${who} reads the inbox (got ${r.status} ${JSON.stringify(r.body).slice(0, 200)})`);
+        }
+
+        const send = await postJson('/api/local/admin/inbox/send', { targetPubkey: pen.pub, message: 'An admin\'s notice (17)' }, as(adminFresh));
+        assert(send.status === 200, `an admin still sends a notice from the node (got ${send.status} ${JSON.stringify(send.body)})`);
     }
 
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);

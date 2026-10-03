@@ -169,6 +169,8 @@ describe('PhoneSignIn — the QR card', () => {
 });
 
 describe('AdminLoginCard — phone option', () => {
+    // The card asks GET /api/local/claim on mount: an old node's 404 here, so no test reaches a real address.
+    beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => json(404, {}))); });
     afterEach(() => { vi.unstubAllGlobals(); });
 
     it('offers "Sign in with your phone" beside the password, and the password stays', async () => {

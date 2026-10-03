@@ -71,7 +71,7 @@ Profile pictures on your community are not locked with a key of their own yet. A
 ## What admins see in Settings
 
 - The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written. The log keeps its newest 2,500 lines, and none older than 30 days.
-- The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.
+- The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected. Its live traffic shows each message's kind, size, direction and time, never what it says: not who paid whom, an amount or a note.
 - Reports, and the people they are about.
 - On the global community, which accounts joined from the same internet connection within a day of each other (above). Moderators see this too.
 

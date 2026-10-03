@@ -240,11 +240,15 @@ export async function buildWorld(script: string, root: string): Promise<World> {
     }
 }
 
-/** Open the keys with the code and confirm, on the standby's own admin password. The confirm's answer (none if it died). */
+/**
+ * Open the keys with the code and confirm, under an owner's key session the standby makes (step 7c: the password alone
+ * opens no admin route with 2FA off). The confirm's answer (none if it died).
+ */
 export async function openAndConfirm(node: NodeProc, code: string): Promise<{ status: number; body: any }> {
-    const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': PW_STANDBY });
+    const owner: Record<string, string> = await node.send('owner-session');
+    const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, owner);
     if (opened.status !== 200) return opened;
-    return post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+    return post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, owner);
 }
 
 /** Confirm with the process killed the moment `step` is recorded (BEANPOOL_TEST_TAKEOVER_CRASH_AFTER, as a power cut). */

@@ -1411,6 +1411,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                                 diag={diag}
                                                 nodeData={nodeData}
                                                 tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
+                                                keySession={keySession}
                                                 onComplete={() => {
                                                     setShowColdStart(false);
                                                     loadNodeData();

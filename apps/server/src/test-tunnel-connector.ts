@@ -47,7 +47,9 @@ import {
     initTunnelConnector, syncTunnel, restartTunnel, startTunnelForTakeover, persistAddress, getTunnelStatus, dockerSocketMounted,
     setTunnelConnectorForTests, tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN,
 } from './services/tunnel-connector.js';
-import { reconcile } from './services/public-address-agent.js';
+import { reconcile, checkAddressRequest } from './services/public-address-agent.js';
+import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
@@ -132,8 +134,10 @@ async function startRegistrar(): Promise<http.Server> {
             const p = new URL(req.url || '/', 'http://registrar').pathname;
             const body = text ? JSON.parse(text) : null;
             reg.calls.push({ method: req.method || '', path: p, body });
-            if (p === '/api/registrar/status') return send(200, reg.status());
-            if (p === '/api/registrar/claim') return send(200, reg.claim(body));
+            // An answer, or [HTTP status, body] for one that refuses.
+            const answer = (out: any) => Array.isArray(out) ? send(out[0], out[1]) : send(200, out);
+            if (p === '/api/registrar/status') return answer(reg.status());
+            if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
             if (p === '/api/registrar/rotate') { const [code, answer] = reg.rotate(body); return send(code, answer); }
@@ -172,6 +176,7 @@ async function main(): Promise<void> {
     });
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
     const servers: { app: http.Server | null } = { app: null };
+    let settingsPost: ((p: string, body?: unknown) => Promise<{ status: number; body: any }>) | null = null;
 
     try {
         await section('1, 8. at boot: no address, no child; a leftover token file is deleted and never run', async () => {
@@ -488,6 +493,7 @@ async function main(): Promise<void> {
                 const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 return { status: res.status, body: await res.json().catch(() => null) as any };
             };
+            settingsPost = post;
 
             reg.claim = (b) => live(b.name, 'eyJ.token-beta');
             const claimed = await post('/api/local/admin/public-address/claim', { name: 'beta', mode: 'tunnel' });
@@ -549,6 +555,69 @@ async function main(): Promise<void> {
             assert(noKey.status === 409 && /no live tunnel address/i.test(noKey.body?.error || ''), `New tunnel key with no address says so (${noKey.status})`);
             const old = await post('/api/local/admin/public-address/restart-sidecar');
             assert(old.status === 404 || old.status === 405, `the sidecar route is gone (${old.status})`);
+        });
+
+        await section('13. a request from beanpool claim ends once this server holds any address, however it got it', async () => {
+            const post = settingsPost!;
+            const request = (name: string) => updateLocalConfig({ addressRequest: { name, mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            // The registrar did not answer during the install, so the request stood; the owner then set a name in Settings.
+            request('install-name');
+            const set = await post('/api/local/admin/public-address/claim', { name: 'gamma', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'gamma', `Settings claimed gamma (${set.status})`);
+            assert(getLocalConfig().addressRequest == null, `the Settings claim ends the request (${JSON.stringify(getLocalConfig().addressRequest)})`);
+            // An address saved any other way (this agent, a take-over): the 2 s tick ends it.
+            request('install-name');
+            await checkAddressRequest(Date.now());
+            assert(getLocalConfig().addressRequest == null, 'the 2 s tick ends a request while any address is held');
+            request('install-name');
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `Take offline released gamma (${off.status})`);
+            assert(getLocalConfig().addressRequest == null, 'Take offline ends a standing request too');
+            const before = claims().length;
+            await checkAddressRequest(Date.now() + 60_000);
+            await reconcile();
+            assert(!claims().slice(before).some((c) => c.body?.name === 'install-name') && pa() === null, 'after the release, the install name is never claimed');
+        });
+
+        await section('14. a standing request backs off while the registrar does not answer; only its word that the name can\'t be had ends it', async () => {
+            let down = true;
+            reg.status = () => down ? [503, { error: 'down' }] : { status: 'none' };
+            const before = statuses().length;
+            const asks = () => statuses().length - before;
+            const t0 = Date.now() + 10 * 60_000;
+            writeAddressRequestFile(DATA!, { name: 'outage-name', contact: null, at: t0 });
+            await checkAddressRequest(t0);
+            assert(asks() === 1, `a fresh request is asked for at once (${asks()})`);
+            const seen: string[] = [];
+            for (const s of [5, 11, 25, 41, 100, 162, 400, 1000, 3000]) { await checkAddressRequest(t0 + s * 1000); seen.push(`${s}s:${asks()}`); }
+            assert(seen.join(' ') === '5s:1 11s:2 25s:2 41s:3 100s:3 162s:4 400s:4 1000s:4 3000s:4',
+                `during the outage: 10 s, 30 s, 2 min, then only the 5-min tick (${seen.join(' ')})`);
+            assert(getLocalConfig().addressRequest?.name === 'outage-name' && !getLocalConfig().addressRequest?.refused, 'the request still stands');
+
+            down = false;
+            const t1 = t0 + 10_000_000;
+            const refused = () => getLocalConfig().addressRequest?.refused;
+            reg.claim = () => [429, { error: 'slow down' }];
+            writeAddressRequestFile(DATA!, { name: 'busy-name', contact: null, at: t1 });
+            await checkAddressRequest(t1);
+            assert(getLocalConfig().addressRequest?.name === 'busy-name' && !refused(), `a 429 is no refusal: the request stands (${refused()})`);
+            reg.claim = () => [401, { error: 'bad signature' }];
+            await checkAddressRequest(t1 + 11_000);
+            assert(!refused(), `nor a 401 (a clock out of step) (${refused()})`);
+            reg.claim = () => [408, { error: 'timeout' }];
+            await checkAddressRequest(t1 + 42_000);
+            assert(!refused(), `nor a 408 (${refused()})`);
+            reg.claim = () => [409, { error: 'name taken', owner: 'other' }];
+            const n = claims().length;
+            await checkAddressRequest(t1 + 163_000);
+            assert(claims().length === n + 1 && /name taken/.test(refused() || ''), `the registrar's 409 is its word: refused, with its reason (${refused()})`);
+            await checkAddressRequest(t1 + 1_000_000);
+            await reconcile();
+            assert(claims().length === n + 1, 'and never asked for again');
+            updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

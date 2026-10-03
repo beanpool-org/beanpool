@@ -19,7 +19,8 @@
 // A name asked for at install (`beanpool claim --name`, address-request.ts) counts as PUBLIC_ADDRESS_NAME (the env wins
 // when both are set). The node takes the command's file within ~2 s and asks for the name at once, then every 10 s while
 // the request stands and no address is held; after that the 5-min tick. Taken only while this server holds no address:
-// changing a name it holds stays in Settings, owner-only.
+// changing a name it holds stays in Settings, owner-only. The request ends once this server holds any address, however it
+// got it (Settings, this agent, a take-over), and when Settings takes the address offline: it never claims later.
 
 import { getNodeRole, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -71,6 +72,17 @@ const requestDone = (name: string): void => {
     const r = getLocalConfig().addressRequest;
     if (r && r.name === name) updateLocalConfig({ addressRequest: null });
 };
+
+/**
+ * Ends a request from `beanpool claim`: this server holds an address (or its owner released one) however it got it. Left
+ * standing, it would claim the install's name after a later release, against the owner's latest choice.
+ */
+export function dropAddressRequest(): void {
+    const r = getLocalConfig().addressRequest;
+    if (!r) return;
+    updateLocalConfig({ addressRequest: null });
+    if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: the address is set in Settings now`);
+}
 
 /** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
 export async function reconcile(): Promise<void> {
@@ -143,7 +155,8 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
                 fresh = true;
             }
         }
-        if (!requestedName() || holdsAddress()) return;
+        if (holdsAddress()) { dropAddressRequest(); return; }
+        if (!requestedName()) return;
         if (!fresh && now - lastRequestCheck < 10_000) return;
         lastRequestCheck = now;
         await reconcile();

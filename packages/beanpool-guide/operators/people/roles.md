@@ -98,6 +98,10 @@ A server with no owner, which is a brand-new one before its first invite, or one
 - Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.
 - Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm.
 
+## Every owner locked out
+
+If the community has owners but none of them can sign in any more (phones and 12 words lost, no second owner, no break-glass code), whoever runs the server can make a member owner from the server's command line: `docker compose exec beanpool-node beanpool recover --key <their public key or @callsign>`. The member must have joined first. It adds an owner and removes nobody, changes no setting, prints the new owner's break-glass code once, and tells every member in a critical notice that an owner was added from the server. See Signing in.
+
 ## The first owner, Admin
 
 The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up. The global community has no such member: invites are off there, and its first owner joins through the open door and is made owner with the admin password.

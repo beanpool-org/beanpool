@@ -177,7 +177,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
 
                 {claim.kind === 'unclaimed' ? (
                     <>
-                    <UnclaimedCard codeId={claim.codeId} address={claim.address} addresses={claim.addresses} />
+                    <UnclaimedCard codeId={claim.codeId} primaryAddress={claim.primaryAddress} address={claim.address} addresses={claim.addresses} />
                     {/* Stage B: the password still works, second. Stage C's nodes answer password: false and have none. */}
                     {claim.password && (
                         <details open={passwordFoldOpen} className="mt-6 border-t border-nature-800/80 pt-2" data-testid="claim-password-fold">

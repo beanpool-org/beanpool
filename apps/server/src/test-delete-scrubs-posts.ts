@@ -202,8 +202,12 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any; text: string }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither, and any `headers`. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's credential in `admin`, or neither, and any
+ * `headers`. Step 7c: with the node's 2FA off the admin password alone opens no admin route, so `admin` is an owner's key
+ * session the node made (takeover-test-harness.ts owner-session).
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = { ...opts.headers };
     if (opts.as) {
@@ -214,7 +218,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -288,7 +292,8 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown = {}) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        const mainOwner: Record<string, string> = await main.send('owner-session');
+        const A = (route: string, body: unknown = {}) => api(m, 'POST', route, { admin: mainOwner, body });
         const S_ = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [rhea, bo, cy]) {
@@ -337,7 +342,7 @@ async function main(): Promise<void> {
         await main.send('guest-view');
 
         /** Every route that can show a post, read as Bo, Cy, a guest and the admin, and the replication export. */
-        const sweep = async (base: string, adminPw: string): Promise<{ route: string; status: number; leaked: string[] }[]> => {
+        const sweep = async (base: string, adminPw: Record<string, string>): Promise<{ route: string; status: number; leaked: string[] }[]> => {
             const reads: [string, Promise<Answer>][] = [];
             const get = (label: string, route: string, as?: Id) => reads.push([label, api(base, 'GET', route, as ? { as } : {})]);
             for (const [who, as] of [['Bo', bo], ['Cy', cy], ['a guest', undefined]] as [string, Id | undefined][]) {
@@ -370,7 +375,7 @@ async function main(): Promise<void> {
             }
             return out;
         };
-        const before = await sweep(m, PW_MAIN);
+        const before = await sweep(m, mainOwner);
         const shownBefore = before.filter((r) => r.leaked.length > 0);
         const showed = (route: string, what: string) => shownBefore.some((r) => r.route === route && r.leaked.includes(what));
         require_(showed('a guest: the board', 'Quorvex') && showed('Bo: a phone\'s full sync', 'Tavirush') && showed('Bo: a phone\'s full sync', 'pin down')
@@ -452,7 +457,7 @@ async function main(): Promise<void> {
         assert(index3.integrity === 'ok', `the search index is sound, the cancel and the wipe in one millisecond included (${index3.integrity})`);
         assert(Object.values(index3.bytes).every((n) => n === 0), `and holds none of her words in its bytes (${JSON.stringify(index3.bytes)})`);
         assert(index3.neutral === wiped.length, `it finds her wiped posts under the neutral words, once each (${index3.neutral})`);
-        const after = await sweep(m, PW_MAIN);
+        const after = await sweep(m, mainOwner);
         const leaked = after.filter((r) => r.leaked.length > 0);
         assert(leaked.length === 0, `no route read by Bo, Cy, a guest or the admin, nor the replication export, returns her words, photos or pins (${after.length} reads; ${leaked.map((r) => `${r.route}: ${r.leaked.join('/')}`).join('; ') || 'none'})`);
         assert(after.filter((r) => r.status >= 400).length <= before.filter((r) => r.status >= 400).length,
@@ -503,10 +508,11 @@ async function main(): Promise<void> {
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));
@@ -514,7 +520,7 @@ async function main(): Promise<void> {
         require_(standby.ready.role === 'primary', `promoted (${standby.ready.role})`);
         const p = `https://localhost:${await standby.send('serve')}`;
         await standby.send('guest-view');
-        const promoted = await sweep(p, PW_STANDBY);
+        const promoted = await sweep(p, await standby.send('owner-session'));
         const leakedP = promoted.filter((r) => r.leaked.length > 0);
         assert(leakedP.length === 0, `on the promoted server no route returns her words, photos or pins either (${promoted.length} reads; ${leakedP.map((r) => `${r.route}: ${r.leaked.join('/')}`).join('; ') || 'none'})`);
         const photoP = await Promise.all(wiped.map((id) => photoRoute(p, id, 0, cy)));

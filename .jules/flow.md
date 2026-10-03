@@ -115,3 +115,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-23 - Add loading indicators for EconomySection enterprises and proposals
 **Learning:** `EconomySection.tsx` fell through to "No pending proposals." while `loadingCommons` was `true`, misleading operators into thinking no proposals existed before data finished loading.
 **Action:** Render explicit loading indicators with `animate-spin` spinners when `loadingTreasuries` or `loadingCommons` is `true`.
+
+## 2026-11-24 - Add loading states for AutomationTokensPanel
+**Learning:** `AutomationTokensPanel.tsx` did not show a visual loading indicator while initial tokens were fetching (`tokens === null`), and the submit button lacked a visual loading spinner during async creation.
+**Action:** Render an explicit loading indicator with an `animate-spin` spinner when `!tokens && !listMessage` and display an inline spinner on the submit button when `busy` is `true`.

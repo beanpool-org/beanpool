@@ -279,9 +279,10 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
                         type="button"
                         onClick={handleMake}
                         disabled={busy}
-                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                        Make token
+                        {busy && <span className="animate-spin text-sm" aria-hidden="true">⏳</span>}
+                        <span>{busy ? 'Making token…' : 'Make token'}</span>
                     </button>
                 </div>
             )}
@@ -291,6 +292,12 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
             <div className="space-y-2">
                 <span className="text-xs font-semibold text-nature-300">Tokens on this node</span>
                 {listMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{listMessage}</p>}
+                {!tokens && !listMessage && (
+                    <div className="flex items-center gap-2 py-2 text-xs text-nature-400" data-testid="automation-tokens-loading">
+                        <span className="animate-spin text-terra-400" aria-hidden="true">⏳</span>
+                        <span>Loading tokens…</span>
+                    </div>
+                )}
                 {tokens && tokens.length === 0 && <p className="text-[11px] text-nature-400 m-0">No tokens yet.</p>}
                 {tokens && tokens.length > 0 && (
                     <ul className="list-none p-0 m-0 space-y-2" data-testid="automation-token-list">

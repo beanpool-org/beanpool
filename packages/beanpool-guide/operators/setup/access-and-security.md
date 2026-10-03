@@ -19,7 +19,7 @@ If the server made up the first password (ADMIN_PASSWORD was empty), changing it
 
 Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. Settings asks for it with the password. On a server where it is off, signing in with the password opens one card only, which says "Set up two-factor sign-in to open Settings: the admin password alone is not enough." Nothing else in Settings opens until the server accepts a code from your new authenticator; then Settings opens at once, without signing in again. Meanwhile the server keeps running and serving members, the card always opens for the password, and **Log Out** is on it. If two-factor sign-in is switched off later, the next thing the password does brings that card back. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in.
 
-**Until two-factor sign-in is on, the card protects Settings only.** Tools that send the password with every request instead of signing in (a standby that still copies with the password, scripts, the fleet manager) can still do everything with the password alone. Turning two-factor sign-in on closes that too: from then on they need a code as well. So set it up as soon as the card appears, and keep the password as private as before.
+**Until two-factor sign-in is on, the card protects Settings only.** Tools that send the password with every request instead of signing in (a standby that still copies with the password, scripts, the fleet manager) can still do everything with the password alone. Turning two-factor sign-in on closes that too: from then on they need a code as well. Better still, give scripts and the fleet manager an automation token instead of the password (see Automation tokens, below). So set it up as soon as the card appears, and keep the password as private as before.
 
 - Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.
 - Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.
@@ -68,6 +68,15 @@ No token, whatever its scope, makes an owner-only change. It cannot change who i
 - What a script does with a token counts as done by the owner who made it, and the server's log records each use with the token's id, never the token itself. The list shows when and where each token was last used.
 - Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.
 - Tokens stay on this server: they are not in backups, standby copies or a take-over.
+
+### Scripts and the fleet manager
+
+The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password (ADMIN_PASSWORD, or --admin-pw for setup-backup) if you have no token. What each needs:
+
+- **scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.
+- **scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script with --token. Without --token the script stops and says so before it changes anything.
+- **scripts/federation/fed.mjs**: an **Admin** token for each server, in BEANPOOL_TOKEN_ followed by the server's name in capitals (for example BEANPOOL_TOKEN_GIPPSLAND).
+- **The fleet manager**: a **Backups** token, as "automationToken" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those.
 
 ## Factory reset
 

@@ -47,6 +47,14 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                 // route it is the password, owner level and attributed as the password is, with no member's key.
                 ctx.state.adminRole = 'owner';
                 ctx.state.isPasswordSession = true;
+                // Design step 6 (D3): the password needs a second factor. With the node's 2FA off, this session opens
+                // the 2FA setup routes and nothing else until a code is confirmed (a soft gate: the node serves its
+                // members, the card that lifts it always opens, and a key session is never asked).
+                if (passwordSessionNeedsTotpSetup() && !isTotpSetupRoute(ctx)) {
+                    ctx.status = 403;
+                    ctx.body = { error: TOTP_SETUP_REQUIRED_ERROR, code: TOTP_SETUP_REQUIRED_CODE, totpSetupRequired: true };
+                    return false;
+                }
             } else {
                 // Attribution: every admin action performed under a key session is attributed
                 // to that member (auth_signer = their pubkey), replacing 'owner:password'
@@ -342,6 +350,39 @@ export async function checkAdminPasswordAuth(ctx: any): Promise<boolean> {
     if (!viaSession && adminAuthFailures > 0) adminAuthFailures = Math.max(0, adminAuthFailures - 1);
 
     return true;
+}
+
+/**
+ * Design step 6 (D3): a second factor is mandatory on the password path. A password session (POST
+ * /api/local/admin/auth/password) on a node whose 2FA is off reaches only TOTP_SETUP_ROUTES until a code from a new
+ * authenticator is confirmed (/2fa/verify turns 2FA on and keeps this session signed in); every other admin route
+ * answers 403 TOTP_SETUP_REQUIRED_CODE. Soft: nothing else is refused, key sessions (Manage, a computer by QR) are never
+ * gated, and with 2FA on the password already needs the code. A caller sending X-Admin-Password on each request (a
+ * legacy standby's pull, the harvester, the manager's fleet profiles) is not gated yet: step 7 moves those onto
+ * owner automation tokens.
+ */
+export const TOTP_SETUP_REQUIRED_CODE = 'totp_setup_required';
+export const TOTP_SETUP_REQUIRED_ERROR =
+    'Set up two-factor sign-in to open Settings: the admin password alone is not enough.';
+
+/** What a gated password session may still do: read and set up the node's 2FA, and fetch its CSRF token. */
+export const TOTP_SETUP_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: string }> = [
+    { method: 'GET', path: '/api/local/admin/2fa/status' },
+    { method: 'POST', path: '/api/local/admin/2fa/setup' },
+    { method: 'POST', path: '/api/local/admin/2fa/verify' },
+    { method: 'POST', path: '/api/local/admin/csrf-token' },
+];
+
+/** Whether the node's 2FA is off, so a password session is held to the 2FA setup card. */
+export function passwordSessionNeedsTotpSetup(): boolean {
+    const config = getLocalConfig();
+    return !(config.totpEnabled && config.totpSecret);
+}
+
+function isTotpSetupRoute(ctx: any): boolean {
+    const method = String(ctx.method || '').toUpperCase();
+    const path = ctx.path || ctx.request?.path || '';
+    return TOTP_SETUP_ROUTES.some(r => r.method === method && r.path === path);
 }
 
 export type AdminRole = 'owner' | 'admin' | 'moderator';

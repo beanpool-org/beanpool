@@ -88,7 +88,7 @@ describe('startKeySession', () => {
             ? reply(200, { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null })
             : reply(200, { csrfToken: 'csrf-pw' }));
         vi.stubGlobal('fetch', fetchMock);
-        expect(await startKeySession(fakeWindow('').win)).toEqual({ kind: 'password', csrfToken: 'csrf-pw', section: null });
+        expect(await startKeySession(fakeWindow('').win)).toEqual({ kind: 'password', csrfToken: 'csrf-pw', section: null, totpSetupRequired: false });
         // A password session is only ever the owner's: any other role in the answer is not taken as one.
         vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/session')
             ? reply(200, { authenticated: true, isPasswordSession: true, role: 'moderator', memberPubkey: null })
@@ -102,7 +102,7 @@ describe('signInWithPassword', () => {
         const fetchMock = vi.fn(async () => reply(200, { success: true, role: 'owner', csrfToken: 'csrf-signin' }));
         vi.stubGlobal('fetch', fetchMock);
         const res = await signInWithPassword('/api/local/admin/auth/password', 'hunter2', '123456');
-        expect(res).toEqual({ ok: true, csrfToken: 'csrf-signin' });
+        expect(res).toEqual({ ok: true, csrfToken: 'csrf-signin', totpSetupRequired: false });
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         expect(url).toBe('/api/local/admin/auth/password');

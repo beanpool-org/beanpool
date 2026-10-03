@@ -9,8 +9,9 @@ interface AdminLoginCardProps {
     /**
      * Signed in with the password. The node has set the httpOnly session cookie; this is its CSRF token. The password
      * itself is not handed on: nothing on this page keeps it (lib/key-session.ts, signInWithPassword).
+     * `totpSetupRequired`: the node's 2FA is off, so Settings opens on the 2FA setup card only (TotpSetupGate).
      */
-    onPasswordSession: (csrfToken: string) => void;
+    onPasswordSession: (csrfToken: string, totpSetupRequired: boolean) => void;
     /** Offers "Sign in with your phone" (a QR for the BeanPool app) when given. Single-node /settings only. */
     onKeySession?: (session: KeySession, csrfToken: string) => void;
 }
@@ -56,7 +57,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
 
             setPassword('');
             setTotpCode('');
-            onPasswordSession(res.csrfToken);
+            onPasswordSession(res.csrfToken, res.totpSetupRequired);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Authentication failed';
             setError(msg);

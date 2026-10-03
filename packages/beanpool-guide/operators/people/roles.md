@@ -13,7 +13,8 @@ Owners can do everything in Settings. Only owners can:
 
 - give or take away the owner and admin roles (admins can give and take away the moderator role too);
 - remove or offboard an owner or an admin;
-- suspend an owner;
+- re-key an owner or an admin, moving their role to a new phone's key (anyone may still re-key their own account);
+- suspend an owner, or suspend an owner or an admin through a report;
 - lift a suspension, or give back a role that a suspension took away;
 - end the waiting time early when an owner or admin is being removed;
 - sign other people out of Settings;
@@ -27,7 +28,7 @@ The **admin password** counts as an owner. Anyone who knows it can do all of the
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key their own account, and re-key or suspend a member or a moderator.
 
 ## Moderator
 
@@ -79,6 +80,8 @@ The server checks every change. If it refuses, the screen shows its reason word 
 - "Only an owner may grant the admin role" (or "revoke"): you are signed in as an admin. Admins can add and remove moderators, but only an owner can make another admin or owner.
 - "Only an owner may change the role of an existing admin" (or "owner"): you are an admin, and that person already holds a role. Giving someone a role replaces the one they have, so an admin may only appoint someone who holds no role, or who is already a moderator. Ask an owner.
 - "Only an owner may grant the owner role": once a community has an owner, only an owner can add another.
+- "Only an owner can re-key an owner or admin": you are an admin, and that person holds an owner or admin role, or held one before a suspension. A re-key moves their role to the new key, so ask an owner. Re-keying yourself is not refused.
+- "Only an owner can suspend an owner or admin": you actioned a report with suspend on someone who holds an owner or admin role. Nothing was changed, the report included. Action it without suspending, or ask an owner.
 - "Cannot remove the last owner": add another owner first, then remove this one.
 - "Only active accounts can hold a node role": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.
 - "Member not found": the pasted key is not a member of this community.

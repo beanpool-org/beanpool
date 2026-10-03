@@ -126,9 +126,15 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   every action the engine refuses to an admin because of its target (`stepUpIfOwnerOnly` on decisions-engine
   `adminActionNeedsOwner`: suspending an owner; lifting a suspension or halting a Decision that gives back an owner's
   or admin's role; accelerating an owner's or admin's removal; pruning, branch-pruning or offboarding an owner or admin;
-  a report action with `suspendUser` on one), `POST /auth/revoke-all` for another member (your own is not asked),
+  re-keying one, `rekey/issue-code` and `rekey/complete`, their own re-key included, since the code binds a key the
+  caller chooses to that role; a report action with `suspendUser` on one), `POST /auth/revoke-all` for another member (your own is not asked),
   `POST /auth/break-glass-mode`, and the bulk downloads `GET snapshots/download` and `GET offbox-backups/download`.
   `GET takeover-envelope` is not asked: it is sealed to the owners. A computer's session (the QR pairing) is not asked.
+  Two of those were not refused to an admin by the engine until #1530 fix round 3. Now `issueRekeyCode` and
+  `completeRekey` refuse a re-key of an owner or admin, a role held aside included (member-wizards `assertMayRekey`),
+  and `actionReport` refuses `suspendUser` on one (it takes the role). Both answer 403 and write nothing, unless the
+  actor is owner level. A member re-keying their own key is never refused, an owner's or admin's included. An admin
+  emergency-suspending another admin stays allowed: the role is held aside, and only an owner gives it back.
 - *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /
   SFSafariViewController. The token goes in the **fragment**, so it never reaches a server, proxy log or
   Referer. `/settings` wipes it from the address bar, then POSTs it once to `/api/local/admin/auth/exchange`.

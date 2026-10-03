@@ -88,7 +88,7 @@ The scripts that come with BeanPool take a token in the environment variable **B
 - **scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.
 - **scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script with --token. Without --token the script stops and says so before it changes anything.
 - **scripts/federation/fed.mjs**: an **Admin** token for each server, in BEANPOOL_TOKEN_ followed by the server's name in capitals (for example BEANPOOL_TOKEN_GIPPSLAND).
-- **The harvester** (the fleet's backup puller): a **Backups** token, as "automationToken" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those.
+- **The harvester** (the fleet's backup puller): a **Backups** token, as "automationToken" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those. A Backups token can take a full copy of the community, so keep manager-nodes.json readable by the fleet manager's user only (chmod 600 manager-nodes.json). When the fleet manager saves the file itself, it makes it that way.
 
 ### The fleet manager
 

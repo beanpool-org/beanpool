@@ -742,6 +742,24 @@ async function main() {
     assert(reloadedNodes.length === 1 && reloadedNodes[0].id === 'custom-pool', 'saveNodes persists custom node configuration');
     assert(reloadedNodes[0].adminPassword === 'secret-pass', 'adminPassword field preserved');
 
+    // manager-nodes.json holds owner tokens and passwords: readable by the fleet manager's user only (#1550 review).
+    const nodesFile = path.join(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), 'manager-nodes.json');
+    assert((fs.statSync(nodesFile).mode & 0o777) === 0o600, `saveNodes writes manager-nodes.json 0600 (got ${(fs.statSync(nodesFile).mode & 0o777).toString(8)})`);
+    fs.chmodSync(nodesFile, 0o644);
+    saveNodes(customNodes);
+    assert((fs.statSync(nodesFile).mode & 0o777) === 0o600, `saveNodes puts an existing 0644 manager-nodes.json back to 0600 (got ${(fs.statSync(nodesFile).mode & 0o777).toString(8)})`);
+    // A file that does not parse: the log names the file and the failure, never a snippet of what is in it.
+    const tokenInFile = `bp_${'c'.repeat(12)}_${'d'.repeat(64)}`;
+    fs.writeFileSync(nodesFile, `[{ "id": "x", "automationToken": "${tokenInFile}", }]`);
+    const warned: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warned.push(args.map(a => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join(' ')); };
+    let fellBack: FleetNodeConfig[];
+    try { fellBack = getNodes(); } finally { console.warn = origWarn; }
+    const warnedText = warned.join('\n');
+    assert(fellBack.some(n => n.id === 'mullum') && warnedText.includes(nodesFile) && !warnedText.includes('dddd') && !warnedText.includes('"x"'),
+        `a manager-nodes.json that does not parse: the warning names the file and holds none of its contents (got: ${warnedText.replace(/d{4,}/g, '<d…>')})`);
+    saveNodes(customNodes);
 
     // 4. Test loadHarvestState default
     const initialState = loadHarvestState();

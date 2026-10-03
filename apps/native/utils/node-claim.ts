@@ -63,19 +63,20 @@ function retryAfterOf(res: Response): number | null {
 const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]/g;
 /**
  * Control characters (C0, DEL, C1) and the invisible format characters (Unicode Cf, BMP): the soft hyphen, the Arabic
- * number signs and letter mark (U+061C), the zero-width space, joiners and marks (U+200B-200F), every bidi embedding,
+ * number signs and letter mark (U+061C), the zero-width space and direction marks (U+200B, U+200E, U+200F; the non-joiner and joiner U+200C/D stay), every bidi embedding,
  * override and isolate (U+202A-202E, U+2066-2069), the word joiner and invisible operators (U+2060-2064), the
  * deprecated format controls (U+206A-206F), the BOM (U+FEFF) and the interlinear annotation marks (U+FFF9-FFFB).
  * Listed by hand rather than as \p{Cc}\p{Cf}, so the set is explicit and does not hang on the JS engine's Unicode tables.
  */
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
-const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
 export const CLAIM_NAME_MAX = 80;
 /** Anything that looks like a claim code (with or without `claim-` and the dashes), for the developer log. */
 const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
 
 /**
- * A server-written community name made safe to show: one line, no invisible or direction-changing characters, runs of
+ * A server-written community name made safe to show: one line, no invisible or direction-changing characters (the zero-width
+ * non-joiner and joiner, U+200C/U+200D, stay: scripts such as Persian and emoji sequences need them, and neither moves text), runs of
  * whitespace as one space, trimmed, at most {@link CLAIM_NAME_MAX} characters. Null when nothing is left.
  */
 export function cleanClaimName(raw: unknown): string | null {

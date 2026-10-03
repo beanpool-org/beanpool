@@ -185,7 +185,12 @@ describe('the server-written community name, before it is shown', () => {
     });
 
     it('zero-width and other invisible characters are gone; control characters too', async () => {
-        expect(await nameFrom('Be\u200Ban\u200C To\u200Dwn\u2060\uFEFF\u00AD')).toBe('Bean Town');
+        expect(await nameFrom('Be\u200Ban To\u200Ewn\u2060\uFEFF\u00AD')).toBe('Bean Town');
+    });
+
+    it('the zero-width non-joiner and joiner stay: Persian names and emoji sequences need them, and neither moves text', async () => {
+        expect(await nameFrom('\u0645\u06CC\u200C\u0631\u0648\u0645')).toBe('\u0645\u06CC\u200C\u0631\u0648\u0645');
+        expect(await nameFrom('Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467} garden')).toBe('Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467} garden');
         expect(await nameFrom('Bean\u0000\u0007\u001B[31m Town\u007F\u009B')).toBe('Bean[31m Town');
     });
 

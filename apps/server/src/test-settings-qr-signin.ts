@@ -27,6 +27,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { buildBoundRequestHeaders } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
 import { resolveClientIp, setTrustConfigForTests } from './client-ip.js';
@@ -119,6 +120,16 @@ async function approve(pairingId: string, shortCode: string, signer: Identity, o
         },
         headers: via(opts.ip ?? freshIp()),
     });
+}
+
+/** The phone's lookup, signed as the app signs a GET (format 2, for this node's host). */
+async function signedLookup(pairingId: string, signer: Identity, from: Record<string, string>) {
+    const path = `/api/local/admin/auth/pairing/${pairingId}`;
+    const headers = await buildBoundRequestHeaders({
+        method: 'GET', url: `${BASE}${path}`, body: '', publicKeyHex: signer.pub,
+        sign: (bytes) => new Uint8Array(crypto.sign(null, Buffer.from(bytes), signer.priv)),
+    });
+    return call('GET', path, { headers: { ...from, ...headers } });
 }
 
 async function sessionInfo(sessionId: string) {
@@ -388,26 +399,40 @@ async function main() {
     console.log('\n8. The phone sees where and when the computer asked');
     {
         const b = await newPairing();
-        const same = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(b.ip) });
+        const same = await signedLookup(b.pairingId, admin, via(b.ip));
         assert(same.status === 200 && same.body.fromAddress === b.ip, `the phone is told the address the computer asked from (${same.body.fromAddress})`);
         assert(same.body.sameNetwork === true, 'a phone on the same network as the computer is told so');
         assert(typeof same.body.askedSecondsAgo === 'number' && same.body.askedSecondsAgo >= 0 && same.body.askedSecondsAgo < 10,
             `the phone is told how long ago the computer asked (${same.body.askedSecondsAgo}s)`);
         assert(typeof same.body.expiresInSeconds === 'number' && same.body.expiresInSeconds > 100 && same.body.expiresInSeconds <= 120,
             `the phone is told how long is left (${same.body.expiresInSeconds}s)`);
-        const other = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(freshIp()) });
+        const other = await signedLookup(b.pairingId, owner, via(freshIp()));
         assert(other.status === 200 && other.body.sameNetwork === false && other.body.fromAddress === b.ip,
             'a phone somewhere else is not told "same network", and still sees the computer\'s address');
 
+        // Only a lookup signed by a member who could approve is told where the computer is (4171995201).
+        const unsigned = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(b.ip) });
+        assert(unsigned.status === 200 && unsigned.body.shortCode === b.shortCode && !('fromAddress' in unsigned.body) && !('sameNetwork' in unsigned.body),
+            `an unsigned lookup (anyone who photographed the QR) still gets the browser, but neither the computer's address nor "same network" (${JSON.stringify(unsigned.body)})`);
+        const byMember = await signedLookup(b.pairingId, member, via(b.ip));
+        assert(byMember.status === 200 && !('fromAddress' in byMember.body) && !('sameNetwork' in byMember.body),
+            'nor does a lookup signed by a member who holds no role here');
+        const byOutsider = await signedLookup(b.pairingId, outsider, via(b.ip));
+        assert(byOutsider.status === 200 && !('fromAddress' in byOutsider.body), 'nor one signed by a key that is no member here');
+        const byOwner = await signedLookup(b.pairingId, owner, via(b.ip));
+        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16) } });
+        assert(byOwner.status === 200 && 'fromAddress' in byOwner.body && forged.status === 200 && !('fromAddress' in forged.body),
+            'nor one that names an owner\'s key without the owner\'s signature');
+
         // An address that stands for many people says nothing about one network (4171995134).
         const local = await call('POST', '/api/local/admin/auth/pairing', { body: {} });
-        const fromLoopback = await call('GET', `/api/local/admin/auth/pairing/${local.body.pairingId}`);
+        const fromLoopback = await signedLookup(local.body.pairingId, owner, {});
         assert(local.status === 200 && fromLoopback.status === 200 && fromLoopback.body.sameNetwork === false,
             `a computer and a phone that both reach the node as its local proxy (no forwarding header) are not told "same network" (${fromLoopback.body?.sameNetwork})`);
         setTrustConfigForTests({ loopback: false, localSubnets: false });
         try {
             const proxied = await call('POST', '/api/local/admin/auth/pairing', { body: {}, headers: { 'x-forwarded-for': '203.0.113.66' } });
-            const look = await call('GET', `/api/local/admin/auth/pairing/${proxied.body.pairingId}`, { headers: { 'x-forwarded-for': '192.0.2.9' } });
+            const look = await signedLookup(proxied.body.pairingId, owner, { 'x-forwarded-for': '192.0.2.9' });
             assert(proxied.status === 200 && look.status === 200 && look.body.sameNetwork === false,
                 `behind a reverse proxy the node doesn't trust, the attacker's computer and the admin's phone are not told "same network" (${look.body?.sameNetwork})`);
         } finally { setTrustConfigForTests(undefined); }

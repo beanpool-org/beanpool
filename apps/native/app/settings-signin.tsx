@@ -66,7 +66,7 @@ export default function SettingsSigninScreen() {
             problem(m.title, m.message);
             return;
         }
-        const look = await lookupPairing(scan.qr);
+        const look = await lookupPairing(scan.qr, identity);
         if (look.kind !== 'ok') {
             problem(look.kind === 'gone' ? 'That code has run out' : "Couldn't check the code", look.message);
             return;

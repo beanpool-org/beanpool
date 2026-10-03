@@ -134,6 +134,17 @@ describe('asking the node about the pairing', () => {
         });
     });
 
+    it('signs the lookup as the app signs a GET, so the node may show this admin where the computer asked from', async () => {
+        const calls = mockFetch([{ status: 200, body: { shortCode: 'K7F3QX', browser: 'Chrome on macOS', expiresAt: 5 } }]);
+        expect((await lookupPairing(qr, identity)).kind).toBe('ok');
+        const headers = calls[0].init?.headers as Record<string, string>;
+        expect(calls[0].url).toBe(`https://mullum.beanpool.org/api/local/admin/auth/pairing/${ID}`);
+        expect(headers['X-Public-Key']).toBe(identity.publicKey);
+        expect(headers['X-Signature']).toEqual(expect.any(String));
+        expect(headers['X-Nonce']).toEqual(expect.any(String));
+        expect(headers.Accept).toBe('application/json');
+    });
+
     it('refuses a QR whose short code the node does not recognise (a doctored code)', async () => {
         mockFetch([{ status: 200, body: { shortCode: 'M4P9WZ', browser: 'Chrome on macOS', expiresAt: 5 } }]);
         expect((await lookupPairing(qr)).kind).toBe('gone');

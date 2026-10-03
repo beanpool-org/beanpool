@@ -21,6 +21,7 @@ import { parseSettingsSigninQr, isSameNode, nodeOrigin, type SettingsSigninQr } 
 import type { BeanPoolIdentity } from './identity';
 import { requireDeviceUnlock } from './node-admin';
 import { oldPairingText, signPairing } from './member-statements';
+import { buildSignedHeaders } from './crypto';
 
 export type ScanResult =
     | { kind: 'ok'; qr: SettingsSigninQr }
@@ -85,9 +86,15 @@ export type PairingLookup =
     | { kind: 'error'; message: string };
 
 /** The node's view of the pairing. Refuses a QR whose short code the node does not recognise. */
-export async function lookupPairing(qr: SettingsSigninQr): Promise<PairingLookup> {
+export async function lookupPairing(qr: SettingsSigninQr, identity?: BeanPoolIdentity | null): Promise<PairingLookup> {
     try {
-        const res = await fetch(`${qr.nodeUrl}${pairingPath(qr.pairingId)}`, { headers: { Accept: 'application/json' } });
+        const url = `${qr.nodeUrl}${pairingPath(qr.pairingId)}`;
+        // Signed as the app signs a GET: the node tells only a member who could approve where the computer asked from.
+        // A lookup it can't sign still goes, unsigned, and shows the rest.
+        const signed = identity
+            ? await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey).catch(() => ({}))
+            : {};
+        const res = await fetch(url, { headers: { Accept: 'application/json', ...signed } });
         const body = await res.json().catch(() => ({})) as {
             shortCode?: unknown; browser?: unknown; expiresAt?: unknown; error?: unknown;
             expiresInSeconds?: unknown; askedSecondsAgo?: unknown; fromAddress?: unknown; sameNetwork?: unknown;

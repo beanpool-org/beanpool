@@ -6,8 +6,9 @@
  *                                                   on approval, the admin_session cookie + a CSRF token,
  *                                                   or { status: 'confirm' } when the phone shows two digits
  *   POST /api/local/admin/auth/pairing/:id/confirm  browser: { code } — the phone's two digits, with the binding cookie
- *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", the computer's address,
- *                                                   how long ago it asked, the time left, and "same network"
+ *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", how long ago it asked and
+ *                                                   the time left; signed by a member who holds a role here, also the
+ *                                                   computer's address and "same network"
  *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, totpCode?, confirm? }
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
@@ -19,6 +20,9 @@ import Router from '@koa/router';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { setAdminSessionCookie } from '../admin-key-auth.js';
+import { verifyMemberSignature } from '../engine/member-signature.js';
+import { nodeRoleOf } from '../engine/node-roles.js';
+import { SIGNED_FOR_HEADER } from '@beanpool/core';
 import {
     createPairing,
     describePairing,
@@ -129,9 +133,34 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
         const res = describePairing(ctx.params.id, Date.now(), clientIp(ctx as any));
         ctx.set('Cache-Control', 'no-store');
         if (!res.ok) { ctx.status = res.status; ctx.body = { error: res.error }; return; }
-        const { ok: _ok, ...shown } = res;
-        ctx.body = shown;
+        const { ok: _ok, fromAddress, sameNetwork, ...shown } = res;
+        // The pairing id is in the QR, so anyone who saw the screen can look it up: the computer's address, and whether
+        // they share its network, go only to a member who could approve it (4171995201).
+        const signer = signedBy(ctx);
+        ctx.body = signer && nodeRoleOf(signer) ? { ...shown, fromAddress, sameNetwork } : shown;
     });
+
+    /**
+     * The member who signed this request as the app signs a GET, or null. /api/local/ is outside the signature
+     * middleware (https-server.ts isSignatureBypassed), so the signature, its freshness, its community and its nonce
+     * are checked here; a request that fails any of them is answered as unsigned.
+     */
+    function signedBy(ctx: any): string | null {
+        const pubKeyHex = ctx.get('X-Public-Key');
+        const signature = ctx.get('X-Signature');
+        if (!pubKeyHex || !signature) return null;
+        const verdict = verifyMemberSignature({
+            pubKeyHex,
+            signature,
+            timestamp: ctx.get('X-Timestamp'),
+            nonce: ctx.get('X-Nonce'),
+            method: ctx.method,
+            path: ctx.path,
+            body: '',
+            signedFor: ctx.get(SIGNED_FOR_HEADER) || null,
+        }, { consumeNonce: true });
+        return verdict.ok ? verdict.signer : null;
+    }
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;

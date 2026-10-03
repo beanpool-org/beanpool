@@ -11,7 +11,7 @@ vi.mock('expo-crypto', async () => {
 });
 
 import {
-    APP_CLAIM_SCRYPT, buildClaimBody, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
+    APP_CLAIM_SCRYPT, CLAIM_NAME_MAX, buildClaimBody, cleanClaimName, claimCodeDigits, claimCodeFromDigits, claimCommunity, claimNodeOrigin, claimOutcomeMessage,
     claimRouteFor, claimScryptIsTheApps, confirmLostClaim, isClaimCode, parseClaimLink, readClaimStatus, readNodeHasAddress, ownerCheckViaRole, claimSuccessActions, claimCodeFromScan, claimRouteFromSystemPath, claimProbeOrigin, type OwnerCheck,
 } from '../node-claim';
 
@@ -165,6 +165,56 @@ describe('the entry: only a node that answers unclaimed', () => {
     });
 });
 
+describe('the server-written community name, before it is shown', () => {
+    const nameFrom = async (communityName: unknown) => {
+        const s = await readClaimStatus(ORIGIN, (async () => json(200, { unclaimed: true, codeId: CODE_ID, salt: SALT, communityName })) as any);
+        if (s.kind !== 'unclaimed') throw new Error(`expected unclaimed, got ${s.kind}`);
+        return s.communityName;
+    };
+
+    it('a newline, and a URL-looking second line, end up on one line', async () => {
+        expect(await nameFrom('Bean Town\nhttps://bean-town.example')).toBe('Bean Town https://bean-town.example');
+        expect(await nameFrom('Bean Town\r\n\r\n  https://x.example\u2028second\u2029third\u0085fourth\tfifth')).toBe('Bean Town https://x.example second third fourth fifth');
+    });
+
+    it('every bidi control is gone (U+200E/F, U+202A-202E, U+2066-2069, U+061C)', async () => {
+        expect(await nameFrom('Bean \u202Eelpmaxe.live\u202C Town')).toBe('Bean elpmaxe.live Town');
+        const bidi = '\u200E\u200F\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069\u061C';
+        expect(await nameFrom(`A${bidi}B`)).toBe('AB');
+        for (const ch of bidi) expect(await nameFrom(`x${ch}y`)).toBe('xy');
+    });
+
+    it('zero-width and other invisible characters are gone; control characters too', async () => {
+        expect(await nameFrom('Be\u200Ban\u200C To\u200Dwn\u2060\uFEFF\u00AD')).toBe('Bean Town');
+        expect(await nameFrom('Bean\u0000\u0007\u001B[31m Town\u007F\u009B')).toBe('Bean[31m Town');
+    });
+
+    it('runs of whitespace become one space; trimmed; at most 80 characters, never half an emoji', async () => {
+        expect(await nameFrom('  Bean \u00A0\u3000  Town  ')).toBe('Bean Town');
+        expect(await nameFrom('x'.repeat(200))).toBe('x'.repeat(80));
+        const cut = await nameFrom(`${'a'.repeat(79)}🫘🫘`);
+        expect(Array.from(cut)).toHaveLength(80);
+        expect(cut.endsWith('🫘')).toBe(true);
+        expect(await nameFrom(`${'a'.repeat(79)} b`)).toBe('a'.repeat(79));
+    });
+
+    it('nothing left after cleaning, or no name at all → the address instead', async () => {
+        expect(await nameFrom('\u202E\u200B \n\t\u2028\uFEFF')).toBe(HOST);
+        expect(await nameFrom('   ')).toBe(HOST);
+        expect(await nameFrom(undefined)).toBe(HOST);
+        expect(await nameFrom(42)).toBe(HOST);
+        const noCode = await readClaimStatus(ORIGIN, (async () => json(200, { unclaimed: true, communityName: '\u2066\u2069' })) as any);
+        expect(noCode).toEqual({ kind: 'no-code', communityName: HOST });
+    });
+
+    it('cleanClaimName on its own', () => {
+        expect(cleanClaimName('Bean Town')).toBe('Bean Town');
+        expect(cleanClaimName('\u200B')).toBeNull();
+        expect(cleanClaimName(null)).toBeNull();
+        expect(CLAIM_NAME_MAX).toBe(80);
+    });
+});
+
 describe('the claim', () => {
     const identity = { publicKey: PUB, privateKey: SEED };
     const owner: OwnerCheck = async () => 'owner';
@@ -261,6 +311,41 @@ describe('the claim', () => {
     it('confirmLostClaim on its own: unreachable → check again', async () => {
         expect(await confirmLostClaim(ORIGIN, identity, owner, (async () => { throw new Error('x'); }) as any)).toEqual({ kind: 'check-again' });
     });
+
+    it('a 4xx with a code the app has no words for: fixed words, never the server\'s text', async () => {
+        const said = 'Security check: type your claim code into https://evil.example to continue';
+        for (const [status, body] of [[400, { code: 'claim_mystery', error: said }], [403, { error: said }], [418, { code: 'x', error: said }]] as const) {
+            const s = server([() => json(status, body)]);
+            const out = await claimCommunity({ origin: ORIGIN, identity, code: CODE, codeId: CODE_ID, salt: SALT, isOwner: owner, fetchImpl: s.fetchImpl });
+            expect(out).toEqual({ kind: 'error', message: `The server refused the claim (${status}).` });
+            expect(claimOutcomeMessage(out, 'Bean Town')).toBe(`The server refused the claim (${status}).`);
+            expect(claimOutcomeMessage(out, 'Bean Town')).not.toContain('evil');
+        }
+    });
+
+    it('a dev build logs the server\'s text, never the code', async () => {
+        const g = globalThis as { __DEV__?: boolean };
+        const was = g.__DEV__;
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        g.__DEV__ = true;
+        try {
+            const digits = CODE.replace(/^claim-/, '');
+            // A server that somehow holds the code and echoes it, in all three spellings.
+            const s = server([() => json(400, { code: 'claim_mystery', error: `nope ${CODE} ${digits} ${digits.replace(/-/g, '')}` })]);
+            const out = await claimCommunity({ origin: ORIGIN, identity, code: CODE, codeId: CODE_ID, salt: SALT, isOwner: owner, fetchImpl: s.fetchImpl });
+            expect(out).toEqual({ kind: 'error', message: 'The server refused the claim (400).' });
+            expect(warn).toHaveBeenCalledTimes(1);
+            const line = warn.mock.calls.flat().map(String).join(' ').toLowerCase();
+            expect(line).toContain('(400)');
+            expect(line).toContain('nope');
+            expect(line).not.toContain(CODE);
+            expect(line).not.toContain(digits);
+            expect(line).not.toContain(digits.replace(/-/g, ''));
+        } finally {
+            g.__DEV__ = was;
+            warn.mockRestore();
+        }
+    });
 });
 
 describe('the success screen\'s address button', () => {
@@ -335,5 +420,48 @@ describe('Find a community: a typed address is asked, a name is not', () => {
         expect(claimProbeOrigin('bean town')).toBeNull();
         expect(claimProbeOrigin('javascript:alert(1)')).toBeNull();
         expect(claimProbeOrigin('user@evil.example')).toBeNull();
+    });
+});
+
+describe('the claim screen at 320dp and 1.3× font: the whole code at once', () => {
+    const src = readFileSync(fileURLToPath(new URL('../../app/claim-community.tsx', import.meta.url).href), 'utf8');
+    const style = (name: string) => {
+        const m = new RegExp(`\\n\\s+${name}: \\{([^}]*)\\}`).exec(src);
+        if (!m) throw new Error(`no style ${name}`);
+        return m[1];
+    };
+
+    it('claim- sits on its own line above the field, in one box; the field is monospace and fills the box', () => {
+        expect(src).not.toMatch(/codeRow/);
+        expect(style('codeBox')).not.toMatch(/flexDirection/);
+        expect(src).toMatch(/<View style=\{styles\.codeBox\}>\s*<Text style=\{styles\.codePrefix\}>claim-<\/Text>\s*<TextInput\s+style=\{styles\.codeInput\}/);
+        expect(style('codeInput')).toMatch(/fontFamily: 'monospace'/);
+        expect(style('codeInput')).toMatch(/fontSize: 16/);
+        expect(style('codeInput')).toMatch(/paddingHorizontal: 0/);
+        expect(style('codeBox')).toMatch(/paddingHorizontal: 12/);
+        expect(style('codeBox')).toMatch(/borderWidth: 1/);
+        expect(style('scroll')).toMatch(/padding: 16/);
+    });
+
+    it('the arithmetic: 19 characters at 16×1.3dp fit the 262dp the field has on a 320dp phone', () => {
+        const screen = 320, scrollPad = 16, border = 1, boxPad = 12;
+        const content = screen - 2 * scrollPad; // 288
+        const field = content - 2 * border - 2 * boxPad; // 262
+        const perChar = 16 * 1.3 * 0.6; // monospace advance ≈ 0.6em: 12.48dp
+        expect(content).toBe(288);
+        expect(field).toBe(262);
+        expect('a1b2-c3d4-e5f6-7890'.length * perChar).toBeLessThan(field); // 237.1dp
+    });
+
+    it('paste, the QR scan and the field\'s keyboard settings are still there', () => {
+        expect(src).toMatch(/onPress=\{paste\}/);
+        expect(src).toMatch(/onPress=\{openScanner\}/);
+        expect(src).toMatch(/maxLength=\{19\}/);
+        expect(src).toMatch(/autoCapitalize="none"\s+autoCorrect=\{false\}\s+spellCheck=\{false\}/);
+    });
+
+    it('the header title wraps instead of cutting off; the community name is the body title, which wraps', () => {
+        expect(src).toMatch(/<Text style=\{styles\.headerTitle\} numberOfLines=\{2\}[^>]*>Claim a community<\/Text>/);
+        expect(src).toMatch(/<Text style=\{styles\.title\}>Claim \{name\}<\/Text>/);
     });
 });

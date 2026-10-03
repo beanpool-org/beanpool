@@ -139,7 +139,8 @@ export default function FindCommunityScreen() {
     // ── A typed server address with no owner yet: "Claim ‹name›" (utils/node-claim.ts) ─────────────────────
     // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
     // community with an owner never shows it.
-    const [claimable, setClaimable] = useState<{ origin: string; name: string | null; codeId: string } | null>(null);
+    // The name is the server's, cleaned (node-claim.ts cleanClaimName), or the address's host when it gave none.
+    const [claimable, setClaimable] = useState<{ origin: string; name: string; codeId: string } | null>(null);
     useEffect(() => {
         const origin = claimProbeOrigin(query);
         setClaimable(null);
@@ -433,7 +434,7 @@ export default function FindCommunityScreen() {
                 </View>
                 {claimable && (
                     <View style={[styles.card, { marginTop: 10 }]}>
-                        <Text style={styles.name}>{claimable.name ?? 'This server'} has no owner yet</Text>
+                        <Text style={styles.name}>{claimable.name} has no owner yet</Text>
                         <Text style={styles.facts} selectable>{claimable.origin}</Text>
                         <Text style={styles.note}>If you installed it, claim it with the one-time code on the server.</Text>
                         <View style={styles.actions}>
@@ -442,7 +443,7 @@ export default function FindCommunityScreen() {
                                 onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
                                 accessibilityRole="button"
                             >
-                                <Text style={styles.primaryText}>Claim {claimable.name ?? 'this server'}</Text>
+                                <Text style={styles.primaryText}>Claim {claimable.name}</Text>
                             </Pressable>
                         </View>
                     </View>

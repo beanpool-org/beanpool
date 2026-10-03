@@ -40,9 +40,14 @@ const CODE_ID = CLAIM_CODE_ID;
 const SALT = /^[0-9a-f]{16,128}$/;
 const KEY = /^[0-9a-f]{64}$/;
 
+/**
+ * `communityName` is what the server says its name is: whoever runs that server writes it, and it is shown large, as the
+ * claim screen's title and the Find a community card's heading, right above the real address. Cleaned with
+ * {@link cleanClaimName}; when nothing is left (or the server sent none) it is the address's host instead.
+ */
 export type ClaimStatus =
-    | { kind: 'unclaimed'; codeId: string; salt: string; communityName: string | null }
-    | { kind: 'no-code'; communityName: string | null }
+    | { kind: 'unclaimed'; codeId: string; salt: string; communityName: string }
+    | { kind: 'no-code'; communityName: string }
     | { kind: 'claimed' }
     | { kind: 'busy'; retryAfter: number | null }
     | { kind: 'unreachable'; message: string };
@@ -52,6 +57,32 @@ type Fetch = typeof fetch;
 function retryAfterOf(res: Response): number | null {
     const n = Number(res.headers?.get?.('Retry-After'));
     return Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
+}
+
+/** Breaks that would start a new line: become a space, so "Bean\nTown" reads "Bean Town". */
+const LINE_BREAKS = /[\t\n\v\f\r\u0085\u2028\u2029]/g;
+/**
+ * Control characters (C0, DEL, C1) and the invisible format characters (Unicode Cf, BMP): the soft hyphen, the Arabic
+ * number signs and letter mark (U+061C), the zero-width space, joiners and marks (U+200B-200F), every bidi embedding,
+ * override and isolate (U+202A-202E, U+2066-2069), the word joiner and invisible operators (U+2060-2064), the
+ * deprecated format controls (U+206A-206F), the BOM (U+FEFF) and the interlinear annotation marks (U+FFF9-FFFB).
+ * Listed by hand rather than as \p{Cc}\p{Cf}, so the set is explicit and does not hang on the JS engine's Unicode tables.
+ */
+// eslint-disable-next-line no-control-regex -- removing control characters is the point
+const INVISIBLE = /[\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+export const CLAIM_NAME_MAX = 80;
+/** Anything that looks like a claim code (with or without `claim-` and the dashes), for the developer log. */
+const CODE_SHAPED = /(?:claim-)?[0-9a-f]{4}(?:-?[0-9a-f]{4}){3}/gi;
+
+/**
+ * A server-written community name made safe to show: one line, no invisible or direction-changing characters, runs of
+ * whitespace as one space, trimmed, at most {@link CLAIM_NAME_MAX} characters. Null when nothing is left.
+ */
+export function cleanClaimName(raw: unknown): string | null {
+    if (typeof raw !== 'string') return null;
+    const flat = raw.replace(LINE_BREAKS, ' ').replace(INVISIBLE, '').replace(/\s+/g, ' ').trim();
+    const capped = Array.from(flat).slice(0, CLAIM_NAME_MAX).join('').trim();
+    return capped || null;
 }
 
 /** GET /api/local/claim at `origin`. Only `unclaimed`, `codeId`, `salt` and `communityName` are read. */
@@ -68,7 +99,7 @@ export async function readClaimStatus(origin: string, fetchImpl: Fetch = fetch):
     const body = await res.json().catch(() => null) as { unclaimed?: unknown; codeId?: unknown; salt?: unknown; communityName?: unknown } | null;
     if (!body || typeof body.unclaimed !== 'boolean') return { kind: 'unreachable', message: "That address doesn't answer like a BeanPool server." };
     if (body.unclaimed === false) return { kind: 'claimed' };
-    const communityName = typeof body.communityName === 'string' && body.communityName.trim() ? body.communityName.trim().slice(0, 80) : null;
+    const communityName = cleanClaimName(body.communityName) ?? audienceOf(origin) ?? origin;
     if (typeof body.codeId === 'string' && CODE_ID.test(body.codeId) && typeof body.salt === 'string' && SALT.test(body.salt)) {
         return { kind: 'unclaimed', codeId: body.codeId, salt: body.salt, communityName };
     }
@@ -182,7 +213,14 @@ export async function claimCommunity(req: ClaimRequest & { isOwner: OwnerCheck; 
     if (code === 'claim_already_claimed') return { kind: 'already-claimed' };
     if (code === 'claim_no_code') return { kind: 'no-code' };
     if (res.status >= 500 || !answer) return confirmLostClaim(req.origin, req.identity, req.isOwner, fetchImpl);
-    return { kind: 'error', message: typeof answer.error === 'string' && answer.error ? answer.error.slice(0, 200) : `The server refused the claim (${res.status}).` };
+    // A refusal this app has no words for. The server's own text never reaches the screen: it would sit right under the
+    // code field, the one place a server could still talk the owner out of the code. Dev builds log it, never with the
+    // code: the code is not in the line, and anything in the server's text shaped like a claim code is blanked.
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && typeof answer.error === 'string' && answer.error) {
+        const said = answer.error.slice(0, 200).replace(CODE_SHAPED, '[code]');
+        console.warn(`[claim] the server refused the claim (${res.status}): ${said}`);
+    }
+    return { kind: 'error', message: `The server refused the claim (${res.status}).` };
 }
 
 /** The words for each outcome but success (design: "The phone: Claim a community"). */

@@ -43,15 +43,18 @@ export default function ClaimCommunityScreen() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: theme === 'dark' ? colors.surface.card : colors.text.heading },
         backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase', paddingVertical: 4 },
         scroll: { padding: 16 },
         title: { fontSize: 22, fontWeight: '800', color: colors.text.heading, lineHeight: 28 },
         address: { fontSize: 15, color: colors.text.secondary, marginTop: 4, lineHeight: 21, fontFamily: 'monospace' },
         lead: { fontSize: 15, color: colors.text.body, lineHeight: 21, marginTop: 12 },
         label: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, marginTop: 16, marginBottom: 4 },
-        codeRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, paddingHorizontal: 12 },
+        // The code box: `claim-` on its own line, the 19 characters under it, so the whole code shows at once, the way
+        // the server prints it. At 320dp and 1.3× font: 288dp of content (320 − 2×16), minus 2 of border and 2×12 of
+        // padding = 262dp for the input; 19 monospace characters at 16×1.3 = 20.8dp (≈0.6em, 12.5dp each) take 237dp.
+        codeBox: { borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, paddingHorizontal: 12, paddingTop: 8 },
         codePrefix: { fontSize: 16, color: colors.text.secondary, fontFamily: 'monospace' },
-        codeInput: { flex: 1, minWidth: 0, minHeight: 48, fontSize: 16, color: colors.text.heading, fontFamily: 'monospace', paddingVertical: 8 },
+        codeInput: { minHeight: 48, fontSize: 16, color: colors.text.heading, fontFamily: 'monospace', paddingVertical: 8, paddingHorizontal: 0 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, color: colors.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
         primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
@@ -118,6 +121,7 @@ export default function ClaimCommunityScreen() {
     const staleLink = status?.kind === 'unclaimed' && !!linkId && linkId !== status.codeId;
     useEffect(() => { if (staleLink && linkCode) setDigits(''); }, [staleLink, linkCode]);
 
+    // The server's name, cleaned (node-claim.ts cleanClaimName), or the address's host when nothing was left of it.
     const name = (status && 'communityName' in status && status.communityName) || 'this community';
 
     const paste = async () => {
@@ -209,7 +213,9 @@ export default function ClaimCommunityScreen() {
             <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Back">
                 <MaterialCommunityIcons name="arrow-left" size={24} color={placeholder} />
             </Pressable>
-            <Text style={styles.headerTitle} numberOfLines={1}>Claim a community</Text>
+            {/* 208dp between the two 48dp slots; at 1.3× the words take two lines rather than an ellipsis. The community's
+                name is never here: it is the body's title, which wraps. */}
+            <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">Claim a community</Text>
             <View style={styles.backButton} />
         </View>
     );
@@ -314,7 +320,7 @@ export default function ClaimCommunityScreen() {
                 {staleLink ? <Text style={styles.note}>The server made a new code since this link. Read the code on the server again.</Text> : null}
 
                 <Text style={styles.label}>Claim code</Text>
-                <View style={styles.codeRow}>
+                <View style={styles.codeBox}>
                     <Text style={styles.codePrefix}>claim-</Text>
                     <TextInput
                         style={styles.codeInput}

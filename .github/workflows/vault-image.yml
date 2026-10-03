@@ -58,6 +58,27 @@ jobs:
           key: vault-image-${{ hashFiles('apps/vault/image/pins.env', 'apps/vault/image/mkosi/mkosi.conf') }}
       - name: First build
         run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/one" --cache "${RUNNER_TEMP}/image-cache"
+      # Test branch only (never merged): a disk image to test-boot on the 1984 VPS, which has no DHCP, so its static
+      # address is laid over the image's DHCP network file. Throwaway public keys only inside.
+      - name: A 1984 test-boot image (static network)
+        run: |
+          set -euo pipefail
+          x="${RUNNER_TEMP}/x1984/etc/systemd/network"
+          mkdir -p "$x"
+          printf '%s\n' '[Match]' 'Type=ether' 'Kind=!*' '' '[Network]' 'Address=89.126.250.9/24' 'Gateway=89.126.250.1' \
+            'IPv6AcceptRA=yes' 'LinkLocalAddressing=ipv6' '' '[IPv6AcceptRA]' 'UseDNS=no' > "$x/80-wan.network"
+          apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/b1984" --cache "${RUNNER_TEMP}/image-cache" --extra "${RUNNER_TEMP}/x1984"
+          ls -la "${RUNNER_TEMP}/b1984"
+      - name: The 1984 test-boot disk image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vault-disk-image-1984
+          path: |
+            ${{ runner.temp }}/keys.json
+            ${{ runner.temp }}/b1984/image.json
+            ${{ runner.temp }}/b1984/beanpool-vault_0.0.1.raw
+          compression-level: 9
+          retention-days: 3
       - name: Second build
         run: apps/vault/image/build.sh --custodian-keys "${RUNNER_TEMP}/keys.json" --version 0.0.1 --out "${RUNNER_TEMP}/two" --cache "${RUNNER_TEMP}/image-cache"
       - name: What the first build listed (to compare with a build elsewhere)

@@ -411,7 +411,6 @@ async function main(): Promise<void> {
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const anna = newId('Anna');
     const rex = newId('Rex'), rex2 = newId('Rex (new phone)');
     const sue = newId('Sue'), sue2 = newId('Sue (new phone)');
@@ -629,9 +628,11 @@ async function main(): Promise<void> {
         const envelope = await standby.send('envelope');
         require_(envelope === 'stored' || envelope === 'unchanged', `the standby holds the main server's latest take-over keys (${envelope})`);
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw(PW_STANDBY));
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         require_(opened.status === 200, `the recovery code opens the keys (${opened.status} ${opened.body?.error ?? ''})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);

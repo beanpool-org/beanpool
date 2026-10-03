@@ -21,6 +21,8 @@ Owners can do everything in Settings. Only owners can:
 - restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
 - make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from.
 
+From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in.
+
 The **admin password** counts as an owner. Anyone who knows it can do all of the above.
 
 ## Admin

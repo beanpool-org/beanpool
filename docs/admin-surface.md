@@ -123,6 +123,10 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   until Manage is pressed again (`requirePhoneStepUp`). That covers every owner-only route that changes something
   (`requireAdminRole` with owners only; reads sent as POST are named in `READ_ONLY_POSTS` and pass), every node-roles
   change or enrolment that names owner or admin or whose target holds owner or admin now (`roleChangeNeedsOwner`),
+  every action the engine refuses to an admin because of its target (`stepUpIfOwnerOnly` on decisions-engine
+  `adminActionNeedsOwner`: suspending an owner; lifting a suspension or halting a Decision that gives back an owner's
+  or admin's role; accelerating an owner's or admin's removal; pruning, branch-pruning or offboarding an owner or admin;
+  a report action with `suspendUser` on one), `POST /auth/revoke-all` for another member (your own is not asked),
   `POST /auth/break-glass-mode`, and the bulk downloads `GET snapshots/download` and `GET offbox-backups/download`.
   `GET takeover-envelope` is not asked: it is sealed to the owners. A computer's session (the QR pairing) is not asked.
 - *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /

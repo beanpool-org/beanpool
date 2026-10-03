@@ -168,3 +168,19 @@ export function askBeforeSavingKit(alert: AlertLike): Promise<boolean> {
         ], { cancelable: true, onDismiss: () => resolve(false) });
     });
 }
+
+/**
+ * The community the kit names: the saved alias for the phone's anchor (else its host), and the anchor's address as
+ * the phone holds it. Null with no anchor: the kit is not made without the place to go back to.
+ */
+export function kitCommunityFrom(anchor: string | null | undefined, savedNodes: readonly { url: string; alias?: string | null }[]): { communityName: string; communityAddress: string } | null {
+    if (!anchor) return null;
+    const alias = savedNodes.find((n) => n.url === anchor)?.alias;
+    let host: string;
+    try {
+        host = new URL(anchor).host || anchor;
+    } catch {
+        host = anchor.replace(/^https?:\/\//, '').replace(/\/.*$/, '') || anchor;
+    }
+    return { communityName: alias || host, communityAddress: anchor };
+}

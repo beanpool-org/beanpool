@@ -495,6 +495,8 @@ function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: strin
 }
 
 const handleEnrol = async (ctx: any) => {
+    // First, so a refusal is never cached either: a new owner's answer carries their break-glass code (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
@@ -562,6 +564,8 @@ router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
  * password, as it does every route but enrolment.
  */
 router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
@@ -590,7 +594,6 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     try {
         const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
             state.isKeySession ? 'key-session' : 'password');
-        ctx.set('Cache-Control', 'no-store');
         ctx.body = {
             success: true,
             memberPubkey: target,

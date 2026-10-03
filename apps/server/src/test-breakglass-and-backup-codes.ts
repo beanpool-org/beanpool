@@ -110,6 +110,9 @@ const BG_SHAPE = /^bg-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 const ISSUE = '/api/local/admin/auth/break-glass/issue';
 const APP_ISSUE = '/api/node-admin/break-glass';
 const BACKUP = '/api/local/admin/2fa/backup-codes';
+const SETUP = '/api/local/admin/2fa/setup';
+/** A route that can answer with a code says no-store from its first line, so a refusal is never cached either (#1531). */
+const noStore = (r: { headers: Headers }) => (r.headers.get('cache-control') || '').includes('no-store');
 
 async function main() {
     console.log('--- TEST: break-glass codes from Settings and the app, 2FA backup codes in Settings ---');
@@ -173,6 +176,13 @@ async function main() {
 
         const pwNone = await post(ISSUE, {}, asPassword);
         assert(pwNone.status === 400 && !pwNone.body?.breakGlassCode, `the password must name the owner (${pwNone.status})`);
+        for (const [what, x] of [['another owner, 403', other], ['a break-glass code, 401', asCode], ['an admin, 403', a], ['no owner named, 400', pwNone]] as const) {
+            assert(noStore(x), `a refusal (${what}) is never cached either`);
+        }
+        const enrolRefused = await post('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'owner' }, asAdmin);
+        assert(enrolRefused.status === 403 && noStore(enrolRefused), `enrol: an admin enrolling an owner is refused, and the refusal is never cached (${enrolRefused.status})`);
+        const bgEnrolRefused = await post('/api/local/admin/auth/break-glass/enrol', { memberPubkey: 'not-a-key', role: 'admin' }, asOwner);
+        assert(bgEnrolRefused.status === 400 && noStore(bgEnrolRefused), `break-glass enrol: a bad key is refused, never cached (${bgEnrolRefused.status})`);
         const pwMember = await post(ISSUE, { memberPubkey: member.pub }, asPassword);
         assert(pwMember.status === 409 && hashOf(member.pub) === null, `the password cannot make a code for a member who is not an owner (${pwMember.status})`);
         const pwAdmin = await post(ISSUE, { memberPubkey: admin.pub }, asPassword);
@@ -197,6 +207,7 @@ async function main() {
         assert(unsigned.status === 401 && !unsigned.body?.breakGlassCode, `unsigned is refused (${unsigned.status})`);
         const m = await signedPost(APP_ISSUE, {}, member);
         assert(m.status === 403 && !m.body?.breakGlassCode, `a member is refused (${m.status})`);
+        assert(noStore(m), 'a refusal (a member, 403) is never cached either');
         const a = await signedPost(APP_ISSUE, {}, admin);
         assert(a.status === 403 && !a.body?.breakGlassCode && hashOf(admin.pub) === null, `an admin is refused (${a.status})`);
         const before = hashOf(owner2.pub);
@@ -320,6 +331,9 @@ async function main() {
         assert(a.status === 403 && !a.body?.backupCodes && oldHashes() === start, `an admin with a right code: refused (${a.status})`);
         const m = await post(BACKUP, { code: now }, asMod);
         assert(m.status === 403 && !m.body?.backupCodes && oldHashes() === start, `a moderator with a right code: refused (${m.status})`);
+        for (const [what, x] of [['2FA off, 409', off], ['no code, 401', missing], ['a wrong code, 401', wrong], ['an admin, 403', a]] as const) {
+            assert(noStore(x), `a refusal (${what}) is never cached either`);
+        }
 
         forgetUsedTotpCodesForTests();
         const ok = await post(BACKUP, { code: now }, asOwner);
@@ -346,6 +360,13 @@ async function main() {
         const pw = await post(BACKUP, { code: body }, { ...asPassword, 'x-admin-totp': inline });
         assert(pw.status === 200 && pw.body?.backupCodes?.length === 8, `the password + its code, with a current code: new codes (${pw.status} ${JSON.stringify(pw.body)})`);
         shown.push(...(pw.body?.backupCodes || []));
+
+        // 2FA setup answers with a new secret and backup codes: never cached, refusal or not.
+        const setupAdmin = await post(SETUP, {}, asAdmin);
+        assert(setupAdmin.status === 403 && !setupAdmin.body?.secret && noStore(setupAdmin), `2FA setup: an admin is refused, never cached (${setupAdmin.status})`);
+        const setup = await post(SETUP, {}, asOwner);
+        assert(setup.status === 200 && setup.body?.backupCodes?.length === 8 && noStore(setup), `2FA setup: the owner's secret and codes are never cached (${setup.status})`);
+        shown.push(...(setup.body?.backupCodes || []));
     }
 
     console.log('\n4. The log');

@@ -56,8 +56,8 @@ export function createNodeAdminRoutes(_deps: RouteDeps): Router {
     });
 
     /**
-     * The app's break-glass code: a new one for the signing owner's own key, shown once on the phone, which offers to
-     * keep it in the secure store. The owner's earlier code stops working. An admin, a moderator or a member gets 403
+     * The app's break-glass code: a new one for the signing owner's own key, shown once on the phone, which keeps no
+     * copy (#1531). The owner's earlier code stops working. An admin, a moderator or a member gets 403
      * and nothing is stored; there is no way to name another key. Logged without the code (issueBreakGlassCode).
      */
     router.post('/api/node-admin/break-glass', async (ctx) => {

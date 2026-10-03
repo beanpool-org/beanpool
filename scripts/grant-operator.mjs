@@ -1,7 +1,11 @@
 // Grant or revoke operator capability for a member on a treasury.
 //
-//   NODE_URL=https://test.beanpool.org ADMIN_PASSWORD='your-admin-password' \
+//   NODE_URL=https://test.beanpool.org BEANPOOL_TOKEN='bp_…' \
 //     node scripts/grant-operator.mjs <treasury> <callsign-or-pubkey> [--revoke] [--insecure]
+//
+// BEANPOOL_TOKEN is an owner's automation token with the ADMIN scope (Settings → Automation tokens, made by an owner
+// signed in with their key). It is read from the environment only, never an argument: arguments show in `ps`.
+// ADMIN_PASSWORD (the node's admin password) still works in its place, as before; with a token it is never sent.
 
 const insecure = process.argv.includes('--insecure');
 if (insecure) {
@@ -10,13 +14,20 @@ if (insecure) {
 }
 
 const NODE_URL = (process.env.NODE_URL || 'https://test.beanpool.org').replace(/\/$/, '');
+const BEANPOOL_TOKEN = process.env.BEANPOOL_TOKEN;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const revoke = process.argv.includes('--revoke');
 
-if (!ADMIN_PASSWORD) {
-    console.error('✗ Set ADMIN_PASSWORD env var.');
+if (!BEANPOOL_TOKEN && !ADMIN_PASSWORD) {
+    console.error('✗ Set BEANPOOL_TOKEN (an owner\'s automation token, admin scope) or, as before, ADMIN_PASSWORD.');
     process.exit(1);
 }
+if (BEANPOOL_TOKEN && !BEANPOOL_TOKEN.startsWith('bp_')) {
+    console.error('✗ BEANPOOL_TOKEN is not an automation token (bp_…): make one in Settings → Automation tokens.');
+    process.exit(1);
+}
+// The token alone, or the password alone: never both.
+const authHeader = BEANPOOL_TOKEN ? { authorization: `Bearer ${BEANPOOL_TOKEN}` } : { 'x-admin-password': ADMIN_PASSWORD };
 
 // Parse arguments
 let treasuryArg = null;
@@ -40,8 +51,9 @@ for (let i = 2; i < process.argv.length; i++) {
 
 const minPositional = treasuryArg ? 1 : 2;
 if (positionalArgs.length < minPositional) {
-    console.error('Usage: NODE_URL=... ADMIN_PASSWORD=... node scripts/grant-operator.mjs <treasury> <callsign-or-pubkey> [--revoke] [--insecure]');
-    console.error('       NODE_URL=... ADMIN_PASSWORD=... node scripts/grant-operator.mjs <callsign-or-pubkey> --treasury <treasury> [--revoke] [--insecure]');
+    console.error('Usage: NODE_URL=... BEANPOOL_TOKEN=bp_... node scripts/grant-operator.mjs <treasury> <callsign-or-pubkey> [--revoke] [--insecure]');
+    console.error('       NODE_URL=... BEANPOOL_TOKEN=bp_... node scripts/grant-operator.mjs <callsign-or-pubkey> --treasury <treasury> [--revoke] [--insecure]');
+    console.error('       (an owner\'s automation token with the admin scope; ADMIN_PASSWORD=... still works in its place)');
     process.exit(1);
 }
 
@@ -107,7 +119,7 @@ if (!pubkey || !treasuryPubkey) {
 
 const adminHeaders = {
     'content-type': 'application/json',
-    'x-admin-password': ADMIN_PASSWORD,
+    ...authHeader,
 };
 
 let res;
@@ -115,7 +127,7 @@ try {
     if (revoke) {
         res = await fetch(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators/${encodeURIComponent(pubkey)}`, {
             method: 'DELETE',
-            headers: { 'x-admin-password': ADMIN_PASSWORD },
+            headers: authHeader,
         });
     } else {
         res = await fetch(`${NODE_URL}/api/local/admin/treasury/${encodeURIComponent(treasuryPubkey)}/operators`, {

@@ -72,6 +72,15 @@ No token, whatever its scope, makes an owner-only change. It cannot change who i
 - Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.
 - Tokens stay on this server: they are not in backups, standby copies or a take-over.
 
+### Scripts and the harvester
+
+The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password (ADMIN_PASSWORD, or --admin-pw for setup-backup) if you have no token. What each needs:
+
+- **scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.
+- **scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script with --token. Without --token the script stops and says so before it changes anything.
+- **scripts/federation/fed.mjs**: an **Admin** token for each server, in BEANPOOL_TOKEN_ followed by the server's name in capitals (for example BEANPOOL_TOKEN_GIPPSLAND).
+- **The harvester** (the fleet's backup puller): a **Backups** token, as "automationToken" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those.
+
 ### The fleet manager
 
 The fleet manager signs in to a node with an automation token instead of the admin password. Make the token on your phone as above (an **Admin** token for everyday work, or **Read** or **Backups** for less), then in the fleet manager edit the node (⚙️) and paste it under **Automation token**. **Where do I get one?** under the field says the same.

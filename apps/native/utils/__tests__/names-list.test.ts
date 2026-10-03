@@ -3175,6 +3175,25 @@ describe('§8 21. Two phones, one key: the higher-seq copy is merged, never roll
     };
     const nodeCopy = (node: FakeNode, me: BeanPoolIdentity) => node.copies!.get(me.publicKey) ?? node.copies!.get(me.publicKey.toLowerCase());
 
+    it('Sign Out on phone A after phone B saved a newer copy: A merges it, saves past both, confirmed; signed in again, both keys are back', async () => {
+        const { node, phones: [owen, ada, bea], k1 } = await community(['Owen', 'Ada', 'Bea'], true);
+        const phoneA = takePhone(ada);
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        expect((await open(ada)).plan.kind).toBe('ready');
+        node.admins = [role(owen, 'owner'), role(ada)];
+        await removeOldKey(STORE, owen, COMMUNITY, bea.publicKey);
+        for (let i = 0; i < 2; i++) { await open(owen); await open(ada); }
+        const k2 = node.current()!.id;
+        const newer = nodeCopy(node, ada)!.seq;
+        putPhone(ada, phoneA);
+        const out = await saveNamesCopiesBeforeLeaving(ada, [COMMUNITY], STORE);
+        expect(out).toEqual([]);
+        expect(nodeCopy(node, ada)!.seq).toBe(newer + 1);
+        putPhone(ada, { mem: new Map(), secret: undefined });
+        const back = await open(ada);
+        expect(Object.keys(back.ring)).toEqual(expect.arrayContaining([k1, k2]));
+    });
+
     it('21 phone A, back after phone B saved a newer copy with a key A lacks: A takes it, keeps both keys, saves past both, says it once', async () => {
         const { node, phones: [owen, ada, bea], k1 } = await community(['Owen', 'Ada', 'Bea'], true);
         const phoneA = takePhone(ada);

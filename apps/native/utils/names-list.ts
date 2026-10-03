@@ -244,7 +244,7 @@ const postGeneration = (anchor: string, id: BeanPoolIdentity, g: Pick<NamesGener
 const putCopy = (anchor: string, id: BeanPoolIdentity, c: NamesCopy, limitMs?: number) =>
     call<{ seq: number; code?: string }>(anchor, id, 'PUT', `${NAMES_PATH}/copy`, { header: c.header, signature: c.signature, box: c.box }, limitMs);
 /** Every fetch is logged on the node as `copy_restored` and other admins see it: only ever for a restore, never to check. */
-const getCopy = (anchor: string, id: BeanPoolIdentity) => call<unknown>(anchor, id, 'GET', `${NAMES_PATH}/copy`);
+const getCopy = (anchor: string, id: BeanPoolIdentity, limitMs?: number) => call<unknown>(anchor, id, 'GET', `${NAMES_PATH}/copy`, undefined, limitMs);
 const postShare = (anchor: string, id: BeanPoolIdentity, s: NamesShare) =>
     call<{ to: string }>(anchor, id, 'POST', `${NAMES_PATH}/shares`, { header: s.header, signature: s.signature, box: s.box });
 
@@ -529,8 +529,8 @@ export function mergeNamesPins(local: NamesPin, other: NamesPin): NamesPin {
  * after this one): fetched, checked (§2) and merged ({@link mergeNamesPins}), kept, and said once. Any failure keeps
  * this phone's pin as it is (never rolled back); the copy then waits (`copy_newer`) and no shares go.
  */
-async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin): Promise<NamesPin> {
-    const got = await getCopy(anchor, identity);
+async function mergeNewerCopy(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, state: NamesState, local: NamesPin, limitMs?: number): Promise<NamesPin> {
+    const got = await getCopy(anchor, identity, limitMs);
     if (!got.ok) return local;
     const r = restoreNamesCopy(got.value, { me: identity, communityId: state.communityId, address: copyAddress(anchor) ?? anchor });
     if (!r.ok || r.copy.seq <= local.copy.seq || state.myCopy?.seq !== r.copy.seq) return local;
@@ -597,7 +597,10 @@ export async function saveNamesCopiesBeforeLeaving(
             const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
             const onlyKey = !s.ok ? pinOnly : head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
             if (!s.ok || s.value.myCopy === undefined || left() <= 0) return { anchor, onlyKey };
-            const saved = await saveCopy(anchor, identity, store, kept.pin, s.value, left);
+            // Another phone saved a newer copy: merged first, as the open does, so this one is saved past both.
+            const pin = s.value.myCopy && s.value.myCopy.seq > kept.pin.copy.seq ? await mergeNewerCopy(anchor, identity, store, s.value, kept.pin, left()) : kept.pin;
+            if (left() <= 0) return { anchor, onlyKey };
+            const saved = await saveCopy(anchor, identity, store, pin, s.value, left);
             if (!saved.ok) return { anchor, onlyKey };
             const last = await lastCopied(store, identity.publicKey, anchor);
             return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : { anchor, onlyKey };

@@ -41,8 +41,10 @@ export const NODES = {
     eastgippy: { port: 18450, callsign: 'East Gippsland Beanp', containerIp: '172.18.0.4', publicUrl: 'https://eastgippy.beanpool.org:8450' },
 };
 
+// Per node, an owner's automation token with the admin scope (BEANPOOL_TOKEN_GIPPSLAND, BEANPOOL_TOKEN_EASTGIPPY; made in
+// that node's Settings → Automation tokens), from the environment only. A node without one gets ADMIN_PASSWORD, as before.
+// The routes this harness's admin calls reach: /api/admin/seed-invite and /api/local/admin/treasury/:id/operators.
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (!ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD must be set in the environment');
 
 export function loadState() {
     try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')); } catch { return {}; }
@@ -94,8 +96,17 @@ function rememberTfaSession(node, res) {
     if (issued) tfaSessions[node] = issued;
 }
 
-/** The admin headers for `node`: the password, and the node's 2FA session (or a code to get one) when there is one. */
+/**
+ * The admin headers for `node`: its automation token alone (a token asks for no 2FA code), or else the password, and the
+ * node's 2FA session (or a code to get one) when there is one. Never both.
+ */
 export function adminHeaders(node) {
+    const token = envFor('BEANPOOL_TOKEN', node);
+    if (token) {
+        if (!token.startsWith('bp_')) throw new Error(`BEANPOOL_TOKEN_${node.toUpperCase()} is not an automation token (bp_…)`);
+        return { Authorization: `Bearer ${token}` };
+    }
+    if (!ADMIN_PASSWORD) throw new Error(`Set BEANPOOL_TOKEN_${node.toUpperCase()} (an owner's automation token, admin scope) or ADMIN_PASSWORD in the environment`);
     const h = { 'X-Admin-Password': ADMIN_PASSWORD };
     const session = tfaSessions[node] || envFor('ADMIN_2FA_SESSION', node);
     if (session) h['X-Admin-2FA-Session'] = session;

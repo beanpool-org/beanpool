@@ -12,21 +12,28 @@
  * State only ever flows primary → backup. The primary imports from nobody.
  *
  * Usage:
- *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]
+ *   BEANPOOL_TOKEN='bp_…' node scripts/setup-backup.mjs --primary <https url> --token <replication token> [--data-dir <path>]
+ *   node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]   (legacy)
  *
+ *   BEANPOOL_TOKEN  An owner's automation token for the primary, read or admin scope (Settings → Automation
+ *                tokens, made by an owner signed in with their key). From the environment only, never an
+ *                argument: arguments show in `ps`. Used ONCE, in memory, to fetch the community identity, and
+ *                never written to this machine. With it, --admin-pw is not sent.
  *   --primary    Required. The primary's public HTTPS base URL,
  *                e.g. https://test.beanpool.org  (http:// only allowed for localhost)
- *   --admin-pw   Required. The primary's admin password. Used ONCE, in memory, to fetch the
- *                community identity. It is NEVER written to this machine: a standby that kept
- *                it held the main server's admin password in plain text.
+ *   --admin-pw   Legacy, in place of BEANPOOL_TOKEN: the primary's admin password. Used ONCE, in memory. It
+ *                is NEVER written to this machine: a standby that kept it held the main server's admin
+ *                password in plain text.
  *   --token      The primary's replication token (Settings → Replication Access), written to
- *                .env as BACKUP_REPLICATION_TOKEN; the standby copies with it. If omitted and
- *                the primary has no token yet, one is made; if the primary already has one,
- *                pass it (making a new one would cut off any standby already using it).
+ *                .env as BACKUP_REPLICATION_TOKEN; the standby copies with it. Required with
+ *                BEANPOOL_TOKEN: making a replication token is an owner's, signed in with their key or
+ *                phone, and no automation token can. With --admin-pw and no --token, the primary's is
+ *                made if it has none; if it already has one, pass it (a new one would cut off any
+ *                standby already using it).
  *   --data-dir   Optional. The node's data directory. Default: ./data
  *
  * Example:
- *   node scripts/setup-backup.mjs --primary https://test.beanpool.org --admin-pw 'S3cr3t!pass' --token '<token>'
+ *   BEANPOOL_TOKEN='bp_…' node scripts/setup-backup.mjs --primary https://test.beanpool.org --token '<token>'
  *
  * After it finishes, set NODE_ROLE=backup is written to a sibling .env — then
  * RESTART the node. On next boot it generates a fresh PeerId, rebuilds state.db,
@@ -129,16 +136,30 @@ async function mintTokenIfNone(primary, adminPw) {
 async function main() {
     const args = parseArgs(process.argv.slice(2));
     const primary = typeof args.primary === 'string' ? args.primary.replace(/\/$/, '') : null;
+    const automationToken = process.env.BEANPOOL_TOKEN || null;
     const adminPw = typeof args['admin-pw'] === 'string' ? args['admin-pw'] : null;
     let replicationToken = typeof args.token === 'string' ? args.token.trim() : null;
     const dataDir = path.resolve(typeof args['data-dir'] === 'string' ? args['data-dir'] : './data');
 
-    if (!primary || !adminPw) {
-        die('Usage: node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]');
+    if (!primary || (!automationToken && !adminPw)) {
+        die('Usage: BEANPOOL_TOKEN=bp_... node scripts/setup-backup.mjs --primary <https url> --token <replication token> [--data-dir <path>]\n' +
+            '   or (legacy): node scripts/setup-backup.mjs --primary <https url> --admin-pw <pw> [--token <token>] [--data-dir <path>]');
     }
+    if (automationToken && !automationToken.startsWith('bp_')) {
+        die('BEANPOOL_TOKEN is not an automation token (bp_…): make one in the primary\'s Settings → Automation tokens (read or admin scope).');
+    }
+    // Said now, before anything is fetched or written: the step that makes the primary's replication token is an owner's.
+    if (automationToken && !replicationToken) {
+        die('With BEANPOOL_TOKEN, pass the primary\'s replication token with --token.\n' +
+            'Making one is an owner\'s change: no automation token can. An owner makes it on their phone or in Settings → Replication Access\n' +
+            '(signed in with their key), copies it once, and it goes here with --token.');
+    }
+    if (automationToken && adminPw) console.log('  • BEANPOOL_TOKEN is set: --admin-pw is not sent.');
+    // The token alone, or the password alone: never both.
+    const auth = automationToken ? { Authorization: `Bearer ${automationToken}` } : { 'X-Admin-Password': adminPw };
     if (!isAllowedPrimaryUrl(primary)) {
         die(`--primary must be an https:// URL (http:// allowed only for localhost). Got: ${primary}\n` +
-            'Pulling over cleartext to a public host would leak the admin password and full ledger.');
+            'Pulling over cleartext to a public host would leak the admin credential and full ledger.');
     }
 
     console.log(`\n🗄️  BeanPool backup setup`);
@@ -152,11 +173,11 @@ async function main() {
     try {
         const res = await fetch(enrollUrl, {
             method: 'GET',
-            headers: { 'X-Admin-Password': adminPw },
+            headers: auth,
         });
         if (!res.ok) {
             const body = await res.text().catch(() => '');
-            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? 'Check --admin-pw.' : body}`);
+            die(`Primary returned HTTP ${res.status}. ${res.status === 401 ? (automationToken ? 'Check BEANPOOL_TOKEN (revoked or expired?).' : 'Check --admin-pw.') : body}`);
         }
         bundle = await res.json();
     } catch (e) {

@@ -450,6 +450,18 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * Enrols a member key and generates a unique per-owner break-glass code.
  * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
  */
+/**
+ * Whether a role change needs an owner (engine/node-roles.ts): it names 'owner' or 'admin', or its target holds owner or
+ * admin now (a grant replaces the role the target holds, so "grant moderator" to a co-owner removes an owner). Such a
+ * change from the phone's Manage hand-off asks for its unlock again (admin-auth.ts requirePhoneStepUp), as every
+ * owner-only route does; an admin appointing or removing a moderator is not asked.
+ */
+function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
+    if (role === 'owner' || role === 'admin') return true;
+    const held = heldNodeRoleOf(targetPubkey);
+    return held === 'owner' || held === 'admin';
+}
+
 const handleEnrol = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -480,7 +492,7 @@ const handleEnrol = async (ctx: any) => {
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
         return;
     }
-    if (requestedRole === 'owner' && !requirePhoneStepUp(ctx)) return;
+    if (roleChangeNeedsOwner(targetPubkey, requestedRole) && !requirePhoneStepUp(ctx)) return;
 
     try {
         const res = enrolAdminOwnerKey({
@@ -519,6 +531,8 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
         ctx.body = { error: 'Only node owners can toggle break-glass mode' };
         return;
     }
+    // Owner-only, checked here rather than by requireAdminRole: from the phone it asks for its unlock again too.
+    if (!requirePhoneStepUp(ctx)) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
@@ -1975,8 +1989,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-    // Making an owner from the phone asks for its unlock again (admin-auth.ts requirePhoneStepUp).
-    if (role === 'owner' && !requirePhoneStepUp(ctx)) return;
+    // A change that needs an owner, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(targetPubkey, role) && !requirePhoneStepUp(ctx)) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -2004,8 +2018,8 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-    // Taking an owner's role from the phone asks for its unlock again (admin-auth.ts requirePhoneStepUp).
-    if (role === 'owner' && !requirePhoneStepUp(ctx)) return;
+    // Taking an owner's or an admin's role, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(pubkey, role) && !requirePhoneStepUp(ctx)) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).

@@ -25,7 +25,7 @@ import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
-import { updateLocalConfig } from './config/local-config.js';
+import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -376,6 +376,70 @@ async function main() {
         const grantComputer = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, { Cookie: `admin_session=${computer.sessionId}`, 'X-CSRF-Token': computer.csrfToken! });
         assert(grantComputer.status === 200, `a computer's session six minutes on is not asked (got ${grantComputer.status} ${JSON.stringify(grantComputer.body)})`);
         revokeNodeRole(target.pub, 'owner', owner.pub);
+    }
+
+    // ── 6. Every change that needs an owner is asked, not only the ones that name 'owner' (review 4172055076) ──
+    // Demoting a co-owner to admin or moderator removes their ownership; granting, revoking or enrolling an admin and
+    // switching break-glass mode are owner-only too. From a phone left open past the window, each waits for Manage again.
+    console.log('\n6. Demoting an owner, admin changes and break-glass mode from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const coOwner = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        const member = keypair();
+        seedMember(member.pub, 'hoMember6');
+        const anAdmin = keypair();
+        seedMember(anAdmin.pub, 'hoAdmin6');
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const toAdmin = await postJson('/api/local/admin/node-roles', { pubkey: coOwner.pub, role: 'admin' }, as(stale));
+        assert(isStepUp(toAdmin), `demoting a co-owner to admin asks for the phone's unlock (got ${toAdmin.status} ${JSON.stringify(toAdmin.body)})`);
+        const toMod = await postJson('/api/local/admin/node-roles', { pubkey: coOwner.pub, role: 'moderator' }, as(stale));
+        assert(isStepUp(toMod), `demoting a co-owner to moderator asks too (got ${toMod.status} ${JSON.stringify(toMod.body)})`);
+        assert(roleOf(coOwner.pub) === 'owner', `…and the co-owner is still an owner (got ${roleOf(coOwner.pub)})`);
+        const grantAdmin = await postJson('/api/local/admin/node-roles', { pubkey: member.pub, role: 'admin' }, as(stale));
+        assert(isStepUp(grantAdmin) && roleOf(member.pub) === null, `granting admin asks and grants nothing (got ${grantAdmin.status} ${JSON.stringify(grantAdmin.body)})`);
+        const revokeAdminRes = await fetch(`${BASE}/api/local/admin/node-roles/${anAdmin.pub}/admin`, { method: 'DELETE', headers: as(stale) });
+        const revokeAdminBody = (await revokeAdminRes.json()) as any;
+        assert(isStepUp({ status: revokeAdminRes.status, body: revokeAdminBody }) && roleOf(anAdmin.pub) === 'admin',
+            `revoking an admin asks and keeps the role (got ${revokeAdminRes.status} ${JSON.stringify(revokeAdminBody)})`);
+        const enrolAdmin = await postJson('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'admin' }, as(stale));
+        assert(isStepUp(enrolAdmin) && roleOf(member.pub) === null, `enrolling an admin key asks and grants nothing (got ${enrolAdmin.status} ${JSON.stringify(enrolAdmin.body)})`);
+        const bgOn = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: true }, as(stale));
+        assert(isStepUp(bgOn) && getLocalConfig().breakGlassMode !== true, `turning break-glass mode on asks and changes nothing (got ${bgOn.status} ${JSON.stringify(bgOn.body)})`);
+        updateLocalConfig({ breakGlassMode: true } as any);
+        const bgOff = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false }, as(stale));
+        assert(isStepUp(bgOff) && getLocalConfig().breakGlassMode === true, `turning it off asks too (got ${bgOff.status} ${JSON.stringify(bgOff.body)})`);
+        updateLocalConfig({ breakGlassMode: false } as any);
+
+        // Manage again: each goes through.
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const freshDemote = await postJson('/api/local/admin/node-roles', { pubkey: coOwner.pub, role: 'admin' }, as(fresh));
+        assert(freshDemote.status === 200 && roleOf(coOwner.pub) === 'admin', `after Manage again, demoting a co-owner works (got ${freshDemote.status} ${JSON.stringify(freshDemote.body)})`);
+        const freshRevoke = await fetch(`${BASE}/api/local/admin/node-roles/${anAdmin.pub}/admin`, { method: 'DELETE', headers: as(fresh) });
+        assert(freshRevoke.status === 200 && roleOf(anAdmin.pub) === null, `…revoking an admin works (got ${freshRevoke.status})`);
+        const freshEnrol = await postJson('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'admin' }, as(fresh));
+        assert(freshEnrol.status === 200 && roleOf(member.pub) === 'admin', `…enrolling an admin key works (got ${freshEnrol.status} ${JSON.stringify(freshEnrol.body)})`);
+        const freshBgOn = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: true }, as(fresh));
+        assert(freshBgOn.status === 200 && freshBgOn.body.breakGlassMode === true, `…break-glass mode on works (got ${freshBgOn.status})`);
+        const freshBgOff = await postJson('/api/local/admin/auth/break-glass-mode', { enabled: false }, as(fresh));
+        assert(freshBgOff.status === 200 && freshBgOff.body.breakGlassMode === false, `…and off (got ${freshBgOff.status})`);
+        revokeNodeRole(member.pub, 'admin', owner.pub);
+        revokeNodeRole(coOwner.pub, 'admin', owner.pub);
+
+        // An admin's own work is not owner-only: appointing a moderator from a stale phone session is not asked.
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        assert(adminStale.status === 200, 'an admin opens Settings on the phone');
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        const modByAdmin = await postJson('/api/local/admin/node-roles', { pubkey: member.pub, role: 'moderator' }, as(adminStale));
+        assert(modByAdmin.status === 200 && roleOf(member.pub) === 'moderator', `an admin appoints a moderator six minutes on, unasked (got ${modByAdmin.status} ${JSON.stringify(modByAdmin.body)})`);
+        const unmodByAdmin = await fetch(`${BASE}/api/local/admin/node-roles/${member.pub}/moderator`, { method: 'DELETE', headers: as(adminStale) });
+        assert(unmodByAdmin.status === 200 && roleOf(member.pub) === null, `…and removes one, unasked (got ${unmodByAdmin.status})`);
     }
 
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);

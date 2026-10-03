@@ -1187,6 +1187,9 @@ async function main(): Promise<void> {
             'POST /api/invite/generate': { publicKey: pruned.pk },
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
+            // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
+            'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
+                signedFor: 'localhost', signature: 'AAAA' },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1248,6 +1251,7 @@ async function main(): Promise<void> {
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
             'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
+            'GET /api/local/claim', 'POST /api/local/claim',
             'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',
             'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',

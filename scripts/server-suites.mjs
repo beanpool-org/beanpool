@@ -139,6 +139,7 @@ export const SUITES = [
     'test-admin-queue',
     'test-admin-auth',
     'test-first-admin-password',
+    'test-node-claim',
     'test-config-write-races',
     'test-admin-key-auth',
     'test-app-admin-handoff',

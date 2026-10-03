@@ -9,8 +9,9 @@
  *
  * What binds a claim to this node: the code id (a fresh one per code), and the host. On a node that knows its names the
  * host must be one of them (engine/member-signature.ts audienceRefusal). On a node that knows none, audienceRefusal lets
- * any host through until the switch; a claim there must also name the host this request was sent to (its Host header),
- * so a signature made for another server is refused here.
+ * any host through until the switch, and every node takes a home-network host (10.x, 192.168.x, .local): a claim for
+ * such a host must also name the host this request was sent to (its Host header), so a signature made for another
+ * server is refused here.
  *
  * The signature is checked before the code, and only a request that will cost an scrypt is braked (claim-code.ts
  * admitClaimCheck). Once the node has an owner every claim is refused, except the same key retrying the claim that made
@@ -27,7 +28,7 @@ import { logAddressTag } from '../log-address.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeHasOwner } from '../engine/node-roles.js';
 import { verifyStatementSignature } from '../engine/member-signature.js';
-import { audienceStanding, normalizeAddress } from '../engine/own-addresses.js';
+import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
 import {
     admitClaimCheck, claimCodeMatches, claimedByThisKey, claimKey, claimNode, isClaimCodeId, isClaimCodeShape, pendingClaim,
 } from '../claim-code.js';
@@ -75,10 +76,11 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
                 oldTexts: [],
             });
             if (!signed.ok) return signed;
-            // A node that knows none of its names takes any host above (audienceRefusal). The claim must still name the
-            // host this request came to, so a statement signed for another server is no claim here.
+            // A node that knows none of its names takes any host above (audienceRefusal), and every node takes any
+            // home-network host. The claim must then also name the host this request came to, so a statement signed for
+            // another server is no claim here.
             const named = String(body.signedFor);
-            if (audienceStanding(named) === 'unconfigured' && named !== normalizeAddress(ctx.request.host)) {
+            if ((audienceStanding(named) === 'unconfigured' || isLocalNetworkHost(named)) && named !== normalizeAddress(ctx.request.host)) {
                 return { ok: false as const, status: 421, error: 'This claim was signed for another server.', code: 'wrong_community' };
             }
             return signed;

@@ -16,6 +16,8 @@
  *   F. A new code after the file was lost: a statement for the old code id is refused.
  *   G. The claim file cannot be written: the node starts anyway, no code, and the password still works.
  *   H. The node-wide cap: 30 checks a minute across sources, the 31st is 429.
+ *   I. The password's first invite, then the claim: the claim follows whether the node has an owner; the password still
+ *      signs in; with an owner, the next start has no file and no waiting code.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-node-claim.ts
  */
@@ -145,6 +147,7 @@ const claim = (b: Boot, body: unknown, source = '203.0.113.1') =>
 const readCode = (dir: string) => fs.readFileSync(path.join(dir, FILE_NAME), 'utf-8').trim();
 const modeOf = (file: string) => fs.statSync(file).mode & 0o777;
 const printed = (output: string, code: string) => [code, code.slice(6, 15), code.slice(15)].some((p) => output.includes(p));
+const pendingIn = (dir: string) => { const c = JSON.parse(fs.readFileSync(path.join(dir, 'local-config.json'), 'utf-8')).claim; return !!c && !c.claimedBy; };
 const signsIn = async (b: Boot, password: string) => (await request(b, 'POST', '/api/local/admin/data', { password })).status === 200;
 
 function dbFacts(dir: string, pub: string): { rows: number; role: string | null; grantedBy: string | null; inviteCode: string | null } {
@@ -280,6 +283,28 @@ async function main(): Promise<void> {
     r = await claim(h, claimBody(alice, readCode(dirH), idH), '198.51.200.1');
     assert(r.status === 429 && fs.existsSync(path.join(dirH, FILE_NAME)), `H3. even the right code waits for the brake (${r.status})`);
     await h.stop();
+
+    console.log('\nI. The password\'s first invite, then the claim');
+    const dirI = path.join(root, 'i');
+    let iNode = await boot(dirI, env);
+    const idI = (await request(iNode, 'GET', '/api/local/claim', undefined, { Host: HOST })).json.codeId;
+    const codeI = readCode(dirI);
+    const pwI = fs.readFileSync(path.join(dirI, 'first-admin-password.txt'), 'utf-8').trim();
+    const seeded = await request(iNode, 'POST', '/api/admin/seed-invite', { password: pwI });
+    assert(seeded.status === 200, `I1. the password makes the first invite, as on main (${seeded.status})`);
+    // Measured, not decided here: on a fresh node the seed invite takes its "already have members" branch (the SYSTEM
+    // rows count), so no "Admin" owner is made and the node still has no owner. Whichever way that goes, the claim
+    // follows nodeHasOwner().
+    const afterSeed = (await request(iNode, 'GET', '/api/local/claim', undefined, { Host: HOST })).json.unclaimed;
+    console.log(`  (after the password's first invite the node is ${afterSeed ? 'still unclaimed' : 'claimed'})`);
+    r = await claim(iNode, claimBody(alice, codeI, idI), '203.0.113.40');
+    assert(afterSeed ? r.status === 200 : r.status === 409, `I2. the claim follows whether an owner exists (${r.status})`);
+    assert(await signsIn(iNode, pwI), 'I3. the password still signs in');
+    await iNode.stop();
+    iNode = await boot(dirI, env);
+    assert(!fs.existsSync(path.join(dirI, FILE_NAME)), 'I4. with an owner, the next start has no claim file');
+    assert(!pendingIn(dirI), 'I5. and no waiting code');
+    await iNode.stop();
 
     fs.rmSync(root, { recursive: true, force: true });
     console.log(`\n${passed}/${run} passed`);

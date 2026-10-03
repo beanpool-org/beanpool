@@ -151,7 +151,6 @@ async function main(): Promise<void> {
     const { verifyEpochStatement, signEpochStatement } = await import('./services/identity-epoch.js');
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const memberWrite = (n: NodeProc) => post(n.base, '/api/test/member-write', { hello: 1 });
     const fake = await fakeAddress();
 
@@ -192,9 +191,12 @@ async function main(): Promise<void> {
 
         // ── 2. Take-over ──
         console.log('\n— 2. the main server dies; the standby takes over and serves epoch 1 —');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
+        // standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         assert(opened.status === 200 && opened.body.preview?.peerId === mainPeerId, `the code opens the keys (${opened.status})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 120)})`);
         assert((await standby.exited) === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
@@ -226,7 +228,7 @@ async function main(): Promise<void> {
             `a member's write is refused, saying why (${refused.status} ${refused.body.error})`);
         const readStill = await get(old.base + EPOCH_PATH);
         assert(readStill.status === 200 && readStill.body.statement.epoch === 0, 'reads still answer');
-        const prog = await post(old.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
+        const prog = await post(old.base, '/api/local/admin/takeover/progress', {}, await old.send('owner-session'));
         assert(prog.status === 200 && prog.body.replaced?.message === `This server was replaced on ${date}. It is now read-only.` && prog.body.replaced.epoch === 1,
             `Settings (the admin control plane stays open) says so (${prog.body.replaced?.message})`);
         assert(/\[Split-brain\].*replaced on/.test(old.output()), 'and so does its log');

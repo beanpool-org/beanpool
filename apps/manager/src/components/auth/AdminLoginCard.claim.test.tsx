@@ -25,8 +25,9 @@ const CLAIM_CODE = 'claim-1111-2222-3333-4444'; // what the server holds; must n
 
 type Answer = { status: number; body?: unknown } | 'network-error' | 'not-json' | 'hang';
 
-function stubNode(answers: Answer[]) {
+function stubNode(answers: Answer[], opts: { communityInfo?: { primaryAddress?: string | null; addresses?: string[] } } = {}) {
     const claimCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const infoCalls: Array<{ url: string; init: RequestInit | undefined }> = [];
     let i = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = String(input);
@@ -48,10 +49,18 @@ function stubNode(answers: Answer[]) {
                 json: async () => answer.body,
             } as Response;
         }
+        if (url.endsWith('/api/community/info')) {
+            infoCalls.push({ url, init });
+            return {
+                ok: true,
+                status: 200,
+                json: async () => opts.communityInfo ?? { addresses: [], primaryAddress: null },
+            } as Response;
+        }
         throw new Error(`unexpected request ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
-    return { fetchMock, claimCalls };
+    return { fetchMock, claimCalls, infoCalls };
 }
 
 const unclaimed = (extra: Record<string, unknown> = {}): Answer => ({
@@ -79,11 +88,12 @@ describe('AdminLoginCard: the unclaimed card', () => {
         vi.restoreAllMocks();
     });
 
-    function renderCard() {
+    function renderCard(nodeUrl = window.location.origin) {
         return render(
-            <AdminLoginCard nodeUrl={window.location.origin} onPasswordSession={onPasswordSession} onKeySession={onKeySession} />,
+            <AdminLoginCard nodeUrl={nodeUrl} onPasswordSession={onPasswordSession} onKeySession={onKeySession} />,
         );
     }
+
 
     it('asks the claim route with no cookie and, while the node is unclaimed, shows the card instead of the form', async () => {
         const { claimCalls } = stubNode([unclaimed()]);
@@ -130,6 +140,107 @@ describe('AdminLoginCard: the unclaimed card', () => {
         await screen.findByTestId('claim-qr');
         expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}`);
     });
+
+    it('reads community info once across several polls', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: false });
+        const { claimCalls, infoCalls } = stubNode(
+            [unclaimed(), unclaimed(), unclaimed(), unclaimed()],
+            { communityInfo: { primaryAddress: 'town.beanpool.org', addresses: ['town.beanpool.org'] } },
+        );
+        renderCard('https://town.beanpool.org');
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+        expect(claimCalls).toHaveLength(1);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(2);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(3);
+        expect(infoCalls).toHaveLength(1);
+
+        await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
+        expect(claimCalls).toHaveLength(4);
+        expect(infoCalls).toHaveLength(1);
+    });
+
+    it('keeps http and port in the QR when opened at an http LAN page origin with a matching listed host', async () => {
+        const lanOrigin = 'http://192.168.1.100:8080';
+        const origLocation = window.location;
+        const win = window as unknown as { location: Location };
+        delete (window as { location?: Location }).location;
+        win.location = new URL(lanOrigin) as unknown as Location;
+        try {
+            stubNode([unclaimed()], {
+                communityInfo: { primaryAddress: '192.168.1.100', addresses: ['192.168.1.100'] },
+            });
+            renderCard(lanOrigin);
+            await screen.findByTestId('claim-qr');
+            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(lanOrigin)}&id=${CODE_ID}`);
+            expect(screen.getByTestId('claim-origin')).toHaveTextContent(lanOrigin);
+            expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+        } finally {
+            win.location = origLocation;
+        }
+    });
+
+    it('keeps :8443 in the QR for page on https://town.example.org:8443 listed as town.example.org', async () => {
+        const portOrigin = 'https://town.example.org:8443';
+        const origLocation = window.location;
+        const win = window as unknown as { location: Location };
+        delete (window as { location?: Location }).location;
+        win.location = new URL(portOrigin) as unknown as Location;
+        try {
+            stubNode([unclaimed()], {
+                communityInfo: { primaryAddress: 'town.example.org', addresses: ['town.example.org'] },
+            });
+            renderCard(portOrigin);
+            await screen.findByTestId('claim-qr');
+            expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(portOrigin)}&id=${CODE_ID}`);
+            expect(screen.getByTestId('claim-origin')).toHaveTextContent(portOrigin);
+            expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+        } finally {
+            win.location = origLocation;
+        }
+    });
+
+    it('shows the line "Open this page at ... to scan" instead of the QR when page host is unlisted with a listed name', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: { primaryAddress: 'town.beanpool.org', addresses: ['town.beanpool.org'] },
+        });
+        renderCard(); // opened at window.location.origin (http://localhost:3000, not town.beanpool.org)
+        const notice = await screen.findByTestId('claim-unlisted-notice');
+        expect(notice).toHaveTextContent('Open this page at https://town.beanpool.org to scan');
+        expect(screen.queryByTestId('claim-qr')).toBeNull();
+    });
+
+    it('draws QR with page origin and no line when listed names all fail sanitising', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: {
+                primaryAddress: 'javascript:alert(1)',
+                addresses: ['javascript:alert(1)', 'ftp://files.example.com', '//hostile.example.com'],
+            },
+        });
+        renderCard();
+        await screen.findByTestId('claim-qr');
+        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
+        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+        expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+    });
+
+    it('draws QR with page origin when community addresses list is empty', async () => {
+        stubNode([unclaimed()], {
+            communityInfo: { primaryAddress: null, addresses: [] },
+        });
+        renderCard();
+        await screen.findByTestId('claim-qr');
+        expect(qrTexts[qrTexts.length - 1]).toBe(`beanpool://claim?node=${encodeURIComponent(window.location.origin)}&id=${CODE_ID}`);
+        expect(screen.getByTestId('claim-origin')).toHaveTextContent(window.location.origin);
+        expect(screen.queryByTestId('claim-unlisted-notice')).toBeNull();
+    });
+
+
 
     it('shows the sign-in form when the node has an owner', async () => {
         const { claimCalls } = stubNode([claimed]);
@@ -278,4 +389,108 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
+
+    it('keeps the password form open in the fold if the operator submitted before a slow claim check answered unclaimed', async () => {
+        let resolveClaim!: (res: Response) => void;
+        const claimPromise = new Promise<Response>((resolve) => {
+            resolveClaim = resolve;
+        });
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/api/local/claim')) {
+                return claimPromise;
+            }
+            if (url.endsWith('/api/local/admin/auth/password')) {
+                return {
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ error: 'Invalid password' }),
+                } as Response;
+            }
+            if (url.endsWith('/api/community/info')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ addresses: [], primaryAddress: null }),
+                } as Response;
+            }
+            throw new Error(`unexpected request ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        renderCard();
+
+        const passwordInput = screen.getByPlaceholderText('Password');
+        fireEvent.change(passwordInput, { target: { value: 'wrong-password' } });
+        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+
+        expect(await screen.findByText('Invalid password')).toBeInTheDocument();
+
+        await act(async () => {
+            resolveClaim({
+                ok: true,
+                status: 200,
+                json: async () => ({ unclaimed: true, codeId: CODE_ID }),
+            } as Response);
+        });
+
+        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
+        const fold = screen.getByTestId('claim-password-fold');
+        expect(fold).toHaveAttribute('open');
+        expect(screen.getByText('Invalid password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    });
+
+    it('keeps the fold open with the 2FA field if 2FA was required before a slow claim check answered unclaimed', async () => {
+        let resolveClaim!: (res: Response) => void;
+        const claimPromise = new Promise<Response>((resolve) => {
+            resolveClaim = resolve;
+        });
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/api/local/claim')) {
+                return claimPromise;
+            }
+            if (url.endsWith('/api/local/admin/auth/password')) {
+                return {
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ totpRequired: true, error: '2FA required' }),
+                } as Response;
+            }
+            if (url.endsWith('/api/community/info')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ addresses: [], primaryAddress: null }),
+                } as Response;
+            }
+            throw new Error(`unexpected request ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        renderCard();
+
+        const passwordInput = screen.getByPlaceholderText('Password');
+        fireEvent.change(passwordInput, { target: { value: 'my-password' } });
+        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+
+        expect(await screen.findByPlaceholderText(/6-digit code/)).toBeInTheDocument();
+
+        await act(async () => {
+            resolveClaim({
+                ok: true,
+                status: 200,
+                json: async () => ({ unclaimed: true, codeId: CODE_ID }),
+            } as Response);
+        });
+
+        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
+        const fold = screen.getByTestId('claim-password-fold');
+        expect(fold).toHaveAttribute('open');
+        expect(screen.getByPlaceholderText(/6-digit code/)).toBeInTheDocument();
+    });
 });
+

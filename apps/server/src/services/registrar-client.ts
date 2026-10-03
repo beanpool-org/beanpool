@@ -177,7 +177,8 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     if (!res.ok) {
         const why = data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`);
         // `ref`: where the address service logged what went wrong (it no longer sends Cloudflare's answer to a node).
-        throw new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why);
+        // `status`: the registrar answered and refused (a 4xx is its word, a name taken or not allowed); no status, nothing answered.
+        throw Object.assign(new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why), { status: res.status });
     }
     return data;
 }

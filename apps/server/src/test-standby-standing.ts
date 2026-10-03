@@ -306,8 +306,12 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes
+ * (takeover-test-harness.ts owner-session).
+ */
+async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -318,7 +322,7 @@ async function api(base: string, method: 'GET' | 'POST' | 'DELETE', route: strin
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -420,7 +424,7 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        const A = async (route: string, body: unknown) => api(m, 'POST', route, { admin: await main.send('owner-session'), body });
         const S_ = (who: Id, route: string, body: unknown = {}) => api(m, 'POST', route, { as: who, body });
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip, lou, eve, fay, hal]) {
@@ -506,7 +510,7 @@ async function main(): Promise<void> {
         // ── 3. Changes between two pulls, then a delta ──
         console.log('\n— 3. between two pulls: a vouch withdrawn, a keeper unbound, a pledge released, a pause, a ceiling, an opt-out —');
         built('Bo withdraws his vouch for Lou, which the first copy copied', await S_(bo, '/api/profile/unvouch', { targetPubkey: lou.pk }));
-        built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: PW_MAIN }));
+        built('the admin unbinds Dee from Probe Co', await api(m, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${dee.pk}`, { admin: await main.send('owner-session') }));
         built('Kip releases 1 of his 2 Beans of backing', await S_(kip, `/api/treasury/${probe.publicKey}/release`, { amount: 1 }));
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
         built('the admin changes Probe Co\'s working capital ceiling (that column alone)', await A(`/api/local/admin/treasury/${probe.publicKey}/ceiling`, { ceiling: 80 }));
@@ -620,7 +624,7 @@ async function main(): Promise<void> {
             ['Kip pledges 1 more', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/backing`, { as: kip2, body: { amount: 1 } })],
             ['by /pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/pledge`, { as: kip2, body: { type: 'backing', amount: 1 } })],
             ['Kip steps down, which releases his pledge', await api(sb, 'POST', `/api/treasury/${probe.publicKey}/keepers/step-down`, { as: kip2, body: {} })],
-            ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: PW_STANDBY })],
+            ['the admin unbinds Kip, which settles it', await api(sb, 'DELETE', `/api/local/admin/treasury/${probe.publicKey}/operators/${kip2.pk}`, { admin: await standby.send('owner-session') })],
         ];
         const through = pledgeWrites.filter(([, a]) => !(a.status === 409 && a.body?.code === 'standby')).map(([w, a]) => `${w}: ${brief(a)}`);
         assert(through.length === 0, `on S every write of a pledge answers 409 standby (${through.length} did not: ${through.join(' | ') || 'none'})`);
@@ -764,10 +768,12 @@ async function main(): Promise<void> {
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));

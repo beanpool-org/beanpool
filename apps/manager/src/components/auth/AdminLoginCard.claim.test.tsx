@@ -323,4 +323,108 @@ describe('AdminLoginCard: the unclaimed card', () => {
         expect(screen.getByRole('button', { name: /Unlock Settings/i })).toBeInTheDocument();
         expect(screen.queryByTestId('claim-card')).toBeNull();
     });
+
+    it('keeps the password form open in the fold if the operator submitted before a slow claim check answered unclaimed', async () => {
+        let resolveClaim!: (res: Response) => void;
+        const claimPromise = new Promise<Response>((resolve) => {
+            resolveClaim = resolve;
+        });
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/api/local/claim')) {
+                return claimPromise;
+            }
+            if (url.endsWith('/api/local/admin/auth/password')) {
+                return {
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ error: 'Invalid password' }),
+                } as Response;
+            }
+            if (url.endsWith('/api/community/info')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ addresses: [], primaryAddress: null }),
+                } as Response;
+            }
+            throw new Error(`unexpected request ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        renderCard();
+
+        const passwordInput = screen.getByPlaceholderText('Password');
+        fireEvent.change(passwordInput, { target: { value: 'wrong-password' } });
+        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+
+        expect(await screen.findByText('Invalid password')).toBeInTheDocument();
+
+        await act(async () => {
+            resolveClaim({
+                ok: true,
+                status: 200,
+                json: async () => ({ unclaimed: true, codeId: CODE_ID }),
+            } as Response);
+        });
+
+        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
+        const fold = screen.getByTestId('claim-password-fold');
+        expect(fold).toHaveAttribute('open');
+        expect(screen.getByText('Invalid password')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    });
+
+    it('keeps the fold open with the 2FA field if 2FA was required before a slow claim check answered unclaimed', async () => {
+        let resolveClaim!: (res: Response) => void;
+        const claimPromise = new Promise<Response>((resolve) => {
+            resolveClaim = resolve;
+        });
+
+        const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.endsWith('/api/local/claim')) {
+                return claimPromise;
+            }
+            if (url.endsWith('/api/local/admin/auth/password')) {
+                return {
+                    ok: false,
+                    status: 401,
+                    json: async () => ({ totpRequired: true, error: '2FA required' }),
+                } as Response;
+            }
+            if (url.endsWith('/api/community/info')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ addresses: [], primaryAddress: null }),
+                } as Response;
+            }
+            throw new Error(`unexpected request ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        renderCard();
+
+        const passwordInput = screen.getByPlaceholderText('Password');
+        fireEvent.change(passwordInput, { target: { value: 'my-password' } });
+        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+
+        expect(await screen.findByPlaceholderText(/6-digit code/)).toBeInTheDocument();
+
+        await act(async () => {
+            resolveClaim({
+                ok: true,
+                status: 200,
+                json: async () => ({ unclaimed: true, codeId: CODE_ID }),
+            } as Response);
+        });
+
+        expect(await screen.findByTestId('claim-card')).toBeInTheDocument();
+        const fold = screen.getByTestId('claim-password-fold');
+        expect(fold).toHaveAttribute('open');
+        expect(screen.getByPlaceholderText(/6-digit code/)).toBeInTheDocument();
+    });
 });
+

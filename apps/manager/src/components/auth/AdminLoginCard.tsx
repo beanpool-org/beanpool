@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { resolveNodeApiUrl } from '../../lib/node-client';
 import { signInWithPassword, type KeySession } from '../../lib/key-session';
@@ -30,6 +30,18 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     // Asked before sign-in; the form shows meanwhile and whenever the answer is not "unclaimed" (useClaimState).
     const claim = useClaimState(resolveNodeApiUrl(nodeUrl, CLAIM_PATH));
     const [passwordFoldOpen, setPasswordFoldOpen] = useState(false);
+    // If the operator has entered a password or submitted (an error shown, 2FA open, or in flight)
+    // before the first claim check answers "unclaimed", start the fold open so their form and result stay visible.
+    const wasUnclaimedRef = useRef(claim.kind === 'unclaimed');
+    useEffect(() => {
+        if (!wasUnclaimedRef.current && claim.kind === 'unclaimed') {
+            wasUnclaimedRef.current = true;
+            if (password || error || showTotpField || loading) {
+                setPasswordFoldOpen(true);
+            }
+        }
+    }, [claim.kind, password, error, showTotpField, loading]);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

@@ -28,6 +28,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createPost, updatePost, getPosts } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { listingsForPeer, reachablePeers } from './federation-listings.js';
 import { setMemberPhoto } from '@beanpool/engine';
@@ -35,6 +36,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const PW = 'TestAdmin123!';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
+// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
 
 const BYRON = '12D3KooWByronReachTestPeer0000000000';
 const BYRON_ADDR = `/ip4/172.18.0.21/tcp/4001/p2p/${BYRON}`;
@@ -49,9 +53,10 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; json: any }> {
+async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
+    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -108,6 +113,11 @@ async function main() {
     initStateEngine();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+
+    const alone = await post('/api/local/connectors', { password: PW, address: BYRON_ADDR, trustLevel: 'peer', callsign: 'byron', enabled: true });
+    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
+        `setup: 2FA off, the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
+    tfa = turnOn2faForTests(PW);
 
     // Two capped peers we settle with, and one configured-but-capless peer.
     for (const [addr, callsign] of [[BYRON_ADDR, 'byron'], [BRISBANE_ADDR, 'brisbane'], [UNCAPPED_ADDR, 'sleepy']] as const) {

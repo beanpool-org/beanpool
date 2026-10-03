@@ -27,7 +27,7 @@ Owners and admins see **Manage** followed by the community's name in the phone a
 - asks for the phone's own unlock (fingerprint, face or PIN). If the phone has no screen lock, the button refuses to open Settings;
 - opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings.
 
-Settings opened this way can make an owner-only change (making or removing an owner, two-factor sign-in, backups, the password) for **5 minutes** after your phone's unlock. After that it says *Confirm it's you first*: press Manage in the app again, which asks for your phone's lock, and make the change there. Everything else carries on as before. A computer signed in by scanning a code is not asked.
+Settings opened this way can make a change that only an owner may make for **5 minutes** after your phone's unlock. That covers making, removing or demoting an owner; making or removing an admin; break-glass mode; two-factor sign-in; the password; backups, including downloading a backup, a snapshot or an off-box backup; and every other owner-only setting. After that it says *Confirm it's you first*: press Manage in the app again, which asks for your phone's lock, and make the change there. Reading Settings is not asked, the off-box backups card included, and nor is anything an admin may do, such as appointing a moderator. A computer signed in by scanning a code is not asked.
 
 When you are done, **← App** at the top right (in full, **← Back to the BeanPool app**, at the top of the **☰** menu) takes you back to the app, and **View my profile** opens your own profile there.
 

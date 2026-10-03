@@ -52,10 +52,14 @@ async function getRaw(path: string, headers: Record<string, string> = {}): Promi
     return { status: res.status, text: await res.text() };
 }
 
+// Step 7c: the password alone opens no admin route with 2FA off; the admin calls go under an owner's key session (the
+// operator screen's tunnel token is shown to an owner only, which no token is).
+let ADMIN: Record<string, string> = {};
+
 async function postAdmin(path: string, body: unknown): Promise<{ status: number; text: string }> {
     const res = await fetch(`${BASE}${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify(body),
     });
     return { status: res.status, text: await res.text() };
@@ -87,6 +91,7 @@ async function main() {
     await initTls();
     initAdminPassword();
     initStateEngine();
+    ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     // The admin status route names the node's key in its answer, so the identity is loaded (ephemeral ports, no peers).
@@ -148,7 +153,7 @@ async function main() {
     const refused = await getRaw(STATUS);
     assert(refused.status === 401, `without the admin password ${STATUS} is refused (got ${refused.status})`);
     assert(!refused.text.includes(TUNNEL_TOKEN) && !refused.text.includes(CONTACT), 'the refusal carries neither the token nor the contact');
-    const admin = await getRaw(STATUS, { 'X-Admin-Password': ADMIN_PASSWORD });
+    const admin = await getRaw(STATUS, ADMIN);
     assert(admin.status === 200, `with the admin password ${STATUS} is 200 (got ${admin.status})`);
     const pa = JSON.parse(admin.text);
     // PublicAddressPanel reads name, hostname, mode, status, contact and tunnelToken from it.
@@ -216,7 +221,7 @@ async function main() {
     const noAuth = await getRaw(DIAG);
     assert(noAuth.status === 401, `without the admin password ${DIAG} is refused (got ${noAuth.status})`);
     assert(!noAuth.text.includes(EMAIL) && !noAuth.text.includes(PHONE), 'the refusal holds neither contact');
-    const adminGet = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    const adminGet = JSON.parse((await getRaw(DIAG, ADMIN)).text);
     assert(adminGet.contactEmail === EMAIL && adminGet.contactPhone === PHONE,
         `with the admin password, GET ${DIAG} (the manager) returns both, with both switches off (${JSON.stringify({ email: adminGet.contactEmail, phone: adminGet.contactPhone })})`);
     const adminPost = await postAdmin(DIAG, { password: ADMIN_PASSWORD });
@@ -225,7 +230,7 @@ async function main() {
         `and POST ${DIAG} (static/settings.js) too (${adminPost.status} ${JSON.stringify({ email: posted.contactEmail, phone: posted.contactPhone })})`);
     const cleared = await postAdmin('/api/local/update-identity', { contactEmail: '', contactPhone: '' });
     if (cleared.status !== 200) throw new Error(`setup: update-identity answered ${cleared.status} ${cleared.text}`);
-    const none = JSON.parse((await getRaw(DIAG, { 'X-Admin-Password': ADMIN_PASSWORD })).text);
+    const none = JSON.parse((await getRaw(DIAG, ADMIN)).text);
     assert(none.contactEmail === null && none.contactPhone === null,
         `a node with no contacts says null for each, so a screen can tell "none" from "not loaded" (${JSON.stringify({ email: none.contactEmail, phone: none.contactPhone })})`);
 

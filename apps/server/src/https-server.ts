@@ -1909,6 +1909,8 @@ const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],
     [/^\/api\/join\/knocks\//, 4 * 1024],
+    // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).
+    [/^\/api\/names\/copy$/, 1.5 * 1024 * 1024],
 ];
 
 function routeBodyLimit(path: string): number {

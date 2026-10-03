@@ -3,7 +3,7 @@
 //
 // A leaf module (the database and nothing else), so the standby's import (engine/sync.ts) and the re-key share one list.
 
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -252,6 +252,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('names_entries', 'updated_by');
     move('names_access_log', 'actor_pubkey');
     move('names_access_log', 'subject_pubkey');
+    // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one
+    // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
+    if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);
+    else deletePlainRows('names_copies', 'owner_pubkey = ?', oldKey);
 }
 
 // ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
     const start = async () => {
         setBusy(true);
         setError(null);
-        let res: Response | null = null;
+        let res: Response | null;
         try {
             res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/2fa/setup'), {
                 method: 'POST', credentials: 'same-origin', headers: buildAdminHeaders(), body: '{}',
@@ -65,7 +65,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
         if (!clean) return;
         setBusy(true);
         setError(null);
-        let res: Response | null = null;
+        let res: Response | null;
         try {
             res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/2fa/verify'), {
                 method: 'POST', credentials: 'same-origin', headers: buildAdminHeaders(), body: JSON.stringify({ code: clean }),

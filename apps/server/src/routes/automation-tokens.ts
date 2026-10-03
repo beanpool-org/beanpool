@@ -3,6 +3,10 @@
  * one. An owner's, every route: making a token is an owner-only change, so a session from the phone's Manage asks for its
  * unlock again (requireAdminRole's step-up). No token reaches these routes (isRefusedToEveryToken). The token is in the
  * answer that makes it and nowhere else; the list never carries a secret or a hash.
+ *
+ * Only an owner's KEY session makes one (the phone's Manage, or a computer signed in by scanning a code): never the admin
+ * password, by session, header or body, whatever the node's 2FA. So every token belongs to a person and stops when they
+ * are no longer an owner (checkAutomationToken). Listing and revoking take any owner credential: removing one is safe.
  */
 
 import Router from '@koa/router';
@@ -12,6 +16,8 @@ import { issueAutomationToken, listAutomationTokens, revokeAutomationToken, TOKE
 import { logger } from '../logger.js';
 
 export const TOKENS_OWNER_ONLY = 'Only an owner of this node can make, see or revoke its automation tokens';
+export const TOKEN_NEEDS_KEY_CODE = 'token_needs_key';
+export const TOKEN_NEEDS_KEY_ERROR = 'Make automation tokens from the app: sign in with your owner key (Manage, or a computer signed in by scanning a code)';
 
 export function createAutomationTokenRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -42,8 +48,14 @@ export function createAutomationTokenRoutes(deps: RouteDeps): Router {
     router.post('/api/local/admin/automation-tokens', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
         if (!(await ownerOnly(ctx))) return;
+        const actor = (ctx.state as any)?.actor;
+        if ((ctx.state as any)?.isKeySession !== true || typeof actor !== 'string' || !actor) {
+            ctx.status = 403;
+            ctx.body = { error: TOKEN_NEEDS_KEY_ERROR, code: TOKEN_NEEDS_KEY_CODE };
+            return;
+        }
         const b = body(ctx);
-        const createdBy = typeof (ctx.state as any)?.actor === 'string' && (ctx.state as any).actor ? (ctx.state as any).actor : 'owner:password';
+        const createdBy: string = actor;
         const res = issueAutomationToken({ name: b.name, scope: b.scope, expiresAt: b.expiresAt, createdBy });
         if (!res.ok) {
             ctx.status = 400;

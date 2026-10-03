@@ -97,7 +97,7 @@ export type IssueResult =
     | { ok: false; error: string };
 
 /**
- * Make a token. `createdBy` is the issuing owner: their key, or 'owner:password'. The plain token is in the answer only;
+ * Make a token. `createdBy` is the issuing owner's key (only a key session makes one). The plain token is in the answer only;
  * the stored record has its hash.
  */
 export function issueAutomationToken(input: { name: unknown; scope: unknown; expiresAt?: unknown; createdBy: string }, now = Date.now()): IssueResult {

@@ -33,7 +33,8 @@ import { resetAdminAuthTarpit, TOKEN_REFUSED_CODE } from './admin-auth.js';
 import { backdateAdminSessionForTests } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { db } from './db/db.js';
-import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle } from './automation-tokens.js';
+import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationToken } from './automation-tokens.js';
+import { TOKEN_NEEDS_KEY_CODE } from './routes/automation-tokens.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -173,14 +174,59 @@ async function main(): Promise<void> {
         const byStale = await make(asSession(stale.sessionId), { name: 'x', scope: 'read' });
         assert(byStale.status === 403 && byStale.body?.code === 'step_up_required', `a stale phone session needs the step-up (${show(byStale)})`);
 
-        const pw = await call('POST', '/api/local/admin/auth/password', { body: { password: PW, totpCode: generateTotpCode(SECRET) } });
+        // Only an owner's key makes a token, never the admin password by any path, whatever the node's 2FA: so every token
+        // belongs to a person and stops when they are no longer an owner (PR #1540 deciding review, fix round 1).
+        const stored = () => (getLocalConfig().automationTokens ?? []).length;
+        const storedBefore = stored();
+        const needsKey = (r: Reply) => r.status === 403 && r.body?.code === TOKEN_NEEDS_KEY_CODE;
+        const code = () => { forgetUsedTotpCodesForTests(); return generateTotpCode(SECRET); };
+        const pw = await call('POST', '/api/local/admin/auth/password', { body: { password: PW, totpCode: code() } });
         assert(pw.status === 200 && !!pw.sessionId, `the password signs in with its 2FA code (${show(pw)})`);
         const byPw = await make(asCookie(pw.sessionId, pw.body?.csrfToken), { name: 'pw made', scope: 'read' });
-        assert(byPw.status === 201 && byPw.body?.record?.createdBy === 'owner:password', `the password session makes one, by 'owner:password' (${byPw.status})`);
-        if (byPw.body?.token) secrets.push(byPw.body.token);
+        assert(needsKey(byPw), `2FA on: the password session cannot make one (${show(byPw)})`);
+        const byHeader = await make({ 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, { name: 'pw made', scope: 'admin' });
+        assert(needsKey(byHeader), `2FA on: the password and its code in the headers cannot make one (${show(byHeader)})`);
+        const byBodyPw = await make({}, { name: 'pw made', scope: 'admin', password: PW, totpCode: code() });
+        assert(needsKey(byBodyPw), `2FA on: the password and its code in the body cannot make one (${show(byBodyPw)})`);
+        updateLocalConfig({ totpEnabled: false });
+        try {
+            const pwOff = await call('POST', '/api/local/admin/auth/password', { body: { password: PW } });
+            assert(pwOff.status === 200 && !!pwOff.sessionId, `2FA off: the password signs in alone (${show(pwOff)})`);
+            const byPwOff = await make(asCookie(pwOff.sessionId, pwOff.body?.csrfToken), { name: 'pw made', scope: 'admin' });
+            assert(byPwOff.status === 403 && ['totp_setup_required', TOKEN_NEEDS_KEY_CODE].includes(byPwOff.body?.code), `2FA off: the password session cannot make one (${show(byPwOff)})`);
+            const byHeaderOff = await make({ 'X-Admin-Password': PW }, { name: 'pw made', scope: 'admin' });
+            assert(needsKey(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
+            const byBodyOff = await make({}, { name: 'pw made', scope: 'admin', password: PW });
+            assert(needsKey(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
+        } finally {
+            updateLocalConfig({ totpEnabled: true });
+        }
+        assert(stored() === storedBefore, `no password path stored a token (${stored() - storedBefore} stored)`);
+        assert(/owner's key|owner key/i.test(byHeader.body?.error ?? ''), `and the answer says to make it with an owner's key (${byHeader.body?.error})`);
 
         const list = await call('GET', '/api/local/admin/automation-tokens', { headers: asSession(ownerS.sessionId) });
-        assert(list.status === 200 && list.body?.tokens?.length === 4, `the list shows the four (${show(list)})`);
+        assert(list.status === 200 && list.body?.tokens?.length === 3, `the list shows the three (${show(list)})`);
+        const listByPw = await call('GET', '/api/local/admin/automation-tokens', { headers: asCookie(pw.sessionId) });
+        assert(listByPw.status === 200 && listByPw.body?.tokens?.length === 3, `the password session lists them (${show(listByPw)})`);
+        const spare = await make(asSession(ownerS.sessionId), { name: 'spare', scope: 'read' });
+        assert(spare.status === 201, `the owner's key makes a spare (${spare.status})`);
+        secrets.push(spare.body.token);
+        const revByPw = await call('POST', `/api/local/admin/automation-tokens/${spare.body.record.id}/revoke`, { headers: asCookie(pw.sessionId, pw.body?.csrfToken), body: {} });
+        assert(revByPw.status === 200, `the password session revokes it (${show(revByPw)})`);
+        const spareAfter = await call('GET', '/api/local/admin/diagnostics', { headers: bearer(spare.body.token) });
+        assert(spareAfter.status === 401, `and it is refused at once (${spareAfter.status})`);
+
+        // A stored token whose maker is not a member key is refused on use (none can be made now; defence in depth).
+        for (const createdBy of ['owner:password', 'not-a-key']) {
+            const legacy = issueAutomationToken({ name: 'legacy', scope: 'read', createdBy });
+            assert(legacy.ok, 'a record with a non-key maker is stored directly');
+            if (!legacy.ok) continue;
+            secrets.push(legacy.token);
+            const r = await call('GET', '/api/local/admin/diagnostics', { headers: bearer(legacy.token) });
+            assert(r.status === 401, `a token made by '${createdBy}' is refused on use (${show(r)})`);
+            const rv = await call('POST', `/api/local/admin/automation-tokens/${legacy.record.id}/revoke`, { headers: asSession(ownerS.sessionId), body: {} });
+            assert(rv.status === 200, 'and the owner can still revoke it');
+        }
         assert(!secrets.some(s => list.text.includes(s.split('_')[2])) && !/"hash"/.test(list.text), 'the list carries no secret and no hash');
         const listByAdmin = await call('GET', '/api/local/admin/automation-tokens', { headers: asSession(adminS.sessionId) });
         assert(listByAdmin.status === 403, 'an admin cannot list them');

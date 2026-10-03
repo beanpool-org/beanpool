@@ -133,8 +133,8 @@ export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-onl
 
 /**
  * An automation token's request (design step 7, D8). The token is a credential on its own, as a key session is: it asks
- * for no 2FA code, because an owner who had already signed in (with their key, or the password and its 2FA code) made
- * it; and a 2FA code sent with it changes nothing. Its scope is checked here, before any route runs:
+ * for no 2FA code, because an owner made it with their key (never the password: routes/automation-tokens.ts); and a 2FA
+ * code sent with it changes nothing. Its scope is checked here, before any route runs:
  *   read     GET/HEAD, and the POSTs that only read (READ_ONLY_POSTS); admin level.
  *   backups  BACKUPS_SCOPE_ROUTES and nothing else; owner level on those routes alone.
  *   admin    every route an admin may use; admin level, so every owner-only route refuses it.
@@ -152,8 +152,9 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
         logger.warn('AUTH', 'Automation token refused', { route: `${method} ${reqPath}`, from: logAddressTag(ctx) });
         return false;
     }
-    // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them.
-    if (record.createdBy !== 'owner:password' && !isNodeOwner(record.createdBy)) {
+    // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them. A
+    // record whose maker is not a member's key ('owner:password', from before only a key could make one) is refused alike.
+    if (typeof record.createdBy !== 'string' || !isNodeOwner(record.createdBy)) {
         ctx.status = 401;
         ctx.body = { error: 'Invalid, revoked or expired automation token' };
         logger.warn('AUTH', 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
@@ -174,7 +175,7 @@ function checkAutomationToken(ctx: any, presented: string): boolean {
     ctx.state.tokenScope = record.scope;
     ctx.state.tokenOwnerRoute = record.scope === 'backups';
     ctx.state.adminRole = record.scope === 'backups' ? 'owner' : 'admin';
-    if (record.createdBy && record.createdBy !== 'owner:password') ctx.state.actor = record.createdBy;
+    ctx.state.actor = record.createdBy;
     logger.info('AUTH', 'Automation token used', {
         tokenId: record.id, issuedBy: String(record.createdBy).slice(0, 16), scope: record.scope, route: `${method} ${reqPath}`,
     });

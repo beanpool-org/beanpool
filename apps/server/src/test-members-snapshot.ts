@@ -154,6 +154,11 @@ async function main() {
     moves('a node role granted', () => grantNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a node role revoked', () => revokeNodeRole(people[10].pk, 'admin', owner.pk));
     moves('a member pruned by an admin', () => se.adminPruneUser(people[11].pk, owner.pk));
+    // The genesis seed (POST /api/admin/seed-invite on a node with no members; seedGenesisMember): a new member and owner,
+    // or an owner made of a member already there. It moved no version before (found by a scan of every SQL write to
+    // members and node_roles, 2026-10-03).
+    moves('a genesis member seeded', () => se.seedGenesisMember(keypair().pk, 'Genesis'));
+    moves('a genesis seed of a member already there', () => se.seedGenesisMember(people[12].pk, 'ignored'));
 
     // ── 2. Byte for byte an unshared build ───────────────────────────────────────────────────────────────────────
     console.log('\n── 2. The same bytes as an unshared build, plain and gzipped');

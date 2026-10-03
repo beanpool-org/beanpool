@@ -91,6 +91,8 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
                  VALUES (?, 'owner', 'genesis')`
             ).run(adminPublicKey);
         }
+        // An owner role shows in the directory (members-snapshot.ts rebuilds on the version).
+        bumpMembersVersion();
         return getMember(db, adminPublicKey)!;
     }
 
@@ -110,6 +112,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
         ).run(adminPublicKey);
     }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
+    bumpMembersVersion();
     return getMember(db, adminPublicKey)!;
 }
 

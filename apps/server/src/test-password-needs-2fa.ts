@@ -157,7 +157,7 @@ async function main(): Promise<void> {
         }
         const wrong = await call('GET', '/api/local/admin/diagnostics', { headers: { 'X-Admin-Password': 'not-the-password' } });
         assert(wrong.status === 401 && wrong.body?.error === 'Invalid password', `a wrong password is still 401 Invalid password (${show(wrong)})`);
-        const code = issueBreakGlassCode(owner.pub, 'test');
+        const code = issueBreakGlassCode(owner.pub, 'test', 'app');
         const codeOff = await call('GET', '/api/local/admin/diagnostics', { headers: { 'X-Break-Glass-Code': code } });
         assert(codeOff.status === 401, `a real break-glass code off the enrol routes is still a wrong password (${show(codeOff)})`);
 

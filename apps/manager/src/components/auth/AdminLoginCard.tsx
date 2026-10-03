@@ -29,6 +29,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     const [error, setError] = useState<string | null>(null);
     // Asked before sign-in; the form shows meanwhile and whenever the answer is not "unclaimed" (useClaimState).
     const claim = useClaimState(resolveNodeApiUrl(nodeUrl, CLAIM_PATH));
+    const [passwordFoldOpen, setPasswordFoldOpen] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -163,7 +164,21 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                 </div>
 
                 {claim.kind === 'unclaimed' ? (
+                    <>
                     <UnclaimedCard codeId={claim.codeId} />
+                    {/* Stage B: the password still works, second. Stage C's nodes answer password: false and have none. */}
+                    {claim.password && (
+                        <details open={passwordFoldOpen} className="mt-6 border-t border-nature-800/80 pt-2" data-testid="claim-password-fold">
+                            <summary
+                                onClick={(e) => { e.preventDefault(); setPasswordFoldOpen((o) => !o); }}
+                                className="min-h-[48px] flex items-center cursor-pointer text-sm font-semibold text-nature-300 hover:text-white"
+                            >
+                                This server also has an admin password
+                            </summary>
+                            {passwordFoldOpen && <div className="mt-2">{passwordForm}</div>}
+                        </details>
+                    )}
+                    </>
                 ) : mode === 'phone' && onKeySession ? (
                     <PhoneSignIn onSignedIn={onKeySession} onUsePassword={() => setMode('password')} />
                 ) : (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, waitFor } from '@testing-library/react';
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
 
 // The QR's text is what matters here, not its picture: record what the card asks to encode.
 const qrTexts: string[] = [];
@@ -199,5 +199,43 @@ describe('AdminLoginCard: the unclaimed card', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(CLAIM_POLL_MS); });
         expect(claimCalls).toHaveLength(3);
         expect(screen.queryByTestId('claim-card')).toBeNull();
+    });
+
+    it('keeps today\'s password form under a closed fold, and it still signs in', async () => {
+        const { fetchMock } = stubNode([unclaimed()]);
+        renderCard();
+        const fold = await screen.findByTestId('claim-password-fold');
+        expect(fold.tagName).toBe('DETAILS');
+        expect(fold).not.toHaveAttribute('open');
+        expect(fold.querySelector('summary')).toHaveTextContent('This server also has an admin password');
+        // The form is the card's second thing, under the claim, not beside it.
+        const card = screen.getByTestId('claim-card');
+        expect(card.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+        fireEvent.click(fold.querySelector('summary')!);
+        const input = screen.getByPlaceholderText('Password');
+        expect(fold).toContainElement(input);
+
+        fetchMock.mockImplementationOnce(async () => ({
+            ok: true, status: 200, json: async () => ({ success: true, role: 'owner', csrfToken: 'csrf-fold' }),
+        }) as Response);
+        fireEvent.change(input, { target: { value: 'pw' } });
+        fireEvent.click(screen.getByRole('button', { name: /Unlock Settings/i }));
+        await waitFor(() => expect(onPasswordSession).toHaveBeenCalledWith('csrf-fold', false));
+    });
+
+    it('has no fold and no password form when the node answers password: false', async () => {
+        stubNode([unclaimed({ password: false })]);
+        renderCard();
+        await screen.findByTestId('claim-card');
+        expect(screen.queryByTestId('claim-password-fold')).toBeNull();
+        expect(screen.queryByText('This server also has an admin password')).toBeNull();
+        expect(screen.queryByPlaceholderText('Password')).toBeNull();
+    });
+
+    it('keeps the fold for any answer other than password: false', async () => {
+        stubNode([unclaimed({ password: true })]);
+        renderCard();
+        expect(await screen.findByTestId('claim-password-fold')).toBeInTheDocument();
     });
 });

@@ -1707,7 +1707,7 @@ export const HARVESTER_UNAVAILABLE = 'No harvested backups here: the server behi
 
 /** True for the dashboard's own /api/manager routes, which never get a node's credential. */
 export function isManagerApi(path: string): boolean {
-    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname;
+    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname.toLowerCase();
     return p === '/api/manager' || p.startsWith('/api/manager/');
 }
 

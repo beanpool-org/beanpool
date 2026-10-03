@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { fetchWebVisits, getTfaSessionToken, type WebVisitDay } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 /**
  * Web app visits a day, as the node counts them itself (no cookies, no addresses kept; server engine/web-visits.ts):
@@ -99,11 +100,11 @@ export function WebVisitsCard({ node }: { node: NodeProfile }) {
         setSeries(null);
         setError(null);
         setSelected(null);
-        fetchWebVisits(node.url, node.adminPassword, DAYS, getTfaSessionToken(node.id))
+        fetchWebVisits(node.url, nodeCredential(node), DAYS, getTfaSessionToken(node.id))
             .then((res) => { if (!cancelled) setSeries(Array.isArray(res?.series) ? res.series : []); })
             .catch((e) => { if (!cancelled) setError(e?.message || 'Could not reach this node'); });
         return () => { cancelled = true; };
-    }, [node.id, node.url, node.adminPassword]);
+    }, [node.id, node.url, nodeCredential(node)]);
 
     const view = useMemo(() => {
         if (!series || series.length === 0) return null;

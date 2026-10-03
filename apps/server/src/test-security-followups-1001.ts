@@ -97,18 +97,20 @@ async function part1BreakGlass(owner: Key): Promise<void> {
     console.log('— 1. a break-glass code enrols a key, and does nothing else —');
     resetAdminAuthTarpit();
     const pwHeaders = { 'x-admin-password': PW };
-    // Step 7c: with the node's 2FA off, the password alone enrols nothing (it used to issue the code); with 2FA on, the
-    // password and a code do. 2FA goes off again after, so the checks below run on a node with 2FA off, as before.
+    // Step 7c: with the node's 2FA off, the password alone enrols nothing and changes no code; with 2FA on, the password and a
+    // code do. The owner already holds the role, and re-enrolling them keeps their code (#1531), so the code is made the way
+    // Settings makes it, naming the owner. 2FA goes off again after, so the checks below run on a node with 2FA off, as before.
+    const hashBefore = getNodeRoleBreakGlassHash(owner.pub);
     const aloneEnrol = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...pwHeaders, ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
-    assert(aloneEnrol.status === 403 && aloneEnrol.json?.code === 'password_needs_2fa' && !aloneEnrol.json?.breakGlassCode && !getNodeRoleBreakGlassHash(owner.pub),
-        `with 2FA off the password alone enrols nothing and issues no code (${show(aloneEnrol)})`);
+    assert(aloneEnrol.status === 403 && aloneEnrol.json?.code === 'password_needs_2fa' && !aloneEnrol.json?.breakGlassCode && getNodeRoleBreakGlassHash(owner.pub) === hashBefore,
+        `with 2FA off the password alone enrols nothing and changes no code (${show(aloneEnrol)})`);
     const twoFa = turnOn2faForTests(PW);
     const twoFaOff = () => updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
     resetAdminAuthTarpit();
-    const enrolled = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { ...twoFa.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub, role: 'owner' } });
+    const enrolled = await req('/api/local/admin/auth/break-glass/issue', { method: 'POST', headers: { ...twoFa.headers(), ...viaTunnel(freshIp()) }, body: { memberPubkey: owner.pub } });
     twoFaOff();
     const code: string = enrolled.json?.breakGlassCode;
-    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the owner's enrolment issues a code (${enrolled.status})`);
+    assert(enrolled.status === 200 && /^bg-[0-9a-f]{4}(-[0-9a-f]{4}){3}$/.test(code ?? ''), `the password makes the owner a code (${enrolled.status})`);
 
     // Stored salted and slow, not as the code's plain SHA-256.
     const stored = getNodeRoleBreakGlassHash(owner.pub) ?? '';

@@ -1423,7 +1423,11 @@ CREATE TABLE IF NOT EXISTS node_roles (
     granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by       TEXT,
     session_epoch    INTEGER NOT NULL DEFAULT 0,
-    break_glass_hash TEXT
+    break_glass_hash TEXT,
+    -- When the owner's break-glass code was last made, and from which kind of session (engine/node-roles.ts
+    -- BreakGlassMadeBy). Both NULL when there is no code, or for a code made before they were recorded.
+    break_glass_made_at TEXT,
+    break_glass_made_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 

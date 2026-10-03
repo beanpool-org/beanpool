@@ -1,22 +1,25 @@
 import React, { useState } from 'react';
-import { normalizeNodeUrl } from '../../lib/node-client';
+import { normalizeNodeUrl, isAutomationToken } from '../../lib/node-client';
+import { AutomationTokenField } from './AutomationTokenField';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
 interface AddNodeModalProps {
     onClose: () => void;
-    onAdd: (name: string, url: string, adminPassword?: string) => void;
+    onAdd: (name: string, url: string, adminPassword?: string, automationToken?: string) => void;
 }
 
 export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
     const [name, setName] = useState('');
     const [url, setUrl] = useState('');
     const [password, setPassword] = useState('');
+    const [token, setToken] = useState('');
+    const tokenOk = token.trim() === '' || isAutomationToken(token.trim());
     const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!name.trim() || !url.trim()) return;
-        onAdd(name.trim(), normalizeNodeUrl(url), password.trim() || undefined);
+        if (!name.trim() || !url.trim() || !tokenOk) return;
+        onAdd(name.trim(), normalizeNodeUrl(url), password.trim() || undefined, token.trim() || undefined);
     };
 
     return (
@@ -61,8 +64,9 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                             className="w-full bg-nature-950 border border-nature-800 px-3.5 py-2.5 rounded-xl text-white font-mono focus:outline-none focus:border-terra-500 shadow-inner"
                         />
                     </div>
+                    <AutomationTokenField value={token} onChange={setToken} />
                     <div>
-                        <label className="block text-nature-300 font-semibold mb-1">Admin Password (Optional)</label>
+                        <label className="block text-nature-300 font-semibold mb-1">Admin Password (old nodes, optional)</label>
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
@@ -93,6 +97,7 @@ export function AddNodeModal({ onClose, onAdd }: AddNodeModalProps) {
                         </button>
                         <button
                             type="submit"
+                            disabled={!tokenOk}
                             className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold transition-all shadow-md active:scale-95"
                         >
                             Save Node Profile

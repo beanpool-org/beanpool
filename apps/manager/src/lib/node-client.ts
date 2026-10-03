@@ -141,7 +141,7 @@ export async function forgetStandby(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword, id }),
+        body: JSON.stringify({ ...passwordField(adminPassword), id }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -329,7 +329,7 @@ export async function loginToNode(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPassword, totpCode }),
+        body: JSON.stringify({ ...passwordField(adminPassword), totpCode }),
     });
     const body = await res.json();
     if (!res.ok) {
@@ -350,12 +350,39 @@ export function setKeySessionCsrfToken(token: string | null): void {
     keySessionCsrfToken = token;
 }
 
+/** An owner automation token's shape (server automation-tokens.ts TOKEN_SHAPE): bp_ + 12 hex + _ + 64 hex. */
+const AUTOMATION_TOKEN_SHAPE = /^bp_[0-9a-f]{12}_[0-9a-f]{64}$/;
+
 /**
- * Build headers with admin password and optional 2FA session token for node API calls.
- * Every fetch helper below uses this so TOTP-enabled nodes work transparently.
+ * Whether a profile's credential (profiles.ts nodeCredential) is an automation token rather than a password. Decided by
+ * the token's exact shape: the server takes any bearer starting bp_ as a token, and a token is never sent as a password.
+ */
+export function isAutomationToken(credential: string | undefined | null): credential is string {
+    return typeof credential === 'string' && AUTOMATION_TOKEN_SHAPE.test(credential);
+}
+
+/**
+ * The body's `password` for a request: the password itself, or nothing when the credential is a token (it travels only
+ * in the Authorization header, buildAdminHeaders). Every request body that used to say `...passwordField(adminPassword)`
+ * spreads this instead, so a token never lands in a body.
+ */
+export function passwordField(credential: string | undefined): { password?: string } {
+    return isAutomationToken(credential) ? {} : { password: credential };
+}
+
+/**
+ * Build headers for node API calls from a profile's credential (profiles.ts nodeCredential) and optional 2FA session
+ * token. A password goes in X-Admin-Password (with the 2FA session, so TOTP-enabled nodes work transparently); an
+ * automation token goes as `Authorization: Bearer` alone: it asks for no 2FA, and the password header is never sent
+ * with it. Every fetch helper below uses this.
  */
 export function buildAdminHeaders(adminPassword?: string, tfaSessionToken?: string): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (isAutomationToken(adminPassword)) {
+        headers['Authorization'] = `Bearer ${adminPassword}`;
+        if (keySessionCsrfToken) headers['X-CSRF-Token'] = keySessionCsrfToken;
+        return headers;
+    }
     if (adminPassword) headers['X-Admin-Password'] = adminPassword;
     if (tfaSessionToken) headers['X-Admin-2FA-Session'] = tfaSessionToken;
     if (keySessionCsrfToken) headers['X-CSRF-Token'] = keySessionCsrfToken;
@@ -439,7 +466,9 @@ export async function downloadAdminFile(
     filename: string,
     tfaToken?: string,
 ): Promise<DownloadNotice> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
+    // The dashboard's own /api/manager routes are not a node: they get no credential (see isManagerApi).
+    const managerApi = isManagerApi(endpointPath);
+    const headers = managerApi ? {} : buildAdminHeaders(adminPassword, tfaToken);
     const url = new URL(endpointPath, window.location.origin);
     for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v);
@@ -455,7 +484,7 @@ export async function downloadAdminFile(
             const body = await res.json();
             if (body?.error) detail = body.error;
         } catch { /* not JSON — the status is all we have */ }
-        throw new Error(detail);
+        throw new Error(managerApi ? `${HARVESTER_UNAVAILABLE} (${detail})` : detail);
     }
 
     // Asked before buffering, because afterwards is too late to warn about.
@@ -526,7 +555,7 @@ export async function acknowledgeShutdownStatus(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -575,7 +604,7 @@ export async function cleanStorageAndCompressLogs(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -738,7 +767,7 @@ export async function updateGatewayConfig(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...updates, password: adminPassword }),
+        body: JSON.stringify({ ...updates, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -882,7 +911,7 @@ export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfa
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -896,7 +925,7 @@ export async function fetchNodeLogs(nodeUrl: string, adminPassword?: string, tfa
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword, limit: 50 }),
+        body: JSON.stringify({ ...passwordField(adminPassword), limit: 50 }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -916,7 +945,7 @@ export async function freezeNodeUser(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ freeze, password: adminPassword }),
+        body: JSON.stringify({ freeze, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -934,7 +963,7 @@ export async function pruneNodeUser(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -955,7 +984,7 @@ export async function pruneInviteBranch(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -978,7 +1007,7 @@ export async function deleteNodePost(
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         credentials: 'same-origin',
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1005,7 +1034,7 @@ export async function removeReportedPulseItem(
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         credentials: 'same-origin',
-        body: JSON.stringify({ removePulseItem: true, password: adminPassword }),
+        body: JSON.stringify({ removePulseItem: true, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1032,7 +1061,7 @@ export async function dismissNodeReport(
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
         credentials: 'same-origin',
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1158,7 +1187,7 @@ export async function actionNodeReport(
             deletePost: !!action.deletePost,
             removePulseItem: !!action.removePulseItem,
             ...(action.reasonCategory ? { reasonCategory: action.reasonCategory } : {}),
-            ...(adminPassword ? { password: adminPassword } : {}),
+            ...(adminPassword ? { ...passwordField(adminPassword) } : {}),
         }),
     });
     const data = await res.json().catch(() => ({}));
@@ -1329,7 +1358,7 @@ export async function generateNodeInvite(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword, type }),
+        body: JSON.stringify({ ...passwordField(adminPassword), type }),
     });
     if (!res.ok) {
         // The node's own words (e.g. 'Invalid password', 'Only an owner or admin of this node can issue invites').
@@ -1355,7 +1384,7 @@ export async function updateNodeUserTier(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ tier, password: adminPassword }),
+        body: JSON.stringify({ tier, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1374,7 +1403,7 @@ export async function updateNodeUserVoucher(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ grant: canVouch, password: adminPassword }),
+        body: JSON.stringify({ grant: canVouch, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1393,7 +1422,7 @@ export async function updateNodeUserOperator(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ granted, password: adminPassword }),
+        body: JSON.stringify({ granted, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1407,6 +1436,12 @@ export interface NodeRoleRecord {
     granted_at: string;
     granted_by: string | null;
     callsign?: string;
+    /** Whether this owner holds a break-glass code now. */
+    has_break_glass?: boolean;
+    /** When their code was last made (null: no code, or made before nodes recorded it; absent from an older node). */
+    break_glass_made_at?: string | null;
+    /** From which kind of session: 'key-session' | 'app' | 'password' | 'break-glass' | 'recover'. */
+    break_glass_made_by?: string | null;
 }
 
 export async function fetchNodeRoles(
@@ -1569,7 +1604,7 @@ export async function createNodeTreasury(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...data, password: adminPassword }),
+        body: JSON.stringify({ ...data, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1589,7 +1624,7 @@ export async function updateEnterpriseLocation(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...(location || {}), password: adminPassword }),
+        body: JSON.stringify({ ...(location || {}), ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1608,7 +1643,7 @@ export async function clearEnterpriseLocation(
     const res = await fetch(endpoint, {
         method: 'DELETE',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1628,7 +1663,7 @@ export async function seedTreasuryOffer(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...offer, password: adminPassword }),
+        body: JSON.stringify({ ...offer, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -1664,47 +1699,30 @@ export interface HarvesterStatusResponse {
     harvestState: Record<string, HarvesterNodeState>;
 }
 
-// The three harvester helpers below talk to /api/manager/* on the SAME ORIGIN — the server
-// hosting this dashboard, not the node being inspected — and every one of those routes is behind
-// checkAdminAuth. They were sending no credential at all, so each answered 401 and the Harvested
-// Fleet Backups tab sat permanently empty. Same class of bug as the download buttons in #377.
-// The password travels in X-Admin-Password only, never a query parameter (see the note above
-// buildAdminHeaders): checkAdminAuth reads the header ahead of ?password= in its fallback chain,
-// and a credential in a URL ends up in access logs and browser history.
-export async function fetchHarvesterStatus(adminPassword?: string, tfaToken?: string): Promise<HarvesterStatusResponse> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    const res = await fetch('/api/manager/backups/status', { headers });
+// The harvester helpers below talk to /api/manager/* on the SAME ORIGIN: the server behind this dashboard, not the
+// node being inspected. No credential goes there, token or password (node sign-in step 7b-1). A profile's credential
+// belongs to its own node only, and no server route handles /api/manager today (the fleet manager's nightly backup
+// pull was retired), so a credential sent there could only reach a server that isn't its node.
+export const HARVESTER_UNAVAILABLE = 'No harvested backups here: the server behind this dashboard keeps none';
+
+/** True for the dashboard's own /api/manager routes, which never get a node's credential. */
+export function isManagerApi(path: string): boolean {
+    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname;
+    return p === '/api/manager' || p.startsWith('/api/manager/');
+}
+
+export async function fetchHarvesterStatus(): Promise<HarvesterStatusResponse> {
+    const res = await fetch('/api/manager/backups/status');
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(`${HARVESTER_UNAVAILABLE} (HTTP ${res.status})`);
     }
     return res.json();
 }
 
-// `managerPassword` authenticates US to the local manager API. `adminPassword` is the TARGET
-// node's own credential and stays in the body, where the server forwards it to that node — the
-// two are different secrets and must not be conflated. The server resolves the target's password
-// as `body.adminPassword || body.password || found.adminPassword`, so putting the manager's
-// password in `password` would override the configured per-node credential and make the harvest
-// authenticate to a remote node with the wrong secret.
-export async function triggerHarvesterSync(
-    nodeId: string,
-    url?: string,
-    adminPassword?: string,
-    managerPassword?: string,
-    tfaToken?: string,
-): Promise<any> {
-    const managerAuth = managerPassword ?? adminPassword;
-    const headers = buildAdminHeaders(managerAuth, tfaToken);
-    const res = await fetch('/api/manager/backups/trigger', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ nodeId, url, adminPassword, password: adminPassword }),
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${res.statusText} ${text ? `— ${text}` : ''}`);
-    }
-    return res.json();
+// A harvest only ever did something by forwarding the target node's credential to the server behind this page, which
+// no longer happens; so this says so and sends nothing.
+export async function triggerHarvesterSync(nodeId: string): Promise<never> {
+    throw new Error(`${HARVESTER_UNAVAILABLE}, so there is no harvest to start for ${nodeId}`);
 }
 
 export interface HistoryFileItem {
@@ -1714,11 +1732,10 @@ export interface HistoryFileItem {
     modifiedAt: string;
 }
 
-export async function fetchNodeHistory(nodeId: string, adminPassword?: string, tfaToken?: string): Promise<HistoryFileItem[]> {
-    const headers = buildAdminHeaders(adminPassword, tfaToken);
-    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`, { headers });
+export async function fetchNodeHistory(nodeId: string): Promise<HistoryFileItem[]> {
+    const res = await fetch(`/api/manager/backups/history?nodeId=${encodeURIComponent(nodeId)}`);
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw new Error(`${HARVESTER_UNAVAILABLE} (HTTP ${res.status})`);
     }
     const data = await res.json();
     return data.history || [];
@@ -1735,7 +1752,7 @@ export async function fetchNodeSnapshots(nodeUrl: string, adminPassword?: string
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -1747,7 +1764,7 @@ export async function createNodeSnapshot(nodeUrl: string, adminPassword?: string
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1761,7 +1778,7 @@ export async function deleteNodeSnapshot(nodeUrl: string, name: string, adminPas
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ name, password: adminPassword }),
+        body: JSON.stringify({ name, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1786,13 +1803,15 @@ export async function fetchNodeSnapshotSchedule(nodeUrl: string, adminPassword?:
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
+    // The node's real schedule or an error: never a made-up default shown as if it were the node's.
     if (!res.ok) {
-        return { enabled: true, intervalHours: 24, keep: 7 };
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     const data = await res.json();
-    return data.config || { enabled: true, intervalHours: 24, keep: 7 };
+    if (!data?.config) throw new Error("The node didn't say its backup schedule");
+    return data.config;
 }
 
 export async function updateNodeSnapshotSchedule(
@@ -1805,7 +1824,7 @@ export async function updateNodeSnapshotSchedule(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...config, password: adminPassword }),
+        body: JSON.stringify({ ...config, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1824,7 +1843,7 @@ export async function verifyNodeBackup(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ name: snapshotName, password: adminPassword }),
+        body: JSON.stringify({ name: snapshotName, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1843,7 +1862,7 @@ export async function updateNodeReplicationCadence(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ pullSeconds, reconcileMinutes, password: adminPassword }),
+        body: JSON.stringify({ pullSeconds, reconcileMinutes, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1855,7 +1874,7 @@ export async function forceNodeResync(nodeUrl: string, adminPassword?: string, t
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1894,7 +1913,7 @@ export async function getRegistrarPending(
     tfaToken?: string
 ): Promise<RegistrarAllocation[]> {
     const headers = buildAdminHeaders(adminPassword, tfaToken);
-    if (adminPassword) {
+    if (adminPassword && !isAutomationToken(adminPassword)) {
         headers['x-admin-secret'] = adminPassword;
     }
     const endpoint = nodeUrl
@@ -1930,7 +1949,7 @@ export async function approveRegistrarClaim(
     }
 
     const headers = buildAdminHeaders(pwd, tfaToken);
-    if (pwd) {
+    if (pwd && !isAutomationToken(pwd)) {
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
@@ -1940,7 +1959,7 @@ export async function approveRegistrarClaim(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ password: pwd }),
+        body: JSON.stringify({ ...passwordField(pwd) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1965,7 +1984,7 @@ export async function revokeRegistrarClaim(
     }
 
     const headers = buildAdminHeaders(pwd, tfaToken);
-    if (pwd) {
+    if (pwd && !isAutomationToken(pwd)) {
         headers['x-admin-secret'] = pwd;
     }
     const endpoint = nodeUrl
@@ -1975,7 +1994,7 @@ export async function revokeRegistrarClaim(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ password: pwd }),
+        body: JSON.stringify({ ...passwordField(pwd) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -2023,7 +2042,7 @@ export async function getReplicationTokenStatus(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -2040,7 +2059,7 @@ export async function generateReplicationToken(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -2059,7 +2078,7 @@ export async function setReplicationTokenMode(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ tokenOnly, password: adminPassword }),
+        body: JSON.stringify({ tokenOnly, ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -2077,7 +2096,7 @@ export async function clearReplicationToken(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -2111,7 +2130,7 @@ export async function getOwnerWordsChecks(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -2171,7 +2190,7 @@ async function takeoverPost(nodeUrl: string, apiPath: string, body: Record<strin
     const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...body, password: adminPassword }),
+        body: JSON.stringify({ ...body, ...passwordField(adminPassword) }),
     });
     const json = await res.json().catch(() => ({})) as Record<string, unknown>;
     if (!res.ok) {
@@ -2225,7 +2244,7 @@ export async function getReplicationAccess(
     const res = await fetch(endpoint, {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
     });
     if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -2312,7 +2331,7 @@ async function offboxPost<T>(nodeUrl: string, apiPath: string, body: object, adm
     const res = await fetch(resolveNodeApiUrl(nodeUrl, apiPath), {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ password: adminPassword, ...body }),
+        body: JSON.stringify({ ...passwordField(adminPassword), ...body }),
     });
     if (!res.ok) {
         const err = await res.json().catch(() => null) as { error?: string } | null;
@@ -2589,7 +2608,7 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
     const res = await fetch(resolveNodeApiUrl(nodeUrl, path), {
         method: 'POST',
         headers: buildAdminHeaders(adminPassword, tfaToken),
-        body: JSON.stringify({ ...body, password: adminPassword }),
+        body: JSON.stringify({ ...body, ...passwordField(adminPassword) }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}: ${res.statusText}`);

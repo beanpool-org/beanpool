@@ -39,6 +39,8 @@ import { AppLockSurface, installLockCovers } from '../components/AppLock';
 import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
 import { sweepPrintedPdfs } from '../utils/recovery-kit';
+import { sweepKeptBreakGlassCode } from '../utils/break-glass';
+import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { appVersionHeaderValue } from '../utils/force-update';
 import ForceUpdateBlock from '../components/ForceUpdateBlock';
 import { communitySwitched } from '../utils/community-switch';
@@ -207,6 +209,14 @@ function RootLayoutNav() {
 
     // Once at start: a recovery kit PDF left in expo-print's folder by an app killed mid-share (utils/recovery-kit.ts).
     useEffect(() => { void sweepPrintedPdfs(); }, []);
+
+    // At start (and for a new identity): the copy of a break-glass code an older app offered to keep on this phone, which
+    // nothing reads back and this app no longer makes (utils/break-glass.ts, #1531).
+    useEffect(() => {
+        const publicKey = identity?.publicKey;
+        if (!publicKey) return;
+        void getAnchorUrl().then((url) => sweepKeptBreakGlassCode(url, publicKey)).catch(() => {});
+    }, [identity?.publicKey]);
 
     // Check on startup
     useEffect(() => {

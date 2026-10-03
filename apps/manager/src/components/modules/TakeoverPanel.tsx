@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 /**
  * "Take over as the main server" — on a standby, with the printed recovery code (sealed-keys.md §5.3–§5.5, slice 5)
@@ -187,8 +189,8 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const adminHeaders = useCallback(
-        () => buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-        [activeNode.adminPassword, activeNode.id],
+        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        [nodeCredential(activeNode), activeNode.id],
     );
 
     const loadProgress = useCallback(async (): Promise<TakeoverProgressData | null> => {
@@ -197,7 +199,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             : adminHeaders();
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/progress'), {
-                method: 'POST', headers, body: JSON.stringify({ password: progressToken ? undefined : activeNode.adminPassword }),
+                method: 'POST', headers, body: JSON.stringify({ ...(progressToken ? {} : passwordField(nodeCredential(activeNode))) }),
             });
             if (!res.ok) {
                 // With a progress token, a refusal means the server that answers is not the one that started it.
@@ -212,7 +214,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             setUnreachable(true);
             return null;
         }
-    }, [activeNode.url, activeNode.adminPassword, progressToken, adminHeaders]);
+    }, [activeNode.url, nodeCredential(activeNode), progressToken, adminHeaders]);
 
     // While a take-over this screen started is under way, follow it (through the restart).
     useEffect(() => {
@@ -234,12 +236,12 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         if (busy) return;
         if (stage === 'preview') {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => {});
         }
         if (phone) {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
             }).catch(() => {});
         }
         setStage('closed');
@@ -256,7 +258,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/start'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, serverUrl: activeNode.url }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), serverUrl: activeNode.url }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.qr === 'string') {
@@ -280,7 +282,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         const tick = async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/wait'), {
-                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
@@ -307,7 +309,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         };
         t = setTimeout(tick, pollMs);
         return () => { cancelled = true; if (t) clearTimeout(t); };
-    }, [stage, phone, activeNode.url, activeNode.adminPassword, adminHeaders, pollMs]);
+    }, [stage, phone, activeNode.url, nodeCredential(activeNode), adminHeaders, pollMs]);
 
     const submitCode = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -315,7 +317,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/open'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, code }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), code }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.preview) {
@@ -339,7 +341,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/confirm'), {
                 method: 'POST', headers: adminHeaders(),
-                body: JSON.stringify({ password: activeNode.adminPassword, sessionId: preview.sessionId, confirm: true }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: preview.sessionId, confirm: true }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.progressToken === 'string') {

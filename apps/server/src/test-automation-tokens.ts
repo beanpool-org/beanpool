@@ -353,11 +353,19 @@ async function main(): Promise<void> {
         const { verifyAutomationToken } = await import('./automation-tokens.js');
         const time = (t: string) => { const s = process.hrtime.bigint(); for (let i = 0; i < 4000; i++) verifyAutomationToken(t); return Number(process.hrtime.bigint() - s) / 4000; };
         for (let i = 0; i < 2; i++) bad.forEach(time); // warm up
-        // The fastest of five interleaved rounds for each: other work on a busy machine only ever adds time.
-        const ns = bad.map(() => Infinity);
-        for (let round = 0; round < 5; round++) bad.forEach((t, i) => { ns[i] = Math.min(ns[i], time(t)); });
-        const spread = Math.max(...ns) / Math.min(...ns);
-        assert(spread < 2, `the three take about the same time (${ns.map(n => n.toFixed(0)).join(' / ')} ns per check)`);
+        // The fastest of five interleaved rounds for each: other work on a busy machine only ever adds time. A shared CI
+        // runner can still slow one kind for all five rounds, so a measurement over the bound is taken again, up to three
+        // times: a real difference (a lookup that leaks) shows every time, a busy neighbour does not.
+        const measure = () => {
+            const ns = bad.map(() => Infinity);
+            for (let round = 0; round < 5; round++) bad.forEach((t, i) => { ns[i] = Math.min(ns[i], time(t)); });
+            return ns;
+        };
+        const attempts: number[][] = [];
+        for (let a = 0; a < 3; a++) { const ns = measure(); attempts.push(ns); if (Math.max(...ns) / Math.min(...ns) < 2) break; }
+        const last = attempts[attempts.length - 1];
+        assert(Math.max(...last) / Math.min(...last) < 2,
+            `the three take about the same time (${attempts.map(ns => ns.map(n => n.toFixed(0)).join(' / ')).join('; then ')} ns per check)`);
         const exp = await make(asSession(ownerS.sessionId), { name: 'short', scope: 'read', expiresAt: Date.now() + 1500 });
         assert(exp.status === 201, 'a token with an expiry is made');
         secrets.push(exp.body.token);

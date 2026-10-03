@@ -79,6 +79,9 @@ import { PhoneReturnLink } from './components/layout/ReturnLinks';
 import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEntry, readSettingsEntry } from './components/layout/PhoneNav';
 import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
+import { nodeCredential } from './lib/profiles';
+import { passwordField } from './lib/node-client';
+import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
 
 /**
  * Does this error mean "wrong password" rather than "node unreachable"?
@@ -252,7 +255,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (!activeNode) return;
         setAuditState((prev) => ({ ...prev, running: true }));
         try {
-            const pwd = activeNode.adminPassword;
+            const pwd = nodeCredential(activeNode);
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/ledger-audit');
             const res = await fetch(url, {
                 method: 'POST',
@@ -284,14 +287,14 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const handleDownloadBackup = async () => {
         if (!activeNode) return;
         try {
-            const pwd = activeNode.adminPassword;
+            const pwd = nodeCredential(activeNode);
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup');
             const headers = buildAdminHeaders(pwd, getTfaSessionToken(activeNode.id));
             headers['Content-Type'] = 'application/json';
             const res = await fetch(url, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ password: pwd }),
+                body: JSON.stringify({ ...passwordField(pwd) }),
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
@@ -569,7 +572,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             gatewayInFlightRef.current[p.id] = true;
             (async () => {
                 try {
-                    const gData = await fetchGatewayConfig(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                    const gData = await fetchGatewayConfig(p.url, nodeCredential(p), getTfaSessionToken(p.id));
                     if (gData) {
                         setFleetGateways((prev) => ({ ...prev, [p.id]: gData }));
                         if (p.id === activeNodeIdRef.current && gData) {
@@ -593,7 +596,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             dataInFlightRef.current[p.id] = true;
             (async () => {
                 try {
-                    const nData = await fetchNodeData(p.url, p.adminPassword, getTfaSessionToken(p.id));
+                    const nData = await fetchNodeData(p.url, nodeCredential(p), getTfaSessionToken(p.id));
                     setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
                     applyHealthFromData(p.id, nData);
                     // The active node's sections read `nodeData`, and this is the same payload
@@ -734,7 +737,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             // hand still goes through, and re-blocks if it fails again.
             //
             // Also skip if we're already waiting for a TOTP code for this node.
-            if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(p.adminPassword) || totpPromptNode?.profileId === p.id)) {
+            if (!opts?.manual && (authBlockedRef.current[p.id] === credentialDigest(nodeCredential(p)) || totpPromptNode?.profileId === p.id)) {
                 return;
             }
             // Never two at once for the same node. A slow or stalled node used to collect a
@@ -754,7 +757,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 // the response body for totpRequired errors (which node-client's
                 // helper throws away).
                 const diagUrl = resolveNodeApiUrl(p.url, '/api/local/admin/diagnostics');
-                const diagHeaders = buildAdminHeaders(p.adminPassword, getTfaSessionToken(p.id));
+                const diagHeaders = buildAdminHeaders(nodeCredential(p), getTfaSessionToken(p.id));
                 const diagRes = await fetch(diagUrl, { headers: diagHeaders, cache: 'no-store' });
 
                 let totpRetry = false;
@@ -783,7 +786,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         }
                         if (totpRetry) {
                             // Retry diagnostics with the session token
-                            const retryHeaders = buildAdminHeaders(p.adminPassword, sessionToken);
+                            const retryHeaders = buildAdminHeaders(nodeCredential(p), sessionToken);
                             const retryRes = await fetch(diagUrl, { headers: retryHeaders, cache: 'no-store' });
                             if (!retryRes.ok) {
                                 throw new Error(`HTTP ${retryRes.status}: ${retryRes.statusText}`);
@@ -817,7 +820,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                 if (!errMsg.includes('429') && errMsg !== '2FA_PROMPT_BUSY') {
                     const authFailed = isAuthFailure(errMsg) || errMsg === '2FA_CANCELLED';
                     if (authFailed && errMsg !== '2FA_CANCELLED') {
-                        authBlockedRef.current[p.id] = credentialDigest(p.adminPassword);
+                        authBlockedRef.current[p.id] = credentialDigest(nodeCredential(p));
                     }
                     setFleetDiags((prev) => ({
                         ...prev,
@@ -844,7 +847,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setDiagLoading(true);
         setDiagError(null);
         try {
-            const data = await fetchDiagnostics(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const data = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setDiag(data);
             setFleetDiags((prev) => ({
                 ...prev,
@@ -869,7 +872,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setGatewayLoading(true);
         const requestedFor = activeNode.id;
         try {
-            const data = await fetchGatewayConfig(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const data = await fetchGatewayConfig(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             if (requestedFor === activeNodeIdRef.current) {
                 setGateway(data);
             }
@@ -903,7 +906,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setNodeDataLoading(true);
         const requestedFor = activeNode.id;
         try {
-            const data = await fetchNodeData(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const data = await fetchNodeData(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             // Only if this node is still the one on screen. A ~4 MB payload is long enough in
             // flight for the operator to have switched node, and the sidebar's own copies below
             // are keyed by id, so they are safe either way.
@@ -940,7 +943,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             // fetchNodeLogs already unwraps to the array (`data.logs || []`) and throws on a non-OK
             // response, so there is nothing left to unwrap or guard here. Indexing `.logs` again
             // yields undefined and silently empties the panel.
-            const logs = await fetchNodeLogs(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const logs = await fetchNodeLogs(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setNodeLogs(logs);
         } catch (e: unknown) {
             // Keep existing logs on error
@@ -1034,7 +1037,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         setGatewaySuccess(null);
         setGatewaySaving(true);
         try {
-            const updated = await updateGatewayConfig(activeNode.url, gateway, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const updated = await updateGatewayConfig(activeNode.url, gateway, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setGateway(updated);
             setFleetGateways((prev) => ({ ...prev, [activeNode.id]: updated }));
             setGatewaySuccess('✅ Gateway configuration updated successfully!');
@@ -1046,8 +1049,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         }
     };
 
-    const handleAddNode = (name: string, url: string, adminPassword?: string) => {
-        const created = addNodeProfile({ name, url, adminPassword });
+    const handleAddNode = (name: string, url: string, adminPassword?: string, automationToken?: string) => {
+        const created = addNodeProfile({ name, url, adminPassword, automationToken });
         const updated = loadNodeProfiles();
         setProfiles(updated);
         setActiveProfileId(created.id);
@@ -1057,7 +1060,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const handleSaveNodeEdit = (id: string, updates: Partial<NodeProfile>) => {
         // If password is being changed, also clear any stored 2FA session token
         // so the operator re-authenticates with TOTP for the new credential.
-        if (updates.adminPassword !== undefined) {
+        if (updates.adminPassword !== undefined || updates.automationToken !== undefined) {
             setTfaSessionToken(id, undefined);
         }
         const updatedProfiles = updateNodeProfile(id, updates);
@@ -1370,6 +1373,8 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                         </button>
                     </div>
                 )}
+                {/* A profile's automation token met an owner-only route (lib/token-guard.ts). */}
+                {isFleetMode && <OwnerPhoneBanner nodeUrl={activeNode?.url} />}
                 {/* Active Target Banner for Control Subsystems */}
                 {isFleetMode && activeTab !== 'overview' && activeTab !== 'analytics' && (
                     <div className="bg-nature-900/60 border-b border-nature-800 px-6 py-2.5 flex items-center justify-between text-xs">
@@ -1456,13 +1461,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                             onStartColdStartWizard={() => setShowColdStart(true)}
                                             onAcknowledgeShutdown={async () => {
                                                 if (activeNode) {
-                                                    await acknowledgeShutdownStatus(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
+                                                    await acknowledgeShutdownStatus(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)).catch(() => {});
                                                     await refreshFleetDiagnostics({ manual: true });
                                                 }
                                             }}
                                             onForgetStandby={async (id) => {
                                                 if (activeNode) {
-                                                    await forgetStandby(activeNode.url, id, activeNode.adminPassword, getTfaSessionToken(activeNode.id)).catch(() => {});
+                                                    await forgetStandby(activeNode.url, id, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)).catch(() => {});
                                                     await refreshFleetDiagnostics({ manual: true });
                                                 }
                                             }}
@@ -1480,44 +1485,44 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         onRefresh={() => loadNodeData()}
                                         onFreezeUser={async (pubkey, freeze) => {
                                             if (activeNode) {
-                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onPruneUser={async (pubkey) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onPruneBranch={async (pubkey) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}
                                         onUpdateTier={async (pubkey, tier) => {
                                             if (activeNode) {
-                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onToggleVoucher={async (pubkey, canVouch) => {
                                             if (activeNode) {
-                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onToggleOperator={async (pubkey, granted) => {
                                             if (activeNode) {
-                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onGrantNodeRole={async (pubkey, role) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}
                                         onRevokeNodeRole={async (pubkey, role) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}
@@ -1639,49 +1644,49 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         nodeData={nodeData}
                                         nodeDataLoading={nodeDataLoading}
                                         activeNodeUrl={activeNode?.url}
-                                        adminPassword={activeNode?.adminPassword}
+                                        adminPassword={nodeCredential(activeNode)}
                                         tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                                         onRefresh={() => loadNodeData()}
                                         onFreezeUser={async (pubkey, freeze) => {
                                             if (activeNode) {
-                                                await freezeNodeUser(activeNode.url, pubkey, freeze, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await freezeNodeUser(activeNode.url, pubkey, freeze, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onPruneUser={async (pubkey) => {
                                             if (activeNode) {
-                                                await pruneNodeUser(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await pruneNodeUser(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onPruneBranch={async (pubkey) => {
                                             if (activeNode) {
-                                                await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}
                                         onUpdateTier={async (pubkey, tier) => {
                                             if (activeNode) {
-                                                await updateNodeUserTier(activeNode.url, pubkey, tier, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserTier(activeNode.url, pubkey, tier, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onToggleVoucher={async (pubkey, canVouch) => {
                                             if (activeNode) {
-                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserVoucher(activeNode.url, pubkey, canVouch, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onToggleOperator={async (pubkey, granted) => {
                                             if (activeNode) {
-                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await updateNodeUserOperator(activeNode.url, pubkey, granted, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                             }
                                         }}
                                         onGrantNodeRole={async (pubkey, role) => {
                                             if (activeNode) {
-                                                await grantNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await grantNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}
                                         onRevokeNodeRole={async (pubkey, role) => {
                                             if (activeNode) {
-                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                                                await revokeNodeRoleApi(activeNode.url, pubkey, role, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                                                 await loadNodeData();
                                             }
                                         }}

@@ -303,6 +303,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .catch(() => {});
         return () => { cancelled = true; };
     }, [newPostType, keeperOf, keeperNames]);
+    // ⚡ Bolt: O(1) Map lookup for user groups by ID instead of O(G) .find() scans on render
+    const userGroupsById = useMemo(() => new Map(userGroups.map(g => [g.id, g])), [userGroups]);
     const convenorGroups = userGroups.filter(g => g.viewerRole === 'convenor');
     // An enterprise is hosting this event, so its audience is the whole community and nothing else (#1054).
     const enterpriseHostsEvent = newPostType === 'event' && !eventEdit && eventHost.startsWith('ent:');
@@ -1884,7 +1886,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 {eventEdit && (
                     <p data-testid="event-edit-fixed" className="m-0 mb-4 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
                         {audienceScope === 'group'
-                            ? `For ${userGroups.find(g => g.id === targetGroupId)?.name || 'the group'} only. `
+                            ? `For ${userGroupsById.get(targetGroupId)?.name || 'the group'} only. `
                             : 'For this community. '}
                         Who can see it and who hosts it stay as they are.
                     </p>
@@ -1988,10 +1990,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 rounded-xl text-xs text-emerald-950 dark:text-emerald-200">
                             <p className="font-black text-sm flex items-center gap-1.5 mb-1 text-emerald-800 dark:text-emerald-300">
                                 <span>🔒</span>
-                                <span>Only {userGroups.find(g => g.id === targetGroupId)?.name || 'Group'} can see this</span>
+                                <span>Only {userGroupsById.get(targetGroupId)?.name || 'Group'} can see this</span>
                             </p>
                             <p className="m-0 leading-relaxed text-[11px]">
-                                This post will be visible <strong>only to active members of {userGroups.find(g => g.id === targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
+                                This post will be visible <strong>only to active members of {userGroupsById.get(targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
                             </p>
                         </div>
                     )}

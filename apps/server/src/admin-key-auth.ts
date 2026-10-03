@@ -42,6 +42,7 @@ import {
     grantNodeRole,
     NODE_ROLE_ACTS,
     type MemberNodeRole,
+    type BreakGlassMadeBy,
 } from './engine/node-roles.js';
 import { getLocalConfig, isBreakGlassMode } from './config/local-config.js';
 import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
@@ -717,16 +718,29 @@ export async function verifyBreakGlassCode(code: string, ownerPubkey?: string): 
 /**
  * A new break-glass code for a key that holds the owner role now, shown once by the caller. The stored hash is replaced,
  * so any earlier code of that owner's stops working. Grants nothing: a key without the owner role gets an error, and
- * nothing is stored. `by` names who asked, for the log line, which never carries the code.
+ * nothing is stored. `by` names who asked, for the log line, which never carries the code; `madeBy` is the kind of
+ * session, kept beside the hash for Settings (engine/node-roles.ts BreakGlassMadeBy).
  */
-export function issueBreakGlassCode(ownerPubkey: string, by: string): string {
+export function issueBreakGlassCode(ownerPubkey: string, by: string, madeBy: BreakGlassMadeBy): string {
     if (nodeRoleOf(ownerPubkey) !== 'owner') {
         throw Object.assign(new Error('Only a key that holds the owner role has a break-glass code'), { status: 409 });
     }
     const code = generateBreakGlassCode();
-    setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code));
+    setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code), madeBy);
     logger.security('AUTH', `A new break-glass code was made for owner ${ownerPubkey.slice(0, 12)}… by ${by}; any earlier code of theirs no longer works`);
     return code;
+}
+
+/**
+ * "Sign out everywhere" by an owner, for their own sessions (#1531): their break-glass code stops working too, so a code
+ * a stolen session made does not outlive the session. The owner makes a new one from Settings when they need it.
+ * Returns whether there was a code to retire.
+ */
+export function retireBreakGlassCode(ownerPubkey: string): boolean {
+    if (!getNodeRoleBreakGlassHash(ownerPubkey)) return false;
+    setNodeRoleBreakGlassHash(ownerPubkey, null);
+    logger.security('AUTH', `Owner ${ownerPubkey.slice(0, 12)}… signed out everywhere: their break-glass code no longer works`);
+    return true;
 }
 
 /**
@@ -740,6 +754,8 @@ export function enrolAdminOwnerKey(params: {
     actorPubkey?: string;
     isBreakGlass?: boolean;
     role?: MemberNodeRole;
+    /** The kind of session enrolling, kept beside a new owner's code for Settings. */
+    madeBy?: BreakGlassMadeBy;
 }): {
     success: boolean;
     memberPubkey: string;
@@ -747,7 +763,7 @@ export function enrolAdminOwnerKey(params: {
     breakGlassCode?: string;
     alertEmitted?: boolean;
 } {
-    const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner' } = params;
+    const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner', madeBy = null } = params;
 
     // A visitor's row is answered as a key with no row is (grantNodeRole gives it no role either).
     const member = getMember(db, targetPubkey);
@@ -761,12 +777,16 @@ export function enrolAdminOwnerKey(params: {
         grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'));
     }
 
-    // Generate per-owner break-glass code only for owners
+    // Generate per-owner break-glass code only for a new owner. An owner who already holds the role keeps theirs, or
+    // keeps having none (#1531): re-enrolling them must not let any owner session re-make another owner's code, which
+    // "Make a break-glass code" refuses a key session (routes/admin.ts). Their own code is theirs to make, in Settings.
     let breakGlassCode: string | undefined;
     if (role === 'owner') {
-        breakGlassCode = generateBreakGlassCode();
-        const hash = hashBreakGlassCode(breakGlassCode);
-        setNodeRoleBreakGlassHash(targetPubkey, hash);
+        if (currentRole !== 'owner') {
+            breakGlassCode = generateBreakGlassCode();
+            const hash = hashBreakGlassCode(breakGlassCode);
+            setNodeRoleBreakGlassHash(targetPubkey, hash, madeBy);
+        }
     } else {
         setNodeRoleBreakGlassHash(targetPubkey, null);
     }

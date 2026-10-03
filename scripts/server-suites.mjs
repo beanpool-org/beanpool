@@ -410,6 +410,7 @@ export const SUITES = [
     'test-slice6-review-findings',
     'test-security-followups-0919',
     'test-security-followups-1001',
+    'test-member-error-text',
     'test-storm-smalls',
 ];
 

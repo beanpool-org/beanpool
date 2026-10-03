@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -129,7 +131,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/logs');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -142,7 +144,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         } catch {
             // Ignore fetch errors during log polling
         }
-    }, [activeNode.url, activeNode.adminPassword, activeNode.id]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
 
     // Start background log monitor
     const startLogMonitor = useCallback(() => {
@@ -176,7 +178,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/status');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             const data: PublicAddressStatus = await res.json().catch(() => ({ status: 'error', error: 'Invalid JSON response' }));
             if (res.ok) {
@@ -199,7 +201,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             setLoading(false);
             fetchLogs();
         }
-    }, [activeNode.url, activeNode.adminPassword, activeNode.id, fetchLogs]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs]);
 
     useEffect(() => {
         loadStatus();
@@ -270,11 +272,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                     name: trimmedName,
                     mode: claimMode,
                     communityName: communityName.trim() || undefined,
@@ -361,10 +363,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
@@ -388,10 +390,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
@@ -416,10 +418,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {

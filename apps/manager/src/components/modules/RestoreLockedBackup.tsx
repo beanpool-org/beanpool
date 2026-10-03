@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { restoreShortfall, shortfallSuffix } from '../../lib/backup-shortfall';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 /**
  * Restore → a locked backup (`.bpsealed`, sealed-keys.md §6.2). The server has read the file's public header and said
@@ -56,7 +58,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const shortfall = (body: unknown): string => shortfallSuffix(restoreShortfall(body));
 
     const upload = async (extra: Record<string, string>) => {
-        const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+        const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
         delete headers['Content-Type'];
         const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore'), {
             method: 'POST', headers: { ...headers, ...extra }, body: file,
@@ -132,8 +134,8 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
     const cancel = () => {
         if (phone) {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
-                method: 'POST', headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                method: 'POST', headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
             }).catch(() => {});
         }
         onCancel();

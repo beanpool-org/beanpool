@@ -11,6 +11,7 @@ import {
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 export interface ReplicationAccessPanelProps {
     activeNode: NodeProfile;
@@ -66,7 +67,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             const data = await getReplicationAccess(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setAccessData(data);
@@ -75,7 +76,7 @@ export function ReplicationAccessPanel({
         } finally {
             setLoading(false);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword, initialData]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode), initialData]);
 
     useEffect(() => {
         if (initialData) {
@@ -92,7 +93,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             const res = await generateReplicationToken(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             if (res.token) {
@@ -126,7 +127,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             await clearReplicationToken(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setShowClearConfirm(false);
@@ -169,7 +170,7 @@ export function ReplicationAccessPanel({
             await setReplicationTokenMode(
                 activeNode.url,
                 nextTokenOnly,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setAccessData((prev) => ({

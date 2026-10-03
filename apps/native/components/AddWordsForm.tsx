@@ -143,10 +143,12 @@ export function AddWordsForm({
                 onPress={submit}
                 disabled={!check.ready || busy}
                 accessibilityRole="button"
+                accessibilityLabel={busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit}
+                accessibilityHint="Saves recovery words to this device"
                 accessibilityState={{ disabled: !check.ready || busy, busy }}
             >
                 {busy
-                    ? <ActivityIndicator color={colors.text.inverse} accessibilityLabel={ADD_WORDS_COPY.checking} />
+                    ? <ActivityIndicator color={colors.text.inverse} />
                     : <Text style={[styles.submitText, { color: colors.text.inverse }]}>{ADD_WORDS_COPY.submit}</Text>}
             </Pressable>
             <Pressable style={styles.cancel} onPress={onCancel} accessibilityRole="button" disabled={busy}>

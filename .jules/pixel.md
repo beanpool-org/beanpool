@@ -158,3 +158,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-11-02 - Add dynamic accessibilityLabel and hint to InvitePeopleSheet submit button
 **Learning:** In invite sheets, action buttons whose text is replaced by an `ActivityIndicator` while sending leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided.
 **Action:** Provide dynamic `accessibilityLabel` and `accessibilityHint` on invite submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-08 - Add dynamic accessibilityLabel and hint to AddWordsForm submit button
+**Learning:** Recovery phrase submit buttons whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without explicit accessible labels unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided on the parent `Pressable`.
+**Action:** Always supply dynamic `accessibilityLabel` (`busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit`) and `accessibilityHint` on recovery phrase submit buttons rendering `ActivityIndicator` when busy.

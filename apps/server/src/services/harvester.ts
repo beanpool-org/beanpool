@@ -46,6 +46,9 @@ export interface FleetNodeConfig {
     id: string;
     name: string;
     url: string;
+    /** An owner's automation token with the backups scope (bp_<id>_<secret>, made in the node's Settings). Sent as
+     *  `Authorization: Bearer`, and then nothing else is: the admin password below is the legacy credential. */
+    automationToken?: string;
     adminPassword?: string;
     replicationToken?: string;
     /** The node's PeerId (its libp2p key), set by the operator. The seal-old pass trusts only a header it signed. */
@@ -192,15 +195,11 @@ function normalizeUrl(url: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
-/** Fetch remote counts from /api/community/info or /api/local/admin/diagnostics */
+/** Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. */
 async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: number; posts: number } | null> {
     try {
         const baseUrl = normalizeUrl(node.url);
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-        if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
-
-        const res = await fetch(`${baseUrl}/api/community/info`, { headers, signal: AbortSignal.timeout(10000) });
+        const res = await fetch(`${baseUrl}/api/community/info`, { signal: AbortSignal.timeout(10000) });
         if (res.ok) {
             const data = await res.json() as any;
             return {
@@ -573,14 +572,22 @@ export function listPlainHistory(target: string | FleetNodeConfig): { file: stri
  * backup it can by default and labels it, so the retry has nothing left to ask for.
  */
 export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResult> {
-    if (!node.adminPassword && !node.replicationToken) {
-        throw new Error('No admin credentials (adminPassword / replicationToken) configured');
+    if (!node.automationToken && !node.adminPassword && !node.replicationToken) {
+        throw new Error('No admin credentials (automationToken / adminPassword / replicationToken) configured');
+    }
+    if (node.automationToken && !node.automationToken.startsWith('bp_')) {
+        throw new Error('automationToken is not an automation token (bp_<id>_<secret>): make one with the backups scope in the node\'s Settings');
     }
 
     const baseUrl = normalizeUrl(node.url);
     const headers: Record<string, string> = {};
-    if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-    if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
+    if (node.automationToken) {
+        // An owner's token with the backups scope: the node decides on it alone, so the password is never sent beside it.
+        headers['Authorization'] = `Bearer ${node.automationToken}`;
+    } else {
+        if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
+        if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
+    }
 
     const url = `${baseUrl}/api/local/admin/backup`;
     const res = await fetch(url, {

@@ -47,12 +47,15 @@ Know its limits:
 
 ## Break-glass codes
 
-A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock, shows a new code once, and offers to keep a copy in the phone's secure store as well.
+A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock and shows a new code once. The app keeps no copy, since the code is for when that phone is lost: write it down.
 
 - The server's log records that a code was made and for whom, never the code itself.
 - Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.
 - The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
 - If two-factor sign-in is on, it still asks for the code. If it is off, the code alone is enough: the admin password alone does not add a key.
+- When an owner signs out all of their own sessions at once (from their key, or from the app), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out, or signing out with the password, leaves codes alone.
+- Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.
+- In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one.
 
 Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.
 
@@ -75,6 +78,26 @@ No token, whatever its scope, makes an owner-only change. It cannot change who i
 - What a script does with a token counts as done by the owner who made it, and the server's log records each use with the token's id, never the token itself. The list shows when and where each token was last used.
 - Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.
 - Tokens stay on this server: they are not in backups, standby copies or a take-over.
+
+### Scripts and the harvester
+
+The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still take the admin password (ADMIN_PASSWORD, or --admin-pw for setup-backup) if you have no token. What each needs:
+
+- **scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.
+- **scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script with --token. Without --token the script stops and says so before it changes anything.
+- **scripts/federation/fed.mjs**: an **Admin** token for each server, in BEANPOOL_TOKEN_ followed by the server's name in capitals (for example BEANPOOL_TOKEN_GIPPSLAND).
+- **The harvester** (the fleet's backup puller): a **Backups** token, as "automationToken" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those.
+
+### The fleet manager
+
+The fleet manager signs in to a node with an automation token instead of the admin password. Make the token on your phone as above (an **Admin** token for everyday work, or **Read** or **Backups** for less), then in the fleet manager edit the node (⚙️) and paste it under **Automation token**. **Where do I get one?** under the field says the same.
+
+- The fleet manager holds the token in that page only, as it does the password: a reload asks for it again, and it is never saved on the computer or in the browser.
+- With a token, the fleet manager sends the token and nothing else: never the password, and no two-factor code. The password field stays for a node that runs a BeanPool older than tokens; it says it is not sent while a token is set.
+- What a token cannot do, the fleet manager does not try. For an owner-only change (owners and admins, the public address, a take-over, the recovery code, where backups go, two-factor sign-in) it sends nothing and says "This needs an owner's phone: sign in with your phone (scan the code)", with **Sign in with your phone**. That opens the node's own Settings, where you scan the code with the app as an owner and make the change there.
+- If a node refuses the token all the same (a Read token asked to change something, or a change that is owner-only only sometimes, such as making someone an owner or changing the backup schedule), the fleet manager says the same words. Reading who can take over, the owners' words checks, the backup schedule and the copy timing works with an Admin token.
+- If a node no longer takes the token (it was revoked, has expired, or was copied wrong), the fleet manager shows what the node said and "Make a new token from your phone (Settings → Automation tokens)", with **Fix token** to paste the new one. It never asks for the password instead.
+- A token, or a password, goes only to its own node: never to the server the fleet manager's page comes from.
 
 ## Factory reset
 

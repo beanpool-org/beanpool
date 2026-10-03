@@ -8,6 +8,7 @@ import {
     type StrandedEscrowItem,
     type StrandedEscrowsResponse,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 // The server's bounds (engine/escrow-write-off.ts); it checks them again.
 const REASON_MIN = 10;
@@ -54,12 +55,12 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
 
     const load = useCallback(async () => {
         try {
-            setData(await fetchStrandedEscrows(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)));
+            setData(await fetchStrandedEscrows(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             setLoadError(null);
         } catch (e: unknown) {
             setLoadError(e instanceof Error ? e.message : 'Could not load the stranded escrows');
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => {
         if (refreshKey) load();
@@ -79,7 +80,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
         try {
             const res = await writeOffStrandedEscrow(
                 activeNode.url, escrow.escrowId, reason.trim(), confirmDeficit,
-                activeNode.adminPassword, getTfaSessionToken(activeNode.id),
+                nodeCredential(activeNode), getTfaSessionToken(activeNode.id),
             );
             setDone(`Wrote off ${beans(res.amount)} from the Commons for trade ${res.tradeId.slice(0, 8)}. The Commons now reads ${beans(res.commonsAfter)}.`);
             open(null);

@@ -1,6 +1,14 @@
 import React from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse, NodeDataPayload } from '../../lib/node-client';
+import { isAutomationToken } from '../../lib/node-client';
+import { TOKEN_REPLACE_ADVICE } from '../../lib/token-guard';
+
+/** A token profile's 401 (revoked, expired or wrong): the node's own words. A password is never the fix, nor sent. */
+function tokenRefusal(profile: NodeProfile, error: string | null | undefined): string | null {
+    if (!error || !/\b401\b/.test(error) || !isAutomationToken(profile.automationToken)) return null;
+    return error.replace(/^HTTP 401:\s*/, '').trim() || 'The node refused this automation token';
+}
 
 export interface NodeDiagnosticState {
     diag: DiagnosticsResponse | null;
@@ -391,6 +399,7 @@ export function TelemetryModule({
                             const isSelected = profile.id === activeProfileId;
                             const state = fleetDiags[profile.id] || { diag: null, loading: false, error: null };
                             const { diag, loading, error } = state;
+                            const refusedToken = tokenRefusal(profile, error);
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
                                 : (Array.isArray(fleetNodeData?.[profile.id]?.members)
@@ -453,7 +462,20 @@ export function TelemetryModule({
                                     </div>
 
                                     {/* Compact Metrics Row */}
-                                    {error ? (
+                                    {refusedToken ? (
+                                        <div className="px-2.5 py-1.5 rounded-xl text-[11px] flex flex-wrap items-center justify-between gap-1.5 bg-amber-950/40 border border-amber-800/80 text-amber-300">
+                                            <span className="min-w-0 break-words">🔒 {refusedToken}. {TOKEN_REPLACE_ADVICE}</span>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEditNode(profile);
+                                                }}
+                                                className="text-[10px] underline font-sans text-amber-200 min-h-[44px] shrink-0"
+                                            >
+                                                Fix token
+                                            </button>
+                                        </div>
+                                    ) : error ? (
                                         <div className={`px-2.5 py-1.5 rounded-xl text-[11px] font-mono truncate flex items-center justify-between ${
                                             error.includes('401')
                                                 ? 'bg-amber-950/40 border border-amber-800/80 text-amber-300'
@@ -521,6 +543,7 @@ export function TelemetryModule({
                             const isSelected = profile.id === activeProfileId;
                             const state = fleetDiags[profile.id] || { diag: null, loading: false, error: null };
                             const { diag, loading, error } = state;
+                            const refusedToken = tokenRefusal(profile, error);
                             const nodeUserCount = typeof diag?.userCount === 'number'
                                 ? diag.userCount
                                 : (Array.isArray(fleetNodeData?.[profile.id]?.members)
@@ -601,7 +624,17 @@ export function TelemetryModule({
                                     </div>
 
                                     {/* Node Telemetry Grid */}
-                                     {error ? (
+                                     {refusedToken ? (
+                                         <div className="p-4 rounded-xl text-xs flex flex-wrap items-center justify-between gap-3 bg-amber-950/40 border border-amber-800 text-amber-300">
+                                             <span className="min-w-0 break-words">🔒 Token refused: {refusedToken}. {TOKEN_REPLACE_ADVICE}</span>
+                                             <button
+                                                 onClick={() => onEditNode(profile)}
+                                                 className="px-2.5 py-1 min-h-[44px] rounded text-[11px] font-sans font-bold border transition-all bg-amber-900/40 hover:bg-amber-900/60 text-amber-200 border-amber-800 shrink-0"
+                                             >
+                                                 🔑 Fix token
+                                             </button>
+                                         </div>
+                                     ) : error ? (
                                          <div className={`p-4 rounded-xl text-xs flex items-center justify-between gap-3 font-mono ${
                                              error.includes('401')
                                                  ? 'bg-amber-950/40 border border-amber-800 text-amber-300'

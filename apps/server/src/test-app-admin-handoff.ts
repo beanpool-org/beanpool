@@ -24,7 +24,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
-import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS } from './admin-key-auth.js';
+import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 
@@ -325,6 +325,57 @@ async function main() {
         // The option can only shorten it.
         const longer = consumeHandshakeToken((await requestLink(admin)).body.handshakeToken, Date.now(), { idleTtlMs: 48 * 60 * MIN });
         assert(longer.ok === true && longer.idleExpiresAt! - Date.now() <= SESSION_IDLE_TTL_MS, 'an idle limit longer than 2 hours is never granted');
+    }
+
+    // ── 5. Owner-only changes from the phone need a recent unlock (decision D2's step-up, 2026-10-03) ──
+    // With no 2FA code on a key sign-in, a phone taken while Settings is open must not be enough to change who owns the
+    // community or how it is kept safe: those need the phone's lock again, given within the last few minutes.
+    console.log('\n5. Owner-only changes from a phone hand-off need a recent unlock');
+    {
+        assert(PHONE_STEP_UP_WINDOW_MS === 5 * 60_000, 'the step-up window is 5 minutes');
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const target = keypair();
+        seedMember(target.pub, 'hoStepUp');
+        const phone = await exchange((await requestLink(owner)).body.handshakeToken);
+        assert(phone.status === 200 && !!phone.sessionId, 'Manage opens Settings on the phone');
+        const grantFresh = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, as(phone));
+        assert(grantFresh.status === 200, `just after the phone's unlock, an owner grant works (got ${grantFresh.status} ${JSON.stringify(grantFresh.body)})`);
+        revokeNodeRole(target.pub, 'owner', owner.pub);
+
+        backdateAdminSessionForTests(phone.sessionId!, 6 * 60_000);
+        const grantStale = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, as(phone));
+        assert(grantStale.status === 403 && grantStale.body.code === 'step_up_required' && /Manage/.test(grantStale.body.error ?? ''),
+            `six minutes on, an owner grant asks for the phone's unlock again (got ${grantStale.status} ${JSON.stringify(grantStale.body)})`);
+        assert(!db.prepare("SELECT 1 FROM node_roles WHERE member_pubkey = ? AND role = 'owner'").get(target.pub), '…and grants nothing');
+        const enrolStale = await postJson('/api/local/admin/auth/enrol', { memberPubkey: target.pub, role: 'owner' }, as(phone));
+        assert(enrolStale.status === 403 && enrolStale.body.code === 'step_up_required', `so does enrolling an owner key (got ${enrolStale.status})`);
+        const otherOwner = keypair();
+        seedMember(otherOwner.pub, 'hoOtherOwner');
+        grantNodeRole(otherOwner.pub, 'owner', owner.pub);
+        const revokeStale = await fetch(`${BASE}/api/local/admin/node-roles/${otherOwner.pub}/owner`, { method: 'DELETE', headers: as(phone) });
+        assert(revokeStale.status === 403 && ((await revokeStale.json()) as any).code === 'step_up_required', `so does taking another owner's role (got ${revokeStale.status})`);
+        revokeNodeRole(otherOwner.pub, 'owner', owner.pub);
+        const tfaStale = await postJson('/api/local/admin/2fa/setup', {}, as(phone));
+        assert(tfaStale.status === 403 && tfaStale.body.code === 'step_up_required', `so does any other owner-only change, e.g. 2FA setup (got ${tfaStale.status})`);
+        // Everything else goes on as before: an owner's everyday work, and reading Settings.
+        const modStale = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'moderator' }, as(phone));
+        assert(modStale.status === 200, `a moderator grant (not owner-only) still works (got ${modStale.status})`);
+        revokeNodeRole(target.pub, 'moderator', owner.pub);
+        assert((await sessionInfo(phone.sessionId!)).authenticated === true, 'the session is not ended: only owner-only changes wait');
+
+        // Manage again: the phone asks its lock, and the new session may.
+        const again = await exchange((await requestLink(owner)).body.handshakeToken);
+        const grantAgain = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, as(again));
+        assert(grantAgain.status === 200, `after Manage again, the owner grant works (got ${grantAgain.status})`);
+        revokeNodeRole(target.pub, 'owner', owner.pub);
+
+        // A computer's session (the QR pairing; any sign-in that is not the phone's own hand-off) is not a phone left open.
+        const computer = consumeHandshakeToken((await requestLink(owner)).body.handshakeToken);
+        assert(computer.ok === true, 'a computer session opens');
+        backdateAdminSessionForTests(computer.sessionId!, 6 * 60_000);
+        const grantComputer = await postJson('/api/local/admin/node-roles', { pubkey: target.pub, role: 'owner' }, { Cookie: `admin_session=${computer.sessionId}`, 'X-CSRF-Token': computer.csrfToken! });
+        assert(grantComputer.status === 200, `a computer's session six minutes on is not asked (got ${grantComputer.status} ${JSON.stringify(grantComputer.body)})`);
+        revokeNodeRole(target.pub, 'owner', owner.pub);
     }
 
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);

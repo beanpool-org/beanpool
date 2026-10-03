@@ -52,7 +52,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -480,6 +480,7 @@ const handleEnrol = async (ctx: any) => {
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
         return;
     }
+    if (requestedRole === 'owner' && !requirePhoneStepUp(ctx)) return;
 
     try {
         const res = enrolAdminOwnerKey({
@@ -1974,6 +1975,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // Making an owner from the phone asks for its unlock again (admin-auth.ts requirePhoneStepUp).
+    if (role === 'owner' && !requirePhoneStepUp(ctx)) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -2001,6 +2004,8 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // Taking an owner's role from the phone asks for its unlock again (admin-auth.ts requirePhoneStepUp).
+    if (role === 'owner' && !requirePhoneStepUp(ctx)) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).

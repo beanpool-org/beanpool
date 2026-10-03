@@ -67,6 +67,19 @@ export const SESSION_HARD_TTL_MS = 12 * 60 * 60 * 1000;  // 12 hours hard maximu
  * The desktop "Sign in with your phone" pairing keeps SESSION_IDLE_TTL_MS: that browser is on a computer.
  */
 export const PHONE_HANDOFF_IDLE_TTL_MS = 15 * 60 * 1000;
+/**
+ * How long after the phone's unlock a session opened by the phone's Manage hand-off may make owner-only changes (the
+ * step-up of decision D2, 2026-10-03). A key sign-in asks for no 2FA code: the phone's lock, asked before every Manage,
+ * is the factor. A phone picked up while Settings is open in its browser has that unlock behind it, so changes that
+ * decide who owns the community or how it is kept safe (owner-only routes, an owner grant or revoke, an owner key's
+ * enrolment) ask for it again once the session is older than this: Manage again, which asks the phone's lock. Reading
+ * Settings and an admin's everyday work are not asked. A computer's session (the QR pairing) is not a phone left open.
+ */
+export const PHONE_STEP_UP_WINDOW_MS = 5 * 60 * 1000;
+export const STEP_UP_REQUIRED_CODE = 'step_up_required';
+export const STEP_UP_REQUIRED_ERROR =
+    "Confirm it's you first: this change decides who owns the community or how it is kept safe. Press Manage in the " +
+    "BeanPool app again (it asks for your phone's lock), then make the change there.";
 
 // ===================== TYPES =====================
 export interface AdminChallenge {
@@ -358,6 +371,17 @@ export function mintHandshakeToken(memberPubkey: string, role: MemberNodeRole, n
     };
     handshakeTokens.set(handshakeToken, entry);
     return { handshakeToken, expiresAt };
+}
+
+/** Whether this session is a phone hand-off whose unlock is older than PHONE_STEP_UP_WINDOW_MS (owner-only changes wait). */
+export function phoneStepUpDue(session: AdminSession, now = Date.now()): boolean {
+    return session.kind === 'key' && session.idleTtlMs <= PHONE_HANDOFF_IDLE_TTL_MS && now - session.createdAt > PHONE_STEP_UP_WINDOW_MS;
+}
+
+/** Tests only: make a session look `ms` older, as if opened that long ago (the step-up window). */
+export function backdateAdminSessionForTests(sessionId: string, ms: number): void {
+    const s = adminSessions.get(sessionId);
+    if (s) s.createdAt -= ms;
 }
 
 // ===================== HANDSHAKE TOKEN EXCHANGE =====================

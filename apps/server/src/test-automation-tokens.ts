@@ -351,7 +351,9 @@ async function main(): Promise<void> {
         const { verifyAutomationToken } = await import('./automation-tokens.js');
         const time = (t: string) => { const s = process.hrtime.bigint(); for (let i = 0; i < 4000; i++) verifyAutomationToken(t); return Number(process.hrtime.bigint() - s) / 4000; };
         for (let i = 0; i < 2; i++) bad.forEach(time); // warm up
-        const ns = bad.map(time);
+        // The fastest of five interleaved rounds for each: other work on a busy machine only ever adds time.
+        const ns = bad.map(() => Infinity);
+        for (let round = 0; round < 5; round++) bad.forEach((t, i) => { ns[i] = Math.min(ns[i], time(t)); });
         const spread = Math.max(...ns) / Math.min(...ns);
         assert(spread < 2, `the three take about the same time (${ns.map(n => n.toFixed(0)).join(' / ')} ns per check)`);
         const exp = await make(asSession(ownerS.sessionId), { name: 'short', scope: 'read', expiresAt: Date.now() + 1500 });

@@ -129,6 +129,8 @@ export function ApplianceSection({
     const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig | null>(null);
     // False until the node has said its schedule: the form is hidden until then, so made-up values are never shown or saved.
     const [scheduleKnown, setScheduleKnown] = useState(false);
+    // True once a read of the schedule has failed; until then an unknown schedule is still being read.
+    const [scheduleReadFailed, setScheduleReadFailed] = useState(false);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [scheduleStatusMsg, setScheduleStatusMsg] = useState<string | null>(null);
 
@@ -266,9 +268,11 @@ export function ApplianceSection({
             );
             setScheduleConfig(cfg);
             setScheduleKnown(true);
+            setScheduleReadFailed(false);
         } catch (e: unknown) {
             setScheduleKnown(false);
             setScheduleConfig(null);
+            setScheduleReadFailed(true);
             setScheduleStatusMsg(`Couldn't read this node's backup schedule, so it is shown as unknown: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
@@ -296,6 +300,7 @@ export function ApplianceSection({
     useEffect(() => {
         setScheduleKnown(false);
         setScheduleConfig(null);
+        setScheduleReadFailed(false);
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
@@ -1151,7 +1156,9 @@ export function ApplianceSection({
 
                         {!scheduleKnown || !scheduleConfig ? (
                             <p className="text-xs text-nature-400 m-0">
-                                The node's schedule could not be read, so it can't be changed from here right now.
+                                {scheduleReadFailed
+                                    ? "The node's schedule could not be read, so it can't be changed from here right now."
+                                    : "Reading the node's schedule…"}
                             </p>
                         ) : (
                             <form onSubmit={handleSaveSchedule} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">

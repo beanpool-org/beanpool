@@ -200,6 +200,36 @@ describe('ApplianceSection Component', () => {
         view.unmount();
     });
 
+    it('while the schedule is still being read it says so, never "could not be read"', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockReturnValue(new Promise(() => {}));
+        let view!: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+        expect(await screen.findByText("Reading the node's schedule…")).toBeInTheDocument();
+        expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        view.unmount();
+    });
+
     it('backup schedule holds at 320px with 130% text in unknown and known states', async () => {
         vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403'));
         let view!: ReturnType<typeof render>;

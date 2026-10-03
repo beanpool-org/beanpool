@@ -113,6 +113,7 @@ export const SUITES = [
     'test-totp-admin-2fa',
     'test-2fa-covers-admin-routes',
     'test-2fa-reenrol-needs-code',
+    'test-beanpool-recover',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',
@@ -242,6 +243,7 @@ export const SUITES = [
     'test-heavy-read-cap',
     'test-heavy-read-keys',
     'test-members-snapshot',
+    'test-roster-snapshots',
     'test-members-directory-cost',
     'test-member-photos-out-of-rows',
     'test-group-pictures-out-of-rows',
@@ -411,6 +413,10 @@ export const SUITES = [
  * A variant with no tag is a suite that ONLY runs here, because it refuses to run without its flag.
  */
 export const VARIANTS = [
+    // test-heavy-read-cap's section 1c (stalled readers with the version moved before each, the directory and a roster)
+    // on its own: with it the file ran past the 300 s per run on CI (#1526).
+    { name: 'test-heavy-read-cap', tag: '1c-directory', label: 'version moves (1c), the directory', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'directory' } },
+    { name: 'test-heavy-read-cap', tag: '1c-roster', label: 'version moves (1c), a roster', env: { HEAVY_READ_CAP_ONLY: '1c', HEAVY_READ_CAP_1C: 'roster' } },
     // The two settlement ROUTES with settlement ENABLED. The plain run covers the shipped state (off, the kill switch
     // refusing everything) and this covers the full matrix behind it. Running either one once would leave half the
     // route untested, and it is the half that moves value: the purchase route can debit a member, and the commission

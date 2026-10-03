@@ -14,6 +14,10 @@
  *      redemption gives no session.
  *   6. The node's 2FA code is still asked for, on the phone.
  *   7. Decline, and the brakes: creation per client, approvals through the auth limiter.
+ *   8. The phone is told the computer's address as the node saw it, how long ago it asked, the time left, and
+ *      "same network" when the phone's address matches.
+ *   9. Number matching: a new app's approval gives two digits; the page must type them. Wrong digits, three tries,
+ *      30 s, a replay, or a browser without the binding cookie: no session. An older app signs in as before.
  *
  * Local only — it talks to the server it starts on localhost and nothing else.
  *
@@ -23,14 +27,19 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { buildBoundRequestHeaders } from '@beanpool/core';
 import { initTls } from './services/tls.js';
 import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.js';
+import { resolveClientIp, setTrustConfigForTests } from './client-ip.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
 import {
     approvePairing,
+    confirmPairing,
+    createPairing,
+    describePairing,
     redeemPairing,
     pairingMessage,
     bindingCookieName,
@@ -38,6 +47,7 @@ import {
     PAIRING_TTL_MS,
     PAIRING_CREATES_PER_MINUTE,
     PAIRING_MAX_REFUSALS,
+    PAIRING_CONFIRM_TTL_MS,
 } from './settings-signin-pairing.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
@@ -110,6 +120,16 @@ async function approve(pairingId: string, shortCode: string, signer: Identity, o
         },
         headers: via(opts.ip ?? freshIp()),
     });
+}
+
+/** The phone's lookup, signed as the app signs a GET (format 2, for this node's host). */
+async function signedLookup(pairingId: string, signer: Identity, from: Record<string, string>) {
+    const path = `/api/local/admin/auth/pairing/${pairingId}`;
+    const headers = await buildBoundRequestHeaders({
+        method: 'GET', url: `${BASE}${path}`, body: '', publicKeyHex: signer.pub,
+        sign: (bytes) => new Uint8Array(crypto.sign(null, Buffer.from(bytes), signer.priv)),
+    });
+    return call('GET', path, { headers: { ...from, ...headers } });
 }
 
 async function sessionInfo(sessionId: string) {
@@ -376,6 +396,132 @@ async function main() {
         assert(approveLimited >= 1, 'approvals from one client are braked by the auth limiter (15 a minute)');
         assert((await call('GET', `/api/local/admin/auth/pairing/${target.pairingId}`, { headers: via(phoneIp) })).status === 429,
             'and so are lookups from that client');
+    }
+
+    // ── 8. What the phone is told about the computer (design §5 fixes 1–2) ──
+    console.log('\n8. The phone sees where and when the computer asked');
+    {
+        const b = await newPairing();
+        const same = await signedLookup(b.pairingId, admin, via(b.ip));
+        assert(same.status === 200 && same.body.fromAddress === b.ip, `the phone is told the address the computer asked from (${same.body.fromAddress})`);
+        assert(same.body.sameNetwork === true, 'a phone on the same network as the computer is told so');
+        assert(typeof same.body.askedSecondsAgo === 'number' && same.body.askedSecondsAgo >= 0 && same.body.askedSecondsAgo < 10,
+            `the phone is told how long ago the computer asked (${same.body.askedSecondsAgo}s)`);
+        assert(typeof same.body.expiresInSeconds === 'number' && same.body.expiresInSeconds > 100 && same.body.expiresInSeconds <= 120,
+            `the phone is told how long is left (${same.body.expiresInSeconds}s)`);
+        const other = await signedLookup(b.pairingId, owner, via(freshIp()));
+        assert(other.status === 200 && other.body.sameNetwork === false && other.body.fromAddress === b.ip,
+            'a phone somewhere else is not told "same network", and still sees the computer\'s address');
+
+        // Only a lookup signed by a member who could approve is told where the computer is (4171995201).
+        const unsigned = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: via(b.ip) });
+        assert(unsigned.status === 200 && unsigned.body.shortCode === b.shortCode && !('fromAddress' in unsigned.body) && !('sameNetwork' in unsigned.body),
+            `an unsigned lookup (anyone who photographed the QR) still gets the browser, but neither the computer's address nor "same network" (${JSON.stringify(unsigned.body)})`);
+        const byMember = await signedLookup(b.pairingId, member, via(b.ip));
+        assert(byMember.status === 200 && !('fromAddress' in byMember.body) && !('sameNetwork' in byMember.body),
+            'nor does a lookup signed by a member who holds no role here');
+        const byOutsider = await signedLookup(b.pairingId, outsider, via(b.ip));
+        assert(byOutsider.status === 200 && !('fromAddress' in byOutsider.body), 'nor one signed by a key that is no member here');
+        const byOwner = await signedLookup(b.pairingId, owner, via(b.ip));
+        const forged = await call('GET', `/api/local/admin/auth/pairing/${b.pairingId}`, { headers: { ...via(b.ip), 'X-Public-Key': owner.pub, 'X-Signature': Buffer.alloc(64).toString('base64'), 'X-Timestamp': String(Date.now()), 'X-Nonce': 'ab'.repeat(16) } });
+        assert(byOwner.status === 200 && 'fromAddress' in byOwner.body && forged.status === 200 && !('fromAddress' in forged.body),
+            'nor one that names an owner\'s key without the owner\'s signature');
+
+        // An address that stands for many people says nothing about one network (4171995134).
+        const local = await call('POST', '/api/local/admin/auth/pairing', { body: {} });
+        const fromLoopback = await signedLookup(local.body.pairingId, owner, {});
+        assert(local.status === 200 && fromLoopback.status === 200 && fromLoopback.body.sameNetwork === false,
+            `a computer and a phone that both reach the node as its local proxy (no forwarding header) are not told "same network" (${fromLoopback.body?.sameNetwork})`);
+        setTrustConfigForTests({ loopback: false, localSubnets: false });
+        try {
+            const proxied = await call('POST', '/api/local/admin/auth/pairing', { body: {}, headers: { 'x-forwarded-for': '203.0.113.66' } });
+            const look = await signedLookup(proxied.body.pairingId, owner, { 'x-forwarded-for': '192.0.2.9' });
+            assert(proxied.status === 200 && look.status === 200 && look.body.sameNetwork === false,
+                `behind a reverse proxy the node doesn't trust, the attacker's computer and the admin's phone are not told "same network" (${look.body?.sameNetwork})`);
+        } finally { setTrustConfigForTests(undefined); }
+        const forwarder = '198.51.100.20';
+        resolveClientIp(forwarder, { 'x-forwarded-for': '203.0.113.66' }); // a peer that forwards for others, untrusted
+        const viaForwarder = createPairing({ clientKey: 'k-forwarder', requesterAddress: forwarder });
+        const seen = viaForwarder.ok ? describePairing(viaForwarder.pairingId, Date.now(), forwarder) : null;
+        assert(!!seen && seen.ok && seen.sameNetwork === false,
+            'a public address that has forwarded for others (an untrusted proxy) is never "same network"');
+        for (const [computer, phone] of [['10.0.0.5', '10.0.0.5'], ['192.168.1.20', '192.168.1.20'], ['169.254.1.1', '169.254.1.1'], ['::1', '::1']]) {
+            const p = createPairing({ clientKey: `k-${computer}`, requesterAddress: computer });
+            const d = p.ok ? describePairing(p.pairingId, Date.now(), phone) : null;
+            assert(!!d && d.ok && d.sameNetwork === false, `a private, link-local or loopback address (${computer}) is never "same network"`);
+        }
+    }
+
+    // ── 9. Number matching: the computer types the two digits the phone shows (design §5 fix 3) ──
+    console.log('\n9. Two digits typed on the computer');
+    const approveNew = (b: Browser, signer: Identity) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/approve`, {
+        body: { memberPubkey: signer.pub, signature: signText(signer, pairingMessage('approve', b.pairingId, b.shortCode)), confirm: true },
+        headers: via(freshIp()),
+    });
+    const confirmDigits = (b: Browser, code: string, cookie: string | null = b.cookie) => call('POST', `/api/local/admin/auth/pairing/${b.pairingId}/confirm`, {
+        body: { code },
+        headers: { ...via(b.ip), ...(cookie ? { Cookie: cookie } : {}) },
+    });
+    const sessionOf = (r: { cookies: string[] }) => {
+        const s = r.cookies.find(c => c.startsWith('admin_session='));
+        return s ? s.split(';')[0].slice('admin_session='.length) : null;
+    };
+    const wrongOf = (code: string) => String((Number(code) + 1) % 100).padStart(2, '0');
+    {
+        // Right digits: a session, once.
+        const b = await newPairing();
+        const ok = await approveNew(b, owner);
+        assert(ok.status === 200 && /^\d{2}$/.test(ok.body.confirmCode || ''), `a new app's approval gets two digits to show (${ok.body.confirmCode})`);
+        const waiting = await poll(b);
+        assert(waiting.status === 200 && waiting.body.status === 'confirm' && !waiting.sessionId,
+            'the page is asked for the digits, and holds no session yet');
+        const noCookie = await confirmDigits(b, ok.body.confirmCode, null);
+        assert(noCookie.status === 403 && !sessionOf(noCookie), 'digits from a browser without the binding cookie are refused');
+        const wrong = await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        assert(wrong.status === 400 && wrong.body.status === 'wrong' && wrong.body.triesLeft === 2 && !sessionOf(wrong),
+            'wrong digits give no session and say how many tries are left (the cookie-less try was not counted)');
+        const right = await confirmDigits(b, ok.body.confirmCode);
+        const sid = sessionOf(right);
+        assert(right.status === 200 && right.body.status === 'signed-in' && !!sid, 'the right digits sign the browser in');
+        assert(sid ? (await sessionInfo(sid)).authenticated === true : false, 'the session is a real one');
+        const replay = await confirmDigits(b, ok.body.confirmCode);
+        assert(replay.status === 410 && !sessionOf(replay), 'the digits replayed are refused');
+        const again = await poll(b);
+        assert(again.status === 410 && !again.sessionId, 'the page cannot redeem the pairing a second time');
+    }
+    {
+        // Three wrong: the pairing is burned, the right digits are then useless.
+        const b = await newPairing();
+        const ok = await approveNew(b, admin);
+        for (let i = 0; i < 3; i++) await confirmDigits(b, wrongOf(ok.body.confirmCode));
+        const late = await confirmDigits(b, ok.body.confirmCode);
+        assert(late.status === 410 && late.body.status === 'refused' && !sessionOf(late), 'three wrong tries burn the pairing; the right digits then give nothing');
+        assert((await poll(b)).body.status === 'refused', 'the page is told the sign-in was refused');
+        assert(auditLines().some(l => l.includes('wrong digits')), 'the burn is logged');
+    }
+    {
+        // An older app sends no `confirm`: it signs the browser in as today.
+        const b = await newPairing();
+        const ok = await approve(b.pairingId, b.shortCode, owner);
+        assert(ok.status === 200 && !('confirmCode' in ok.body), 'an older app gets no digits');
+        const r = await poll(b);
+        assert(r.body.status === 'signed-in' && !!r.sessionId, 'and the browser is signed in as before');
+    }
+    {
+        // Expiry, at the module level with a clock: 30 s for the digits.
+        const t = Date.now();
+        const created = createPairing({ clientKey: 'confirm-expiry', requesterAddress: '198.51.100.7', now: t });
+        if (!created.ok) throw new Error('create failed');
+        const res = approvePairing({
+            pairingId: created.pairingId, memberPubkey: owner.pub,
+            signature: signText(owner, pairingMessage('approve', created.pairingId, created.shortCode)), confirm: true, now: t + 1_000,
+        });
+        assert(res.ok && /^\d{2}$/.test(res.confirmCode || ''), 'the module hands out two digits');
+        const code = res.ok ? res.confirmCode! : '';
+        const late = confirmPairing(created.pairingId, created.secret, code, t + 1_000 + PAIRING_CONFIRM_TTL_MS + 1);
+        assert(late.kind === 'expired', `the right digits after ${PAIRING_CONFIRM_TTL_MS / 1000}s give no session (${late.kind})`);
+        assert(redeemPairing(created.pairingId, created.secret, t + 1_000 + PAIRING_CONFIRM_TTL_MS + 2).kind === 'expired', 'and the page is told it expired');
+        assert(PAIRING_CONFIRM_TTL_MS === 30_000, 'the digits last 30 seconds');
     }
 
     console.log(`\n${passed}/${run} passed`);

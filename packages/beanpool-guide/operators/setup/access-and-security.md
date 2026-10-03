@@ -34,7 +34,7 @@ Know its limits:
 - Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.
 - There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.
 - The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.
-- If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first.
+- If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first. beanpool recover (Signing in) does not help here yet: it makes someone an owner, and today an owner's key sign-in still asks for the code.
 
 ## Break-glass codes
 

@@ -5,6 +5,8 @@ import type { KeySession } from '../../lib/key-session';
 import {
     startPhonePairing,
     waitForPhone,
+    confirmPhoneDigits,
+    wrongDigitsMessage,
     formatCountdown,
     formatShortCode,
     PHONE_SIGNIN_MESSAGES,
@@ -16,7 +18,7 @@ import {
  *
  * Shows the QR, the short code to compare with the phone, and a countdown; waits for the phone; a new code comes
  * by itself when one runs out (up to AUTO_RENEWALS times, so a forgotten tab stops asking the node), or on
- * "New code".
+ * "New code". When the phone shows two digits (a newer app), the card asks for them; only the right digits sign in.
  */
 
 /** Ten minutes of fresh codes for an unattended page, then it waits for a click. */
@@ -27,6 +29,7 @@ const MIN_POLL_MS = 1_000;
 type State =
     | { kind: 'starting' }
     | { kind: 'showing'; pairing: PhonePairing; notice: string | null }
+    | { kind: 'confirm'; pairing: PhonePairing; deadline: number; message: string | null; busy: boolean }
     | { kind: 'ended'; message: string }
     | { kind: 'signed-in' };
 
@@ -43,6 +46,7 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
     const abort = useRef<AbortController | null>(null);
     const signedIn = useRef(onSignedIn);
     signedIn.current = onSignedIn;
+    const [digits, setDigits] = useState('');
 
     const newCode = useCallback(async (auto: boolean) => {
         const mine = ++run.current;
@@ -73,6 +77,10 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
                     if (Date.now() > pairing.expiresAt) break; // treat as expired below
                     await new Promise(r => setTimeout(r, RETRY_MS));
                     continue;
+                case 'confirm':
+                    setDigits('');
+                    setState({ kind: 'confirm', pairing, deadline: Date.now() + res.seconds * 1000, message: null, busy: false });
+                    return;
                 case 'signed-in':
                     run.current++;
                     setState({ kind: 'signed-in' });
@@ -100,12 +108,52 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
         return () => { run.current++; abort.current?.abort(); };
     }, [newCode]);
 
+    const sendDigits = useCallback(async (e?: React.FormEvent) => {
+        e?.preventDefault();
+        if (state.kind !== 'confirm' || state.busy) return;
+        const mine = run.current;
+        const current = state;
+        setState({ ...current, busy: true });
+        const res = await confirmPhoneDigits(current.pairing.pairingId, digits.trim());
+        if (run.current !== mine) return;
+        switch (res.kind) {
+            case 'signed-in':
+                run.current++;
+                setState({ kind: 'signed-in' });
+                signedIn.current(res.session, res.csrfToken);
+                return;
+            case 'wrong':
+                setDigits('');
+                setState({ ...current, busy: false, message: wrongDigitsMessage(res.triesLeft) });
+                return;
+            case 'retry':
+            case 'waiting':
+            case 'confirm':
+                setState({ ...current, busy: false, message: 'Could not reach the node. Try again.' });
+                return;
+            case 'expired':
+                setState({ kind: 'ended', message: PHONE_SIGNIN_MESSAGES.confirmLate });
+                return;
+            case 'ended':
+                setState({ kind: 'ended', message: res.message });
+                return;
+        }
+    }, [state, digits]);
+
     useEffect(() => {
-        if (state.kind !== 'showing') return;
+        if (state.kind !== 'showing' && state.kind !== 'confirm') return;
         const t = setInterval(() => setNow(Date.now()), 1000);
         setNow(Date.now());
         return () => clearInterval(t);
     }, [state.kind]);
+
+    // The 30 seconds ran out with nothing sent: the node would answer "expired", so say so now rather than sit at 0:00.
+    // Digits already on their way get the node's answer instead.
+    useEffect(() => {
+        if (state.kind === 'confirm' && !state.busy && state.deadline - now <= 0) {
+            setState({ kind: 'ended', message: PHONE_SIGNIN_MESSAGES.confirmLate });
+        }
+    }, [state, now]);
 
     // The page's own origin, not a configured URL: the pairing and its cookie live where this page's requests go.
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -157,6 +205,40 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
                         </div>
                     )}
                 </>
+            )}
+
+            {state.kind === 'confirm' && (
+                <form onSubmit={sendDigits} className="space-y-3 text-center" data-testid="phone-signin-confirm">
+                    <label htmlFor="phone-signin-digits" className="block text-sm text-nature-100 font-semibold">
+                        Type the two digits your phone shows
+                    </label>
+                    <input
+                        id="phone-signin-digits"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]{2}"
+                        maxLength={2}
+                        autoFocus
+                        value={digits}
+                        onChange={(e) => setDigits(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                        className="w-24 min-h-[48px] text-center text-2xl font-black font-mono tracking-widest rounded-xl bg-nature-950 border border-nature-700 text-white"
+                    />
+                    <div className="text-sm text-nature-300">
+                        <span className="whitespace-nowrap">{formatCountdown(state.deadline - now)} left</span>
+                    </div>
+                    {state.message && (
+                        <div role="alert" className="p-3.5 rounded-xl bg-red-950/70 border border-red-800/60 text-red-200 text-sm">
+                            {state.message}
+                        </div>
+                    )}
+                    <button
+                        type="submit"
+                        disabled={state.busy || digits.length !== 2}
+                        className="w-full min-h-[48px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
+                    >
+                        Confirm
+                    </button>
+                </form>
             )}
 
             {state.kind === 'ended' && (

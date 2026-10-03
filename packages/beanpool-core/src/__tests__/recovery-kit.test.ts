@@ -26,6 +26,18 @@ describe('recoveryKitHtml', () => {
         expect(KIT_WEB_RESTORE_STEPS[KIT_WEB_RESTORE_STEPS.length - 1]).toMatch(/^Click “Recover Identity”/);
     });
 
+    it('on the web, names the way back on the global lobby and an open door as well as on an invite page', () => {
+        const web = KIT_WEB_RESTORE_STEPS.join('\n');
+        // The global community (and any open door): "Already have BeanPool?", then "Use my 12 words".
+        expect(KIT_WEB_RESTORE_STEPS[1]).toMatch(/^Click “Already have BeanPool\?”\./);
+        expect(web).toContain('“Use my 12 words”');
+        // An invite-only community: the button at the bottom of the invite page, then "Recover with 12 Words".
+        expect(KIT_WEB_RESTORE_STEPS[1]).toContain('If the page asks for an invite code instead, click “🔑 Restore Existing Identity →” at the bottom of the page.');
+        expect(web).toContain('“🔑 Recover with 12 Words”');
+        const html = recoveryKitHtml(KIT);
+        expect(html).toContain('Click “Already have BeanPool?”.');
+    });
+
     it('names the address it was given, an IP as well as a domain, and assumes no domain of its own', () => {
         const html = recoveryKitHtml(KIT);
         expect(html).toContain('Address: <strong>http://10.0.0.7:8080</strong>');

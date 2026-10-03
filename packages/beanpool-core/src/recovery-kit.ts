@@ -34,14 +34,21 @@ export const KIT_RESTORE_STEPS = [
 ] as const;
 
 /**
- * In a web browser, worded as the web app's restore screens are (apps/pwa/src/pages/WelcomePage.tsx): the community's
- * own address opens the welcome page, whose "Restore Existing Identity" leads to "Recover with 12 Words", the twelve
- * boxes and "Recover Identity". The address is the community, so there is no community box on the web.
+ * In a web browser, worded as the web app's restore screens are, true on every page a community's address can open
+ * with no account in the browser, whatever kind of community it is and whichever door it has when the page is used:
+ * - the global community's lobby (apps/pwa/src/pages/GuestLobby.tsx, a node with `features.guestListingsOnly`), and a
+ *   community whose door is open (components/WebJoin.tsx): "Already have BeanPool?", then "Use my 12 words";
+ * - the lobby on a node whose door is shut (pages/WelcomePage.tsx, `start === 'restore'`): "Already have BeanPool?",
+ *   then "🔑 Recover with 12 Words";
+ * - an invite-only community (WelcomePage's "🎟️ Join with Invite Code"): "🔑 Restore Existing Identity →" at the
+ *   bottom of the page, then "🔑 Recover with 12 Words".
+ * Every way ends at the twelve boxes and "Recover Identity". The address is the community, so there is no community
+ * box on the web.
  */
 export const KIT_WEB_RESTORE_STEPS = [
     'Open your community’s address (written above) in a web browser.',
-    'Click “🔑 Restore Existing Identity →”.',
-    'Click “🔑 Recover with 12 Words”.',
+    'Click “Already have BeanPool?”. If the page asks for an invite code instead, click “🔑 Restore Existing Identity →” at the bottom of the page.',
+    'Click “Use my 12 words” or “🔑 Recover with 12 Words”, whichever the page shows.',
     'Type your 12 words in order, one in each box.',
     'Click “Recover Identity”. Your name and picture come back once you’re in.',
 ] as const;

@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { RecoveryKitButton } from './RecoveryKitButton';
+import { KIT_WEB_RESTORE_STEPS } from '@beanpool/core';
 import { printKitInFrame } from '../lib/recovery-kit';
 
 const WORDS = ['abandon', 'ability', 'able', 'about', 'above', 'absent', 'absorb', 'abstract', 'absurd', 'abuse', 'access', 'accident'];
@@ -79,6 +80,45 @@ describe('printKitInFrame', () => {
         expect(document.querySelector('iframe')).toBeNull();
         expect(await printKitInFrame('<p>x</p>', () => { throw new Error('x'); })).toBe('failed');
         expect(document.querySelector('iframe')).toBeNull();
+    });
+});
+
+describe('the kit’s web steps match the web app’s screens (review 4170915901)', () => {
+    const src = (rel: string) => readFileSync(resolve(__dirname, rel), 'utf8');
+    const app = src('../App.tsx');
+    const lobby = src('../pages/GuestLobby.tsx');
+    const join = src('./WebJoin.tsx');
+    const welcome = src('../pages/WelcomePage.tsx').replace(/<span aria-hidden="true">🔑<\/span> /g, '🔑 ');
+    const between = (text: string, from: string, to: string) => text.slice(text.indexOf(from), text.indexOf(to, text.indexOf(from)));
+    const named = KIT_WEB_RESTORE_STEPS.join('\n').match(/“[^”]+”/g)!.map((q) => q.slice(1, -1));
+
+    it('every button the steps name is on a web restore screen', () => {
+        expect(named).toEqual(['Already have BeanPool?', '🔑 Restore Existing Identity →', 'Use my 12 words', '🔑 Recover with 12 Words', 'Recover Identity']);
+        for (const name of named) expect([lobby, join, welcome].some((s) => s.includes(name))).toBe(true);
+    });
+
+    it('the global community: its address opens the lobby, whose "Already have BeanPool?" opens the ways back', () => {
+        expect(app).toMatch(/visitorsSeeListings\(info\) && !inFlight \? \{ kind: 'lobby'/);
+        const have = between(lobby, 'data-testid="lobby-have-account"', '</button>');
+        expect(have).toContain("openJoin('restore')");
+        expect(have).toContain('Already have BeanPool?');
+        // An open door: WebJoin's "Bring your account here", whatever the node's words door says.
+        const restore = between(join, "case 'restore':", "case 'name':");
+        expect(restore).toContain("onRestore('words')");
+        expect(restore).toMatch(/Use my 12 words/);
+        expect(restore).not.toMatch(/wordsDoor|wordsOpen/);
+        // A shut door: WelcomePage opens on the member options, whose words button is "🔑 Recover with 12 Words".
+        expect(welcome).toContain("useState(() => start === 'restore')");
+        expect(welcome).toMatch(/setShowRecovery\(true\); setError\(null\); \}\}[\s\S]{0,900}🔑 Recover with 12 Words/);
+    });
+
+    it('a local community: the invite page’s "🔑 Restore Existing Identity →", and an open door’s "Already have BeanPool?"', () => {
+        const invite = between(welcome, '/* ===== NEW USER SIGNUP + FAQs ===== */', '/* ===== MAIN WELCOME');
+        expect(invite).toContain('Join with Invite Code');
+        expect(invite).toContain('🔑 Restore Existing Identity →');
+        expect(between(join, "case 'lobby':", "case 'guard':")).toContain('Already have BeanPool?');
+        // Every way ends at the twelve boxes and "Recover Identity".
+        expect(between(welcome, '/* ===== RECOVERY FROM 12 WORDS ===== */', '← ')).toContain("'Recover Identity'");
     });
 });
 

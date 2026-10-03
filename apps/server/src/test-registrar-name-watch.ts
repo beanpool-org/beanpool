@@ -439,7 +439,9 @@ async function main(): Promise<void> {
         nodes.push(P);
         const pSetup = await P.send('setup', { ownerSeedHex });
         const pBase: string = pSetup.https;
-        const pAdmin = { 'X-Admin-Password': PW_P };
+        // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls on each node go under an owner's key
+        // session the node makes (takeover-test-harness.ts owner-session).
+        const pAdmin: Record<string, string> = await P.send('owner-session');
         const claim = (base: string, admin: Record<string, string>, name: string) => call(base, 'POST', '/api/local/admin/public-address/claim', admin, { name, mode: 'tunnel' });
         const statusOpen = (base: string, admin: Record<string, string>) => call(base, 'GET', '/api/local/admin/public-address/status', admin);
 
@@ -701,7 +703,7 @@ async function main(): Promise<void> {
             const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, ADMIN_PASSWORD: PW_U, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(U);
             const uSetup = await U.send('setup', { ownerSeedHex });
-            const uAdmin = { 'X-Admin-Password': PW_U };
+            const uAdmin: Record<string, string> = await U.send('owner-session');
             const holderAsks = () => [...reg.holderCalls.values()].reduce((a, b) => a + b, 0);
             const before = holderAsks();
             const due = await U.send('due', { now: Date.now() });
@@ -744,7 +746,7 @@ async function main(): Promise<void> {
             const N = await spawnNode(SCRIPT, dirs.n, { ...noAgent, ADMIN_PASSWORD: PW_N, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(N);
             const nSetup = await N.send('setup', { ownerSeedHex, replicationToken });
-            const nAdmin = { 'X-Admin-Password': PW_N };
+            const nAdmin: Record<string, string> = await N.send('owner-session');
             assert((await claim(nSetup.https, nAdmin, 'sname')).status === 200, 'N claims sname');
 
             fs.mkdirSync(dirs.standby, { recursive: true });
@@ -762,9 +764,10 @@ async function main(): Promise<void> {
             const pulled = await standby.send('pull');
             assert(pulled.envelope === 'stored' && pulled.held.at(-1) === flushed.envelopeId, `the standby holds N's newest keys (${pulled.envelope}, ${flushed.envelopeId})`);
             await N.kill('SIGKILL');
-            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: nSetup.code }, { 'X-Admin-Password': PW_STANDBY });
+            const standbyOwner: Record<string, string> = await standby.send('owner-session');
+            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: nSetup.code }, standbyOwner);
             assert(opened.status === 200 && opened.body?.preview?.sessionId, `the recovery code opens the keys (${opened.status})`);
-            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body?.preview?.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body?.preview?.sessionId, confirm: true }, standbyOwner);
             assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
             assert((await standby.exited) === 0, 'the standby restarts itself');
             standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined });
@@ -876,7 +879,7 @@ async function main(): Promise<void> {
             const Q = await spawnNode(SCRIPT, dirs.q, { ...noAgent, ADMIN_PASSWORD: PW_Q, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined });
             nodes.push(Q);
             const qSetup = await Q.send('setup', { ownerSeedHex });
-            const qAdmin = { 'X-Admin-Password': PW_Q };
+            const qAdmin: Record<string, string> = await Q.send('owner-session');
             const due = async (at: number) => ((await Q.send('due', { now: at })) ?? []) as any[];
             const qname = host('qname');
             const standing = async () => {

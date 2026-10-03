@@ -26,6 +26,7 @@ import {
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
+import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { AddSignIn } from '../components/OneWayBack';
 import { askPersistentStorage, captureAuthReturn, checkMembershipWithKey, MAX_JOIN_CALLSIGN, probeMembership, providerLabel, suggestCallsigns } from '../lib/web-join';
 import { adoptNodeName, nodeNameFor } from '../lib/member-name';
@@ -1989,6 +1990,8 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     </div>
                                 ))}
                             </div>
+
+                            <RecoveryKitButton words={pendingWords} />
 
                             {/*
                               Says out loud that this is not the only chance. Removing the

@@ -42,6 +42,7 @@ import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
+import { RecoveryKitButtons } from '../components/RecoveryKitButtons';
 import { copyWordsForAMinute } from '../utils/words-clipboard';
 import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
@@ -2061,6 +2062,9 @@ export default function WelcomeScreen() {
                             </Text>
                         </Pressable>
                         <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
+
+                        {/* Optional, like the tickbox below: Next never waits on the kit (utils/recovery-kit.ts). */}
+                        <RecoveryKitButtons words={pendingWords} colors={colors} />
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.

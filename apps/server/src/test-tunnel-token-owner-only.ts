@@ -206,6 +206,19 @@ async function main() {
         assert(ownerCached.body?.cached === true && ownerCached.body?.tunnelToken === TUNNEL_TOKEN, 'an owner reads the saved token');
         process.env.REGISTRAR_URL = regUrl;
 
+        console.log('\n── 4b. the node-config save and the tunnel restart give an admin no token either ──');
+        // Settings' save answers with the stored node config, which holds publicAddress.tunnelToken (deciding review of #1535).
+        const adminCfg = await call('POST', '/api/local/admin/node/config', {}, asAdmin);
+        assert(adminCfg.status === 200 && !leaks(adminCfg.text), `an admin's empty node-config save carries no token (${adminCfg.status})`);
+        const adminCfgSet = await call('POST', '/api/local/admin/node/config', { publishHealth: true }, asAdmin);
+        assert(adminCfgSet.status === 200 && !leaks(adminCfgSet.text) && adminCfgSet.body?.publishHealth === true,
+            `an admin's node-config change is saved and carries no token (${adminCfgSet.status})`);
+        const ownerCfg = await call('POST', '/api/local/admin/node/config', {}, asOwner);
+        assert(ownerCfg.status === 200 && !leaks(ownerCfg.text), `the save's answer holds no token for an owner either: the address has its own route (${ownerCfg.status})`);
+        const adminRestart = await call('POST', '/api/local/admin/public-address/restart-tunnel', {}, asAdmin);
+        assert(adminRestart.status === 200 && !leaks(adminRestart.text), `an admin can still restart the tunnel, with no token in the answer (${adminRestart.status})`);
+        assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN, 'and the restarted tunnel runs on the stored token');
+
         console.log('\n── 5. an admin cannot rename or release the address ──');
         const adminUpdate = await call('POST', UPDATE, { communityName: 'Taken Over' }, asAdmin);
         assert(adminUpdate.status === 403 && !leaks(adminUpdate.text), `an admin's rename is refused (${adminUpdate.status})`);

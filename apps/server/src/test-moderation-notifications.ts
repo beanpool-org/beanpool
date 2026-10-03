@@ -78,7 +78,7 @@ async function main() {
     const { startHttpsServer } = await import('./https-server.js');
     const { db } = await import('./db/db.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
-    const { createAdminRoutes } = await import('./routes/admin.js');
+    const { createAdminRoutes, MAX_BULK_DELETE_POSTS } = await import('./routes/admin.js');
     const mod = await import('./engine/moderation-notices.js');
 
     await initTls();
@@ -398,6 +398,20 @@ async function main() {
         await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: annOld });
         await flush();
         assert(sent.length === 0, 'pruning the same posts again sends nothing');
+
+        // One request takes at most MAX_BULK_DELETE_POSTS ids; the manager and settings.js send longer lists in batches.
+        assert(MAX_BULK_DELETE_POSTS === 200, `the bulk-delete cap is 200 (${MAX_BULK_DELETE_POSTS})`);
+        const capIds = Array.from({ length: 201 }, (_, i) => se.createPost('offer', 'goods', `Cap jar ${i}`, 'old', 2, 'fixed', Ann.pubKeyHex)!.id);
+        const overLimitRes = await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: capIds });
+        assert(overLimitRes.status === 400, `bulk-delete with 201 ids is rejected with 400 (${overLimitRes.status})`);
+        assert(/Bulk delete limit exceeded \(maximum 200 posts per request\)/.test(overLimitRes.body?.error || ''),
+            `and the error names the limit (${overLimitRes.body?.error})`);
+        const stillUp = db.prepare(`SELECT COUNT(*) AS c FROM posts WHERE id IN (${capIds.map(() => '?').join(',')}) AND active = 1`).get(...capIds) as any;
+        assert(stillUp.c === 201, `a refused request deletes none of them (${stillUp.c} still up)`);
+        const atLimitRes = await admin('POST', '/api/local/admin/posts/bulk-delete', { postIds: capIds.slice(0, 200) });
+        assert(atLimitRes.status === 200 && atLimitRes.body?.deleted === 200 && atLimitRes.body?.deletedCount === 200,
+            `exactly 200 ids go through and all 200 are deleted (${atLimitRes.status}, ${atLimitRes.body?.deleted})`);
+        await flush(); sent.length = 0; clear(...all);
 
         // ── 8. The enterprise ledger after an arbitrated deal ────────────────────────────────────
         console.log('\n— 8. the enterprise ledger names an arbitrated deal\'s signer in words —');

@@ -55,6 +55,8 @@ process.env.BACKUP_SWAP_RECHECK_MS = '150';
 
 // Everything the node prints, so the logs can be checked for the password.
 const printed: string[] = [];
+/** Sections 6, 9 and 10: the main server answers as one from before step 7c (routeDeps, below). */
+let preStep7cPrimary = false;
 for (const m of ['log', 'info', 'warn', 'error'] as const) {
     const orig = console[m].bind(console);
     console[m] = (...args: unknown[]) => {
@@ -63,7 +65,8 @@ for (const m of ['log', 'info', 'warn', 'error'] as const) {
     };
 }
 
-const { initStateEngine, setNodeRole, getReplicationAccessLog } = await import('./state-engine.js');
+const { initStateEngine, setNodeRole, getReplicationAccessLog, seedGenesisMember } = await import('./state-engine.js');
+const { mintHandshakeToken, consumeHandshakeToken } = await import('./admin-key-auth.js');
 const { startP2P } = await import('./p2p.js');
 const { addConnector, removeConnector } = await import('./connector-manager.js');
 const {
@@ -122,8 +125,12 @@ async function main() {
     addConnector(mirrorAddr, 'mirror', 'self-test-primary');
 
     // The main server's backup routes over real HTTP, parsed the way https-server.ts does.
+    // checkAdminAuth as https-server.ts hands it over, its options included (replicationAuth's legacyCopy). While
+    // `preStep7cPrimary` is set, the main server answers as one from before step 7c did: the password alone (2FA off) opens
+    // its admin routes, so the standby's one-time swap can mint a token there (sections 6, 9, 10). Otherwise it is
+    // today's: with 2FA off the password opens only the copy routes (section 6a).
     const routeDeps = {
-        checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
+        checkAdminAuth: async (ctx: any, opts?: any) => checkAdminAuth(ctx, preStep7cPrimary ? { ...opts, legacyCopy: true } : opts),
         rateLimit: () => true,
         clampLimit: (_v: unknown, def = 20) => def,
         clampOffset: () => 0,
@@ -132,6 +139,13 @@ async function main() {
         enforceReadAuth: false,
     } as any;
     const router = createBackupRoutes(routeDeps);
+    // Settings' own calls in this suite come from the owner's key session: the admin password alone opens no admin route
+    // while 2FA is off (step 7c), and this suite is about the standby's credential, not the owner's sign-in.
+    const ownerPk = crypto.randomBytes(32).toString('hex');
+    seedGenesisMember(ownerPk, 'Owner');
+    const signedIn = consumeHandshakeToken(mintHandshakeToken(ownerPk, 'owner').handshakeToken);
+    if (!signedIn.ok || !signedIn.sessionId) throw new Error(`setup: no owner session: ${signedIn.error}`);
+    const asOwner = { 'x-admin-session': signedIn.sessionId };
     // The take-over envelope's routes too (the token fetches the envelope from one of them): section 12.
     const takeoverRouter = createTakeoverEnvelopeRoutes(routeDeps);
     const app = new Koa();
@@ -153,7 +167,7 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     const post = async (p: string, body: Record<string, unknown>, headers: Record<string, string> = {}) => {
         resetBrakes();
-        const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+        const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner, ...headers }, body: JSON.stringify(body) });
         const text = await res.text();
         let json: any = null; try { json = JSON.parse(text); } catch { /* binary */ }
         return { status: res.status, text, json };
@@ -182,6 +196,7 @@ async function main() {
         assert(!getLocalConfig().backupReplicationToken, '2. an empty token clears it');
 
         // ---------- 3. Warning path: main server already has a token ----------
+        preStep7cPrimary = true; // the token check comes after the password is taken (6a: today's refuses it first)
         setReplicationToken('token-of-another-standby');
         const hashBefore = getLocalConfig().replicationTokenHash;
         updateLocalConfig({ backupPrimaryUrl: base, backupAdminPassword: ADMIN_PW, backupReplicationToken: null }); // legacy standby
@@ -249,7 +264,7 @@ async function main() {
         const recovery = await makeRecoveryCode({ replace: true });
         {
             resetBrakes();
-            const res = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
+            const res = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify({}) });
             assert(res.status === 200, '5. /api/local/admin/backup answers 200');
             const sealed = Buffer.from(await res.arrayBuffer());
             assert(!(sealed[0] === 0x1f && sealed[1] === 0x8b), '5. …with a sealed file, not a plain archive');
@@ -264,15 +279,33 @@ async function main() {
             assert(!sealed.includes(Buffer.from(ADMIN_PW)), '5. nor the sealed file');
         }
         resetBrakes();
-        const idGone = await fetch(base + '/api/local/admin/identity-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
-        assert(idGone.status === 404, `5. the plain identity bundle is gone: 404 even with the admin password (got ${idGone.status})`);
+        const idGone = await fetch(base + '/api/local/admin/identity-bundle', { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: JSON.stringify({}) });
+        assert(idGone.status === 404, `5. the plain identity bundle is gone: 404 even to an owner (got ${idGone.status})`);
         fs.rmSync(tmp, { recursive: true, force: true });
         for (const p of ['/api/local/admin/replication-config/get', '/api/local/admin/backup-status', '/api/local/admin/replication-token/status', '/api/local/admin/replication-access']) {
             const r = await post(p, { password: ADMIN_PW });
             assert(r.status === 200 && !r.text.includes(ADMIN_PW), `5. ${p} never returns the stored password`);
         }
 
-        // ---------- 6. Auto-swap: main server has no token ----------
+        preStep7cPrimary = false;
+        // ---------- 6a. Step 7c: a main server with 2FA off no longer makes a token for the password alone ----------
+        assert(!getLocalConfig().replicationTokenHash, '6a. precondition: the main server has no replication token');
+        const printedAt6a = printed.length;
+        const noSwap = await migrateStandbyPassword();
+        assert(noSwap.lastSwap === 'failed' && noSwap.using === 'password', `6a. today's main server with 2FA off: no swap, the password is kept (${noSwap.lastSwap})`);
+        assert(/two-factor sign-in is off/.test(noSwap.warning || '') && /from the owner's phone/.test(noSwap.warning || ''),
+            `6a. the warning says to make a replication token from the owner's phone (${noSwap.warning})`);
+        assert(!/NOT copying/.test(noSwap.warning || '') && !/refused the stored password/.test(noSwap.warning || ''),
+            '6a. it never says the password was refused or that copying stopped');
+        const said = printed.slice(printedAt6a).filter(l => l.includes('[Backup]') && l.includes("from the owner's phone")).length;
+        assert(said === 1, `6a. one log line says so (${said})`);
+        assert(getLocalConfig().backupAdminPassword === ADMIN_PW && !getLocalConfig().replicationTokenHash, '6a. no token was made; the password is still stored');
+        resetBrakes();
+        const still = await requestResync();
+        assert(still.ok && getReplicationAccessLog().lastPullAuth === 'admin-pw', `6a. …and the standby keeps copying with the password (${still.error || 'ok'})`);
+
+        // ---------- 6. Auto-swap: a main server from before step 7c has no token ----------
+        preStep7cPrimary = true;
         assert(!getLocalConfig().replicationTokenHash, '6. precondition: the main server has no replication token');
         const swapped = await migrateStandbyPassword();
         assert(swapped.lastSwap === 'minted-token' && swapped.using === 'token' && swapped.warning === null, '6. the password was swapped for a token, no warning');
@@ -350,7 +383,10 @@ async function main() {
         const racing = migrateStandbyPassword();
         for (let i = 0; i < 100 && !getLocalConfig().replicationTokenHash; i++) await new Promise(r => setTimeout(r, 10));
         assert(!!getLocalConfig().replicationTokenHash, '9. precondition: this standby made a token and is re-checking it');
-        const other = await post('/api/local/admin/replication-token/generate', { password: ADMIN_PW }, { 'X-Admin-Password': ADMIN_PW });
+        // The other standby is a legacy one too: the password alone, no owner session (post() sends one).
+        resetBrakes();
+        const otherRes = await fetch(base + '/api/local/admin/replication-token/generate', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: JSON.stringify({ password: ADMIN_PW }) });
+        const other = { status: otherRes.status, json: await otherRes.json().catch(() => null) as any };
         assert(other.status === 200 && typeof other.json?.token === 'string', '9. another standby makes a token meanwhile (replacing it)');
         const lost = await racing;
         assert(lost.lastSwap === 'failed' && /another standby made a replication token/.test(lost.warning || ''), '9. the re-check notices its token was replaced, and says so');
@@ -391,6 +427,8 @@ async function main() {
             assert(getLocalConfig().backupAdminPassword === ADMIN_PW, '10. the password on disk is untouched');
         }
 
+        preStep7cPrimary = false;
+
         // ---------- 11. Node Settings: Replication Access status line ----------
         const settingsSrc = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'static', 'settings.js'), 'utf-8');
         const start = settingsSrc.indexOf('async function loadReplicationAccess()');
@@ -403,7 +441,9 @@ async function main() {
         for (const id of ['rep-token-state', 'rep-token-only', 'rep-token-only-notice']) els[id] = { textContent: '', style: {}, checked: false };
         const settingsCtx = vm.createContext({
             API: `${base}/api/local`, authToken: ADMIN_PW, relativeTime: () => 'now', JSON,
-            fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, init); },
+            // The page's display logic, read with an owner's session: settings.js sends the password per request, which a
+            // node with 2FA off refuses (step 7c); the session, checked first, is what gets this read in.
+            fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, { ...init, headers: { ...(init?.headers || {}), ...asOwner } }); },
             document: { getElementById: (id: string) => els[id] || null },
         });
         vm.runInContext(settingsSrc.slice(start, end) + '\nthis.loadReplicationAccess = loadReplicationAccess;', settingsCtx);
@@ -455,7 +495,7 @@ async function main() {
             assert(leaks.length === 0, `12. no route answers the token with the recovery-seal key or the open door's key, in any form (${answered.length} answered 200; leaks: ${leaks.join(', ') || 'none'})`);
             // What an owner downloads is the sealed backup; opened with the recovery code, its bundle carries the key.
             resetBrakes();
-            const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Password': ADMIN_PW }, body: '{}' });
+            const dl = await fetch(base + '/api/local/admin/backup', { method: 'POST', headers: { 'Content-Type': 'application/json', ...asOwner }, body: '{}' });
             const sealedBytes = Buffer.from(await dl.arrayBuffer());
             const tmp12 = fs.mkdtempSync(path.join(os.tmpdir(), 'standby-seal-key-'));
             try {

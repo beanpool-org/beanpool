@@ -7,8 +7,8 @@
  *      The refusal ends nothing: the session stays signed in.
  *   2. The 2FA card's routes open: status, a CSRF token, setup (with its eight backup codes), and verify.
  *   3. Confirming a code lifts the gate at once, in the same session (no new sign-in).
- *   4. A key session on a node with 2FA off is never gated, and the per-request X-Admin-Password header is not gated
- *      yet (a legacy standby's pull and the fleet profiles send it; step 7 moves them onto owner tokens).
+ *   4. A key session on a node with 2FA off is never gated; the per-request X-Admin-Password header is refused outright
+ *      (step 7c: test-password-needs-2fa covers it).
  *   5. With 2FA on, a password sign-in (with its code) is not gated. Turning 2FA off again holds the password session
  *      that did it to the card once more.
  *
@@ -26,7 +26,7 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, seedGenesisMember } from './state-engine.js';
 import { updateLocalConfig, hashPassword, setBreakGlassMode } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
-import { resetAdminAuthTarpit, TOTP_SETUP_REQUIRED_CODE } from './admin-auth.js';
+import { resetAdminAuthTarpit, TOTP_SETUP_REQUIRED_CODE, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import { validateAdminSession } from './admin-key-auth.js';
 
 let BASE = '';
@@ -165,7 +165,7 @@ async function main(): Promise<void> {
         const who2 = await call('GET', '/api/local/admin/auth/session', { headers: asCookie(a.sessionId) });
         assert(who2.body?.totpSetupRequired === false, `the session no longer says the card comes first (${who2.text.slice(0, 160)})`);
 
-        // ── 4. Keys are never gated; the per-request header is not gated yet ─────────────────────────
+        // ── 4. Keys are never gated; the per-request header is refused ───────────────────────────────
         console.log('── 4. key sessions and the header path ──');
         set2fa(false);
         const k = await keySignIn(owner);
@@ -177,7 +177,8 @@ async function main(): Promise<void> {
         const kWho = await call('GET', '/api/local/admin/auth/session', { headers: asCookie(k.sessionId) });
         assert(kWho.body?.isKeySession === true && kWho.body?.totpSetupRequired === undefined, `and its session never mentions the card (${kWho.text.slice(0, 160)})`);
         const header = await call('GET', '/api/local/admin/diagnostics', { headers: { 'X-Admin-Password': PW } });
-        assert(header.status === 200, `X-Admin-Password on each request is not gated yet (step 7 moves its callers) (${show(header)})`);
+        assert(header.status === 403 && header.body?.code === PASSWORD_NEEDS_2FA_CODE,
+            `X-Admin-Password on each request is refused outright while 2FA is off (step 7c, test-password-needs-2fa) (${show(header)})`);
 
         // ── 5. 2FA on: nothing changes; turning it off holds that session to the card again ───────────
         console.log('── 5. 2FA on ──');

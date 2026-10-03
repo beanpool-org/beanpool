@@ -8,7 +8,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { processProfileImage } from '../../utils/image-processing';
 import { AvatarPickerSheet } from '../../components/AvatarPickerSheet';
 import { updateCallsign, hasMnemonic } from '../../utils/identity';
-import { signOutOfThisPhone } from '../../utils/account-leaves-phone';
+import { namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/account-leaves-phone';
+import { NAMES_COPY, namesSignOutWords } from '../../utils/names-list';
 import {
     DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, deleteFailedLine, deletePlanFailedLine,
     deletedButLine, keepsKeyLine, lastCommunityLine, listNames, planDelete, type DeletePlan,
@@ -1452,6 +1453,41 @@ export default function SettingsScreen() {
         const success = await authenticateUser('Confirm authentication to sign out of this device.');
         if (!success) return;
 
+        async function signOutNow() {
+            setAdvancedLoading(true);
+            try {
+                // Its push alerts stop (signed by its key, so before the wipe), its saved communities and
+                // their cached copies go, then the key and the rest of its app storage.
+                await signOutOfThisPhone(identity, { namesCopiesSaved: true });
+                setIdentity(null);
+            } catch (e: any) {
+                Alert.alert("Sign Out Failed", e.message || "Failed to sign out.");
+            } finally {
+                setAdvancedLoading(false);
+            }
+        }
+
+        /**
+         * The names list's locked copies are saved and confirmed before the wipe (design §5). One the server didn't confirm
+         * gets the words first, and nothing is blocked: "Sign out anyway" always signs out.
+         */
+        async function signOutAfterNamesCopies() {
+            setAdvancedLoading(true);
+            let words: ReturnType<typeof namesSignOutWords> = null;
+            try {
+                words = namesSignOutWords(await namesCopiesBeforeSignOut(identity));
+            } finally {
+                setAdvancedLoading(false);
+            }
+            if (!words) return signOutNow();
+            Alert.alert(NAMES_COPY.title, words.text, [
+                { text: NAMES_COPY.tryAgain, onPress: () => void signOutAfterNamesCopies() },
+                // The names list's own "Export as PDF" (names-list.tsx).
+                ...(words.pdf ? [{ text: NAMES_COPY.savePdf, onPress: () => router.push('/names-list') }] : []),
+                { text: NAMES_COPY.signOutAnyway, style: 'destructive' as const, onPress: () => void signOutNow() },
+            ]);
+        }
+
         Alert.alert(
             "Sign Out (Device Only)",
             hasMnemonic(identity)
@@ -1462,19 +1498,7 @@ export default function SettingsScreen() {
                 { 
                     text: "Sign Out", 
                     style: "destructive",
-                    onPress: async () => {
-                        setAdvancedLoading(true);
-                        try {
-                            // Its push alerts stop (signed by its key, so before the wipe), its saved communities and
-                            // their cached copies go, then the key and the rest of its app storage.
-                            await signOutOfThisPhone(identity);
-                            setIdentity(null);
-                        } catch (e: any) {
-                            Alert.alert("Sign Out Failed", e.message || "Failed to sign out.");
-                        } finally {
-                            setAdvancedLoading(false);
-                        }
-                    }
+                    onPress: () => void signOutAfterNamesCopies()
                 }
             ]
         );

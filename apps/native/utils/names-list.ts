@@ -478,6 +478,50 @@ async function restoreFromCopy(anchor: string, identity: BeanPoolIdentity, store
 /** The codes of a refused copy, on which the screen offers "Start afresh on this phone" (asked first). */
 export const COPY_REFUSED_CODES = ['copy_bad', 'copy_stale', 'copy_other_address'];
 
+/** A names pin whose copy the node didn't confirm at Sign Out; `onlyKey`: the list's key N when no other admin holds it. */
+export interface NamesCopyUnconfirmed { anchor: string; onlyKey: number | null }
+
+/**
+ * Sign Out (design §5): for each community where this key keeps a names pin, the copy saved (or found already saved) and
+ * the node's `myCopy.digest` confirmed against the copy this phone last saw confirmed. On the pin's chain, so nothing
+ * writes the pin after the wipe that follows. Returns the ones not confirmed; the caller decides the words and never
+ * blocks (no hard gates). `anchors`: the community addresses this key keeps a pin for (from the store's labels).
+ */
+export async function saveNamesCopiesBeforeLeaving(identity: BeanPoolIdentity, anchors: readonly string[], store: NamesPinStore = DEVICE_NAMES_STORE): Promise<NamesCopyUnconfirmed[]> {
+    const out: NamesCopyUnconfirmed[] = [];
+    for (const anchor of anchors) {
+        const confirmed = await withPin(identity.publicKey, anchor, async (): Promise<NamesCopyUnconfirmed | null> => {
+            const kept = await readKeptPin(store, identity.publicKey, anchor);
+            if (kept.kind !== 'pin') return null;
+            const head = kept.pin.chain[kept.pin.chain.length - 1];
+            const s = await fetchNamesState(anchor, identity);
+            const me = identity.publicKey.toLowerCase();
+            const holders = s.ok ? (s.value.holdersOfCurrent ?? []).map((k) => k.toLowerCase()) : [];
+            const onlyKey = head && holders.length > 0 && holders.every((k) => k === me) ? head.n : null;
+            if (!s.ok || s.value.myCopy === undefined) return { anchor, onlyKey };
+            const saved = await saveCopy(anchor, identity, store, kept.pin, s.value);
+            if (!saved.ok) return { anchor, onlyKey };
+            const last = await lastCopied(store, identity.publicKey, anchor);
+            return saved.mine && last && saved.mine.digest === last.digest && saved.mine.seq === saved.pin.copy.seq ? null : { anchor, onlyKey };
+        });
+        if (confirmed) out.push(confirmed);
+    }
+    return out;
+}
+
+/** §5's words for a Sign Out whose names copy wasn't confirmed: the only-holder case offers the PDF. */
+export function namesSignOutWords(unconfirmed: readonly NamesCopyUnconfirmed[]): { text: string; pdf: boolean } | null {
+    if (!unconfirmed.length) return null;
+    const only = unconfirmed.find((u) => u.onlyKey !== null);
+    return only ? { text: NAMES_COPY.signOutOnlyCopy(only.onlyKey ?? 0), pdf: true } : { text: NAMES_COPY.signOutNotConfirmed, pdf: false };
+}
+
+/** The community addresses where `publicKey` keeps a names pin on this phone, from the pin labels among `keys`. */
+export function namesPinAddresses(keys: readonly string[], publicKey: string): string[] {
+    const prefix = `beanpool:names-trust:${publicKey.toLowerCase()}:`;
+    return keys.filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+}
+
 type NamesFailure = Extract<NamesResult<never>, { ok: false }>;
 const NOT_KEPT: NamesFailure = { ok: false, status: 0, code: 'not_kept', message: 'This phone couldn’t keep the names list’s keys. Nothing was sent. Try again.' };
 /** The pin is there but couldn't be read this time (round 15): nothing is synced from an empty pin or written over it. */
@@ -1469,6 +1513,12 @@ export const NAMES_COPY = {
     copyNotSaved: 'The server didn’t keep a copy of your names-list record just now, so no keys were sent. The next open tries again.',
     copyNewer: 'Another phone signed in as you saved the names list’s record. Use one phone.',
     startAfresh: 'Start afresh on this phone',
+    // Sign Out with the copy not confirmed (design §5): nothing is blocked.
+    signOutOnlyCopy: (n: number) => `This phone holds the only copy of the names list’s key ${n}, and the server didn’t confirm its copy. If you sign out now, the names written under it can’t be opened again.`,
+    signOutNotConfirmed: 'The server didn’t confirm a copy of your names-list record. After you sign in again, check codes with another admin on a call and their phone will send the keys.',
+    tryAgain: 'Try again',
+    savePdf: 'Save the names as a PDF',
+    signOutAnyway: 'Sign out anyway',
     // §9, exact.
     who: 'Only this community’s owners and admins can read these names, on their own phones. The server keeps them scrambled: '
         + 'a backup, a copy or a stolen database holds nothing readable. This phone gives the list’s keys only to admins whose phones '

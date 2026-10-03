@@ -407,7 +407,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     it("Sign Out and Permanent Node Purge ask the check before anything goes, as they always have", () => {
         const s = source('(tabs)/settings.tsx');
         for (const [start, reason, removal] of [
-            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.', 'await signOutOfThisPhone(identity);'],
+            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.', 'await signOutOfThisPhone(identity, { namesCopiesSaved: true });'],
             ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await deleteAccountHere(identity, plan);'],
         ] as const) {
             const body = slice(s, start, '\n    }\n');

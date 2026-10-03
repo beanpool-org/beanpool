@@ -59,8 +59,11 @@ export function parseHandoffFragment(hash: string): { token: string | null; sect
 
 export type KeySessionStart =
     | { kind: 'session'; session: KeySession; csrfToken: string; section: HandoffSection | null }
-    /** An earlier password sign-in whose cookie is still live: the node's owner, no member. */
-    | { kind: 'password'; csrfToken: string; section: HandoffSection | null }
+    /**
+     * An earlier password sign-in whose cookie is still live: the node's owner, no member. `totpSetupRequired`: the
+     * node's 2FA is off, so the session opens only the 2FA setup card (design step 6, components/auth/TotpSetupGate).
+     */
+    | { kind: 'password'; csrfToken: string; section: HandoffSection | null; totpSetupRequired: boolean }
     | { kind: 'none'; section: HandoffSection | null }
     | { kind: 'failed'; message: string; section: HandoffSection | null };
 
@@ -114,7 +117,7 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
             const csrfRes = await fetch('/api/local/admin/csrf-token', { method: 'POST', credentials: 'same-origin' });
             const csrfBody = await csrfRes.json().catch(() => ({})) as Record<string, unknown>;
             if (csrfRes.ok && typeof csrfBody.csrfToken === 'string') {
-                if (isPassword) return { kind: 'password', csrfToken: csrfBody.csrfToken, section };
+                if (isPassword) return { kind: 'password', csrfToken: csrfBody.csrfToken, section, totpSetupRequired: body.totpSetupRequired === true };
                 return { kind: 'session', session: { memberPubkey: body.memberPubkey as string, role: role! }, csrfToken: csrfBody.csrfToken, section };
             }
         }
@@ -123,7 +126,8 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
 }
 
 export type PasswordSignIn =
-    | { ok: true; csrfToken: string }
+    /** `totpSetupRequired`: the node's 2FA is off, so this session opens only the 2FA setup card (TotpSetupGate). */
+    | { ok: true; csrfToken: string; totpSetupRequired: boolean }
     | { ok: false; error: string; totpRequired: boolean };
 
 /**
@@ -140,7 +144,7 @@ export async function signInWithPassword(url: string, password: string, totpCode
         body: JSON.stringify({ password, ...(totpCode ? { totpCode } : {}) }),
     });
     const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-    if (res.ok && typeof body.csrfToken === 'string') return { ok: true, csrfToken: body.csrfToken };
+    if (res.ok && typeof body.csrfToken === 'string') return { ok: true, csrfToken: body.csrfToken, totpSetupRequired: body.totpSetupRequired === true };
     return {
         ok: false,
         totpRequired: body.totpRequired === true,

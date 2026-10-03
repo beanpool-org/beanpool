@@ -242,6 +242,7 @@ export const SUITES = [
     'test-heavy-read-cap',
     'test-heavy-read-keys',
     'test-members-snapshot',
+    'test-roster-snapshots',
     'test-members-directory-cost',
     'test-member-photos-out-of-rows',
     'test-group-pictures-out-of-rows',

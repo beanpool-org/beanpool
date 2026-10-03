@@ -17,7 +17,7 @@
  * Beside it, "Manage this community from a computer" ("Moderate …" for a moderator; app/settings-signin.tsx): scan the
  * QR on /settings in a computer's browser. Older apps call it "Sign in on a computer".
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
@@ -28,6 +28,7 @@ import { useManageNode } from './useManageNode';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { offersNamesList } from '../utils/names-list';
 import { issueBreakGlassCodeOnce, forgetBreakGlassCode } from '../utils/break-glass';
+import { signOutEverywhereOnce, signOutEverywhereWarning, signOutEverywhereDone } from '../utils/sign-out-everywhere';
 import { turnAppLockOnForRole, APP_LOCK_ON_FOR_ROLE } from '../utils/LocalAuth';
 
 /** The Settings screen's own menu styles, so the entry looks like every other row. */
@@ -48,8 +49,14 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     const [communityName, setCommunityName] = useState<string | null>(null);
     const { busy, start, dialog } = useManageNode();
     const profile = useNodeProfile();
-    // While a break-glass code is being made (the unlock prompt, then the node): its row is disabled and shows so.
+    // While a break-glass code is being made (the unlock prompt, then the node): its row is disabled and shows so. The
+    // ref is the guard: a second tap that lands before the row re-renders disabled returns at once, so it can never
+    // clear the spinner while the first ask is still running (#1548 review NB2).
     const [issuing, setIssuing] = useState(false);
+    const issuingRef = useRef(false);
+    // "Sign out everywhere": the same one-at-a-time guard.
+    const [signingOut, setSigningOut] = useState(false);
+    const signingOutRef = useRef(false);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -78,10 +85,12 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
     // An owner's break-glass code: shown once, to write down; the phone keeps no copy (utils/break-glass.ts says why).
     // One at a time (issueBreakGlassCodeOnce, and the row is disabled meanwhile): a second code would retire the first.
     const breakGlass = async (community: string) => {
-        const url = await getAnchorUrl();
-        if (!url || !identity?.privateKey) return;
+        if (issuingRef.current) return;
+        issuingRef.current = true;
         setIssuing(true);
         try {
+            const url = await getAnchorUrl();
+            if (!url || !identity?.privateKey) return;
             const r = await issueBreakGlassCodeOnce(url, identity, community);
             if (!r.ok) {
                 if (r.reason !== 'busy') Alert.alert('No break-glass code', r.message);
@@ -90,12 +99,40 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
             await forgetBreakGlassCode(url, identity.publicKey).catch(() => {});
             Alert.alert(
                 'Your break-glass code',
-                `${r.code}\n\nIt adds a new admin key if you lose this phone. Write it down and keep it offline, away from this phone: the app keeps no copy. It is shown only now; any earlier code no longer works, and signing out everywhere retires this one too.`,
+                `${r.code}\n\nIt adds a new admin key if you lose this phone. Write it down and keep it offline, away from this phone: the app keeps no copy. It is shown only now; any earlier code no longer works, and "Sign out everywhere" (below) retires this one too.`,
                 [{ text: 'I wrote it down', style: 'cancel' }],
             );
         } finally {
+            issuingRef.current = false;
             setIssuing(false);
         }
+    };
+
+    // Ends every Settings sign-in of this member's, on every computer and phone (an owner's break-glass code with them),
+    // after a plain confirm. The key stays on this phone, so Manage signs in again.
+    const signOutAll = async () => {
+        if (signingOutRef.current) return;
+        signingOutRef.current = true;
+        setSigningOut(true);
+        try {
+            const url = await getAnchorUrl();
+            if (!url || !identity?.privateKey) return;
+            const r = await signOutEverywhereOnce(url, identity);
+            if (!r.ok) {
+                if (r.reason !== 'busy') Alert.alert('Not signed out', r.message);
+                return;
+            }
+            Alert.alert('Signed out everywhere', signOutEverywhereDone(r));
+        } finally {
+            signingOutRef.current = false;
+            setSigningOut(false);
+        }
+    };
+    const confirmSignOutAll = (community: string) => {
+        Alert.alert('Sign out everywhere?', signOutEverywhereWarning(community, role === 'owner'), [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign out everywhere', style: 'destructive', onPress: () => { signOutAll().catch(() => {}); } },
+        ]);
     };
     const name = communityName || fallbackCommunityName || 'this community';
     const label = manageLabel(role, name);
@@ -158,6 +195,22 @@ export function NodeAdminEntry({ styles, fallbackCommunityName, onAppLockTurnedO
                         {issuing ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
                     </Pressable>
                 ) : null}
+                <Pressable
+                    style={[styles.menuBtn, { minHeight: 48 }]}
+                    onPress={() => confirmSignOutAll(name)}
+                    disabled={busy || signingOut}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sign out everywhere"
+                    accessibilityHint={`Asks first, then ends your sign-ins to ${name}'s Settings on every computer and phone. Your key stays on this phone`}
+                    accessibilityState={{ busy: signingOut, disabled: busy || signingOut }}
+                >
+                    <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🚪</Text></View>
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.menuText}>Sign out everywhere</Text>
+                        <Text style={styles.menuSub}>Ends your Settings sign-ins on every computer and phone</Text>
+                    </View>
+                    {signingOut ? <ActivityIndicator size="small" color={colors.brand.primary} /> : <Text style={styles.menuChevron}>›</Text>}
+                </Pressable>
                 <Pressable
                     style={[styles.menuBtn, styles.menuBtnLast, { minHeight: 48 }]}
                     onPress={() => router.push({ pathname: '/settings-signin', params: { community: name } })}

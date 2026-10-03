@@ -324,6 +324,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         dropSession();
     };
 
+    /** After "Sign out everywhere" (Owners & admins): the node already ended this session and cleared its cookie. */
+    const handleSignedOutEverywhere = () => {
+        forgetStoredAdminSecrets();
+        dropSession();
+        setKeySessionNotice('You are signed out everywhere. Sign in again to carry on.');
+    };
+
     /**
      * The node says this browser's session is over (a 401 with `sessionExpired`): it ran out (2 h idle, 12 h at most),
      * the node restarted, the password or its 2FA was changed elsewhere, or break-glass mode came on. Single-node only:
@@ -1521,6 +1528,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         initialSubTab={(navSubTab as any) || 'directory'}
                                         onSubTabChange={setNavSubTab}
                                         rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
+                                        onSignedOutEverywhere={!isFleetMode && keySession ? handleSignedOutEverywhere : undefined}
                                     />
                                 </SectionErrorBoundary>
                             )}

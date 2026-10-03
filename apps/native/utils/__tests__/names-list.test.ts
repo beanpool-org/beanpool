@@ -3316,6 +3316,27 @@ describe('§5 a copy the node didn\'t take: what the phone says, and nothing is 
         expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(c.seq);
     });
 
+    it('Send the keys again after a check: the copy is saved before the share, so the node\'s copy covers it and a wiped phone restores', async () => {
+        const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);
+        // Bea joins the admins; Ada checks her in person (Ada's pin changes), then sends her the keys at once.
+        const bea = await admin('Bea');
+        node.admins.push(role(bea));
+        await meet(node, ada, bea);
+        const before = node.copies!.get(ownerKey(node, ada))!.seq;
+        sent = [];
+        const r = await sendKeysAgain(COMMUNITY, ada, STORE, bea.publicKey);
+        expect(r.ok ? 'ok' : r.code).toBe('ok');
+        const order = sent.map((x) => `${x.method} ${new URL(x.url).pathname}`);
+        expect(order).toContain('POST /api/names/shares');
+        expect(order.indexOf('PUT /api/names/copy')).toBeGreaterThan(-1);
+        expect(order.indexOf('PUT /api/names/copy')).toBeLessThan(order.indexOf('POST /api/names/shares'));
+        expect(node.copies!.get(ownerKey(node, ada))!.seq).toBeGreaterThan(before);
+        wipe(ada);
+        const back = await openNamesList(COMMUNITY, ada, STORE);
+        expect(back.ok ? 'ok' : back.code).toBe('ok');
+        expect(node.log.filter((l) => l.action === 'copy_restored').map((l) => l.actor)).toEqual([ada.publicKey]);
+    });
+
     for (const typed of ['https://mullum.beanpool.org/', 'https://MULLUM.BeanPool.org', 'https://mullum.beanpool.org:443', 'HTTPS://Mullum.beanpool.org:443/']) {
         it(`the address saved under and the one restored with are normalised the same: saved at ${COMMUNITY}, restored at ${typed}`, async () => {
             const { node, phones: [, ada] } = await community(['Owen', 'Ada'], true);

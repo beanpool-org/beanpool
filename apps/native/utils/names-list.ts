@@ -397,6 +397,17 @@ async function copyDue(store: NamesPinStore, publicKey: string, anchor: string, 
 const copyFailure = (code: string, message: string): NamesFailure => ({ ok: false, status: 0, code, message });
 
 /**
+ * The open's copy rule (`copyHeld`, design §3 item 2) for a request that sends statements or shares outside an open:
+ * the copy first, when due. A copy that fails is returned, and the caller sends nothing. The pin as kept otherwise.
+ */
+async function copyFirst(anchor: string, identity: BeanPoolIdentity, store: NamesPinStore, pin: NamesPin, state: Pick<NamesState, 'myCopy'>): Promise<NamesResult<NamesPin>> {
+    const due = await copyDue(store, identity.publicKey, anchor, pin, state);
+    if (due !== 'yes' && due !== 'higher') return { ok: true, value: pin };
+    const copied = await saveCopy(anchor, identity, store, pin, state);
+    return copied.ok ? { ok: true, value: copied.pin } : copied;
+}
+
+/**
  * Saves this pin's locked copy on the node, unless the node already confirmed this very copy (on the pin's chain; the
  * caller holds it). The pin with its copy number moved on is kept on this phone first, so a retry reuses the number and
  * the same copy (`exists`); a 409 `stale_copy` moves past the node's number once. A failure is returned, never thrown:
@@ -1182,7 +1193,9 @@ export async function putHistoryBack(anchor: string, identity: BeanPoolIdentity,
         const l = await look(anchor, identity, store);
         if (!l.ok) return l;
         if (!(l.value.plan.kind === 'refused' && l.value.plan.reason === 'rolled_back')) return openUnlocked(anchor, identity, store);
-        for (const link of namesReplay(l.value.pin, l.value.state)) {
+        const copied = await copyFirst(anchor, identity, store, l.value.pin, l.value.state);
+        if (!copied.ok) return copied;
+        for (const link of namesReplay(copied.value, l.value.state)) {
             const sent = await postGeneration(anchor, identity, link, true);
             if (!sent.ok) return sent;
         }
@@ -1239,7 +1252,9 @@ export function sendKeysAgain(anchor: string, identity: BeanPoolIdentity, store:
         const l = await look(anchor, identity, store);
         if (!l.ok) return l;
         if (l.value.plan.kind !== 'ready') return { ok: false, status: 0, code: 'no_plan', message: NAMES_COPY.notReady };
-        const share = namesSharesToSend(l.value.pin, l.value.state, identity, to)[0];
+        const copied = await copyFirst(anchor, identity, store, l.value.pin, l.value.state);
+        if (!copied.ok) return copied;
+        const share = namesSharesToSend(copied.value, l.value.state, identity, to)[0];
         if (!share) return { ok: false, status: 0, code: 'check_in_person', message: NAMES_COPY.checkFirst(callsignIn(l.value.state, to.toLowerCase())) };
         return postShare(anchor, identity, share);
     });

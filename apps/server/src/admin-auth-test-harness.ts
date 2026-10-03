@@ -6,6 +6,8 @@
  *   - ownerTokenHeaders: an automation token made from an owner's key (a member seeded here, granted owner), the way an
  *     owner makes one from the phone. It reaches every admin route its scope allows; no token reaches the sign-in,
  *     session, 2FA or token routes (isRefusedToEveryToken).
+ *   - ownerSessionHeaders: an owner's key session, as a computer's key sign-in opens one. For owner-only routes, which
+ *     no token reaches.
  *   - turnOn2faForTests: for a suite whose purpose is the password itself. It turns the node's 2FA on, and
  *     `headers()` sends the password with a fresh code, as an owner with an authenticator does.
  *
@@ -17,6 +19,7 @@ import { grantNodeRole } from './state-engine.js';
 import { issueAutomationToken, type TokenScope } from './automation-tokens.js';
 import { updateLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
+import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 
 /** Seed a member that holds the owner role, and return its key. */
 export function seedOwnerForTests(callsign = 'testOwner'): string {
@@ -34,6 +37,19 @@ export function ownerTokenHeaders(scope: TokenScope = 'admin', ownerPubkey?: str
     const issued = issueAutomationToken({ name: `suite ${scope}`, scope, createdBy });
     if (!issued.ok) throw new Error(`could not make a test automation token: ${issued.error}`);
     return { Authorization: `Bearer ${issued.token}` };
+}
+
+/**
+ * Headers carrying an owner's key session (an owner is seeded unless `ownerPubkey` is given): the session a computer's
+ * key sign-in opens once its signed challenge checks out (mintHandshakeToken, then the exchange). It reaches owner-only
+ * routes, which no token does. Sent as X-Admin-Session, not a cookie, so no CSRF token is asked for.
+ */
+export function ownerSessionHeaders(ownerPubkey?: string): Record<string, string> {
+    const pub = ownerPubkey ?? seedOwnerForTests(`sesOwner${crypto.randomBytes(3).toString('hex')}`);
+    const { handshakeToken } = mintHandshakeToken(pub, 'owner');
+    const s = consumeHandshakeToken(handshakeToken);
+    if (!s.ok || !s.sessionId) throw new Error(`could not open a test key session: ${s.error}`);
+    return { 'X-Admin-Session': s.sessionId };
 }
 
 /**

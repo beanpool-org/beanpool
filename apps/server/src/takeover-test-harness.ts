@@ -327,7 +327,7 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
         try {
             const msg = JSON.parse(line);
             id = msg.id;
-            const fn = commands[msg.cmd];
+            const fn = commands[msg.cmd] ?? adminCredentialCommands[msg.cmd];
             if (!fn) throw new Error(`no such command ${msg.cmd}`);
             answer = { reply: id, result: await fn(msg.args || {}) };
         } catch (e: any) {
@@ -402,6 +402,33 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
  * test-member-blocks-standby.ts serves it. Spread into a suite's commands; `serve` answers the port. Run inside the node's
  * process, once per start.
  */
+/**
+ * Step 7c: with the node's 2FA off the admin password alone opens no admin route. An owner's credentials, made inside the
+ * node's process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
+ * them (runNodeChild); a suite's own command of the same name wins.
+ *   - owner-token { scope?, owner? }: an automation token (it lives in local-config.json, so it outlives a restart); no
+ *     token makes an owner-only change.
+ *   - owner-session { owner? }: an owner's key session, for owner-only routes (in memory: ask again after a restart).
+ * The owner is `owner`, else the first member holding the owner role, else one seeded for it.
+ */
+export const adminCredentialCommands: Record<string, (args: any) => Promise<unknown>> = {
+    'owner-token': async (a: { scope?: 'read' | 'backups' | 'admin'; owner?: string }) => {
+        const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+        return ownerTokenHeaders(a.scope ?? 'admin', a.owner ?? await firstOwner());
+    },
+    'owner-session': async (a: { owner?: string }) => {
+        const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+        return ownerSessionHeaders(a.owner ?? await firstOwner());
+    },
+};
+
+async function firstOwner(): Promise<string | undefined> {
+    const { db } = await import('./db/db.js');
+    const row = db.prepare(`SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+                            WHERE nr.role = 'owner' ORDER BY nr.rowid LIMIT 1`).get() as { member_pubkey: string } | undefined;
+    return row?.member_pubkey;
+}
+
 export const serveCommands: Record<string, (args: any) => Promise<unknown>> = {
     serve: async () => {
         delete process.env.CF_RECORD_NAME;

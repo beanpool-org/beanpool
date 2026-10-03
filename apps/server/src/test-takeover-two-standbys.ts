@@ -131,19 +131,21 @@ async function webAddress(): Promise<{ url: string; leadTo: (base: string | null
     };
 }
 
-async function openKeys(node: NodeProc, code: string, pw: string): Promise<{ status: number; body: any }> {
-    return post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': pw });
+// Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the node
+// makes (takeover-test-harness.ts owner-session).
+async function openKeys(node: NodeProc, code: string): Promise<{ status: number; body: any }> {
+    return post(node.base, '/api/local/admin/takeover/open', { code }, await node.send('owner-session'));
 }
 
-async function confirm(node: NodeProc, sessionId: string, pw: string): Promise<{ status: number; body: any }> {
-    return post(node.base, '/api/local/admin/takeover/confirm', { sessionId, confirm: true }, { 'X-Admin-Password': pw });
+async function confirm(node: NodeProc, sessionId: string): Promise<{ status: number; body: any }> {
+    return post(node.base, '/api/local/admin/takeover/confirm', { sessionId, confirm: true }, await node.send('owner-session'));
 }
 
 /** Take over on a standby with the code; the restart; the promoted server started again on `env`. */
-async function takeOver(node: NodeProc, dir: string, code: string, pw: string, env: Record<string, string>, label: string): Promise<NodeProc> {
-    const opened = await openKeys(node, code, pw);
+async function takeOver(node: NodeProc, dir: string, code: string, env: Record<string, string>, label: string): Promise<NodeProc> {
+    const opened = await openKeys(node, code);
     assert(opened.status === 200, `${label}: the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 200)})`);
-    const confirmed = await confirm(node, opened.body.preview.sessionId, pw);
+    const confirmed = await confirm(node, opened.body.preview.sessionId);
     assert(confirmed.status === 200, `${label}: confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 200)})`);
     await node.exited;
     return spawnNode(SCRIPT, dir, env);
@@ -188,16 +190,16 @@ async function main(): Promise<void> {
 
         let a = track(await spawnNode(SCRIPT, dir('a'), envA));
         const b = track(await spawnNode(SCRIPT, dir('b'), envB));
-        const bOpened = await openKeys(b, setup.code, PW_B);
+        const bOpened = await openKeys(b, setup.code);
         assert(bOpened.status === 200 && bOpened.body.preview?.sessionId, `B opens the keys while the web address leads nowhere (${bOpened.status})`);
 
-        a = track(await takeOver(a, dir('a'), setup.code, PW_A, envA, 'A takes over'));
+        a = track(await takeOver(a, dir('a'), setup.code, envA, 'A takes over'));
         assert(a.ready.role === 'primary' && a.ready.peerId === mainPeerId, 'A is the main server, with the community\'s PeerId');
         address.leadTo(a.base);
         const aEpoch = await a.send('epoch');
         assert(aEpoch.epoch === 1 && aEpoch.since, `A is at identity epoch 1, since ${aEpoch.since}`);
 
-        const bConfirmed = await confirm(b, bOpened.body.preview.sessionId, PW_B);
+        const bConfirmed = await confirm(b, bOpened.body.preview.sessionId);
         assert(bConfirmed.status === 409 && bConfirmed.body.alreadyTakenOver === true && bConfirmed.body.epoch === 1 && bConfirmed.body.since === aEpoch.since,
             `B's confirm, opened before A took over, is refused: another server took over with these keys (${bConfirmed.status} ${JSON.stringify(bConfirmed.body).slice(0, 120)})`);
         assert(/^Another server already took over this community with these keys/.test(bConfirmed.body.error)
@@ -206,9 +208,9 @@ async function main(): Promise<void> {
         `B says so plainly, and what to do instead: ${bConfirmed.body.error}`);
         assert(!fs.existsSync(path.join(dir('b'), 'takeover-journal.json')) && !fs.existsSync(path.join(dir('b'), 'takeover-bundle.json'))
             && b.proc.exitCode === null, 'B wrote nothing: no journal, no opened keys, no restart');
-        const bAgain = await openKeys(b, setup.code, PW_B);
+        const bAgain = await openKeys(b, setup.code);
         assert(bAgain.status === 409 && bAgain.body.alreadyTakenOver === true, `opening the keys on B again is refused at once (${bAgain.status})`);
-        const bProgress = await post(b.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': PW_B });
+        const bProgress = await post(b.base, '/api/local/admin/takeover/progress', {}, await b.send('owner-session'));
         assert(bProgress.body.role === 'backup' && bProgress.body.state === 'none', `B is still a standby, with no take-over (${bProgress.body.role}, ${bProgress.body.state})`);
         await b.kill('SIGTERM');
 
@@ -216,10 +218,10 @@ async function main(): Promise<void> {
         copyDir(dir('b-before'), dir('b-url'));
         const bUrl = track(await spawnNode(SCRIPT, dir('b-url'), { ADMIN_PASSWORD: PW_B, NODE_ROLE: 'backup' }));
         await bUrl.send('set-primary-url', { url: a.base });
-        const viaUrl = await openKeys(bUrl, setup.code, PW_B);
+        const viaUrl = await openKeys(bUrl, setup.code);
         assert(viaUrl.status === 409 && viaUrl.body.alreadyTakenOver === true && /the main server's address/.test(viaUrl.body.error),
             `with no web address, B asks the main server's URL it copies from, which leads to A: refused (${viaUrl.status} ${String(viaUrl.body.error).slice(0, 120)})`);
-        const urlProgress = await post(bUrl.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': PW_B });
+        const urlProgress = await post(bUrl.base, '/api/local/admin/takeover/progress', {}, await bUrl.send('owner-session'));
         assert(a.ready.role === 'primary' && urlProgress.body.role === 'backup' && urlProgress.body.state === 'none',
             'exactly one main server: A; B is still a standby');
         await bUrl.kill('SIGTERM');
@@ -231,9 +233,9 @@ async function main(): Promise<void> {
         copyDir(dir('a-before'), dir('a2'));
         copyDir(dir('b-before'), dir('b2'));
         let a2 = track(await spawnNode(SCRIPT, dir('a2'), envA));
-        a2 = track(await takeOver(a2, dir('a2'), setup.code, PW_A, envA, "A' takes over"));
+        a2 = track(await takeOver(a2, dir('a2'), setup.code, envA, "A' takes over"));
         let b2 = track(await spawnNode(SCRIPT, dir('b2'), envB));
-        b2 = track(await takeOver(b2, dir('b2'), setup.code, PW_B, envB, "B' takes over (the address answered nothing)"));
+        b2 = track(await takeOver(b2, dir('b2'), setup.code, envB, "B' takes over (the address answered nothing)"));
         const ea = await a2.send('epoch');
         const eb = await b2.send('epoch');
         assert(a2.ready.role === 'primary' && b2.ready.role === 'primary' && ea.epoch === 1 && eb.epoch === 1 && ea.since < eb.since,
@@ -248,7 +250,12 @@ async function main(): Promise<void> {
             && /^Another server took over this community with the same keys on .+, before this server did \(.+\)\. This server is now read-only\./.test(bWrite.body.error),
         `B' refuses a member's write, saying why (${bWrite.status} ${bWrite.body.error})`);
         // After a take-over, Settings answers the community's admin password (the main server's), not the standby's own.
-        const bProg = await post(b2.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': PW_MAIN });
+        // Step 7c: with 2FA off that password alone opens no admin route (refused as needing 2FA, not as a wrong one); with
+        // 2FA on, it and a code do.
+        const bPwAlone = await post(b2.base, '/api/local/admin/takeover/progress', {}, { 'X-Admin-Password': PW_MAIN });
+        assert(bPwAlone.status === 403 && bPwAlone.body?.code === 'password_needs_2fa',
+            `the community's admin password alone is refused as needing 2FA (${bPwAlone.status} ${bPwAlone.body?.code})`);
+        const bProg = await post(b2.base, '/api/local/admin/takeover/progress', {}, await b2.send('password-and-code', { password: PW_MAIN }));
         assert(bProg.status === 200 && bProg.body.replaced?.conflict === true && /before this server did/.test(bProg.body.replaced.message),
             `Settings on B' (its admin control plane stays open) says so (${bProg.body.replaced?.message})`);
         assert(/\[Split-brain\] 🛑 Another server took over this community with the same keys/.test(b2.output()), "and so does B''s log");

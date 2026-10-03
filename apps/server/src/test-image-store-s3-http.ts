@@ -483,17 +483,25 @@ async function main(): Promise<void> {
     // the kept label says, checked here where it is kept.)
     console.log('\n--- 9. The harvester\'s kept copy ---');
     {
-        // Step 7c: the shipped harvester still sends the admin password alone, with no code and no token (its token path
-        // is PR #1550), and this node refuses that (2FA off: password_needs_2fa; on, as here: a code is required). Until
-        // then this section FAILS, honestly: the refusal is recorded as a failed check rather than crashing the suite, so
-        // sections 10 and 11 still run. No assertion here is loosened.
-        const node = { id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw };
+        // Step 7c: the harvester's legacy entry sends the admin password alone, with no code, and this node's 2FA is on:
+        // refused, nothing kept (with 2FA off it is 403 password_needs_2fa, checked in test-harvester). The fleet holds an
+        // owner's automation token with the backups scope instead (#1550), sent as a bearer and nothing beside it.
+        const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
+        const keptBeforePw = fs.existsSync(kept);
+        resetAdminAuthTarpit();
+        let pwError = '';
+        try { await pullBackupForNode({ id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw } as any); } catch (e) { pwError = (e as Error).message; }
+        assert(/HTTP 401/.test(pwError) && fs.existsSync(kept) === keptBeforePw, `the password alone, no code: refused, nothing kept (${pwError || 'pulled'})`);
+        const { seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+        const { issueAutomationToken } = await import('./automation-tokens.js');
+        const fleetTok = issueAutomationToken({ name: 'fleet harvester', scope: 'backups', createdBy: seedOwnerForTests('fleetOwner') });
+        if (!fleetTok.ok) throw new Error(`the fleet owner's backups token was not made: ${fleetTok.error}`);
+        const node = { id: 'local-node', name: 'S3 node', url: BASE, automationToken: fleetTok.token };
         resetAdminAuthTarpit();
         let pulled: Awaited<ReturnType<typeof pullBackupForNode>> | null = null;
         let pullError = '';
         try { pulled = await pullBackupForNode(node as any); } catch (e) { pullError = (e as Error).message; }
-        assert(pulled?.kind === 'plain', `the harvester pulled a readable backup from the s3 node${pullError ? ` (${pullError})` : ''}`);
-        const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
+        assert(pulled?.kind === 'plain', `the harvester pulled a readable backup from the s3 node with the backups token${pullError ? ` (${pullError})` : ''}`);
         assert(fs.existsSync(kept) && fs.existsSync(inBucketLabelFor(kept)), 'it kept the database AND the in-bucket label beside it');
         assert(listFiles(imagesDirFor(kept)).length === 0, 'with no images beside it, by design');
         let label: ReturnType<typeof readInBucketMember> | null = null;

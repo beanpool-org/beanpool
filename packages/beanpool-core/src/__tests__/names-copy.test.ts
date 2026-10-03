@@ -28,7 +28,8 @@ function admin(): Admin {
     return { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
 }
 const pkcs8 = (seedHex: string) => '302e020100300506032b657004220420' + seedHex;
-const flip = (s: string) => s.replace(/^./, (c) => (c === '0' ? '1' : c === 'A' ? 'B' : c === '1' ? '0' : 'A'));
+// Hex decodes 'a' and 'A' to the same nibble, so 'a' must become another letter, not 'A' (1 run in 16 passed a "changed" signature).
+const flip = (s: string) => s.replace(/^./, (c) => (c === '0' ? '1' : c === 'A' ? 'B' : c === 'a' ? 'b' : c === '1' ? '0' : 'A'));
 const wireGen = (g: NamesGeneration) => ({ statement: g.statement, signature: g.signature, id: g.id, n: g.n });
 const wireShare = (s: NamesShare) => ({ header: s.header, signature: s.signature, from: s.from, to: s.to });
 const wireCopy = (c: NamesCopy) => ({ header: c.header, signature: c.signature, box: c.box });

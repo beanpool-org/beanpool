@@ -48,7 +48,7 @@ import { avatarKeysRequired, groupPictureKeyMatches } from '../engine/avatar-key
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
-import { heavyRead, heavyReadKey } from '../heavy-reads.js';
+import { heavyRead, heavyReadKey, LIGHT_BYTES } from '../heavy-reads.js';
 import { getMembersVersion } from '../engine/versions.js';
 import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT } from '../members-snapshot.js';
 import { noteRosterSent, rosterSlot, rosterSnapshotKey, rosterSnapshotSize, storeRosterSnapshot, usableRosterSnapshot, type RosterSnapshot, type RosterView } from '../roster-snapshots.js';
@@ -316,8 +316,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const ready = usableRosterSnapshot(slot, keyNow());
         if (ready) {
             if (holds(ready)) { ctx.set('ETag', ready.etag); ctx.status = 304; return; }
-            // Under the cap too, weighed at what a send holds (a window of the shared bytes), and cut off at its deadline.
-            await heavyRead(ctx, 'roster-snapshot', () => send(ready), SNAPSHOT_SEND_WEIGHT);
+            // Under the cap too, weighed at what a send holds (a window of the shared bytes), and cut off at its deadline. A
+            // small one is light, as its key's last answer was: straight through, never waiting behind the big ones.
+            await heavyRead(ctx, 'roster-snapshot', () => send(ready), ready.body.length < LIGHT_BYTES ? 0 : SNAPSHOT_SEND_WEIGHT);
             return;
         }
         // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster with the same status and role: a

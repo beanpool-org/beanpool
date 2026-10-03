@@ -63,7 +63,7 @@ const MAX_QUEUE = 64;
  */
 const DEADLINE_MS = 180_000;
 /** Below this, a route's answer isn't heavy (see above). */
-const LIGHT_BYTES = 512 * 1024;
+export const LIGHT_BYTES = 512 * 1024;
 /** A route not yet measured weighs this share of the budget. */
 const UNMEASURED_SHARE = 4;
 /** Retry-After on a refusal, in seconds: spread over this range, so the readers turned away don't all come back at once. */
@@ -247,7 +247,9 @@ export async function heavyRead(ctx: Koa.Context, key: string, build: () => void
     const res = ctx.res;
     const fixed = fixedWeight !== undefined;
     const known = fixed ? undefined : lastSize.get(slot(key));
-    const light = known !== undefined && known < LIGHT_BYTES;
+    // A fixed weight of 0 is a caller's light answer (a small shared roster, roster-snapshots.ts): straight through, as a
+    // key whose last answer was light.
+    const light = fixed ? fixedWeight === 0 : known !== undefined && known < LIGHT_BYTES;
     const weight = fixed ? fixedWeight : light ? 0 : (known ?? Math.ceil(heavyReadSettings().budgetBytes / UNMEASURED_SHARE));
     // A route called with no response to watch (a suite dispatching a handler directly): its weight is given back as
     // soon as it is built.

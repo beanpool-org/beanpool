@@ -17,10 +17,12 @@
  *   1. Each full answer is read once with nothing in flight, so its size is known: the member's roster, the convenor's
  *      (every status). The list of 200 groups is read too, and is under 512 KB.
  *   2. The small answers under the same routes are read: a member's `?role=convenor` and the convenor's `?status=invited`.
- *   3. A member who stops reading holds a full roster: that answer's whole size is in flight, the budget full.
+ *   3. A member who stops reading a full roster holds a window of it, not its size: rosters are shared answers sent a
+ *      window at a time (roster-snapshots.ts, slice 3). One who stops reading the whole-directory delta (still built per
+ *      read) holds its whole size: the budget full.
  *   4. The small answers still go straight through.
- *   5. The full ones are weighed by their own last size: each waits its 1.5 s and is told "busy". At 5257ccc0 each was
- *      let straight through as light, and the reader holding the roster held nothing.
+ *   5. The full ones, built again (no shared roster kept), are weighed by their own last size: each waits its 1.5 s and
+ *      is told "busy". At 5257ccc0 each was let straight through as light, and the reader holding the roster held nothing.
  *   6. When the holder hangs up, a full roster is served again, the same bytes.
  *
  * The member directory's delta (r4170492489): `/api/members?updatedAfter=0` is every member, the whole directory, and a
@@ -132,6 +134,8 @@ async function main(): Promise<void> {
     const engine = await import('@beanpool/engine');
     const { GROUP_DESCRIPTION_LIMIT } = await import('@beanpool/core');
     const { heavyReadStats, setHeavyReadsForTests } = await import('./heavy-reads.js');
+    const { setRosterSnapshotsForTests } = await import('./roster-snapshots.js');
+    const { SNAPSHOT_SEND_WEIGHT } = await import('./members-snapshot.js');
     initAdminPassword();
     await initTls();
     se.initStateEngine();
@@ -207,12 +211,19 @@ async function main(): Promise<void> {
             `the convenor's ?status=invited is none (${small.invitedOnly.status}, ${small.invitedOnly.text})`);
         assert(await free(), `nothing is in flight (${inFlight()} bytes)`);
 
-        // ── 3. A member who stops reading holds a full roster ────────────────────────────────────────────────────
-        holder = read(routes.memberRoster, { hold: true });
+        // ── 3. A member who stops reading a shared roster holds a window; one who stops reading the delta, its size ─
+        const rosterHolder = read(routes.memberRoster, { hold: true });
+        const rosterHeld = await rosterHolder.headers;
+        await until(() => inFlight() > 0, 3000);
+        assert(rosterHeld?.statusCode === 200 && inFlight() > 0 && inFlight() <= SNAPSHOT_SEND_WEIGHT,
+            `a member who stops reading a full roster holds a window of the shared answer, not its size (${rosterHeld?.statusCode}; ${(inFlight() / 1024).toFixed(0)} KB in flight of a ${(full.memberRoster.bytes / MB).toFixed(1)} MB roster)`);
+        rosterHolder.hangUp();
+        assert(await free(), `the roster's holder gives its window back when it hangs up (${inFlight()} bytes)`);
+        holder = read(routes.deltaFromZero, { hold: true });
         const held = await holder.headers;
-        const holding = await until(() => inFlight() >= full.memberRoster.bytes, 3000);
+        const holding = await until(() => inFlight() >= 1 * MB, 3000);
         assert(held?.statusCode === 200 && holding,
-            `a member who stops reading a full roster holds its whole size, the budget full (${held?.statusCode}; ${(inFlight() / MB).toFixed(1)} MB in flight of a ${(full.memberRoster.bytes / MB).toFixed(1)} MB roster)`);
+            `a member who stops reading the whole-directory delta holds its whole size, the budget full (${held?.statusCode}; ${(inFlight() / MB).toFixed(1)} MB in flight)`);
 
         // ── 4. The small answers still go straight through ───────────────────────────────────────────────────────
         const smallAgain = {
@@ -223,6 +234,8 @@ async function main(): Promise<void> {
             `with the budget full, the small answers are still light and go straight through (${Object.values(smallAgain).map((a) => `${a.status} in ${Math.round(a.ms)} ms`).join(', ')})`);
 
         // ── 5. The full answers are weighed by their own last size, not the small one's ──────────────────────────
+        // Built again, as after a write: a ready shared roster is sent a window at a time and weighed at that.
+        setRosterSnapshotsForTests(undefined);
         const fullAgain = {
             memberRoster: await read(routes.memberRoster).done,
             convenorRoster: await read(routes.convenorRoster).done,

@@ -468,8 +468,8 @@ function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
 /**
  * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
  * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
- * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) an owner or
- * admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
+ * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) or re-keying an
+ * owner or admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
  * engine is given. Answers 403 and returns false when that is due.
  */
 function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
@@ -2153,6 +2153,8 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const { pubkey } = ctx.params;
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
         const result = issueRekeyCode(pubkey, effectiveActor);
@@ -2186,6 +2188,7 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
 
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
         const result = completeRekey(pubkey, newPubkey, code, effectiveActor);

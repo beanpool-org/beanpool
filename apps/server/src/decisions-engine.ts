@@ -1598,14 +1598,16 @@ function haltRestoresRole(decision: { status: string; effect: string }): boolean
         || decision.effect === 'keep_suspension';
 }
 
-export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend';
+export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend' | 'rekey';
 
 /**
  * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root), Decision (halt,
  * accelerate) or report (report-suspend: actioning it with suspendUser, which takes the subject's role) is one only an
  * owner may make: the conditions on which the engine refuses it to an admin
  * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
- * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard), whoever is acting. No role gate sees these,
+ * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
+ * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
+ * caller's choosing to that role. No role gate sees these,
  * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
  * stepUpIfOwnerOnly). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
  */
@@ -1615,6 +1617,7 @@ export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: stri
     if (action === 'prune') return pruneNeedsOwner(target, actor);
     if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
     if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
+    if (action === 'rekey') return !!heldPrivilegedRole(target);
     if (action === 'lift') {
         const openKeeps = db.prepare(
             "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"

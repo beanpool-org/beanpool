@@ -32,6 +32,8 @@ import {
     adminPruneUser,
     assertMayPrune,
     isSoleOwner,
+    heldPrivilegedRole,
+    isOwnerLevelActor,
     broadcast,
     getBalance,
     getCommonsBalanceExact,
@@ -174,6 +176,19 @@ function shortKey(key: string): string {
     return /^[0-9a-f]{64}$/i.test(key) ? `${key.slice(0, 10)}...` : key;
 }
 
+/**
+ * A re-key moves the member's node role to the new key, and only an owner may change an owner's or admin's role
+ * (node-roles): an owner's or admin's re-key (a role held aside while suspended counts) by anyone but an owner, the
+ * password or the member themselves is refused, 403, before any write. Both steps ask it: a code an owner issued is
+ * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched.
+ */
+function assertMayRekey(cleanOld: string, cleanOperator: string): void {
+    if (!heldPrivilegedRole(cleanOld) || cleanOperator === cleanOld || isOwnerLevelActor(cleanOperator)) return;
+    const err: any = new Error('Only an owner can re-key an owner or admin');
+    err.status = 403;
+    throw err;
+}
+
 export function issueRekeyCode(
     oldPublicKey: string,
     operatorPubkey: string,
@@ -190,6 +205,7 @@ export function issueRekeyCode(
     if (member.status === 'pruned') {
         throw new Error('Cannot re-key a pruned member');
     }
+    assertMayRekey(cleanOld, cleanOperator);
     if (isKeyInvalidated(cleanOld)) {
         const info = getInvalidatedKeyInfo(cleanOld);
         if (info?.rekeyed_to) {
@@ -297,6 +313,9 @@ export function completeRekey(
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
     }
+    // The operator as this call names it: the admin route's session, or the issuer the member's own completion reads
+    // from the code (routes/community.ts), which is the old key itself when a member re-keyed themselves.
+    assertMayRekey(cleanOld, (operatorPubkey || '').trim().toLowerCase());
     // An account deleted by its owner (purgeMemberSelf) or removed (adminPruneUser, by an admin or a community vote)
     // since the code was issued stays that way: issueRekeyCode refuses a pruned member, and this is its other half.
     // Completing used to set the row back to 'active' and hand it to the new key: a deleted account came back emptied

@@ -638,6 +638,77 @@ async function main() {
         assert(onPlain.status === 200, `suspending a plain member through a report six minutes on is not asked (got ${onPlain.status} ${JSON.stringify(onPlain.body)})`);
     }
 
+    // ── 13. A re-key moves an owner's or admin's role to a new key: only an owner may (member-wizards assertMayRekey),
+    // so a stale phone session is asked and an admin is refused; an admin re-keying a member or moderator is neither
+    // (confirm 2, 4172228423). ──
+    console.log('\n13. Re-keying an owner or admin');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const roleOf = (pk: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pk) as any)?.role ?? null;
+        const statusOf = (pk: string) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pk) as any)?.status ?? null;
+        const pending = (pk: string) => (db.prepare("SELECT COUNT(*) AS c FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending'").get(pk) as any).c as number;
+        const isStepUp = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'step_up_required';
+        const isOwnerOnly = (r: { status: number; body: any }) => r.status === 403 && r.body?.code !== 'step_up_required' && /Only an owner can re-key an owner or admin/.test(r.body?.error ?? '');
+        const issue = (pk: string, s: any) => postJson(`/api/local/admin/members/${pk}/rekey/issue-code`, {}, as(s));
+        const complete = (pk: string, code: string, newPubkey: string, s: any) => postJson(`/api/local/admin/members/${pk}/rekey/complete`, { code, newPubkey }, as(s));
+        const coOwner = keypair(), coOwnerB = keypair(), anAdmin = keypair(), plain = keypair(), aMod = keypair();
+        seedMember(coOwner.pub, 'hoCoOwner13');
+        seedMember(coOwnerB.pub, 'hoCoOwnerB13');
+        seedMember(anAdmin.pub, 'hoAdmin13');
+        seedMember(plain.pub, 'hoPlain13');
+        seedMember(aMod.pub, 'hoMod13');
+        grantNodeRole(coOwner.pub, 'owner', owner.pub);
+        grantNodeRole(coOwnerB.pub, 'owner', owner.pub);
+        grantNodeRole(anAdmin.pub, 'admin', owner.pub);
+        grantNodeRole(aMod.pub, 'moderator', owner.pub);
+
+        // A stale owner session: both steps asked, nothing changed.
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const issueStale = await issue(coOwner.pub, stale);
+        assert(isStepUp(issueStale) && roleOf(coOwner.pub) === 'owner' && statusOf(coOwner.pub) === 'active' && pending(coOwner.pub) === 0,
+            `issuing a code for a co-owner asks and changes nothing (got ${issueStale.status} ${JSON.stringify(issueStale.body)})`);
+        const issueStaleAdmin = await issue(anAdmin.pub.toUpperCase(), stale);
+        assert(isStepUp(issueStaleAdmin) && roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active' && pending(anAdmin.pub) === 0,
+            `…and for an admin, key in capitals (got ${issueStaleAdmin.status} ${JSON.stringify(issueStaleAdmin.body)})`);
+
+        const fresh = await exchange((await requestLink(owner)).body.handshakeToken);
+        const issued = await issue(coOwner.pub, fresh);
+        assert(issued.status === 200 && typeof issued.body.code === 'string', `a fresh owner session issues the co-owner's code (got ${issued.status} ${JSON.stringify(issued.body)})`);
+        const code = issued.body.code as string;
+        const newKey = keypair();
+        const completeStale = await complete(coOwner.pub, code, newKey.pub, stale);
+        assert(isStepUp(completeStale) && roleOf(coOwner.pub) === 'owner' && roleOf(newKey.pub) === null && statusOf(coOwner.pub) === 'suspended' && pending(coOwner.pub) === 1,
+            `completing it from the stale session asks; the old key keeps the role, no new key gets it (got ${completeStale.status} ${JSON.stringify(completeStale.body)})`);
+
+        // A fresh ADMIN session: refused by the engine on an owner and an admin, at either step; nothing changed.
+        const adminFresh = await exchange((await requestLink(admin)).body.handshakeToken);
+        const adminComplete = await complete(coOwner.pub, code, newKey.pub, adminFresh);
+        assert(isOwnerOnly(adminComplete) && roleOf(coOwner.pub) === 'owner' && roleOf(newKey.pub) === null && statusOf(coOwner.pub) === 'suspended' && pending(coOwner.pub) === 1,
+            `an admin completing an owner's re-key is refused (got ${adminComplete.status} ${JSON.stringify(adminComplete.body)})`);
+        const adminIssueOwner = await issue(coOwnerB.pub, adminFresh);
+        assert(isOwnerOnly(adminIssueOwner) && roleOf(coOwnerB.pub) === 'owner' && statusOf(coOwnerB.pub) === 'active' && pending(coOwnerB.pub) === 0,
+            `an admin issuing an owner's code is refused (got ${adminIssueOwner.status} ${JSON.stringify(adminIssueOwner.body)})`);
+        const adminIssueAdmin = await issue(anAdmin.pub, adminFresh);
+        assert(isOwnerOnly(adminIssueAdmin) && roleOf(anAdmin.pub) === 'admin' && statusOf(anAdmin.pub) === 'active' && pending(anAdmin.pub) === 0,
+            `an admin issuing another admin's code is refused (got ${adminIssueAdmin.status} ${JSON.stringify(adminIssueAdmin.body)})`);
+
+        // A fresh owner session completes it: the new key holds the role.
+        const completed = await complete(coOwner.pub, code, newKey.pub, fresh);
+        assert(completed.status === 200 && roleOf(newKey.pub) === 'owner' && roleOf(coOwner.pub) === null && statusOf(newKey.pub) === 'active',
+            `a fresh owner session completes it and the new key is owner (got ${completed.status} ${JSON.stringify(completed.body)})`);
+
+        // An admin's own work, six minutes on: re-keying a plain member and a moderator is not asked.
+        const adminStale = await exchange((await requestLink(admin)).body.handshakeToken);
+        backdateAdminSessionForTests(adminStale.sessionId!, 6 * 60_000);
+        for (const [who, pk, role] of [['a plain member', plain.pub, null], ['a moderator', aMod.pub, 'moderator']] as const) {
+            const i = await issue(pk, adminStale);
+            const nk = keypair();
+            const c = i.status === 200 ? await complete(pk, i.body.code, nk.pub, adminStale) : i;
+            assert(i.status === 200 && c.status === 200 && roleOf(nk.pub) === role, `an admin re-keys ${who} six minutes on, unasked (got ${i.status}/${c.status} ${JSON.stringify(c.body)})`);
+        }
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

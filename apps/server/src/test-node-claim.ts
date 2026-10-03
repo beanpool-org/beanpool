@@ -9,7 +9,7 @@
  * the salt GET answers, and sends HMAC(K, host, code id, key) signed into a beanpool-claim/2 statement.
  *
  *   A. First start: data/claim-code.txt, 0600, holding claim-xxxx-xxxx-xxxx-xxxx; the code is in no line of the output;
- *      GET says unclaimed with the code's id, the salt and the scrypt parameters. local-config.json holds K, which is
+ *      GET says unclaimed with the code's id and the salt, and no scrypt parameters. local-config.json holds K, which is
  *      what the core helper derives from the code and the salt. The admin password still signs in.
  *   B. Refusals, none of which claims: a proof from a wrong code; a signature for another code id; a signature for
  *      another host (the node knows none of its names); key A's signature sent as key B; a code id that is not the
@@ -42,7 +42,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { CLAIM_SCRYPT, claimKeyFromCode, claimProof, claimText, signedRequestBytes } from '@beanpool/core';
+import { claimKeyFromCode, claimProof, claimText, signedRequestBytes } from '@beanpool/core';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--child';
@@ -209,8 +209,9 @@ async function main(): Promise<void> {
     assert(a.output().includes(file), 'A5. the output says where the file is');
     const info = await request(a, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(info.status === 200 && info.json.unclaimed === true && /^[0-9a-f]{8}$/.test(info.json.codeId || ''), `A6. GET says unclaimed, with the code id (${info.status} ${JSON.stringify(info.json)})`);
-    assert(/^[0-9a-f]{64}$/.test(info.json.salt || '') && JSON.stringify(info.json.scrypt) === JSON.stringify(CLAIM_SCRYPT),
-        `A7. and the salt and the scrypt parameters, which are public (${JSON.stringify(info.json.scrypt)})`);
+    // No scrypt parameters: the phone uses CLAIM_SCRYPT hard-coded, and a phishing server writes this answer itself.
+    assert(/^[0-9a-f]{64}$/.test(info.json.salt || '') && !('scrypt' in info.json),
+        `A7. and the salt, which is public, and no scrypt parameters (${JSON.stringify(Object.keys(info.json))})`);
     const codeId: string = info.json.codeId;
     const salt: string = info.json.salt;
     const config = JSON.parse(fs.readFileSync(path.join(dirA, 'local-config.json'), 'utf-8'));

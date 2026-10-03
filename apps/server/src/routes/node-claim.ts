@@ -1,8 +1,8 @@
 /**
  * Claiming a community that has no owner yet (claim-code.ts). Two routes, both public:
  *
- *   GET  /api/local/claim  whether the node is unclaimed, and if so the waiting code's public id, its salt and the
- *                          scrypt parameters (all public: they make K, not hide it) and the community's name.
+ *   GET  /api/local/claim  whether the node is unclaimed, and if so the waiting code's public id and its salt (both
+ *                          public: they make K, not hide it) and the community's name. No scrypt parameters: see below.
  *   POST /api/local/claim  { publicKey, callsign, codeId, signedFor, proof, signature }, claim v2: `proof` is
  *                          HMAC(K, beanpool-claim-proof/1, signedFor, codeId, publicKey), K derived from the code and
  *                          the salt (@beanpool/core claimKeyFromCode, claimProof); `signature` is the key's over
@@ -27,7 +27,7 @@
  * statement's own signature is the proof.
  */
 import Router from '@koa/router';
-import { CLAIM_SCRYPT, claimText } from '@beanpool/core';
+import { claimText } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { logAddressTag } from '../log-address.js';
@@ -57,11 +57,13 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
         }
         const config = getLocalConfig();
         const pending = pendingClaim(config);
+        // No scrypt parameters in this answer. The phone derives K with @beanpool/core's CLAIM_SCRYPT, hard-coded, and
+        // must never take N, r or p from here: a phishing server writes this answer itself, and a lower N would make a
+        // proof it captured cheap to brute-force offline.
         ctx.body = {
             unclaimed: true,
             codeId: pending ? pending.id : null,
             salt: pending ? pending.salt : null,
-            scrypt: pending ? CLAIM_SCRYPT : null,
             communityName: config.communityName || config.callsign || null,
         };
     });

@@ -16,14 +16,18 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { claimProofText } from './request-signing.js';
 
-/** The scrypt the server uses for K: Node's defaults, a 32-byte key. Answered by GET /api/local/claim. */
+/**
+ * The scrypt the server uses for K: Node's defaults, a 32-byte key. Hard-coded on both sides and never sent: a client
+ * must not take N, r or p from a server's answer (a phishing server writes that answer, and a lower N would make a
+ * proof it captured cheap to brute-force offline).
+ */
 export const CLAIM_SCRYPT = Object.freeze({ N: 16384, r: 8, p: 1, dkLen: 32 });
 
 function password(code: string): Uint8Array {
     return utf8ToBytes(bytesToHex(sha256(utf8ToBytes(String(code).trim().toLowerCase()))));
 }
 
-/** K from the code and the node's salt (hex, as GET /api/local/claim answers it). */
+/** K from the code and the node's salt (hex, as GET /api/local/claim answers it), always with CLAIM_SCRYPT, never a server's. */
 export function claimKeyFromCode(code: string, salt: string): Uint8Array {
     return scrypt(password(code), utf8ToBytes(salt), CLAIM_SCRYPT);
 }

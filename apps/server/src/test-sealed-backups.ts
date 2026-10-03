@@ -141,6 +141,9 @@ async function child(): Promise<void> {
     const pw = 'Fresh-Server-Pw-551!';
     const { hash, salt } = hashPassword(pw);
     updateLocalConfig({ adminHash: hash, salt });
+    // Step 7c: with 2FA off the password alone opens no admin route. A fresh server's operator (no member yet, so no owner
+    // key) turns 2FA on and sends the password with a code, as the manual's lines then do.
+    const twoFa = (await import('./admin-auth-test-harness.js')).turnOn2faForTests(pw);
     const before = {
         key: sha(fs.readFileSync(path.join(dataDir, 'libp2p_key'))),
         communityId: JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId,
@@ -162,21 +165,21 @@ async function child(): Promise<void> {
     if (mode === 'sealed') {
         const backupLocked = async () => {
             resetAdminAuthTarpit();
-            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: { 'X-Admin-Password': pw } });
+            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: twoFa.headers() });
             const b = Buffer.from(await r.arrayBuffer());
             return { status: r.status, locked: r.headers.get('x-backup-locked'), why: r.headers.get('x-backup-not-locked'), gzip: b[0] === 0x1f && b[1] === 0x8b };
         };
         const beforeCode = await backupLocked();
         resetAdminAuthTarpit();
         const made = await localFetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
-            method: 'POST', headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/json' }, body: '{}',
+            method: 'POST', headers: { ...twoFa.headers(), 'Content-Type': 'application/json' }, body: '{}',
         });
         const madeBody: any = await made.json();
         const afterCode = await backupLocked();
         makeCode = { beforeCode, status: made.status, looksLikeCode: /^BPRC-\d+ /.test(madeBody?.code || ''), afterCode };
     }
     resetAdminAuthTarpit();
-    const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const headers: Record<string, string> = { ...twoFa.headers(), 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
     const res = await localFetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
     const body = await res.json();
@@ -524,10 +527,13 @@ async function main(): Promise<void> {
 
     // ── This process as the restoring server, for the refusals (nothing below reaches the database swap) ──
     const { server, base } = await serveBackupRoutes();
+    // Step 7c: the password alone opens no admin route with 2FA off; the refusals are asked under Olive's owner key session.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const asOlive = ownerSessionHeaders(ownerPub);
     const restore = async (bytes: Buffer, headers: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
         const res = await localFetch(base + '/api/local/admin/restore', {
-            method: 'POST', headers: { 'X-Admin-Password': PW, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
+            method: 'POST', headers: { ...asOlive, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
         });
         return { status: res.status, body: await res.json() as any };
     };

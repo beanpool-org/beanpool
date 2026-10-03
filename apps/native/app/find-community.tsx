@@ -19,7 +19,8 @@ import {
     KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
-import { claimProbeOrigin, claimRouteFor, readClaimStatus } from '../utils/node-claim';
+import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
+import { readClaimStatus } from '../utils/node-claim';
 
 export { ErrorBoundary };
 

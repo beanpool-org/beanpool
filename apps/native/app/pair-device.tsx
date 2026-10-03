@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { router, ErrorBoundary } from 'expo-router';
-import { claimRouteFor, parseClaimLink } from '../utils/node-claim';
+import { claimRouteFor, parseClaimLink } from '../utils/claim-link';
 import * as Haptics from 'expo-haptics';
 
 export { ErrorBoundary };

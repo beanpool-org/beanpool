@@ -23,6 +23,7 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -101,8 +102,16 @@ async function main() {
     const noPwRes = await postJson('/api/admin/seed-invite', {});
     assert(noPwRes.status === 401, 'POST /api/admin/seed-invite with missing password returns 401');
 
+    // Step 7c: with the node's 2FA off, the right password alone issues nothing. From here 2FA is on and each password
+    // goes with a code, as an owner with an authenticator sends it.
+    const aloneRes = await postJson('/api/admin/seed-invite', { password: PW, type: 'ambassador' });
+    assert(aloneRes.status === 403 && aloneRes.body.code === 'password_needs_2fa' && !aloneRes.body.success,
+        `2FA off: the password alone → 403 password_needs_2fa, no invite (got ${aloneRes.status} ${aloneRes.body.code})`);
+    const tfa = turnOn2faForTests(PW);
+    const pw = () => ({ password: PW, totpCode: tfa.code() });
+
     // 2. Fresh node (0 members): generate seed invite
-    const freshRes = await postJson('/api/admin/seed-invite', { password: PW, type: 'ambassador' });
+    const freshRes = await postJson('/api/admin/seed-invite', { ...pw(), type: 'ambassador' });
     assert(freshRes.status === 200, 'POST /api/admin/seed-invite on fresh node returns 200');
     assert(freshRes.body.success === true, 'Response indicates success === true');
     assert(typeof freshRes.body.code === 'string' && freshRes.body.code.length > 0, 'Seed invite code is returned');
@@ -120,28 +129,28 @@ async function main() {
     assert(redeemRes.status === 200 && redeemRes.body.success === true, 'Redeeming seed invite registers Alice successfully');
 
     // 4. Node with members (>0 members): generate tiered seed invites
-    const elderRes = await postJson('/api/admin/seed-invite', { password: PW, type: 'elder' });
+    const elderRes = await postJson('/api/admin/seed-invite', { ...pw(), type: 'elder' });
     assert(elderRes.status === 200 && elderRes.body.success === true, 'Existing node generates elder tier invite');
     assert(elderRes.body.tierLabel.includes('Elder'), 'Tier label reflects Elder');
 
-    const invalidTierRes = await postJson('/api/admin/seed-invite', { password: PW, type: 'superduper' });
+    const invalidTierRes = await postJson('/api/admin/seed-invite', { ...pw(), type: 'superduper' });
     assert(invalidTierRes.status === 200 && invalidTierRes.body.success === true, 'Invalid tier name defaults to standard');
     assert(invalidTierRes.body.type === 'standard', 'Returned invite type is standard');
     assert(issuedByOf(elderRes.body.code) === 'owner:password', "Password-issued invite records issued_by = 'owner:password'");
 
     // 5. Key-signed sessions
-    const pwHeader = { 'X-Admin-Password': PW };
+    const pwHeader = () => tfa.headers();
     const bob = makeKeypair();      // will be admin
     const mo = makeKeypair();       // will be moderator
     const charlie = makeKeypair();  // member, no role
     for (const [kp, callsign] of [[bob, 'BobAdmin'], [mo, 'MoModerator'], [charlie, 'CharlieMember']] as const) {
-        const inv = await postJson('/api/admin/seed-invite', { password: PW });
+        const inv = await postJson('/api/admin/seed-invite', pw());
         const red = await redeemAs(kp, { code: inv.body.code, publicKey: kp.pubKeyHex, callsign });
         assert(red.status === 200 && red.body.success === true, `${callsign} joins the node`);
     }
-    const grantBob = await postJson('/api/local/admin/node-roles', { pubkey: bob.pubKeyHex, role: 'admin' }, pwHeader);
+    const grantBob = await postJson('/api/local/admin/node-roles', { pubkey: bob.pubKeyHex, role: 'admin' }, pwHeader());
     assert(grantBob.status === 200, 'Owner (password) makes Bob an admin');
-    const grantMo = await postJson('/api/local/admin/node-roles', { pubkey: mo.pubKeyHex, role: 'moderator' }, pwHeader);
+    const grantMo = await postJson('/api/local/admin/node-roles', { pubkey: mo.pubKeyHex, role: 'moderator' }, pwHeader());
     assert(grantMo.status === 200, 'Owner (password) makes Mo a moderator');
 
     const bobSession = await keySession(bob);
@@ -164,7 +173,7 @@ async function main() {
     assert(fakeSession.status === 401, 'Made-up admin session → seed-invite 401');
     assert(!fakeSession.body.code, 'Made-up admin session gets no code');
 
-    const demote = await fetch(`${BASE}/api/local/admin/node-roles/${bob.pubKeyHex}/admin`, { method: 'DELETE', headers: pwHeader });
+    const demote = await fetch(`${BASE}/api/local/admin/node-roles/${bob.pubKeyHex}/admin`, { method: 'DELETE', headers: pwHeader() });
     assert(demote.status === 200, "Owner removes Bob's admin role");
     const afterDemote = await postJson('/api/admin/seed-invite', {}, { 'x-admin-session': bobSession });
     assert(afterDemote.status === 401, 'Removed admin: the same session → seed-invite 401');

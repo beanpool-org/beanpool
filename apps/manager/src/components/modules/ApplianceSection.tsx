@@ -126,13 +126,11 @@ export function ApplianceSection({
     const [lockedRestore, setLockedRestore] = useState<{ file: File; backup: LockedBackupInfo; canUseCode: boolean; canUsePhone: boolean } | null>(null);
 
     // Backup Schedule state
-    const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig>({
-        enabled: true,
-        intervalHours: 24,
-        keep: 7,
-    });
-    // False until the node has said its schedule: the form's values are then only a starting point, never shown as the node's.
+    const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig | null>(null);
+    // False until the node has said its schedule: the form is hidden until then, so made-up values are never shown or saved.
     const [scheduleKnown, setScheduleKnown] = useState(false);
+    // True once a read of the schedule has failed; until then an unknown schedule is still being read.
+    const [scheduleReadFailed, setScheduleReadFailed] = useState(false);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [scheduleStatusMsg, setScheduleStatusMsg] = useState<string | null>(null);
 
@@ -270,8 +268,11 @@ export function ApplianceSection({
             );
             setScheduleConfig(cfg);
             setScheduleKnown(true);
+            setScheduleReadFailed(false);
         } catch (e: unknown) {
             setScheduleKnown(false);
+            setScheduleConfig(null);
+            setScheduleReadFailed(true);
             setScheduleStatusMsg(`Couldn't read this node's backup schedule, so it is shown as unknown: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
@@ -297,6 +298,9 @@ export function ApplianceSection({
     };
 
     useEffect(() => {
+        setScheduleKnown(false);
+        setScheduleConfig(null);
+        setScheduleReadFailed(false);
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
@@ -336,6 +340,7 @@ export function ApplianceSection({
 
     const handleSaveSchedule = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!scheduleKnown || !scheduleConfig) return;
         setSavingSchedule(true);
         setScheduleStatusMsg(null);
         try {
@@ -1135,11 +1140,11 @@ export function ApplianceSection({
                                 </p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                scheduleKnown && scheduleConfig.enabled
+                                scheduleKnown && scheduleConfig?.enabled
                                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                     : 'bg-nature-800 text-nature-400'
                             }`}>
-                                {!scheduleKnown ? 'Unknown' : scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
+                                {!scheduleKnown || !scheduleConfig ? 'Unknown' : scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
                             </span>
                         </div>
 
@@ -1149,62 +1154,70 @@ export function ApplianceSection({
                             </div>
                         )}
 
-                        <form onSubmit={handleSaveSchedule} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Automated Schedule
-                                </label>
-                                <label className="flex items-center gap-2 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-white">
-                                    <input
-                                        type="checkbox"
-                                        checked={scheduleConfig.enabled}
-                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
-                                        className="rounded border-nature-700 text-terra-500 focus:ring-0"
-                                    />
-                                    <span>Enable automated snapshots</span>
-                                </label>
-                            </div>
+                        {!scheduleKnown || !scheduleConfig ? (
+                            <p className="text-xs text-nature-400 m-0">
+                                {scheduleReadFailed
+                                    ? "The node's schedule could not be read, so it can't be changed from here right now."
+                                    : "Reading the node's schedule…"}
+                            </p>
+                        ) : (
+                            <form onSubmit={handleSaveSchedule} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Automated Schedule
+                                    </label>
+                                    <label className="flex items-center gap-2 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-white">
+                                        <input
+                                            type="checkbox"
+                                            checked={scheduleConfig.enabled}
+                                            onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
+                                            className="rounded border-nature-700 text-terra-500 focus:ring-0"
+                                        />
+                                        <span>Enable automated snapshots</span>
+                                    </label>
+                                </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Cadence Interval
-                                </label>
-                                <select
-                                    value={scheduleConfig.intervalHours}
-                                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, intervalHours: Number(e.target.value) })}
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
-                                >
-                                    <option value={6}>Every 6 hours</option>
-                                    <option value={12}>Every 12 hours</option>
-                                    <option value={24}>Every 24 hours (Daily)</option>
-                                    <option value={48}>Every 48 hours (Every 2 days)</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Retention Limit
-                                </label>
-                                <div className="flex gap-2">
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Cadence Interval
+                                    </label>
                                     <select
-                                        value={scheduleConfig.keep}
-                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, keep: Number(e.target.value) })}
+                                        value={scheduleConfig.intervalHours}
+                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, intervalHours: Number(e.target.value) })}
                                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
                                     >
-                                        <option value={3}>Keep last 3 snapshots</option>
-                                        <option value={7}>Keep last 7 snapshots (1 week)</option>
-                                        <option value={14}>Keep last 14 snapshots (2 weeks)</option>
+                                        <option value={6}>Every 6 hours</option>
+                                        <option value={12}>Every 12 hours</option>
+                                        <option value={24}>Every 24 hours (Daily)</option>
+                                        <option value={48}>Every 48 hours (Every 2 days)</option>
                                     </select>
-                                    <button
-                                        type="submit"
-                                        disabled={savingSchedule}
-                                        className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
-                                    >
-                                        {savingSchedule ? 'Saving...' : 'Save'}
-                                    </button>
                                 </div>
-                            </div>
-                        </form>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Retention Limit
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={scheduleConfig.keep}
+                                            onChange={(e) => setScheduleConfig({ ...scheduleConfig, keep: Number(e.target.value) })}
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
+                                        >
+                                            <option value={3}>Keep last 3 snapshots</option>
+                                            <option value={7}>Keep last 7 snapshots (1 week)</option>
+                                            <option value={14}>Keep last 14 snapshots (2 weeks)</option>
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            disabled={savingSchedule}
+                                            className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
+                                        >
+                                            {savingSchedule ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        )}
                     </div>
 
                     {/* Database Integrity Verification Card */}

@@ -409,9 +409,24 @@ export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error:
     return false;
 }
 
+/**
+ * Owner-only reads that Settings sends as POST (the body says which store, or nothing): they change nothing, so the
+ * step-up does not ask for them. Named one by one; every other POST is a change.
+ */
+const READ_ONLY_POSTS: readonly string[] = [
+    '/api/local/admin/offbox-backups/status',
+    '/api/local/admin/offbox-backups/list',
+    '/api/local/admin/standby-health',
+];
+
+function requestPathOf(ctx: any): string {
+    return String(ctx.path || ctx.request?.path || '').toLowerCase().replace(/\/+$/, '');
+}
+
 function isReadRequest(ctx: any): boolean {
     const method = String(ctx.method || ctx.request?.method || '').toUpperCase();
-    return method === 'GET' || method === 'HEAD';
+    if (method === 'GET' || method === 'HEAD') return true;
+    return method === 'POST' && READ_ONLY_POSTS.includes(requestPathOf(ctx));
 }
 
 /**

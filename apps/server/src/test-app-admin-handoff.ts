@@ -442,6 +442,23 @@ async function main() {
         assert(unmodByAdmin.status === 200 && roleOf(member.pub) === null, `…and removes one, unasked (got ${unmodByAdmin.status})`);
     }
 
+    // ── 7. Owner-only reads Settings sends as POST are not asked (review 4172055077) ──
+    console.log('\n7. Owner-only reads sent as POST from a stale phone session');
+    {
+        const as = (s: { sessionId: string | null; body: any }) => ({ Cookie: `admin_session=${s.sessionId}`, 'X-CSRF-Token': s.body.csrfToken });
+        const stale = await exchange((await requestLink(owner)).body.handshakeToken);
+        backdateAdminSessionForTests(stale.sessionId!, 6 * 60_000);
+        const status = await postJson('/api/local/admin/offbox-backups/status', {}, as(stale));
+        assert(status.status === 200, `the off-box card's status reads six minutes on (got ${status.status} ${JSON.stringify(status.body)})`);
+        const list = await postJson('/api/local/admin/offbox-backups/list', { destination: 'no-such-destination' }, as(stale));
+        assert(list.status === 404, `its list reads too: past the step-up to "no such destination" (got ${list.status} ${JSON.stringify(list.body)})`);
+        const standby = await postJson('/api/local/admin/standby-health', {}, as(stale));
+        assert(standby.status === 200, `the standby banner reads (got ${standby.status} ${JSON.stringify(standby.body)})`);
+        // A change on the same card still asks.
+        const settings = await postJson('/api/local/admin/offbox-backups/settings', { intervalHours: 24 }, as(stale));
+        assert(settings.status === 403 && settings.body.code === 'step_up_required', `changing its settings still asks (got ${settings.status} ${JSON.stringify(settings.body)})`);
+    }
+
     console.log(`\nApp admin hand-off suite: ${passed}/${run} assertions passed.`);
     if (passed !== run) process.exitCode = 1;
 }

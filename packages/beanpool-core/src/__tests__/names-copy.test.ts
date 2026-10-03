@@ -128,7 +128,8 @@ describe('§8.2 every single-field change refuses', () => {
 
     it("the payload's v, the pin's me, communityId, head n, head id, and copy.seq not matching the header", () => {
         const { me, pin, g1 } = scene();
-        const { seen: _seen, ...kept } = pin;
+        const kept: Partial<NamesPin> = { ...pin };
+        delete kept.seen;
         expect(open(forgedPayload(me, pin, { v: 1, pin: kept }), me)).toMatchObject({ ok: true });
         expect(open(forgedPayload(me, pin, { v: 2, pin: kept }), me)).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'version' });
         expect(open(forgedPayload(me, pin, { v: 1, pin: { ...kept, me: admin().publicKey } }), me)).toMatchObject({ ok: false, reason: 'bad_copy', detail: 'pin' });
@@ -149,7 +150,8 @@ describe('§8.2 every single-field change refuses', () => {
 describe('§8.3 forgery: the signature is load-bearing', () => {
     it('a box sealed to the admin by someone else, unsigned or signed by another key, is refused', () => {
         const { me, pin } = scene();
-        const { seen: _seen, ...kept } = pin;
+        const kept: Partial<NamesPin> = { ...pin };
+        delete kept.seen;
         const box = sealNamesCopy(JSON.stringify({ v: 1, pin: kept }), { communityId: CID, address: ADDR, owner: me.publicKey, seq: 1 });
         // The box opens for the admin: sealing alone authenticates nothing.
         expect(openNamesCopy(box, me.privateKey, { communityId: CID, address: ADDR, owner: me.publicKey, seq: 1 })).toContain('"v":1');

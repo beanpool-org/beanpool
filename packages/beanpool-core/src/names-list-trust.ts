@@ -1068,7 +1068,8 @@ export function namesPinForNextCopy(pin: NamesPin): NamesPin {
 export function makeNamesCopy(opts: { pin: NamesPin; address: string; me: NamesSigner; savedAt?: string | Date }): NamesCopy {
     const owner = lower(opts.me.publicKey);
     if (opts.pin.me !== owner) throw new Error('A copy is of this phone’s own pin.');
-    const { seen: _seen, ...kept } = opts.pin;
+    const kept: Partial<NamesPin> = { ...opts.pin };
+    delete kept.seen;
     const seq = opts.pin.copy.seq;
     const box = sealNamesCopy(JSON.stringify({ v: NAMES_COPY_VERSION, pin: kept }), { communityId: opts.pin.communityId, address: opts.address, owner, seq });
     const head = headOf(opts.pin);

@@ -435,8 +435,11 @@ export function completeRekey(
     };
 }
 
-/** A pending re-key as the status answer gives it: the code only to whoever may have it (getRekeyStatus). */
-export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string };
+/**
+ * A pending re-key as the status answer gives it: the code only to whoever may have it (getRekeyStatus). Without it,
+ * `codeNeedsStepUp` says the viewer may read it after Manage again (the phone's step-up).
+ */
+export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string; codeNeedsStepUp?: true };
 /** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
 export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
 
@@ -448,8 +451,13 @@ export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
  * manager's RekeyMemberWizard re-shows it from here) or an owner, who could re-key them anyway: given to any admin, it
  * let them finish an owner's re-key with a key they chose and hold the owner role (confirm 3, 4172310632). For any other
  * member, any admin may re-key them, so their code is read as before. Each answer is an explicit field list.
+ *
+ * Reading such a code is as strong as completing the re-key, which a phone session past its step-up window is asked to
+ * confirm (routes/admin.ts stepUpIfOwnerOnly 'rekey'). So with `viewerStepUpDue` (the route's ctx.state.phoneStepUpDue)
+ * that code is left out too, and `codeNeedsStepUp` is set: the wizard asks for Manage again and reads it then (#1534,
+ * confirm 4 of #1530, 4172426084). Everything else in the answer is unchanged.
  */
-export function getRekeyStatus(publicKey: string, viewer?: string): {
+export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewerStepUpDue?: boolean } = {}): {
     isInvalidated: boolean;
     invalidatedInfo: InvalidatedKeyRow | null;
     pendingRequest: RekeyRequestView | null;
@@ -472,8 +480,10 @@ export function getRekeyStatus(publicKey: string, viewer?: string): {
     } else if (pending) {
         const { code, ...rest } = pending;
         const cleanViewer = (viewer || '').trim().toLowerCase();
-        const mayReadCode = !heldPrivilegedRole(cleanPub) || (!!cleanViewer && cleanViewer === pending.operator_pubkey) || isOwnerLevelActor(cleanViewer);
-        pendingRequest = mayReadCode ? { ...rest, code } : rest;
+        const privileged = !!heldPrivilegedRole(cleanPub);
+        const mayReadCode = !privileged || (!!cleanViewer && cleanViewer === pending.operator_pubkey) || isOwnerLevelActor(cleanViewer);
+        if (mayReadCode && privileged && opts.viewerStepUpDue) pendingRequest = { ...rest, codeNeedsStepUp: true };
+        else pendingRequest = mayReadCode ? { ...rest, code } : rest;
     }
 
     const history = (db.prepare(`

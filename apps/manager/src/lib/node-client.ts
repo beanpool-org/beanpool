@@ -2654,7 +2654,12 @@ export interface RekeyStatusResponse {
     } | null;
     pendingRequest: {
         id: number;
-        code: string;
+        /**
+         * Left out for an owner's or admin's re-key unless the reader issued it or is an owner; and, from a phone session
+         * past its step-up window, until Manage is pressed again (then `codeNeedsStepUp` is true).
+         */
+        code?: string;
+        codeNeedsStepUp?: boolean;
         old_pubkey: string;
         new_pubkey: string | null;
         operator_pubkey: string;

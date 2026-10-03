@@ -2195,12 +2195,13 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
 
 router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    // The reader decides whether a pending owner's or admin's code is in the answer (getRekeyStatus).
+    // The reader decides whether a pending owner's or admin's code is in the answer (getRekeyStatus); a phone session
+    // past its step-up window reads that code only after Manage again, as completing the re-key asks (#1534).
     const viewer = resolveAdminActor(ctx);
     if (!viewer) return;
     try {
         const { pubkey } = ctx.params;
-        const status = getRekeyStatus(pubkey, viewer);
+        const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue });
         ctx.body = status;
     } catch (e: any) {
         ctx.status = 400;

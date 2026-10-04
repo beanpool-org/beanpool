@@ -302,8 +302,16 @@ router.post('/api/local/admin/known-floor', async (ctx) => {
 router.post('/api/local/admin/known-floor/exception', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change a member\'s known floor.')) return;
+    // One member's credit is money, and nobody sets their own: only an owner's or admin's own key session, which names the
+    // person. Never an automation token (it acts as whoever issued it) nor the node password (it names nobody).
+    const actor = (ctx.state as any)?.actor;
+    if ((ctx.state as any)?.automationTokenId || typeof actor !== 'string' || !/^[0-9a-f]{64}$/.test(actor)) {
+        ctx.status = 403;
+        ctx.body = { error: 'Sign in with your own key to change a member\'s known floor.', code: 'key_session_only' };
+        return;
+    }
     try {
-        ctx.body = setKnownFloorException((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
+        ctx.body = setKnownFloorException(actor, (ctx as any).requestBody || {});
     } catch (e) { knownFloorRefusal(ctx, e); }
 });
 

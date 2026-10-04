@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { memberKnownGrant, creditCap } from './known-floor.js';
+import { memberKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -413,9 +413,12 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
         legacyFloor = 0;
     }
 
+    // The known floor (slice 4): the keepers' known share and the community's cap, only with the confirmation dial on;
+    // off, both are main's (share 0, cap CREDIT_FLOOR_CAP).
+    const knownShare = enterpriseKnownShareOf(db, enterprisePubkey);
     const allowance = isCreditFrozen
         ? 0
-        : Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, derivedAllowance));
+        : Math.min(creditCap(db), Math.max(legacyFloor, derivedAllowance + knownShare));
 
     const floor = PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - allowance;
     const activated = allowance > 0;
@@ -428,7 +431,9 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
         activated,
     };
 
-    cache.set(enterprisePubkey, result);
+    // With the dial on the known share moves with every confirmation and keeper binding, none of which clears this cache:
+    // read it fresh each time then.
+    if (!confirmationDialOn(db)) cache.set(enterprisePubkey, result);
     return result;
 }
 

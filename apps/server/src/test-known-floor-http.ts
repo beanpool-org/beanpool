@@ -10,6 +10,10 @@
  *   4. an admin's exception: lowering is logged and never deducts (the member is spend-frozen); a raise only up to the
  *      cap; an admin can't set their own; a member who is no admin is refused
  *   5. the dial off again: the known grant stops applying, nothing is deducted, the member is spend-frozen
+ *   6. a cap saved with the dial off changes nothing: a member's and an enterprise's floors are main's (-2,000)
+ *   7. a keeper's half counts once: split across the enterprises they keep (1 keeper x 4, and 1 x 1), never on top of
+ *      itself per enterprise, so one confirmed person backs at most 1.5 x their grant (design §7.3)
+ *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
  */
@@ -22,9 +26,9 @@ process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -32,7 +36,7 @@ import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
-import { setMemberPhoto } from '@beanpool/engine';
+import { setMemberPhoto, getEnterpriseFloor, clearEnterpriseFloorCache } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -61,6 +65,20 @@ function makeMember(name: string, beans = 0): Id {
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
+}
+
+function makeEnterprise(name: string, keepers: Id[], pledges: number[] = []): string {
+    const pk = keypair(name).pk;
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
+                VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    keepers.forEach((k, i) => {
+        db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(pk, k.pk);
+        if (pledges[i]) db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)')
+            .run(crypto.randomUUID(), k.pk, pk, pledges[i], ago(DAY));
+    });
+    clearEnterpriseFloorCache(db);
+    return pk;
 }
 
 function confirm(member: Id, by: Id): void {
@@ -209,6 +227,64 @@ async function main(): Promise<void> {
     // She can still receive, and selling climbs her back.
     completePostTransaction(acceptPost(kimOffer.id, sam.pk).id, sam.pk);
     assert(getBalance(kim.pk).balance > -1000, `she can still earn: a sale moves her up (${getBalance(kim.pk).balance})`);
+
+    // ── 6. a cap saved with the dial off changes nothing ──────────────────────────────────────────
+    console.log('── 6. a saved cap, the dial off ──');
+    const capSaved = await settings(owner, { creditCap: 5000 });
+    assert(capSaved.status === 200 && capSaved.body?.creditCap === 5000 && capSaved.body?.confirmation === false,
+        `the owner saves a cap of 5,000 with the dial off (${show(capSaved)})`);
+    const gil = makeMember('Gil');
+    db.prepare('UPDATE members SET earned_credit = 2100 WHERE public_key = ?').run(gil.pk);
+    const gilOff = getBalance(gil.pk);
+    assert(gilOff.floor === -2000, `a member granted 2,100 reads main's floor, -2,000, not -2,100 (${gilOff.floor})`);
+    const bea = makeMember('Bea');
+    db.prepare('UPDATE members SET earned_credit = 2000 WHERE public_key = ?').run(bea.pk);
+    const offCo = makeEnterprise('Off Co', [bea, gil], [2000, 500]);
+    const offCoServer = getEnterpriseUnderlyingFloor(offCo).floor;
+    const offCoEngine = getEnterpriseFloor(db, offCo).floor;
+    assert(offCoServer === -2000 && offCoEngine === -2000,
+        `an enterprise with 2,500 pledged reads main's -2,000 in the spend check and the engine (${offCoServer}, ${offCoEngine})`);
+    db.prepare('DELETE FROM enterprise_pledges WHERE enterprise = ?').run(offCo);
+    db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ?').run(offCo);
+
+    // ── 7. a keeper's half counts once ───────────────────────────────────────────────────────────
+    console.log('── 7. keepers ──');
+    const dialBack = await settings(owner, { confirmation: true, creditCap: 2000 });
+    assert(dialBack.status === 200 && dialBack.body?.confirmation === true, `the owner turns the dial on again (${show(dialBack)})`);
+    const kai = makeMember('Kai');
+    confirm(kai, ada);
+    const kaiFour = [1, 2, 3, 4].map(i => makeEnterprise(`Kai Co ${i}`, [kai]));
+    const kaiOwn = getBalance(kai.pk).floor;
+    const fourServer = kaiFour.map(e => getEnterpriseUnderlyingFloor(e).floor);
+    const fourEngine = kaiFour.map(e => getEnterpriseFloor(db, e).floor);
+    const backedByKai = -kaiOwn - fourServer.reduce((sum, f) => sum + f, 0);
+    assert(kaiOwn === -1000 && fourServer.every(f => f === -125) && backedByKai === 1500,
+        `1 keeper x 4 enterprises: Kai's own -1,000, each enterprise -125, 1,500 in all, not 3,000 (${kaiOwn}; ${fourServer.join(', ')})`);
+    assert(fourEngine.every(f => f === -125), `the engine's enterprise floor agrees (${fourEngine.join(', ')})`);
+    const lia = makeMember('Lia');
+    confirm(lia, ada);
+    const liaCo = makeEnterprise('Lia Co', [lia]);
+    const liaCoServer = getEnterpriseUnderlyingFloor(liaCo).floor;
+    assert(getBalance(lia.pk).floor === -1000 && liaCoServer === -500 && getEnterpriseFloor(db, liaCo).floor === -500,
+        `1 keeper x 1 enterprise: Lia's own -1,000 and her enterprise's -500 (${liaCoServer})`);
+    const kaiFive = makeEnterprise('Kai Co 5', [kai]);
+    const fiveServer = [...kaiFour, kaiFive].map(e => getEnterpriseUnderlyingFloor(e).floor);
+    assert(fiveServer.every(f => f === -100), `a fifth enterprise splits it again, -100 each: never more than 500 in all (${fiveServer.join(', ')})`);
+
+    // ── 8. one member's exception needs an owner's or admin's own key session ────────────────────
+    console.log('── 8. who sets an exception ──');
+    const linesBefore = ((await read()).body?.log as unknown[]).length;
+    const token = ownerTokenHeaders('admin');
+    const byToken = await exception(token, { memberPubkey: kim.pk, amount: 2000 });
+    assert(byToken.status === 403 && byToken.body?.code === 'key_session_only', `an automation token can't set one (${show(byToken)})`);
+    const twoFa = turnOn2faForTests(process.env.ADMIN_PASSWORD!);
+    const pwRead = await call('GET', null, '/api/local/admin/known-floor', undefined, twoFa.headers());
+    const byPassword = await exception(twoFa.headers(), { memberPubkey: kim.pk, amount: 2000 });
+    assert(pwRead.status === 200 && byPassword.status === 403 && byPassword.body?.code === 'key_session_only',
+        `the node password reads the settings but can't set one: it names nobody, so nobody could be kept from setting their own (${pwRead.status}; ${show(byPassword)})`);
+    assert(((await read()).body?.log as unknown[]).length === linesBefore, 'and neither wrote a line in the log');
+    const byOwnerKey = await exception(owner, { memberPubkey: kim.pk, clear: true });
+    assert(byOwnerKey.status === 200, `an owner's key session still can (${show(byOwnerKey)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

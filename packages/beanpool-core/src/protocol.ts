@@ -270,9 +270,14 @@ export function usableAllowance(o: { knownGrant: number; otherAllowance: number;
     return Math.min(o.cap, known + Math.min(o.otherAllowance, offerCapForCount(o.liveOffers)));
 }
 
-/** An enterprise counts half of each confirmed keeper's known grant (an enterprise's debt is written off with no recourse). */
-export function enterpriseKnownShare(keeperKnownGrants: number[]): number {
-    return keeperKnownGrants.reduce((sum, g) => sum + Math.floor(Math.max(0, g) / 2), 0);
+/**
+ * What a set of keepers' known grants add to one enterprise's floor (community modes slice 4, design §7.3): half each
+ * keeper's grant, counted ONCE across every enterprise they keep, as main counts a keeper's earned credit once across
+ * all their pledges (docs/the-commons.md §2.4 Rule 3): the half is split evenly over the enterprises they keep, rounded
+ * down. So one confirmed person backs at most their grant plus half of it, however many enterprises they keep.
+ */
+export function enterpriseKnownShare(keepers: Array<{ knownGrant: number; enterprisesKept: number }>): number {
+    return keepers.reduce((sum, k) => sum + Math.floor(Math.floor(Math.max(0, k.knownGrant) / 2) / Math.max(1, k.enterprisesKept)), 0);
 }
 
 /**

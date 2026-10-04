@@ -2935,15 +2935,9 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
-/** Half of each active, unfrozen keeper's known grant, summed (0 when the confirmation dial is off). */
+/** The keepers' known share of this enterprise's floor: engine enterpriseKnownShareOf, each keeper's half counted once. */
 export function enterpriseKnownShareOf(enterprisePubkey: string): number {
-    if (!engine.confirmationDialOn(db)) return 0;
-    const keepers = db.prepare(`
-        SELECT o.member_pubkey AS pk FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
-    `).all(enterprisePubkey) as { pk: string }[];
-    return enterpriseKnownShare(keepers.map(k => engine.memberKnownGrant(db, k.pk)));
+    return engine.enterpriseKnownShareOf(db, enterprisePubkey);
 }
 
 export function usableFloor(publicKey: string): number {
@@ -3228,7 +3222,9 @@ function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): n
     const otherPledges = Number(totalRow?.total || 0);
     const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
     const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-    return Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+    // The other keepers' known share and the community's cap count as the spend check counts them (both main's with the dial off).
+    const othersKnown = engine.enterpriseKnownShareOf(db, treasuryPubkey, memberPubkey);
+    return Math.min(engine.creditCap(db), Math.max(legacyFloor, otherPledges + othersKnown));
 }
 
 /**
@@ -3564,7 +3560,7 @@ export function releaseEnterpriseBacking(
         const newTotalPledges = currentTotalPledges - toRelease;
         const legacyFloor = Number(t.legacy_credit_floor || 0);
 
-        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
+        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, newTotalPledges + enterpriseKnownShareOf(enterprisePubkey)));
         if (newAllowance < deficit) {
             throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
         }

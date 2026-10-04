@@ -13,7 +13,7 @@
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX } from '@beanpool/core';
-import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, creditCap, knownFloor, isConfirmed } from '@beanpool/engine';
+import { CONFIRMATION_DIAL_KEY, KNOWN_FLOOR_KEY, CREDIT_CAP_KEY, confirmationDialOn, savedCreditCap, knownFloor, isConfirmed } from '@beanpool/engine';
 import { getProfileSwitches } from './node-profile.js';
 import { getMember } from '../state-engine.js';
 import { clearEnterpriseFloorCache } from '@beanpool/engine';
@@ -58,7 +58,7 @@ export function knownFloorSettings() {
     return {
         confirmation: confirmationDialOn(db),
         knownFloor: knownFloor(db),
-        creditCap: creditCap(db),
+        creditCap: savedCreditCap(db),
         knownFloorDefault: KNOWN_FLOOR_DEFAULT,
         creditCapDefault: CREDIT_CAP_DEFAULT,
         creditCapMax: CREDIT_CAP_MAX,
@@ -134,7 +134,7 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
         let amount: number | null = null;
         if (!frozen) {
             amount = wholeBeans(body.amount, 'The amount');
-            const cap = creditCap(db);
+            const cap = savedCreditCap(db);
             if (amount > cap) throw new KnownFloorError(400, 'above_cap', `A member's known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
         }
         db.transaction(() => {

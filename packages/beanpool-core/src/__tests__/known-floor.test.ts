@@ -61,7 +61,16 @@ describe('the known floor (community modes slice 4)', () => {
     });
 
     it('an enterprise counts half of each confirmed keeper\'s known grant', () => {
-        expect(enterpriseKnownShare([1000, 0, 501])).toBe(500 + 0 + 250);
+        expect(enterpriseKnownShare([1000, 0, 501].map(knownGrant => ({ knownGrant, enterprisesKept: 1 })))).toBe(500 + 0 + 250);
         expect(enterpriseKnownShare([])).toBe(0);
+    });
+
+    it('a keeper\'s half counts once, split over the enterprises they keep: one grant never backs more than 1.5 times itself', () => {
+        expect(enterpriseKnownShare([{ knownGrant: 1000, enterprisesKept: 4 }])).toBe(125);
+        expect(enterpriseKnownShare([{ knownGrant: 1000, enterprisesKept: 3 }])).toBe(166);
+        for (const kept of [1, 2, 3, 4, 7, 50]) {
+            const total = kept * enterpriseKnownShare([{ knownGrant: 1000, enterprisesKept: kept }]);
+            expect(1000 + total).toBeLessThanOrEqual(1500);
+        }
     });
 });

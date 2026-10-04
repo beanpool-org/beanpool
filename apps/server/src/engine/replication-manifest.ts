@@ -274,8 +274,11 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     abuse_reports: {
-        kind: 'replicated', payload: 'abuseReports', watermark: 'updated_at',
+        kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
         columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at'),
+        except: {
+            suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
+        },
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
@@ -395,9 +398,9 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
-    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status'),
     // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
     // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
     // server that made them and on one that took over.

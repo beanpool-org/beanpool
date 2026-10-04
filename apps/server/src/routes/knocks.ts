@@ -57,6 +57,7 @@ import {
 } from '../engine/knocks.js';
 import { openJoinKeyInvalidated } from '../engine/open-join.js';
 import { mayInviteHere, ADMINS_ONLY, ADMINS_ONLY_ANSWER_MESSAGE } from '../config/door.js';
+import { NamesListError } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -276,7 +277,18 @@ export function createKnockRoutes(deps: RouteDeps): Router {
         const member = answeringMember(ctx);
         if (!member) return;
         if (refusedOnStandby(ctx, STANDBY_ANSWER)) return;
-        const outcome = approveKnock(String(ctx.params.id), member);
+        // An optional names-list binding (community modes slice 3): `namesEntry` (sealed on the phone) or `namesEntryId`.
+        const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
+        const names = body.namesEntry !== undefined || body.namesEntryId !== undefined
+            ? { entry: body.namesEntry as { id?: unknown; ciphertext?: unknown; keyId?: unknown } | undefined, entryId: body.namesEntryId }
+            : undefined;
+        let outcome: ReturnType<typeof approveKnock>;
+        try {
+            outcome = approveKnock(String(ctx.params.id), member, Date.now(), names);
+        } catch (e) {
+            if (e instanceof NamesListError) return answer(ctx, e.status, e.message, e.code);
+            throw e;
+        }
         if (!outcome.ok) return refuseAnswer(ctx, outcome.reason);
         ctx.body = { knock: { id: outcome.knockId, status: outcome.status }, ...(outcome.status === 'approved' ? { invite: outcome.invite } : {}) };
     });

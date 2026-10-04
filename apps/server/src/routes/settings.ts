@@ -14,11 +14,11 @@ import {
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
     getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
-    getGatewayConfig, isBreakGlassMode,
+    getGatewayConfig, isBreakGlassMode, isPasswordRetired,
 } from '../config/local-config.js';
 import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
 import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
 import { logger } from '../logger.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
@@ -609,6 +609,20 @@ router.post('/api/admin/check-update', async (ctx) => {
 // ===================== TOTP 2FA ENDPOINTS (#135) =====================
 
 /**
+ * Once an owner retired the admin password (admin.ts retire-password) the 2FA that guarded it was deleted with it, and
+ * setup, verify and backup codes refuse: a 2FA turned on again would guard nothing but these routes, and a later
+ * take-over or sealed restore would clear it without a word (takeover-envelope.ts bundledLocalConfigUpdates). Off
+ * stays open, so a 2FA turned on before this check existed can still be turned off.
+ */
+const NO_SERVER_2FA = "This server has no admin password, so it has no server 2FA: your phone's lock is your second factor";
+function refuse2faWhileRetired(ctx: any): boolean {
+    if (!isPasswordRetired()) return false;
+    ctx.status = 403;
+    ctx.body = { error: NO_SERVER_2FA, code: PASSWORD_RETIRED_CODE, passwordRetired: true };
+    return true;
+}
+
+/**
  * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
  * Same auth as every admin route. This used to take the password alone, so the UI could learn whether 2FA was on
  * before it had a code; it no longer needs to: with 2FA on, the password alone gets 401 { totpRequired: true },
@@ -624,6 +638,8 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
         hasSecret: !!config.totpSecret,
         pendingSetup: !!config.totpPendingSecret,
         backupCodesRemaining: config.totpBackupCodesHashes ? config.totpBackupCodesHashes.length : 0,
+        // Settings draws one line instead of the 2FA card (refuse2faWhileRetired). Absent on a node from before.
+        passwordRetired: !!config.passwordRetired,
     };
 });
 
@@ -635,6 +651,7 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
     // First, so a refusal is never cached either: the answer carries the new secret and backup codes (#1531).
     ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can set up 2FA')) return;
     const config = getLocalConfig();
     const secret = generateTotpSecret();
@@ -683,6 +700,7 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
     if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA on')) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const code = body.code || body.totpCode;
@@ -797,6 +815,7 @@ router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
     ctx.set('Cache-Control', 'no-store');
     if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can see new 2FA backup codes')) return;
     const config = getLocalConfig();
     if (!config.totpEnabled || !config.totpSecret) {

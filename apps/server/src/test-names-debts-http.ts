@@ -27,6 +27,10 @@
  *  13. a revoked work-off puts back only the known floor it lowered: nothing for one revoked before a second admin
  *      agreed (the owner's 0, or a 0 kept after an earlier settled work-off, stands); exactly the floor the member had
  *      for a live one; an admin's floor set during the work-off (even 0) stands, logged as kept
+ *  14. an invite bound to an entry (#1589) obeys the rule: one for an entry with an open debt is refused (409
+ *      `open_debt`), and none is written; one made (or an offline ticket signed) while the entry was clean and redeemed
+ *      after a debt opened makes its joiner a member, unconfirmed (outcome `open_debt`); once the debt is settled, a
+ *      new one confirms its joiner
  *   Every step: conservation, the whole node sums to what it summed to before
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-names-debts-http.ts
@@ -52,6 +56,7 @@ import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
+import { buildInviteTicket } from '@beanpool/core';
 import WebSocket from 'ws';
 
 let run = 0, passed = 0;
@@ -521,6 +526,71 @@ async function main(): Promise<void> {
     assert(pip300.status === 200 && pipWork.body?.status === 'confirmed' && pipMid.status === 200 && pipRevoke.status === 200 && floorOf(pip)?.amount === 50
         && pipLast?.action === 'exception_kept' && /^50 /.test(pipLast.new_value),
         `the owner sets Pip's floor to 50 during her work-off: the revoke keeps 50, never back up to her 300, and the log says why (${JSON.stringify(floorOf(pip))}; ${JSON.stringify(pipLast)})`);
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
+    // ── 14. an invite bound to an entry obeys the rule (#1589 × debts) ─────────────────────────
+    console.log('── 14. an invite bound to an entry with a debt ──');
+    const bindInvite = (entryId: string) => call('POST', ada, `/api/names/entries/${entryId}/invite`, {});
+    const redeem = (who: Id, code: string) => call('POST', who, '/api/invite/redeem', { code, publicKey: who.pk, callsign: who.name });
+    const redeemTicket = (who: Id, ticketB64: string) => call('POST', who, '/api/invite/redeem-offline', { ticketB64, publicKey: who.pk, callsign: who.name });
+    const adaSigns = async (b: Uint8Array) => new Uint8Array(crypto.sign(null, Buffer.from(b), ada.priv));
+    const invitesTo = (entryId: string) => db.prepare('SELECT used_by, names_bind_outcome FROM invite_codes WHERE names_entry_id = ? ORDER BY created_at').all(entryId) as { used_by: string | null; names_bind_outcome: string | null }[];
+    const usedBy = (who: Id) => db.prepare('SELECT names_entry_id, names_bind_outcome FROM invite_codes WHERE used_by = ?').get(who.pk) as { names_entry_id: string | null; names_bind_outcome: string | null } | undefined;
+    const liveEntryOf = (who: Id) => (db.prepare('SELECT entry_id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(who.pk) as { entry_id: string } | undefined)?.entry_id;
+    const statusOf = (who: Id) => (db.prepare('SELECT status FROM members WHERE public_key = ?').get(who.pk) as { status: string } | undefined)?.status;
+    const inviteCount = () => (db.prepare('SELECT COUNT(*) n FROM invite_codes').get() as any).n as number;
+
+    // (a) Made for an entry with an open debt: refused, as confirmMember refuses, and nothing is written.
+    const ivyDebt = await leftOwing('Ivy', 40);
+    const invitesBefore = inviteCount();
+    const ivyInvite = await bindInvite(ivyDebt?.entry_id);
+    assert(ivyDebt?.status === 'open' && ivyInvite.status === 409 && ivyInvite.body?.code === 'open_debt' && ivyInvite.body?.debtId === ivyDebt.id && /40 Beans/.test(ivyInvite.body?.error ?? ''),
+        `an invite bound to an entry with an open debt is refused, saying why (${show(ivyInvite)})`);
+    assert(inviteCount() === invitesBefore && invitesTo(ivyDebt.entry_id).length === 0, 'and no invite is written');
+
+    // (b) Made while the entry was clean; its person then left owing. The joiner is a member, unconfirmed, never stranded.
+    const jonEntry = makeEntry();
+    const jonInvite = await bindInvite(jonEntry);
+    assert(jonInvite.status === 201 && /^INV-/.test(jonInvite.body?.invite?.code ?? ''), `setup: Ada makes an invite bound to a clean entry (${show(jonInvite)})`);
+    await call('POST', await debtor('Jon', 60, jonEntry), '/api/member/purge', { action: 'purge_account' });
+    const jonDebt = debtsOf(jonEntry)[0];
+    assert(jonDebt?.status === 'open' && jonDebt.amount === 60, `setup: then Jon, confirmed against it, deletes his account at -60 (${JSON.stringify(jonDebt)})`);
+    const jon2 = keypair('Jon again');
+    const jonJoins = await redeem(jon2, jonInvite.body?.invite?.code);
+    assert(jonJoins.status === 200 && jonJoins.body?.success === true && statusOf(jon2) === 'active', `the invite still makes its joiner an active member (${show(jonJoins)}, ${statusOf(jon2)})`);
+    assert(!liveEntryOf(jon2) && invitesTo(jonEntry)[0]?.used_by === jon2.pk && invitesTo(jonEntry)[0]?.names_bind_outcome === 'open_debt',
+        `but doesn't confirm them, and the invite says why (${JSON.stringify(invitesTo(jonEntry))})`);
+    assert(debtsOf(jonEntry)[0].status === 'open' && debtsOf(jonEntry)[0].repaying_pubkey === null, 'the debt stays open, and nobody is working it off');
+
+    // (c) An offline ticket bound to the entry, signed while it was clean, redeemed after a debt opened: the same.
+    const kitEntry = makeEntry();
+    const kitTicket = await buildInviteTicket(BASE, ada.pk, adaSigns, { namesEntryId: kitEntry });
+    await call('POST', await debtor('Kit', 70, kitEntry), '/api/member/purge', { action: 'purge_account' });
+    const kitDebt = debtsOf(kitEntry)[0];
+    assert(kitDebt?.status === 'open' && kitDebt.amount === 70, `setup: Ada signs a ticket bound to a clean entry; then Kit, confirmed against it, deletes her account at -70 (${JSON.stringify(kitDebt)})`);
+    const kit2 = keypair('Kit again');
+    const kitJoins = await redeemTicket(kit2, kitTicket);
+    assert(kitJoins.status === 200 && kitJoins.body?.success === true && statusOf(kit2) === 'active', `the ticket still makes its joiner an active member (${show(kitJoins)}, ${statusOf(kit2)})`);
+    assert(!liveEntryOf(kit2) && usedBy(kit2)?.names_entry_id === kitEntry && usedBy(kit2)?.names_bind_outcome === 'open_debt',
+        `but doesn't confirm them, and the ticket's row says why (${JSON.stringify(usedBy(kit2))})`);
+
+    // (d) Once the debt is settled, a bound invite (or ticket) for the entry is made and confirms its joiner.
+    transfer('genesis', jon2.pk, 60, 'Jon again earns', 'direct', true);
+    const jonPays = await call('POST', jon2, '/api/commons/pay', { amount: 60, debtId: jonDebt.id });
+    const jonSettled = await call('POST', ada, `/api/names/debts/${jonDebt.id}/settle`, { transactionId: jonPays.body?.transactionId });
+    assert(jonPays.status === 200 && jonSettled.status === 200 && jonSettled.body?.status === 'settled', `setup: Jon pays the 60 back and Ada settles it (${show(jonPays)}; ${show(jonSettled)})`);
+    const jonAgain = await bindInvite(jonEntry);
+    assert(jonAgain.status === 201 && /^INV-/.test(jonAgain.body?.invite?.code ?? ''), `a new invite bound to the entry is made now (${show(jonAgain)})`);
+    const jon3 = keypair('Jon third');
+    const jon3Joins = await redeem(jon3, jonAgain.body?.invite?.code);
+    assert(jon3Joins.status === 200 && liveEntryOf(jon3) === jonEntry && invitesTo(jonEntry)[1]?.names_bind_outcome === 'confirmed',
+        `and redeeming it confirms the joiner against the entry (${show(jon3Joins)}; ${JSON.stringify(invitesTo(jonEntry))})`);
+    const kitForgive = createDecision({ authorPubkey: proposer().pk, title: 'Forgive Kit', description: 'Kit had a hard year', touches: 'pool', effect: 'forgive_debt', subject: kitDebt.id });
+    assert(executeDecision(kitForgive.id).success && debtsOf(kitEntry)[0].status === 'forgiven', `setup: a Decision forgives Kit's debt (${JSON.stringify(debtsOf(kitEntry)[0])})`);
+    const kit3 = keypair('Kit third');
+    const kit3Joins = await redeemTicket(kit3, await buildInviteTicket(BASE, ada.pk, adaSigns, { namesEntryId: kitEntry }));
+    assert(kit3Joins.status === 200 && liveEntryOf(kit3) === kitEntry && usedBy(kit3)?.names_bind_outcome === 'confirmed',
+        `a new ticket bound to the entry confirms its joiner (${show(kit3Joins)}; ${JSON.stringify(usedBy(kit3))})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────

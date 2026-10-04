@@ -42,13 +42,15 @@ import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js'
 import { HealthError, healthSummary, openExceptions, readHealthAccessLog, setHealthSettings, consentTerms, myConsent, recordConsent, withdrawConsent } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
-import { getMember, isVisitorKey } from '../state-engine.js';
+import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
+import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
     NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
     addGeneration, addShare, confirmMember, confirmToWorkOff, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
-    readNamesCopyOf, saveNamesCopy,
+    readNamesCopyOf, saveNamesCopy, readBoundInvites,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 
@@ -163,6 +165,24 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     router.get('/api/names/debts', (ctx) => asAdmin(ctx, () => ({ debts: listDebts() })));
     router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body), 201));
     router.post('/api/names/debts/:id/settle', (ctx) => asAdmin(ctx, (actor, body) => settleByPayment(actor, ctx.params.id, body)));
+
+    // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
+    // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
+    router.post('/api/names/entries/:id/invite', async (ctx) => {
+        const actor = admin(ctx);
+        if (!actor) return;
+        try {
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id));
+            if (!invite) return answer(ctx, 403, 'Only registered members can generate invites', 'not_member');
+            ctx.status = 201;
+            ctx.body = { success: true, invite };
+        } catch (e) {
+            if (respondProfileRefusal(ctx, e)) return;
+            respond(ctx, e);
+        }
+    });
+    router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
+
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
     router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id)));
     router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id)));

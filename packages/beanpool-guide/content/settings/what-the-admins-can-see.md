@@ -27,6 +27,7 @@ An admin may **confirm** you: they say your account is the person on your entry.
 
 - A confirmation carries no name. The server records which account, which entry and which admin, never who you are.
 - It is not a trust badge, and for now it changes nothing else in the app.
+- If an admin invited you by name, joining with their invite confirmed you against your entry, by that admin. "Confirmed" means only that an admin says this account is the person on that entry.
 - If you replace a lost phone and your account moves to a new key, your confirmation moves with it.
 - If you leave or delete your account, your confirmation ends. Your entry stays on the admins' list until an admin deletes it: ask them to.
 

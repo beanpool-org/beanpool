@@ -951,6 +951,7 @@ export function initSchema() {
     // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
     // or trigger naming it compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN suspended_member INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
@@ -1102,6 +1103,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
@@ -1348,6 +1351,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // The member’s status before a re-key code suspended them, so a cancelled code puts it back (member-wizards cancelRekeyCode).
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }

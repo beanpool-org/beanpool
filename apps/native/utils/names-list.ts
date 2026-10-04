@@ -1446,6 +1446,16 @@ export function addNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId:
     return call<{ id: string }>(anchor, identity, 'POST', `${NAMES_PATH}/entries`, { id: sealed.id, ciphertext: sealed.ciphertext, keyId });
 }
 
+/** An invite bound to this entry (community modes slice 3): redeeming it confirms the joiner against it, by this admin. */
+export function inviteForNamesEntry(anchor: string, identity: BeanPoolIdentity, entryId: string) {
+    return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, {});
+}
+
+/** Every bound invite on this community, for the admins: used or not, and what each did. */
+export function readBoundInvites(anchor: string, identity: BeanPoolIdentity) {
+    return call<{ invites: import('./names-invite').BoundInvite[] }>(anchor, identity, 'GET', `${NAMES_PATH}/invites`);
+}
+
 export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId: string, sealed: { id: string; ciphertext: string }) {
     return call<{ id: string }>(anchor, identity, 'PUT', `${NAMES_PATH}/entries/${encodeURIComponent(sealed.id)}`, { ciphertext: sealed.ciphertext, keyId });
 }

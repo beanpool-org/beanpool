@@ -164,6 +164,12 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
     -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
     issued_by TEXT,
+    -- An invite bound to a names-list entry (community modes slice 3, engine/names-list.ts): redeeming it confirms the
+    -- joiner against that entry, by the invite's maker. Only the entry's id: the server never sees the name. NULL for
+    -- every other invite. `names_bind_outcome` is what the redeem did with the binding: 'confirmed', or why it didn't
+    -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
+    names_entry_id TEXT,
+    names_bind_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -565,7 +571,10 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whether actioning it suspended its member: 1 it did, 0 it didn't, NULL not actioned or actioned before this was kept
+    -- (state-engine.ts actionReport; read by member-wizards.ts cancelRekeyCode for a code with no prior status).
+    suspended_member INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
@@ -2372,7 +2381,9 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     expires_at       DATETIME NOT NULL,
     completed_at     DATETIME,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
-    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The member’s status before the code suspended them; a cancelled code puts it back (NULL on a code made before it was kept).
+    prior_status     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);

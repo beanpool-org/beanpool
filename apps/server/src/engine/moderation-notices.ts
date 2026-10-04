@@ -111,7 +111,7 @@ export function closeOpenReportsOnPost(postId: string): string[] {
     ).all(postId) as { reporter_pubkey: string }[];
     if (rows.length === 0) return [];
     db.prepare(
-        `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+        `UPDATE abuse_reports SET status = 'actioned', suspended_member = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
           WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
     ).run(postId);
     return rows.map(r => r.reporter_pubkey);

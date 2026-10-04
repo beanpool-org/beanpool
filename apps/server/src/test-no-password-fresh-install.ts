@@ -23,6 +23,10 @@
  *      has a hash but no joinedAt. The new password signs in afterwards.
  *   G. The script on a new install (no password ever): it refuses ADMIN_PASSWORD (non-zero exit, "[not set]", pointing at
  *      the app and `beanpool recover`), leaves local-config.json as it was, and never says the password was set.
+ *   H. A take-over or a sealed restore onto a new install writes adminHash/salt but never isLocked (deciding review
+ *      r4176337957). Booted with ADMIN_PASSWORD: the community password signs in, the .env one does not, /api/local/status
+ *      says isLocked (legacy Settings shows the password box), no "ignored" line, /api/local/claim says password: true, and
+ *      the boot locks the config with the hash kept.
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-no-password-fresh-install.ts
  */
@@ -293,6 +297,24 @@ async function main(): Promise<void> {
     const g = await boot(dirG, { ADMIN_PASSWORD: NEW_PW });
     assert(!(await signsIn(g, NEW_PW)), 'G5. and the node has no password, as the script said');
     await g.stop();
+
+    console.log('\nH. A take-over or sealed restore onto a new install writes the hash, never isLocked');
+    const dirH = path.join(root, 'h');
+    const h0 = await boot(dirH);
+    await h0.stop();
+    const saltH = crypto.randomBytes(16).toString('hex');
+    const hashH = crypto.scryptSync(OLD_PW, saltH, 64).toString('hex');
+    fs.writeFileSync(path.join(dirH, 'local-config.json'), JSON.stringify({ ...configOf(dirH), adminHash: hashH, salt: saltH }, null, 2));
+    const h = await boot(dirH, { ADMIN_PASSWORD: ENV_PW });
+    assert(await signsIn(h, OLD_PW), 'H1. the community password signs in');
+    assert(!(await signsIn(h, ENV_PW)), 'H2. the .env one does not');
+    const status = (await request(h, 'GET', '/api/local/status')).json;
+    assert(status?.isLocked === true, `H3. /api/local/status says it has a password (legacy Settings shows the password box) (${status?.isLocked})`);
+    assert(!/ADMIN_PASSWORD in \.env is ignored/.test(h.output()), 'H4. no "ignored" line: it is not a new install');
+    assert((await request(h, 'GET', '/api/local/claim', undefined, { Host: HOST })).json?.password === true, 'H5. /api/local/claim says password: true');
+    cfg = configOf(dirH);
+    assert(cfg.isLocked === true && cfg.adminHash === hashH && cfg.salt === saltH, 'H6. the boot locks the config and keeps the hash');
+    await h.stop();
 
     fs.rmSync(root, { recursive: true, force: true });
     console.log(`\n${passed}/${run} passed`);

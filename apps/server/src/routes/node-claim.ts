@@ -31,7 +31,7 @@ import { claimText } from '@beanpool/core';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { logAddressTag } from '../log-address.js';
-import { getLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, hasAdminPassword } from '../config/local-config.js';
 import { nodeHasOwner } from '../engine/node-roles.js';
 import { verifyStatementSignature } from '../engine/member-signature.js';
 import { audienceStanding, isLocalNetworkHost, normalizeAddress } from '../engine/own-addresses.js';
@@ -67,7 +67,7 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
             communityName: config.communityName || config.callsign || null,
             // Whether this server has an admin password at all: a new install has none (config/local-config.ts
             // initAdminPassword), and the Settings sign-in then shows no password fold.
-            password: !!(config.adminHash && config.salt),
+            password: hasAdminPassword(config),
         };
     });
 

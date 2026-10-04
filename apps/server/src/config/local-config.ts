@@ -418,8 +418,18 @@ function checkFirstPasswordFile(config: LocalConfig): void {
 }
 
 /**
+ * Whether this server has an admin password: its hash, never isLocked alone. A take-over's admin-settings step
+ * (services/takeover.ts) and a sealed restore (services/sealed-backup.ts) write the hash without isLocked, so onto a new
+ * install (never locked) it arrives unlocked; the next boot locks it (initAdminPassword).
+ */
+export function hasAdminPassword(config: LocalConfig): boolean {
+    return !!(config.adminHash && config.salt);
+}
+
+/**
  * The admin password at boot (node sign-in step 8: no password on new installs).
- * - Config locked → an existing node: its password stays exactly as it is, and the first-password file is looked at
+ * - Config locked, or a hash in it (hasAdminPassword) → an existing node: its password stays exactly as it is, and the
+ *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here
  * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
  *   Reset clears it) → an existing node whose password is being rotated: scripts/rotate-node-env.sh unlocks the config
  *   and drops the hash, then restarts it with the new ADMIN_PASSWORD, which is taken as before. Never read as a new
@@ -433,7 +443,11 @@ function checkFirstPasswordFile(config: LocalConfig): void {
 export function initAdminPassword(): void {
     const config = getLocalConfig();
 
-    if (config.isLocked) {
+    if (config.isLocked || hasAdminPassword(config)) {
+        if (!config.isLocked) {
+            updateLocalConfig({ isLocked: true });
+            console.log('🔒 This server holds an admin password a take-over or a restore brought, so it is locked now.');
+        }
         console.log('🔒 Node is locked — admin password already configured.');
         checkFirstPasswordFile(config);
         return;

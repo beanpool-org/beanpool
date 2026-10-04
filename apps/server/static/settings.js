@@ -4324,7 +4324,7 @@
                 if (data.isLocked) {
                     showView('login');
                 } else {
-                    // Not locked: a new install, which has no admin password (config/local-config.ts initAdminPassword).
+                    // No admin password (status counts the hash too: routes/community.ts): a new install (config/local-config.ts initAdminPassword).
                     // No password box to type into: the claim code makes the first owner, who signs in with the app.
                     showView('login');
                     document.getElementById('login-password-field')?.classList.add('hidden');

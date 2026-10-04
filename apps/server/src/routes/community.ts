@@ -42,7 +42,7 @@ import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '.
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
 } from '../config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
@@ -121,7 +121,8 @@ router.get('/api/local/status', async (ctx) => {
     ctx.set('Access-Control-Allow-Origin', '*');
     
     ctx.body = {
-        isLocked: config.isLocked,
+        // Has an admin password: the hash counts too (hasAdminPassword), as a take-over or a restore writes it unlocked.
+        isLocked: config.isLocked || hasAdminPassword(config),
         callsign: config.callsign || null,
         location: config.location || null,
     };

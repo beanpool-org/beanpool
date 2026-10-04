@@ -118,7 +118,7 @@ describe('AdminLoginCard on a node whose password is retired', () => {
 
     it('shows no password field, only the phone sign-in', async () => {
         fakeNode({ view: {} });
-        vi.mocked(fetchClaimState).mockResolvedValueOnce({ kind: 'claimed', password: false });
+        vi.mocked(fetchClaimState).mockResolvedValueOnce({ kind: 'claimed', password: false, retired: true });
         render(<AdminLoginCard nodeUrl="http://localhost:8080" onPasswordSession={vi.fn()} onKeySession={vi.fn()} />);
         expect(await screen.findByTestId('password-retired-signin')).toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Password')).toBeNull();

@@ -1,7 +1,7 @@
 ---
 slug: first-time-setup
 title: First-time setup
-summary: The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.
+summary: The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.
 related: signing-in, access-and-security, roles, members-and-invites, backups-and-replicas
 ---
 
@@ -9,20 +9,21 @@ related: signing-in, access-and-security, roles, members-and-invites, backups-an
 
 Your server keeps everything in one folder, **data**, next to docker-compose.yml. The server sees it as /data. Back up that folder and you have backed up the whole community.
 
-Put an admin password in the .env file as **ADMIN_PASSWORD** before you start the server for the first time. It needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. If the password is weaker than that, the server will not start. It restarts over and over until you fix it.
+A new server has no admin password, and you do not put one in the .env file. If ADMIN_PASSWORD is there, a new server ignores it, and its log says so once. The community's first owner claims it with a one-time claim code instead: see Claim your community: the address, then your phone, below.
 
-If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It never prints it in the log, because the log is kept for as long as the server runs and gets copied into support requests. It puts the password in a file, data/first-admin-password.txt, that only the server can read, and the log says where it is. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt
+On its first start the server makes the claim code and puts it in a file, data/claim-code.txt, that only the server can read. It never prints the code in the log, because the log is kept for as long as the server runs and gets copied into support requests. beanpool claim shows it to you. You can also read it with: docker compose exec beanpool-node cat /data/claim-code.txt
 
-Sign in with it, then change the password in Access & Security. The file is deleted the moment you do, and the log says so. Until then, every start of the server reminds you in the log that the file is still there, without printing the password. If the server cannot write the file, it does not start, and the log says why.
+### Servers that still have a password
 
-The server reads ADMIN_PASSWORD only on its first start. After that it keeps a scrambled copy in data/local-config.json and ignores the variable. To change the password later, use Settings.
+A server set up before the claim code keeps its admin password exactly as it was. Its first password was the ADMIN_PASSWORD in .env, or one the server made up and put in data/first-admin-password.txt. Read that file with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Until you change the password in Access & Security, every start reminds you in the log that the file is still there, without printing the password. The file is deleted the moment you change it. The server reads ADMIN_PASSWORD only on its first start, so to change the password, use Settings.
 
 ## What the first start creates
 
 - **data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Once you make a recovery code, a backup from Settings carries both, locked. Until then only a copy of the data folder does: see Backups and replicas.
 - **data/state.db**: the database, with every member, post, deal and vote.
-- **data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.
-- **data/first-admin-password.txt**: only when ADMIN_PASSWORD was empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.
+- **data/local-config.json**: two-factor settings, gateway settings, the replication token if this server is a backup or has one, and the claim code's scrambled copy until it is used. On a server that still has an admin password, that password's scrambled copy too.
+- **data/claim-code.txt**: the one-time claim code, in plain text, until a phone claims the community with it. Then it is deleted. A backup from Settings never carries it.
+- **data/first-admin-password.txt**: only on a server set up before the claim code with ADMIN_PASSWORD empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere.
 
 ## Claim your community: the address, then your phone
 
@@ -38,7 +39,7 @@ If the community already has an owner, it says so: use beanpool recover instead.
 
 ## Open Settings
 
-Go to your server's address followed by **/settings**, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it instead of the password: see A community with no owner yet, below. Otherwise, sign in with the admin password. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open.
+Go to your server's address followed by **/settings**, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open.
 
 ## A community with no owner yet
 
@@ -46,9 +47,9 @@ On a new server, the sign-in page at /settings first says **This community has n
 
 The page's QR code carries only your server's address, as it is in the browser's address bar, and a short number that names the waiting code. It never carries the code itself: anyone can open this page, so the code is only ever read on the server. The address is written out under the QR code too, so you can check it. Open the page at the address the app will use (for example https://yourtown.beanpool.org/settings), not the server's home-network address. When opened at an unlisted address, the page shows **Open this page at … to scan** instead of the QR code, because the node answers only at its listed names.
 
-The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. Only when the first check fails does the page show the normal sign-in (a later failure keeps the card), so the claim never stands in the way of the password.
+The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. Only when the first check fails does the page show the normal sign-in (a later failure keeps the card), so a server that still has a password can always be signed in to with it.
 
-Below the claim, **This server also has an admin password** opens today's password sign-in, for a server set up with one. A server that has no admin password does not show it.
+Below the claim, **This server also has an admin password** opens the password sign-in, only on a server that still has one. A new server has no admin password, so it does not show it.
 
 ## The setup wizard
 

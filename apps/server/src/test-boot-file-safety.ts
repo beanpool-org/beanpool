@@ -2,7 +2,7 @@
  * A start never changes the community's identity, and its key files are private (follow-ups to #1616's review).
  *
  * Each case starts a real node process on its own data dir, running index.ts's first steps in order (boot-file-safety,
- * genesis, admin password, TLS, the node key): an empty or cut-off libp2p_key stops the start and stays as it was; a
+ * genesis, admin password, TLS, libp2p on port 0): an empty or cut-off libp2p_key stops the start and stays as it was; a
  * community.key with no genesis.json is never written over; a new install's key files and local-config.json are 0600;
  * an older install's 0644 files are 0600 after a start; an upgraded node gets local-config.json.bak at its first start;
  * a crash's temp files are removed and nothing else. Then, in their own processes: a sealed restore over a config that
@@ -55,8 +55,11 @@ async function bootChild(): Promise<void> {
     saveLocalConfig({ ...getLocalConfig(), contactPhone: 'saved at start' });
     const { initTls } = await import('./services/tls.js');
     await initTls();
-    const p2p = await import('./p2p.js') as any;
-    const peerId = p2p.loadOrCreateIdentity ? (await p2p.loadOrCreateIdentity()).publicKey.toString() : null;
+    // Step 7 as index.ts runs it, on port 0: listeners on this machine only, and no peer is dialled (the Connector Manager does that).
+    const { startP2P } = await import('./p2p.js');
+    const node = await startP2P(0, 0);
+    const peerId = node.peerId.toString();
+    await node.stop();
     process.stdout.write('@@ ' + JSON.stringify({ peerId }) + '\n', () => process.exit(0));
 }
 
@@ -186,7 +189,9 @@ async function main(): Promise<void> {
     cutInHalf(cfgFile);
     const ru = await run(u, ['--boot']);
     check(ru.code === 0, `then cut off before any save: the node starts from the copy (exit ${ru.code})`);
-    check(JSON.parse(fs.readFileSync(cfgFile, 'utf8')).addressRequest?.name === 'cairns', 'the address is intact');
+    let address: string | null = null;
+    try { address = JSON.parse(fs.readFileSync(cfgFile, 'utf8')).addressRequest?.name ?? null; } catch { /* still cut off */ }
+    check(address === 'cairns', `the address is intact (${address ?? 'unreadable'})`);
 
     console.log('\n6. A crash\'s temp files are removed at start, and nothing else');
     const t = fresh('temps');
@@ -239,7 +244,9 @@ async function main(): Promise<void> {
     fs.chmodSync(`${fb}.bak`, 0o400);
     const rb = await run(b, ['--bak-fail']);
     const lines: string[] = rb.result?.lines ?? [];
-    check(JSON.parse(fs.readFileSync(fb, 'utf8')).contactPhone === 'second', 'local-config.json is saved');
+    let phone: string | null = null;
+    try { phone = JSON.parse(fs.readFileSync(fb, 'utf8')).contactPhone ?? null; } catch { /* unreadable */ }
+    check(phone === 'second', 'local-config.json is saved');
     check(lines.some((l) => l.includes('.bak') && /one save behind/.test(l)) && !lines.some((l) => /Failed to save local config/.test(l)), `the log names the .bak write, not the save (${(lines[0] ?? '').slice(0, 120)})`);
     fs.chmodSync(`${fb}.bak`, 0o600);
 

@@ -248,3 +248,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-11 - O(1) User Group Lookups in PWA MapPage Audience Scope Notices
 **Learning:** In `apps/pwa/src/pages/MapPage.tsx`, rendering audience scope notices for group posts called `userGroups.find(g => g.id === targetGroupId)` repeatedly inside JSX templates on every render.
 **Action:** Pre-computed `userGroupsById` Map indexed by group `id` via `useMemo` at component scope, converting group lookups into constant-time O(1) retrievals.
+
+## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
+**Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.

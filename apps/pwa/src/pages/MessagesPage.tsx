@@ -217,6 +217,19 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         }
         return map;
     }, [userTransactions]);
+    const activePeerPubkey = useMemo(() => {
+        if (!activeConv) return '';
+        return activeConv.participants?.find(p => p !== identity.publicKey) || '';
+    }, [activeConv, identity.publicKey]);
+    // ⚡ Bolt: memoized pending transaction for active conversation to avoid O(T) array scan on render
+    const activePendingTransaction = useMemo(() => {
+        if (!activeConv) return null;
+        return userTransactions.find(t =>
+            t.status === 'pending' &&
+            ((t.buyerPublicKey === identity.publicKey && (t.sellerPublicKey === activePeerPubkey || !activePeerPubkey)) ||
+             (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
+        ) || null;
+    }, [activeConv, userTransactions, identity.publicKey, activePeerPubkey]);
     const completedTransactionsByPostId = useMemo(() => {
         const map = new Map<string, MarketplaceTransaction>();
         for (const tx of userTransactions) {
@@ -1166,12 +1179,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
 
                 {/* Active Trust Hold / Escrow Banner */}
                 {(() => {
-                    const peerPubkey = activeConv.participants.find(p => p !== identity.publicKey) || '';
-                    const pendingTx = userTransactions.find(t =>
-                        t.status === 'pending' &&
-                        ((t.buyerPublicKey === identity.publicKey && (t.sellerPublicKey === peerPubkey || !peerPubkey)) ||
-                         (t.postId && t.postId === activeConv.postId && t.buyerPublicKey === identity.publicKey))
-                    );
+                    const pendingTx = activePendingTransaction;
 
                     if (!pendingTx) return null;
                     const isBuyer = pendingTx.buyerPublicKey === identity.publicKey;

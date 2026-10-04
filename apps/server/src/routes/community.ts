@@ -38,6 +38,7 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { pushKeyHex } from '../engine/push-notices.js';
+import { boundInviteCodesOf } from '../engine/names-list.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
@@ -1264,7 +1265,10 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own invites' };
         return;
     }
-    const invites = getInvitesByMember(publicKey);
+    // An invite bound to a names-list entry goes to its maker alone, whatever ENFORCE_READ_AUTH says: redeemed by anyone
+    // else's key, it would confirm that key against the entry, by the maker (engine/names-list.ts readBoundInvites).
+    const bound = ctx.state.actor === publicKey ? null : boundInviteCodesOf(publicKey);
+    const invites = getInvitesByMember(publicKey).filter((i) => !bound?.has(i.code));
     ctx.body = { invites };
 });
 

@@ -122,6 +122,7 @@ import crypto from 'node:crypto';
 import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
+import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
 import { mayInviteHere } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
@@ -400,14 +401,32 @@ function answerable(id: string, now: number): { row: KnockRow } | { reason: Answ
  * "Invite": `member` (the signer, a member here, checked by the route) makes an invite for the applicant's key, and
  * the knock records it and who. Both writes commit together or not at all.
  */
-export function approveKnock(id: string, member: string, now = Date.now()): AnswerOutcome {
+/**
+ * What an admin's answer may add (community modes slice 3): `entry`, a names-list entry their phone sealed as slice 2 does
+ * (id, ciphertext, key id: never the name), added and bound in the same step; or `entryId`, an entry already on the list.
+ * The invite is then bound to it (engine/names-list.ts assertMayBindInvite), and redeeming it confirms the knocker.
+ */
+export interface KnockNamesBinding {
+    entry?: { id?: unknown; ciphertext?: unknown; keyId?: unknown };
+    entryId?: unknown;
+}
+
+export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
         // Where only admins invite (config/door.ts), a member who is no owner or admin answers nothing, before the
         // knock is looked at: the invite below would be refused just the same.
         if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
-        const invite = generateInvite(member, found.row.pubkey);
+        // A binding asked for: the names list's own rules, each refusal a NamesListError thrown, so nothing commits (the
+        // entry included). Holders reconciled first, as every names-list route does.
+        let entryId: string | undefined;
+        if (names?.entry !== undefined || names?.entryId !== undefined) {
+            reconcileHolders();
+            assertNamesAdmin(member);
+            entryId = names.entry !== undefined ? addEntry(member, names.entry).id : String(names.entryId);
+        }
+        const invite = generateInvite(member, found.row.pubkey, undefined, entryId);
         // generateInvite refuses only a key that isn't a member here (isNodeMember), which the route has ruled out. Thrown, so nothing commits.
         if (!invite) throw new Error('knock approval: the invite could not be made');
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?

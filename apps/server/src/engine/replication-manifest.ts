@@ -395,7 +395,7 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
     rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
     // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so

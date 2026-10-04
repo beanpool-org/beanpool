@@ -164,6 +164,12 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
     -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
     issued_by TEXT,
+    -- An invite bound to a names-list entry (community modes slice 3, engine/names-list.ts): redeeming it confirms the
+    -- joiner against that entry, by the invite's maker. Only the entry's id: the server never sees the name. NULL for
+    -- every other invite. `names_bind_outcome` is what the redeem did with the binding: 'confirmed', or why it didn't
+    -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
+    names_entry_id TEXT,
+    names_bind_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

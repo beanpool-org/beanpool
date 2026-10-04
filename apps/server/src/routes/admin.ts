@@ -35,7 +35,7 @@ import {
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
-import { logAlertsLook, logBalanceLook, logDisputesLook } from '../engine/community-health.js';
+import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -858,8 +858,9 @@ router.get('/api/local/admin/stranded-escrows', async (ctx) => {
     try {
         const listed = listStrandedEscrows();
         // A look at the trades these escrows were stuck in, like a look at the disputes (review r4177560417 item 4): a
-        // line in the log the owner and admins read, naming each trade (or the escrow, when its trade is gone), first.
-        if (!logDisputesOrRefuse(ctx, 'disputes_listed', listed.escrows.map(e => e.tradeId ?? e.escrowId))) return;
+        // line of its own in the log the owner and admins read, naming each trade (or the escrow, when its trade is
+        // gone), first.
+        if (!logDisputesOrRefuse(ctx, 'stranded_escrows_read', listed.escrows.map(e => e.tradeId ?? e.escrowId))) return;
         ctx.body = { success: true, ...listed };
     } catch (e: any) {
         ctx.status = 500;
@@ -2395,7 +2396,7 @@ router.get('/api/local/admin/disputes/:id', async (ctx) => {
 });
 
 /** A look at the disputes that can't be logged (a standby writes no plain table) isn't answered. */
-function logDisputesOrRefuse(ctx: any, action: 'disputes_listed' | 'dispute_opened', tradeIds: string[]): boolean {
+function logDisputesOrRefuse(ctx: any, action: TradeLookAction, tradeIds: string[]): boolean {
     try {
         logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds);
         return true;

@@ -20,10 +20,17 @@ type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: numb
 type Lines = { debtLinePct: number; quietDays: number };
 type LogLine = { id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null; at: string };
 
-/** What a line in the access log says the admin did: opened the exceptions, or looked at a member's balance while removing them. */
-function logDid(l: LogLine): string {
+/**
+ * What a line in the access log says the admin did: opened the exceptions, looked at a member's balance while removing
+ * them, or looked at trades and alerts: the disputes, one dispute, the stranded escrows, the alerts that named a member.
+ */
+export function logDid(l: LogLine): string {
     if (l.action === 'offboard_preview') return `saw ${l.subjectCallsign ? `${l.subjectCallsign}'s` : "a member's"} balance while removing them on`;
     if (l.action === 'offboard_settled') return 'removed a member and saw the balance it settled on';
+    if (l.action === 'disputes_listed') return 'opened the disputes list on';
+    if (l.action === 'dispute_opened') return 'opened a dispute on';
+    if (l.action === 'stranded_escrows_read') return 'opened the escrows a member’s removal left stuck on';
+    if (l.action === 'alerts_read') return `read the alerts that named ${l.subjectCallsign ?? 'a member'} on`;
     return 'opened it on';
 }
 export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[]; tradeLog: LogLine[] };

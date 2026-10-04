@@ -501,12 +501,16 @@ async function main(): Promise<void> {
         && bgFlags9.every((f) => !(f.members ?? []).length) && namedKeys9.every((k) => !JSON.stringify(bgFlags9).includes(k)),
         `/admin/data and /admin/health asked for the alerts' summary write no line and their alerts name nobody (${logRows() - bgBefore9} lines)`);
     // An escrow left stuck by a member's removal on an older node: reading the list is a look, logged like the disputes.
+    // It gets a line of its own (stranded_escrows_read), so the log says which view the admin opened.
+    db.prepare("INSERT INTO accounts (public_key, balance) VALUES ('escrow_t9-stranded', -5)").run();
     const strandedBefore9 = logRows();
     const stranded9 = await call('GET', null, '/api/local/admin/stranded-escrows', undefined, adaSession);
     const strandedLine9 = lastLines(1)[0];
-    assert(stranded9.status === 200 && logRows() === strandedBefore9 + 1 && strandedLine9?.action === 'disputes_listed' && strandedLine9?.actor_pubkey === ada.pk
-        && JSON.stringify(JSON.parse(strandedLine9?.detail ?? 'null')) === JSON.stringify((stranded9.body?.escrows ?? []).map((e: any) => e.tradeId ?? e.escrowId)),
-        `an admin's read of the stranded escrows is a line naming their trades (${stranded9.status} ${JSON.stringify(strandedLine9)})`);
+    const strandedIds9 = ((stranded9.body?.escrows ?? []) as any[]).map((e) => e.tradeId ?? e.escrowId);
+    db.prepare("DELETE FROM accounts WHERE public_key = 'escrow_t9-stranded'").run();
+    assert(stranded9.status === 200 && logRows() === strandedBefore9 + 1 && strandedLine9?.action === 'stranded_escrows_read' && strandedLine9?.actor_pubkey === ada.pk
+        && strandedIds9.length > 0 && JSON.stringify(JSON.parse(strandedLine9?.detail ?? 'null')) === JSON.stringify(strandedIds9),
+        `an admin's read of the stranded escrows is a stranded_escrows_read line naming their trades (${stranded9.status} ${JSON.stringify(strandedLine9)} ${JSON.stringify(strandedIds9)})`);
     const stats9 = (data9.body?.memberStats ?? {}) as Record<string, Record<string, unknown>>;
     assert(Object.keys(stats9).length > 0 && Object.values(stats9).every((s) => !('deals' in s) && !('volume' in s) && !('cancelled' in s))
         && typeof stats9[kim.pk]?.posts === 'number' && typeof stats9[kim.pk]?.messages === 'number',
@@ -520,6 +524,7 @@ async function main(): Promise<void> {
     const panelLog9 = (panel9.body?.tradeLog ?? []) as any[];
     assert(panel9.status === 200 && panelLog9.some((l) => l.action === 'disputes_listed' && JSON.stringify(l.tradeIds) === JSON.stringify(shownIds9))
         && panelLog9.some((l) => l.action === 'alerts_read' && named9.includes(l.subject))
+        && panelLog9.some((l) => l.action === 'stranded_escrows_read' && JSON.stringify(l.tradeIds) === JSON.stringify(strandedIds9))
         && ((panel9.body?.log ?? []) as any[]).every((l) => ['exceptions_opened', 'offboard_preview', 'offboard_settled'].includes(l.action)),
         `the looks at trades and alerts are in their own list beside the balance looks, in the panel the owner and admins read (${panel9.status})`);
     // 100 alert reads by different admins can't push a balance look out of the balance list (review r4177560410).

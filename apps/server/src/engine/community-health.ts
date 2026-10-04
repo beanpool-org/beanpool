@@ -223,10 +223,10 @@ export function logBalanceLook(actor: string, subject: string, action: 'offboard
 
 /**
  * An admin's look at trades in the disputes view (queue item 29, Marty 4 Oct: "Keep disputes, log every look"): the
- * list, or one dispute. One line naming the trade ids shown. Written before the answer: a look that can't be logged
- * isn't answered.
+ * list, or one dispute; or at the escrows a member's removal left stuck on an older node (a line of its own). One line
+ * naming the trade ids shown. Written before the answer: a look that can't be logged isn't answered.
  */
-export function logDisputesLook(actor: string, action: 'disputes_listed' | 'dispute_opened', tradeIds: string[]): void {
+export function logDisputesLook(actor: string, action: TradeLookAction, tradeIds: string[]): void {
     assertPlainTablesWritable();
     db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, detail) VALUES (?, ?, ?, ?)')
         .run(crypto.randomBytes(16).toString('hex'), actor, action, JSON.stringify(tradeIds));
@@ -249,6 +249,8 @@ export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: str
         for (const m of named) if (!seen.get(actor, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m);
     })();
 }
+
+export type TradeLookAction = 'disputes_listed' | 'dispute_opened' | 'stranded_escrows_read';
 
 const ALERTS_LOOK_WINDOW_MS = 24 * 60 * 60 * 1000;
 

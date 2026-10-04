@@ -1659,13 +1659,14 @@ CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(d
 -- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
 -- balance outside that member's consent: while removing them (`subject_pubkey` is whose). And every look an admin takes
 -- at trades and alerts (queue item 29, Marty 4 Oct): the disputes list and one dispute (`detail` is a JSON array of the
--- trade ids shown), and the fraud alerts, one line per member they named (`subject_pubkey`). Every owner and admin
--- reads it; no member does.
+-- trade ids shown), the escrows a member's removal left stuck on an older node (`detail` the same), and the fraud
+-- alerts, one line per member they named (`subject_pubkey`). Every owner and admin reads it; no member does.
 CREATE TABLE IF NOT EXISTS health_access_log (
     id             TEXT PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,
     action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
-                                                   'disputes_listed', 'dispute_opened', 'alerts_read')),
+                                                   'disputes_listed', 'dispute_opened', 'alerts_read',
+                                                   'stranded_escrows_read')),
     subject_pubkey TEXT,
     detail         TEXT,
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

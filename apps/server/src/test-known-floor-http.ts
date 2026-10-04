@@ -11,8 +11,9 @@
  *      cap; an admin can't set their own; a member who is no admin is refused
  *   5. the dial off again: the known grant stops applying, nothing is deducted, the member is spend-frozen
  *   6. a cap saved with the dial off changes nothing: a member's and an enterprise's floors are main's (-2,000)
- *   7. a keeper's half counts once: split across the enterprises they keep (1 keeper x 4, and 1 x 1), never on top of
- *      itself per enterprise, so one confirmed person backs at most 1.5 x their grant (design §7.3)
+ *   7. a keeper backs an enterprise from their known grant only by a recorded pledge (at most half the grant, off their
+ *      own line 1:1): 6 enterprises in turn back 500 in all, not 1,224; a keeper can't step down from, or be unbound
+ *      off, the debt their known pledge backs; a lowered floor, a revoked confirmation or the dial off spend-freezes
  *   8. one member's exception needs an owner's or admin's own key session: no automation token, no node password
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-known-floor-http.ts
@@ -26,7 +27,7 @@ process.env.ADMIN_PASSWORD = 'KnownFloor123!';
 
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, getBalance, getEnterpriseUnderlyingFloor, getAvailableBacking, pledgeEnterpriseBacking, stepDownAsKeeper, adminRevokeTreasuryOperator } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders, ownerTokenHeaders, turnOn2faForTests } from './admin-auth-test-harness.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
@@ -72,8 +73,10 @@ function makeEnterprise(name: string, keepers: Id[], pledges: number[] = []): st
     db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_treasury)
                 VALUES (?, ?, ?, 'genesis', 'TEST', 'active', 1)`).run(pk, name, ago(DAY));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
+    setMemberPhoto(db, pk, AVATAR);
     keepers.forEach((k, i) => {
         db.prepare('INSERT INTO treasury_operators (treasury_pubkey, member_pubkey) VALUES (?, ?)').run(pk, k.pk);
+        db.prepare('UPDATE members SET can_operate = 1 WHERE public_key = ?').run(k.pk);
         if (pledges[i]) db.prepare('INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at) VALUES (?, ?, ?, ?, ?)')
             .run(crypto.randomUUID(), k.pk, pk, pledges[i], ago(DAY));
     });
@@ -247,29 +250,89 @@ async function main(): Promise<void> {
     db.prepare('DELETE FROM enterprise_pledges WHERE enterprise = ?').run(offCo);
     db.prepare('DELETE FROM treasury_operators WHERE treasury_pubkey = ?').run(offCo);
 
-    // ── 7. a keeper's half counts once ───────────────────────────────────────────────────────────
+    // ── 7. a keeper backs an enterprise from their known grant only by a recorded pledge, locked like any pledge ────
     console.log('── 7. keepers ──');
     const dialBack = await settings(owner, { confirmation: true, creditCap: 2000 });
     assert(dialBack.status === 200 && dialBack.body?.confirmation === true, `the owner turns the dial on again (${show(dialBack)})`);
+    const sink = makeMember('Sink');
+    const offers = (pk: string) => { for (let i = 0; i < 5; i++) createPost('offer', 'produce', `Goods ${i}`, 'Goods', 10, 'fixed', pk); };
+    // A marketplace buy (escrow), as the reviewer spent: true when the buyer's balance moved.
+    const spend = (from: string, beans: number): boolean => {
+        if (beans <= 0) return false;
+        const before = getBalance(from).balance;
+        try { acceptPost(createPost('offer', 'produce', `Sink's ${beans}-Bean basket`, 'Veg', beans, 'fixed', sink.pk)!.id, from); } catch { /* refused */ }
+        return getBalance(from).balance < before;
+    };
+    const owed = (pk: string) => Math.max(0, -getBalance(pk).balance);
+    const pledgeAll = (co: string, keeper: Id) => { const room = getAvailableBacking(keeper.pk); if (room > 0) pledgeEnterpriseBacking(co, keeper.pk, room); };
+
+    // The dilution sequence (confirmation 1, r4176369080): Kai binds to one enterprise at a time, pledges all the room
+    // left, and each enterprise spends to its floor before the next binding.
     const kai = makeMember('Kai');
     confirm(kai, ada);
-    const kaiFour = [1, 2, 3, 4].map(i => makeEnterprise(`Kai Co ${i}`, [kai]));
-    const kaiOwn = getBalance(kai.pk).floor;
-    const fourServer = kaiFour.map(e => getEnterpriseUnderlyingFloor(e).floor);
-    const fourEngine = kaiFour.map(e => getEnterpriseFloor(db, e).floor);
-    const backedByKai = -kaiOwn - fourServer.reduce((sum, f) => sum + f, 0);
-    assert(kaiOwn === -1000 && fourServer.every(f => f === -125) && backedByKai === 1500,
-        `1 keeper x 4 enterprises: Kai's own -1,000, each enterprise -125, 1,500 in all, not 3,000 (${kaiOwn}; ${fourServer.join(', ')})`);
-    assert(fourEngine.every(f => f === -125), `the engine's enterprise floor agrees (${fourEngine.join(', ')})`);
+    const kaiCos: string[] = [];
+    for (let i = 1; i <= 6; i++) {
+        const co = makeEnterprise(`Kai Co ${i}`, [kai]);
+        offers(co);
+        pledgeAll(co, kai);
+        spend(co, -getEnterpriseUnderlyingFloor(co).floor);
+        kaiCos.push(co);
+    }
+    const kaiDebts = kaiCos.map(owed);
+    const kaiEnterpriseDebt = kaiDebts.reduce((a, b) => a + b, 0);
+    const kaiOwn = -getBalance(kai.pk).floor;
+    assert(kaiEnterpriseDebt === 500 && kaiDebts[0] === 500,
+        `6 enterprises in turn: the debt Kai's known grant backs is 500 in all, not 500·H(6) = 1,224 (${kaiDebts.join(', ')})`);
+    assert(kaiOwn === 500 && kaiOwn + kaiEnterpriseDebt <= 1000,
+        `THE BOUND: Kai's own line (${kaiOwn}) + what his known pledges back (${kaiEnterpriseDebt}) is at most his grant, 1,000`);
+    assert(getEnterpriseUnderlyingFloor(kaiCos[0]).floor === -500 && getEnterpriseFloor(db, kaiCos[0]).floor === -500,
+        `binding to five more never shrank Kai Co 1's pledge: still -500 in the spend check and the engine`);
+    let overPledge = 'pledged';
+    try { pledgeEnterpriseBacking(kaiCos[1], kai.pk, 1); } catch (e) { overPledge = (e as Error).message; }
+    assert(/exceeds what you can pledge/.test(overPledge), `one Bean more is refused (${overPledge})`);
+    assert(!spend(kaiCos[1], 1), 'and an enterprise with none of it pledged spends nothing');
+
+    // The step-down cycle (confirmation 1, r4176369102): Lia's known pledge backs Lia Co's debt, so she can't take it to a
+    // second enterprise.
     const lia = makeMember('Lia');
     confirm(lia, ada);
-    const liaCo = makeEnterprise('Lia Co', [lia]);
-    const liaCoServer = getEnterpriseUnderlyingFloor(liaCo).floor;
-    assert(getBalance(lia.pk).floor === -1000 && liaCoServer === -500 && getEnterpriseFloor(db, liaCo).floor === -500,
-        `1 keeper x 1 enterprise: Lia's own -1,000 and her enterprise's -500 (${liaCoServer})`);
-    const kaiFive = makeEnterprise('Kai Co 5', [kai]);
-    const fiveServer = [...kaiFour, kaiFive].map(e => getEnterpriseUnderlyingFloor(e).floor);
-    assert(fiveServer.every(f => f === -100), `a fifth enterprise splits it again, -100 each: never more than 500 in all (${fiveServer.join(', ')})`);
+    const bob = makeMember('Bob');
+    const liaCo = makeEnterprise('Lia Co', [lia, bob]);
+    offers(liaCo);
+    pledgeAll(liaCo, lia);
+    spend(liaCo, -getEnterpriseUnderlyingFloor(liaCo).floor);
+    let stepped = 'stepped down';
+    try { stepDownAsKeeper(liaCo, lia.pk); } catch (e) { stepped = (e as Error).message; }
+    assert(owed(liaCo) === 500 && /in debt and your pledge is part of what covers it/.test(stepped),
+        `Lia can't step down while her known pledge backs Lia Co's 500 of debt (${owed(liaCo)}; ${stepped})`);
+    adminRevokeTreasuryOperator(liaCo, lia.pk);
+    assert(getEnterpriseUnderlyingFloor(liaCo).floor === -500,
+        `an admin unbind keeps the part of her pledge the debt needs locked: Lia Co still reads -500 (${getEnterpriseUnderlyingFloor(liaCo).floor})`);
+    const liaCoTwo = makeEnterprise('Lia Co Two', [lia]);
+    offers(liaCoTwo);
+    pledgeAll(liaCoTwo, lia);
+    assert(getEnterpriseUnderlyingFloor(liaCoTwo).floor === 0 && !spend(liaCoTwo, 1),
+        `so Lia Co Two gets none of it and spends nothing: 500 of debt from a 500 half, never 1,000 (${getEnterpriseUnderlyingFloor(liaCoTwo).floor})`);
+
+    // A bound that shrinks spend-freezes and claws nothing back: Kai Co 1 owes 500 on Kai's known pledge.
+    const frozenAt = (label: string, floor: number, kaiFloor: number) => {
+        const b = getBalance(kaiCos[0]);
+        assert(getEnterpriseUnderlyingFloor(kaiCos[0]).floor === floor && b.balance === -500 && b.frozen && -getBalance(kai.pk).floor === kaiFloor
+            && -getBalance(kai.pk).floor + -floor <= Math.max(0, kaiFloor * 2),
+            `${label}: Kai Co 1 reads ${floor}, still owes 500 and is spend-frozen; Kai's own line ${kaiFloor} (${getEnterpriseUnderlyingFloor(kaiCos[0]).floor}, ${b.balance}, ${b.frozen}, ${getBalance(kai.pk).floor})`);
+        assert(!spend(kaiCos[0], 1), `${label}: a spend one Bean more moves nothing`);
+    };
+    const lowered = await settings(owner, { knownFloor: 600 });
+    assert(lowered.status === 200, `the owner lowers the known floor to 600 (${show(lowered)})`);
+    frozenAt('known floor lowered to 600', -300, 300);
+    await settings(owner, { knownFloor: 1000 });
+    db.prepare("UPDATE confirmations SET revoked_at = ? WHERE member_pubkey = ?").run(new Date().toISOString(), kai.pk);
+    frozenAt('confirmation revoked', 0, 0);
+    db.prepare('UPDATE confirmations SET revoked_at = NULL WHERE member_pubkey = ?').run(kai.pk);
+    await settings(owner, { confirmation: false });
+    frozenAt('dial off', 0, 0);
+    const dialOn = await settings(owner, { confirmation: true });
+    assert(dialOn.status === 200 && getEnterpriseUnderlyingFloor(kaiCos[0]).floor === -500, 'the dial on again: the pledge, never released, counts again');
 
     // ── 8. one member's exception needs an owner's or admin's own key session ────────────────────
     console.log('── 8. who sets an exception ──');

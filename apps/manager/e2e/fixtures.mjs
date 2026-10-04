@@ -1031,6 +1031,8 @@ export function mockResponse(method, pathname, searchParams, bodyText) {
     // ---- public address ----
     if (pathname === '/api/local/admin/public-address/status') return ok(PUBLIC_ADDRESS_STATUS);
     if (pathname === '/api/local/admin/public-address/logs') return ok({ logs: PUBLIC_ADDRESS_LOGS });
+    // The longest name the registrar gives (32 characters), held besides the address: the line and its Release button at 320px.
+    if (pathname === '/api/local/admin/public-address/extra-names') return ok({ success: true, names: [{ name: 'install-race-name-thirty-two-chr', hostname: 'install-race-name-thirty-two-chr.beanpool.org', state: 'live', releasable: true, fromInstall: true }] });
     if (pathname === '/api/local/admin/public-address/claim') return ok({ success: true, status: 'pending' });
     if (pathname === '/api/local/admin/public-address/restart-tunnel') return ok({ success: true, tunnel: PUBLIC_ADDRESS_STATUS.tunnel });
     if (pathname === '/api/local/admin/public-address/offline') return ok({ success: true });

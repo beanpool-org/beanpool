@@ -601,6 +601,7 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
     addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
     endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
+    turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
     backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
     backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
     replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },

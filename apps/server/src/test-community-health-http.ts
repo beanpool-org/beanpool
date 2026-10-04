@@ -507,6 +507,17 @@ async function main(): Promise<void> {
     const listed9 = new Set(((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? []).map((d: any) => d.id));
     assert(['t9-settled', 't9-open'].every(id => listed9.has(id)) && !['t9-done', 't9-cancelled'].some(id => listed9.has(id)),
         `the same trades the list shows (${[...listed9].filter(id => String(id).startsWith('t9-')).join(', ')})`);
+    // With finished and cancelled trades on the books (Ivy and Jonquil's), the totals still count each trade once, and
+    // neither member's stats carry them.
+    const dataT9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
+    const sumsT9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+        SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
+    const totT9 = dataT9.body?.tradeTotals;
+    const statsT9 = (dataT9.body?.memberStats ?? {}) as Record<string, Record<string, unknown>>;
+    assert(dataT9.status === 200 && sumsT9.deals >= 2 && sumsT9.cancelled >= 1 && sumsT9.volume >= 10
+        && totT9?.deals === sumsT9.deals && totT9?.volume === sumsT9.volume && totT9?.cancelled === sumsT9.cancelled
+        && [ivy, jon].every((m) => statsT9[m.pk] && !('deals' in statsT9[m.pk]) && !('volume' in statsT9[m.pk]) && !('cancelled' in statsT9[m.pk])),
+        `with trades finished and cancelled, the totals equal the sums and no member's stats carry them (${JSON.stringify(totT9)} vs ${JSON.stringify(sumsT9)})`);
 
     const chatOf = db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by) VALUES (?, ?, NULL, ?, ?)`);
     const inChat = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);

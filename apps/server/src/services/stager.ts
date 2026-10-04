@@ -73,7 +73,7 @@ const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.j
  */
 const CREDENTIALS_LEFT_OUT = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes', 'recoveryCode',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest',
 ];
 /**
  * node_config: the copy this database was swapped in from, written by the stager into the staging database. The puller's

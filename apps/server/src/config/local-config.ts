@@ -569,7 +569,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

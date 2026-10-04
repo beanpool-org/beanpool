@@ -620,7 +620,7 @@ async function main(): Promise<void> {
     assert(linkCount() === 0, 'and no payment is linked to the debt');
     const louPays = await call('POST', lou, '/api/commons/pay', { amount: 200, debtId: louDebt.id, requestId: hex(16) });
     const louSettled = await call('POST', ada, `/api/names/debts/${louDebt.id}/settle`, { transactionId: louPays.body?.transactionId });
-    assert(louPays.status === 200 && balanceRow(lou) === 360 && louSettled.status === 200 && louSettled.body?.settled_how === 'pay_back' && debtsOf(louEntry)[0].status === 'settled',
+    assert(louPays.status === 200 && louPays.body?.left === 200 && balanceRow(lou) === 360 && louSettled.status === 200 && louSettled.body?.settled_how === 'pay_back' && debtsOf(louEntry)[0].status === 'settled',
         `200, what is left, is paid and settles the debt: Lou keeps 360 (${show(louPays)}; ${show(louSettled)})`);
     // Decay leaves fractions of a cent, and getBalance rounds: Ivy holds 4.996, shown as 5. The check before the
     // transaction tests what ledger.moveToCommons tests inside it, so 5 is refused there, in plain words.

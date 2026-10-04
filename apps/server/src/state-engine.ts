@@ -5083,8 +5083,8 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
         const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
         // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
-        if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
-        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount };
+        if (debt) linkDebtPayment(debt.id, t.id, memberPubkey, beans);
+        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount, ...(debt ? { left: debt.left } : {}) };
         if (request) recordAnswer(request, paid);
         return paid;
     });
@@ -5092,10 +5092,14 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     return answer;
 }
 
-/** POST /api/commons/pay's answer: the payment's reference (what an admin settles a debt with) and the Beans paid. */
+/**
+ * POST /api/commons/pay's answer: the payment's reference (what an admin settles a debt with) and the Beans paid; for a
+ * debt, what was left on it when paid (the app promises a settle only when the payment covers that).
+ */
 export interface PaidToCommons {
     transactionId: string;
     amount: number;
+    left?: number;
 }
 const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
 

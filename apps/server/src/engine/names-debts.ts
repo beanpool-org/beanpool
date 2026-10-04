@@ -82,12 +82,12 @@ export function sweepExpiredDebts(now = Date.now()): number {
  * work-off may have lowered it since: the node says the true amount, so nobody pays the Commons more than they owe.
  * Before the payment's conservingTransaction (a refusal is no ledger rebuild); the link is written inside it.
  */
-export function assertPayableDebt(debtId: unknown, beans: number): string {
+export function assertPayableDebt(debtId: unknown, beans: number): { id: string; left: number } {
     const row = debtRow(debtId);
     requireOpen(row);
     const left = round2(row.amount - row.repaid);
     if (beans > left) throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
-    return row.id;
+    return { id: row.id, left };
 }
 
 export function linkDebtPayment(debtId: string, txId: string, payer: string, amount: number): void {

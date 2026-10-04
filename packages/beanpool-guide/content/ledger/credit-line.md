@@ -50,6 +50,7 @@ Some communities have admins who know every member by name. If yours has turned 
 - One live Offer lets you use all of it. With no Offers, you can't use it.
 - Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).
 - An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.
+- If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid.
 
 ## Spending paused
 

@@ -38,6 +38,7 @@
  *   themselves after the same 7 days.
  */
 
+import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
@@ -108,7 +109,9 @@ export type DecisionEffect =
     // Pool money
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit';
+    | 'write_off_deficit'
+    // A departed member's debt (engine/names-debts.ts), written off: no Beans move (the Commons took it when they left)
+    | 'forgive_debt';
 
 /**
  * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
@@ -309,6 +312,7 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     grant_enterprise: 'pool',
     grant_hardship: 'pool',
     write_off_deficit: 'pool',
+    forgive_debt: 'pool',
     suspend_member: 'member',
     unsuspend_member: 'member',
     freeze_credit: 'member',
@@ -782,6 +786,12 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(NODE_OPERATOR_VOTE_REFUSAL);
     }
 
+    // A debt is forgiven only while it is open (design §4.2 (c)); its subject is the record's id, never a name.
+    if (opts.effect === 'forgive_debt') {
+        const debt = typeof opts.subject === 'string' ? debtRecord(opts.subject) : undefined;
+        if (!debt || debt.status !== 'open') throw new Error('Name an open debt record to forgive.');
+    }
+
     // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
     if (GRANT_EFFECTS.has(opts.effect)) assertGrantWithinCap(opts.params);
 
@@ -1100,6 +1110,12 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
+    if (decision.effect === 'forgive_debt') {
+        const debt = decision.subject ? debtRecord(decision.subject) : undefined;
+        if (!debt) return { status: 'void', reason: 'The debt record is gone' };
+        if (debt.status !== 'open') return { status: 'void', reason: `The debt is ${debt.status} already` };
+    }
+
     if (decision.effect === 'write_off_deficit') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing enterprise subject' };
         const enterprise = getMember(decision.subject);
@@ -1380,6 +1396,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
                     persistDecayEvents();
                     persistCommonsBalance();
+                    break;
+                }
+                case 'forgive_debt': {
+                    forgiveDebt(authSigner, decision.subject!, { ref: decision.id });
                     break;
                 }
                 case 'write_off_deficit': {

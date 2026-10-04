@@ -8,7 +8,7 @@
  */
 
 /** What the node did with a binding when the invite was used (server engine/names-list.ts InviteBindOutcome). */
-export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin';
+export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
 
 /** As the node lists it: never the code, which the maker's phone shows once, when it is made. */
 export interface BoundInvite {
@@ -23,6 +23,7 @@ export const BIND_OUTCOME_WORDS: Record<InviteBindOutcome, string> = {
     already_confirmed: 'joined, not confirmed: they were confirmed against another entry already',
     entry_gone: 'joined, not confirmed: the entry was deleted',
     maker_not_admin: 'joined, not confirmed: whoever made the invite can no longer confirm against this entry',
+    open_debt: 'joined, not confirmed: the entry has a debt that is still open',
 };
 
 /** One line for a bound invite on its entry: waiting, or what happened when it was used. `nameOf` gives "@callsign". */

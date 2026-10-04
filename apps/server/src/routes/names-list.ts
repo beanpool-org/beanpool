@@ -28,6 +28,7 @@
  * writes the access log, which is the main server's. Every admin's request first marks holders of the current key who
  * are no admin now (reconcileHolders).
  */
+import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
@@ -36,7 +37,7 @@ import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
     NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
-    addGeneration, addShare, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
+    addGeneration, addShare, confirmMember, confirmToWorkOff, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
     readNamesCopyOf, saveNamesCopy, readBoundInvites,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
@@ -85,6 +86,7 @@ function admin(ctx: any): string | null {
 }
 
 function respond(ctx: any, e: unknown): void {
+    if (e instanceof DebtError) return answer(ctx, e.status, e.message, e.code);
     if (e instanceof NamesListError) {
         answer(ctx, e.status, e.message, e.code);
         if (e.extra) ctx.body = { ...e.extra, ...ctx.body };
@@ -132,6 +134,11 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         return { id: out.id, n: out.n, code: 'exists' };
     }, 201));
     router.post('/api/names/shares', (ctx) => asAdmin(ctx, (actor, body) => addShare(actor, body)));
+
+    // Debts and a second chance (engine/names-debts.ts): every entry's debt history, and paying one back.
+    router.get('/api/names/debts', (ctx) => asAdmin(ctx, () => ({ debts: listDebts() })));
+    router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body), 201));
+    router.post('/api/names/debts/:id/settle', (ctx) => asAdmin(ctx, (actor, body) => settleByPayment(actor, ctx.params.id, body)));
 
     // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
     // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.

@@ -1195,6 +1195,10 @@ async function main(): Promise<void> {
             // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most (owner or admin only).
             'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
             'POST /api/local/admin/known-floor': { confirmation: true, knownFloor: 5000, creditCap: 5000 },
+            // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
+            'POST /api/commons/pay': { amount: 1 },
+            'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
+            'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1214,7 +1218,7 @@ async function main(): Promise<void> {
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
-            'POST /api/commons/projects/update',
+            'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
             'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
@@ -1348,6 +1352,7 @@ async function main(): Promise<void> {
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
             'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
+            'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',

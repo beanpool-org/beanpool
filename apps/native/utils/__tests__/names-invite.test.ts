@@ -36,6 +36,9 @@ describe('Invite this person (community modes slice 3)', () => {
         expect(boundInviteLine(inv({ usedBy: 'kim123', outcome: 'confirmed' }), at)).toBe('@kim joined and was confirmed');
         expect(boundInviteLine(inv({ usedBy: 'yan123', outcome: 'entry_taken' }), at)).toBe(`@yan ${BIND_OUTCOME_WORDS.entry_taken}`);
         expect(BIND_OUTCOME_WORDS.entry_taken).toMatch(/not confirmed/);
+        // A debt that opened on the entry after the invite was made (#1589 × debts): a member, unconfirmed.
+        expect(boundInviteLine(inv({ usedBy: 'jon123', outcome: 'open_debt' }), at)).toBe(`@jon ${BIND_OUTCOME_WORDS.open_debt}`);
+        expect(BIND_OUTCOME_WORDS.open_debt).toMatch(/not confirmed.*debt/);
     });
 
     it('picks the entry’s invites and links the code as the People tab does', () => {

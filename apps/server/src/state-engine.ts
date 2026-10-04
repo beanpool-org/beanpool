@@ -54,6 +54,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
+import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
@@ -2371,6 +2372,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
@@ -2793,6 +2796,8 @@ export function payFromCommons(
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
@@ -5000,6 +5005,74 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
     return 0;
 }
 
+/**
+ * Working off a debt (community modes slice 5, engine/names-debts.ts; design §4.2 (b), the Rule 7 sweep pattern): a member
+ * an admin confirmed with a repayment flag sends every Bean above 0 they hold to the Commons, until what they repay reaches
+ * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
+ * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
+ * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
+ * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * Returns what moved.
+ */
+export function sweepRepayment(memberPubkey: string): number {
+    const debt = repaymentOf(memberPubkey);
+    if (!debt) return 0;
+    const { balance } = getBalance(memberPubkey);
+    // Down to the cent, never up: rounding up would take a part of a cent below 0.
+    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    if (!(amount > 0)) return 0;
+    try {
+        conservingTransaction(() => {
+            const txn = moveToCommons(memberPubkey, amount, 'Working off a debt to the Commons', { allowMemberDebit: true });
+            if (!txn) throw new Error('the Commons refused the repayment');
+            const repaid = Math.round((debt.repaid + amount) * 100) / 100;
+            const done = repaid >= debt.amount;
+            db.prepare(`UPDATE names_debts SET repaid = ?, status = CASE WHEN ? THEN 'settled' ELSE status END,
+                        settled_how = CASE WHEN ? THEN 'work_off' ELSE settled_how END,
+                        settled_by = CASE WHEN ? THEN 'node' ELSE settled_by END,
+                        settled_at = CASE WHEN ? THEN ? ELSE settled_at END, settle_ref = CASE WHEN ? THEN ? ELSE settle_ref END
+                        WHERE id = ? AND status = 'open'`)
+                .run(repaid, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, new Date().toISOString(), done ? 1 : 0, txn.id, debt.id);
+        });
+    } catch (err) {
+        console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
+        return 0;
+    }
+    // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
+    return amount;
+}
+
+/**
+ * Paying back a debt (design §4.2 (a)): a member sends Beans they hold to the Commons. Only what is above 0: a payment to
+ * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
+ * (engine/names-debts.ts settleByPayment).
+ */
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown): Transaction {
+    const m = getMember(memberPubkey);
+    if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
+        throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+        throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
+    }
+    // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
+    const beans = Math.round(amount * 100) / 100;
+    const txn = conservingTransaction(() => {
+        const { balance } = getBalance(memberPubkey);
+        if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+        const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+        const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
+        if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
+        if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
+        return t;
+    });
+    try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }
+    return txn;
+}
+
 export { recordDeferredWageClaim } from './engine/escrow.js';
 
 // ===================== ENTERPRISE LIFECYCLE (PAUSE, WIND-UP, LEDGER) =====================
@@ -5665,6 +5738,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
+    // A seller working off a debt: the release is a transfer(), whose after-commit hook sweeps the sale's Beans above 0 to
+    // the Commons (sweepRepayment), as it does for a release or refund by an admin's dispute ruling.
     return res;
 }
 
@@ -7568,7 +7643,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
-        dropNamesListHoldOf(publicKey, 'removed');
+        dropNamesListHoldOf(publicKey, 'removed', balance);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7813,7 +7888,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
-        dropNamesListHoldOf(publicKey, 'account_deleted');
+        dropNamesListHoldOf(publicKey, 'account_deleted', balance);
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
         // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
         // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.

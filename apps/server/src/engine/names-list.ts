@@ -71,6 +71,7 @@ import {
 import { db, deletePlainRows } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { isNodeOwner, NODE_ROLE_ACTS, type MemberNodeRole } from './node-roles.js';
+import { recordDepartedDebt, openDebtOfEntry, debtRecord, startWorkOff, workOffGoesLive, endWorkOff } from './names-debts.js';
 
 export const NAMES_TWO_ADMINS_KEY = 'names_two_admins';
 
@@ -456,7 +457,7 @@ function assertConfirmable(pubkey: string): void {
     }
 }
 
-export function confirmMember(actor: string, body: { memberPubkey?: unknown; entryId?: unknown }): { id: string; status: ConfirmationStatus } {
+export function confirmMember(actor: string, body: { memberPubkey?: unknown; entryId?: unknown }, workOff?: { debtId: string }): { id: string; status: ConfirmationStatus } {
     assertPlainTablesWritable();
     const member = typeof body.memberPubkey === 'string' ? body.memberPubkey.toLowerCase() : '';
     if (!/^[0-9a-f]{64}$/.test(member)) throw new NamesListError(400, 'bad_member', "'memberPubkey' is a member's key, 64 hexadecimal characters.");
@@ -466,6 +467,11 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
     const admins = namesAdmins();
     if (member === actor && admins.length > 1) {
         throw new NamesListError(403, 'self_confirm', 'Another admin confirms you. An admin confirms themselves only where they are the community’s only admin.');
+    }
+    // A second chance is an admin's decision once the debt is addressed (design §4.2): paid back, worked off or forgiven.
+    const debt = openDebtOfEntry(entry.id);
+    if (debt && debt.id !== workOff?.debtId) {
+        throw new NamesListError(409, 'open_debt', `The person on this entry left owing the Commons ${debt.amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.`, { debtId: debt.id });
     }
     if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', 'A member is confirmed against this entry already. One person, one entry.');
     if (db.prepare('SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member)) {
@@ -479,8 +485,20 @@ export function confirmMember(actor: string, body: { memberPubkey?: unknown; ent
         db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, ?)')
             .run(id, member, entry.id, actor, needsSecond);
         log(actor, 'confirm', entry.id, member);
+        // Working the debt off (design §4.2 (b)): a known floor of 0, and every Bean above 0 they receive goes to the
+        // Commons until the debt is cleared (state-engine.ts sweepRepayment).
+        if (workOff) startWorkOff(actor, workOff.debtId, member, id, !needsSecond);
     })();
     return { id, status: needsSecond ? 'awaiting_second' : 'confirmed' };
+}
+
+/** Confirms a member against the entry of an open debt to work it off (POST /api/names/debts/:id/work-off). */
+export function confirmToWorkOff(actor: string, debtId: unknown, body: { memberPubkey?: unknown }): { id: string; status: ConfirmationStatus } {
+    const debt = typeof debtId === 'string' ? debtRecord(debtId) : undefined;
+    if (!debt) throw new NamesListError(404, 'no_debt', 'There is no such debt record.');
+    if (debt.status !== 'open') throw new NamesListError(409, 'not_open', `That debt is ${debt.status} already.`);
+    if (debt.repaying_pubkey) throw new NamesListError(409, 'repaying', 'Someone is working that debt off already.');
+    return confirmMember(actor, { memberPubkey: body.memberPubkey, entryId: debt.entry_id }, { debtId: debt.id });
 }
 
 // ── Invites bound to an entry (community modes slice 3, design §4.1 ways 1–3) ─────────────────────────────────────
@@ -495,11 +513,14 @@ export function assertMayBindInvite(actor: string, entryId: unknown): string {
     const entry = requireEntry(entryId);
     if (!holdersOf(entry.key_id).has(actor)) throw new NamesListError(403, 'no_key', 'You can’t open that entry, so you can’t invite anyone as that person.');
     if (liveConfirmationOfEntry(entry.id)) throw new NamesListError(409, 'entry_taken', 'A member is confirmed against this entry already. One person, one entry.');
+    // The second-chance rule binds an invite too (design §4.2): no confirming against an entry whose debt is still open.
+    const debt = openDebtOfEntry(entry.id);
+    if (debt) throw new NamesListError(409, 'open_debt', `The person on this entry left owing the Commons ${debt.amount} Beans, and that debt is still open. Settle it first: they pay it back, work it off, or the community forgives it.`, { debtId: debt.id });
     return entry.id;
 }
 
 /** What a redeem did with an invite's binding: confirmed (or waiting for a second admin), or why it didn't confirm. */
-export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin';
+export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin' | 'open_debt';
 
 /**
  * Confirms `member`, a joiner just written by a redeem, against `entryId` by the invite's `maker`, in the redeem's own
@@ -513,6 +534,8 @@ export function confirmByInvite(maker: string, entryId: string, member: string):
     if (!entry) return 'entry_gone';
     if (!isNamesAdmin(maker) || !holdersOf(entry.key_id).has(maker)) return 'maker_not_admin';
     if (liveConfirmationOfEntry(entry.id)) return 'entry_taken';
+    // A debt that opened after the invite was made: the joiner is a member, unconfirmed, as confirmMember would refuse.
+    if (openDebtOfEntry(entry.id)) return 'open_debt';
     if (db.prepare('SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(member)) return 'already_confirmed';
     const needsSecond = twoAdminsToConfirm() && namesAdmins().filter((a) => a.pubkey !== member).length >= 2 ? 1 : 0;
     db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, ?)')
@@ -557,6 +580,7 @@ export function secondConfirmation(actor: string, id: unknown): { id: string; st
     db.transaction(() => {
         db.prepare("UPDATE confirmations SET seconded_by = ?, seconded_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?").run(actor, row.id);
         log(actor, 'second', row.entry_id, row.member_pubkey);
+        workOffGoesLive(actor, row.member_pubkey, row.id);
     })();
     return { id: row.id, status: 'confirmed' };
 }
@@ -569,6 +593,8 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
         db.prepare("UPDATE confirmations SET revoked_by = ?, revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = 'admin' WHERE id = ?")
             .run(actor, row.id);
         log(actor, 'revoke', row.entry_id, row.member_pubkey);
+        // A work-off confirmation revoked: the repayment flag and the 0 floor end with it (engine/names-debts.ts).
+        endWorkOff(actor, row.member_pubkey, row.id);
     })();
     return { id: row.id, status: 'revoked' };
 }
@@ -577,9 +603,12 @@ export function revokeConfirmation(actor: string, id: unknown): { id: string; st
  * A member leaving: their live confirmation is revoked (`removed` by the community or an admin, `account_deleted` by
  * themselves), and, where they held the current key, they are marked as no longer holding it (a new key is then needed
  * before anything is written). Called inside adminPruneUser's and purgeMemberSelf's transactions (state-engine.ts), on a
- * main server.
+ * main server, with the balance they had before the Commons settled it.
  */
-export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account_deleted'): void {
+export function dropNamesListHoldOf(pubkey: string, reason: 'removed' | 'account_deleted', balance = 0): void {
+    // Leaving in debt (`balance` before the Commons settled it): a debt record on their entry (engine/names-debts.ts).
+    const live = db.prepare('SELECT entry_id FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(pubkey) as { entry_id: string } | undefined;
+    recordDepartedDebt(pubkey, live?.entry_id ?? null, balance, reason);
     db.prepare(`UPDATE confirmations SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revoke_reason = ?
                 WHERE member_pubkey = ? AND revoked_at IS NULL`).run(reason, pubkey);
     const current = currentGeneration();

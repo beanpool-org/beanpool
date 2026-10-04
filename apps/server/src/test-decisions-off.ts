@@ -139,7 +139,7 @@ async function main() {
         `info says global, with formal Decisions off (${info.status} ${JSON.stringify(info.body?.features)})`);
 
     const effects = [...Object.keys(de.TOUCHES_FOR_EFFECT), 'set_rule'];
-    assert(effects.length === 14 && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper'),
+    assert(effects.length === 15 && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper') && effects.includes('forgive_debt'),
         `every effect there is, the system's own and an unknown one (${effects.join(', ')})`);
     for (const effect of effects) {
         for (const who of [carol, olga]) {

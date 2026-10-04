@@ -101,6 +101,7 @@ export const SUITES = [
     'test-enterprise-credit-rules',
     'test-derived-enterprise-floor',
     'test-known-floor-http',
+    'test-names-debts-http',
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',

@@ -683,11 +683,12 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
 
             // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
             // admin log's line reads only its first bytes, for its type, and only while someone is watching the log.
+            // A member's socket only, as on the way out: a frame a log socket sent made a line on every other log socket.
             const bytes: Buffer = Buffer.isBuffer(data) ? data
                 : typeof data === 'string' ? Buffer.from(data)
                     : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
             let watching = false;
-            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
                 const trafficPayload = wsTrafficLine(id, 'in', bytes.length, bytes.subarray(0, FRAME_TYPE_PROBE).toString('utf8'));
                 for (const client of logClients) {

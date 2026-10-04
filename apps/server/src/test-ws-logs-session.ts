@@ -11,7 +11,8 @@
  *   1. a ticket issued before its member signs out everywhere is refused (401) after it;
  *   2. a ticket issued before its session logs out is refused after it;
  *   3. an open log socket is closed within a second of its member signing out everywhere (close code 4401), and another
- *      member's socket stays open and still streams;
+ *      member's socket stays open and still streams; with two streams open, neither a log line nor a frame one stream
+ *      sends makes a ws_traffic line on the other (those lines describe members' sockets only);
  *   4. a fresh sign-in afterwards gets a ticket and a working stream;
  *   5. an open log socket is closed within a second of its session logging out;
  *   6. an open log socket is closed within two seconds of its member losing their admin role;
@@ -181,6 +182,10 @@ async function main() {
         const traffic = (l: LogSocket) => l.lines.filter(x => x.includes('"ws_traffic"')).length;
         assert(traffic(ownerLogs) === 0 && traffic(adminLogs) === 0,
             `…and neither stream gets a ws_traffic line about the other (got ${traffic(ownerLogs)} and ${traffic(adminLogs)})`);
+        // Nor does a frame one log socket sends (inbound to the node) make a line on the other.
+        for (let i = 0; i < 5; i++) ownerLogs.ws.send(JSON.stringify({ type: 'hello' }));
+        assert(await streams(adminLogs), "a log line written after the owner's stream sent five frames reaches the admin");
+        assert(traffic(adminLogs) === 0, `…and five frames sent on the owner's stream make no ws_traffic line on the admin's (got ${traffic(adminLogs)})`);
         assert(await streams(ownerLogs), "the owner's stream carries a log line while signed in");
         const revokedAt = Date.now();
         const revoked = await post('/api/local/admin/auth/revoke-all', s);

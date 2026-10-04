@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 109,
-  "hash": "4383f10d8f80950ff6e0aaeffa9f3d91f9b35557830f0d536fb67a67cebc2708",
+  "version": 110,
+  "hash": "bb48ba9f2fb99d3d9b1e7b27eb90abd9eed7b3465f3bd10e0358f2e867dcc7c3",
   "sections": [
     {
       "id": "about",
@@ -4662,8 +4662,27 @@
             "One live Offer lets you use all of it. With no Offers, you can't use it.",
             "Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).",
             "An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.",
-            "If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid."
+            "If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid. Your Ledger says how much is left. You can also pay some or all of it yourself in **Ledger → Pay the Commons**: your pay-back code is filled in there (or enter the one an admin gives you). What you pay with the code comes off the debt at once, and when nothing is left the debt is settled: nothing more is taken, by a payment or from what you receive. A payment without the code goes to the Commons but not off your debt, and the app says so: to have it count, ask an admin to count it toward your debt with its reference. Until they do, the debt is still being worked off: the next time you receive Beans, what is left is taken from what you hold above 0. The amount in the admin's message is what was left when they shared it: if less is left now, your server refuses a larger payment and says how much is left, and nothing is paid. If the app says a payment may have gone through, tap **Try again** on the same screen: the same payment is never paid twice. If you left that screen, check your Ledger before you pay again."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Frozen by the admins"
+        },
+        {
+          "type": "p",
+          "text": "Your community's admins can freeze a member's credit line: all of it, or, in a known community, the part that comes from being a confirmed member."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "If they freeze all of it, or the confirmed part is all the line you have, the Ledger says **Your credit line is frozen**: you can't spend into debit while it lasts, but you can still sell and receive Beans, and spend what you hold above zero. If you were in debit when they froze it, the Ledger also says how many Beans you are in debit: selling or receiving Beans brings you back up, and once you are above zero you can spend what you hold.",
+            "If they freeze the confirmed part and you also have credit from a vouch, from trading or from a grant, the bar stays, with a note under it that the confirmed part is frozen and the rest works as before. If you are below what is left, the Ledger says **Spending paused** too (below)."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Your level doesn't change: it is the one your credit line gives you when it isn't frozen, even if the admins had set your line lower or higher than the community's, on your profile and on your listings alike. To ask why, or to have it opened again, ask one of the admins."
         },
         {
           "type": "h2",

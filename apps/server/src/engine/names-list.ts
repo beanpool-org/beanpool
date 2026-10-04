@@ -522,14 +522,19 @@ export function confirmByInvite(maker: string, entryId: string, member: string):
 }
 
 export interface BoundInvite {
-    code: string; entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
+    entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
     outcome: InviteBindOutcome | null;
 }
 
-/** The invites bound to entries, newest first, for every admin: who made each, whether it was used, and what it did. */
+/**
+ * The invites bound to entries, newest first, for every admin: who made each and when, whether it was used, and what it
+ * did. Never a code, not even to its maker: the maker's phone shows it once, when it is made (a lost one is replaced by
+ * making another). A live code in another admin's hands would let one admin, with two admins to confirm, redeem it with
+ * a key of her own (confirmed by the maker) and second that herself.
+ */
 export function readBoundInvites(): BoundInvite[] {
     return (db.prepare(
-        `SELECT code, names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
+        `SELECT names_entry_id AS entryId, created_by AS createdBy, created_at AS createdAt, used_by AS usedBy, used_at AS usedAt,
                 names_bind_outcome AS outcome
          FROM invite_codes WHERE names_entry_id IS NOT NULL ORDER BY created_at DESC LIMIT 500`,
     ).all() as BoundInvite[]);

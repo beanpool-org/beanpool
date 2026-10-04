@@ -3,7 +3,7 @@ import { inviteThisPerson, boundInviteLine, invitesForEntry, inviteLink, BIND_OU
 
 const at = (pk: string) => `@${pk.slice(0, 3)}`;
 const inv = (over: Partial<BoundInvite>): BoundInvite => ({
-    code: 'INV-AAAA-BBBB', entryId: 'e1', createdBy: 'owen', createdAt: '2026-10-04T00:00:00Z', usedBy: null, usedAt: null, outcome: null, ...over,
+    entryId: 'e1', createdBy: 'owen', createdAt: '2026-10-04T00:00:00Z', usedBy: null, usedAt: null, outcome: null, ...over,
 });
 
 describe('Invite this person (community modes slice 3)', () => {
@@ -39,7 +39,7 @@ describe('Invite this person (community modes slice 3)', () => {
     });
 
     it('picks the entry’s invites and links the code as the People tab does', () => {
-        expect(invitesForEntry([inv({ entryId: 'a' }), inv({ entryId: 'b', code: 'X' })], 'b').map((i) => i.code)).toEqual(['X']);
+        expect(invitesForEntry([inv({ entryId: 'a' }), inv({ entryId: 'b', createdBy: 'ada' })], 'b').map((i) => i.createdBy)).toEqual(['ada']);
         expect(inviteLink('https://c.example', 'INV-1')).toBe('https://c.example/?invite=INV-1');
     });
 });

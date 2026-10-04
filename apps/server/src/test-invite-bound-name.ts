@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     const logged = db.prepare("SELECT 1 FROM names_access_log WHERE action = 'confirm' AND actor_pubkey = ? AND subject_pubkey = ?").get(owen.pk, zedId.pk);
     assert(!!logged, '2. the access log has the confirm line, by Owen');
     const listed = await call(owen, 'GET', '/api/names/invites');
-    assert(listed.status === 200 && listed.body?.invites?.some((i: any) => i.code === code && i.outcome === 'confirmed' && i.usedBy === zedId.pk), `2. GET /api/names/invites shows it confirmed (${show(listed)})`);
+    assert(listed.status === 200 && listed.body?.invites?.some((i: any) => i.entryId === zed.entryId && i.createdBy === owen.pk && i.outcome === 'confirmed' && i.usedBy === zedId.pk), `2. GET /api/names/invites shows it confirmed (${show(listed)})`);
     const listedByMember = await call(mel, 'GET', '/api/names/invites');
     assert(listedByMember.status === 403, `2. not to a member who is no admin (${show(listedByMember)})`);
 
@@ -305,6 +305,37 @@ async function main(): Promise<void> {
     const kimJoins = await redeem(kim, kimCode);
     assert(kimJoins.status === 200 && liveConfirmation(kim.pk)?.entry_id === kimEntryId && liveConfirmation(kim.pk)?.confirmed_by === owen.pk,
         `8. Kim joins with it, confirmed by Owen (${show(kimJoins)})`);
+
+    // ── 9. A bound invite's code reaches its maker once, and no other admin (fix round 1, review r4176275260) ──────
+    // With two admins to confirm, an admin who could read another's live bound code could redeem it with a key of her
+    // own (confirmed by its maker, waiting for a second) and then second it herself: one admin, two signatures.
+    const adaP = new Phone(ada);
+    meet(owenP, adaP, COMMUNITY);
+    await owenP.open();
+    const adaOpened = await adaP.open();
+    require_(adaOpened.plan.kind === 'ready', `9. Ada's phone takes the list's key from Owen's (${adaOpened.plan.kind})`);
+    const setTwo = await call(owen, 'POST', '/api/names/settings', { twoAdminsToConfirm: true });
+    require_(setTwo.status === 200 && setTwo.body?.twoAdminsToConfirm === true, `9. Owen turns on two admins to confirm (${show(setTwo)})`);
+    const rue = await addEntry(owenP, { name: 'Rue Applethwaite', note: '' });
+    const rueInv = await bindInvite(owen, rue.entryId);
+    require_(rueInv.status === 201 && /^INV-/.test(rueInv.body?.invite?.code), `9. Owen makes an invite bound to an entry: its code comes back to him, once (${show(rueInv)})`);
+    const rueCode = rueInv.body.invite.code as string;
+    const adaLists = await call(ada, 'GET', '/api/names/invites');
+    assert(adaLists.status === 200 && adaLists.body?.invites?.some((i: any) => i.entryId === rue.entryId && i.createdBy === owen.pk && i.usedBy === null && !!i.createdAt),
+        `9. Ada, an admin who holds the key, sees that Owen made an invite for the entry, when, and that it is unused (${show(adaLists)})`);
+    assert(!adaLists.text.toLowerCase().includes(rueCode.toLowerCase()) && adaLists.body.invites.every((i: any) => !('code' in i)),
+        '9. but never its code, nor any other invite\'s code');
+    const owenLists = await call(owen, 'GET', '/api/names/invites');
+    assert(owenLists.status === 200 && !owenLists.text.toLowerCase().includes(rueCode.toLowerCase()), '9. nor to Owen on a later read: the code is shown once, when it is made');
+    const adaReadsOwens = await call(ada, 'GET', `/api/invite/mine/${owen.pk}`);
+    assert(adaReadsOwens.status === 403 && !adaReadsOwens.text.toLowerCase().includes(rueCode.toLowerCase()), `9. nor through Owen's own invite list (${show(adaReadsOwens)})`);
+    const rueId = newId('Rue');
+    const rueJoins = await redeem(rueId, rueCode);
+    const rueConf = db.prepare('SELECT id, confirmed_by, needs_second FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL').get(rueId.pk) as { id: string; confirmed_by: string; needs_second: number } | undefined;
+    assert(rueJoins.status === 200 && rueConf?.confirmed_by === owen.pk && rueConf?.needs_second === 1 && inviteRow(rueCode)?.names_bind_outcome === 'awaiting_second',
+        `9. the real person joins with it: confirmed by Owen, waiting for a second admin (${show(rueJoins)} ${JSON.stringify(rueConf)})`);
+    const adaSeconds = await call(ada, 'POST', `/api/names/confirmations/${rueConf?.id}/second`, {});
+    assert(adaSeconds.status === 200 && adaSeconds.body?.status === 'confirmed', `9. and Ada, a second admin, confirms it again (${show(adaSeconds)})`);
 
     // ── 7. Replication carries the binding ──────────────────────────────────────────────────────
     const cols = JSON.stringify(TABLES.invite_codes);

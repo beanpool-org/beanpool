@@ -10,8 +10,9 @@
 /** What the node did with a binding when the invite was used (server engine/names-list.ts InviteBindOutcome). */
 export type InviteBindOutcome = 'confirmed' | 'awaiting_second' | 'entry_taken' | 'already_confirmed' | 'entry_gone' | 'maker_not_admin';
 
+/** As the node lists it: never the code, which the maker's phone shows once, when it is made. */
 export interface BoundInvite {
-    code: string; entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
+    entryId: string; createdBy: string; createdAt: string; usedBy: string | null; usedAt: string | null;
     outcome: InviteBindOutcome | null;
 }
 

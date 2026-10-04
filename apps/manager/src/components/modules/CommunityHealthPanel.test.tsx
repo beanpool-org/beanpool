@@ -12,7 +12,10 @@ const ADMIN_KEY: RolesViewer = { kind: 'key', memberPubkey: 'a'.repeat(64), role
 const HEALTH = {
     totals: { beansInCirculation: 4200, sumOfCredit: 4200, sumOfDebt: 3900, membersInDebit: 7, commonsPot: 300, tradesThisMonth: 41 },
     settings: { debtLinePct: 50, quietDays: 60 }, known: true,
-    log: [{ id: 'l1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'exceptions_opened', at: '2026-10-04T06:00:00.000Z' }],
+    log: [
+        { id: 'l2', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'offboard_preview', subject: 'k'.repeat(64), subjectCallsign: 'Kim', at: '2026-10-04T07:00:00.000Z' },
+        { id: 'l1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'exceptions_opened', at: '2026-10-04T06:00:00.000Z' },
+    ],
 };
 
 function mockNode(read: { ok: boolean; status?: number; body: unknown } = { ok: true, body: HEALTH }) {
@@ -50,6 +53,7 @@ describe('CommunityHealthPanel', () => {
         expect(panel).toHaveTextContent('Members in debit7');
         expect(panel).toHaveTextContent('Trades this month41');
         expect(screen.getByTestId('health-log')).toHaveTextContent('Ada opened it on');
+        expect(screen.getByTestId('health-log')).toHaveTextContent("Ada saw Kim's balance while removing them on");
         expect(panel.textContent).not.toMatch(/Ʀ|csv|export/i);
     });
 

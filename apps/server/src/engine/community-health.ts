@@ -179,10 +179,23 @@ export function openExceptions(actor: string, now = Date.now()) {
     return { settings: { debtLinePct, quietDays }, exceptions, departed };
 }
 
-/** Who opened the exceptions, and when: every owner and admin reads it. */
+/**
+ * An admin's look at one member's balance outside that member's consent: while removing them (the offboarding preview,
+ * and the balance the removal settled). Written before the answer: a look that can't be logged isn't answered.
+ */
+export function logBalanceLook(actor: string, subject: string, action: 'offboard_preview' | 'offboard_settled'): void {
+    assertPlainTablesWritable();
+    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, action, subject);
+}
+
+/** Who opened the exceptions or looked at a member's balance, whose, and when: every owner and admin reads it. */
 export function readHealthAccessLog(limit = 100) {
-    return (db.prepare('SELECT id, actor_pubkey, action, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
-        .map(r => ({ id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action, at: r.at }));
+    return (db.prepare('SELECT id, actor_pubkey, action, subject_pubkey, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
+        .map(r => ({
+            id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
+            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null, at: r.at,
+        }));
 }
 
 /** A member's own consent: what the app shows and records. `version` must be the text the app showed. */

@@ -30,5 +30,10 @@ describe('community health on the phone', () => {
     it('the access log names who opened it', () => {
         expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'exceptions_opened', at: '2026-10-04T01:00:00Z' })).toMatch(/^@sam opened the exceptions · /);
         expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: null, action: 'exceptions_opened', at: '2026-10-04T01:00:00Z' })).toMatch(/^An admin opened/);
+        // A look at one member's balance while removing them: who, whose, and why.
+        expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'offboard_preview', subject: 's', subjectCallsign: 'kim', at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam saw @kim's balance while removing them · /);
+        expect(healthLogText({ id: 'l', actor: 'k', actorCallsign: 'sam', action: 'offboard_settled', subject: 's', subjectCallsign: null, at: '2026-10-04T01:00:00Z' }))
+            .toMatch(/^@sam removed a member and saw the balance it settled · /);
     });
 });

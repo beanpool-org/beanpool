@@ -18,7 +18,14 @@ import { nodeCredential } from '../../lib/profiles';
 
 type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: number; membersInDebit: number; commonsPot: number; tradesThisMonth: number };
 type Lines = { debtLinePct: number; quietDays: number };
-type LogLine = { id: string; actorCallsign: string | null; actor: string; at: string };
+type LogLine = { id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null; at: string };
+
+/** What a line in the access log says the admin did: opened the exceptions, or looked at a member's balance while removing them. */
+function logDid(l: LogLine): string {
+    if (l.action === 'offboard_preview') return `saw ${l.subjectCallsign ? `${l.subjectCallsign}'s` : "a member's"} balance while removing them on`;
+    if (l.action === 'offboard_settled') return 'removed a member and saw the balance it settled on';
+    return 'opened it on';
+}
 export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[] };
 type Status = { kind: 'saved' | 'error'; text: string };
 
@@ -179,14 +186,14 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
             </div>
 
             <div className="space-y-2">
-                <h4 className="text-sm font-bold text-white m-0 break-words">Who opened the list</h4>
+                <h4 className="text-sm font-bold text-white m-0 break-words">Who looked at a member&apos;s balance</h4>
                 {health.log.length === 0 ? (
                     <p data-testid="health-log-empty" className="text-xs text-nature-400 m-0 break-words">Nobody has opened it.</p>
                 ) : (
                     <ul data-testid="health-log" className="m-0 p-0 list-none space-y-1">
                         {health.log.map((l) => (
                             <li key={l.id} className="text-xs text-nature-300 break-words">
-                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> opened it on {new Date(l.at).toLocaleString()}
+                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
                             </li>
                         ))}
                     </ul>

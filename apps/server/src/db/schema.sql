@@ -1641,11 +1641,14 @@ CREATE TABLE IF NOT EXISTS names_debt_payments (
 CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
 
 -- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
--- who and when (design §4.4, §7.1: the watchers are watched). Every owner and admin reads it; no member does.
+-- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
+-- balance outside that member's consent: while removing them (`subject_pubkey` is whose). Every owner and admin reads
+-- it; no member does.
 CREATE TABLE IF NOT EXISTS health_access_log (
     id             TEXT PRIMARY KEY,
     actor_pubkey   TEXT NOT NULL,
-    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened')),
+    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled')),
+    subject_pubkey TEXT,
     at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );

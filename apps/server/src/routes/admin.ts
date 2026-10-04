@@ -34,6 +34,7 @@ import {
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
+import { logBalanceLook } from '../engine/community-health.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -2430,17 +2431,19 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { pubkey } = ctx.params;
+        const actor = resolveAdminActor(ctx);
+        if (!actor) return;
         const preview = getOffboardPreview(pubkey);
 
         // Security / Privacy: Only return active members roster to key-authenticated sessions.
         // Password-only sessions cannot execute gift_to_member, so withholding the list
         // prevents leaking the member roster.
-        const actor = resolveAdminActor(ctx);
-        if (!actor) return;
         if (actor === 'owner:password') {
             preview.activeMembers = [];
         }
 
+        // The member's balance, outside their consent: a line in the access log the admins and the owner read, first.
+        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview');
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
@@ -2480,7 +2483,13 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
-        ctx.body = result;
+        // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
+        try {
+            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled');
+            ctx.body = result;
+        } catch {
+            ctx.body = { ...result, balanceSettled: undefined };
+        }
     } catch (e: any) {
         ctx.status = e?.statusCode || e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };

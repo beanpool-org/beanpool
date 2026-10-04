@@ -27,6 +27,7 @@ delete process.env.NODE_PROFILE;
 process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import { initTls } from './services/tls.js';
 import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
@@ -325,6 +326,46 @@ async function main(): Promise<void> {
     assert(mgrSet.status === 200 && mgrSet.body?.debtLinePct === 70 && mgrSet.body?.quietDays === 7, `the owner does (${show(mgrSet)})`);
     const mgrM = await call('GET', kim, '/api/local/admin/community-health');
     assert(mgrM.status === 401 || mgrM.status === 403, `a member's signed request is refused (${show(mgrM)})`);
+
+    // ── 8. an admin's look at a member's balance while removing them is logged ──────────────────────
+    console.log('── 8. removing a member: the look at their balance is logged ──');
+    const lastLine = () => db.prepare('SELECT actor_pubkey, action, subject_pubkey FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT 1').get() as any;
+    const before8 = logRows();
+    const prev = await call('GET', null, `/api/local/admin/members/${una.pk}/offboard/preview`, undefined, adaSession);
+    assert(prev.status === 200 && typeof prev.body?.balance === 'number', `an admin starting to remove Unaleigh sees her balance, to settle it (${show(prev)})`);
+    const l1 = lastLine();
+    assert(logRows() === before8 + 1 && l1?.action === 'offboard_preview' && l1?.actor_pubkey === ada.pk && l1?.subject_pubkey === una.pk,
+        `that look is a line in the access log: who, whose balance, why (${JSON.stringify(l1)})`);
+    const prevO = await call('GET', null, `/api/local/admin/members/${sam.pk}/offboard/preview`, undefined, owner);
+    const l2 = lastLine();
+    assert(prevO.status === 200 && logRows() === before8 + 2 && l2?.action === 'offboard_preview' && typeof l2?.actor_pubkey === 'string'
+        && l2.actor_pubkey !== ada.pk && l2?.subject_pubkey === sam.pk,
+        `the owner's password session's look is logged too (${show(prevO)} ${JSON.stringify(l2)})`);
+    const ott = makeMember('Ottoline');   // no trades, nothing owed: removed outright
+    const done = await call('POST', null, `/api/local/admin/members/${ott.pk}/offboard`, { resolution: 'prune_zero_balance' }, owner);
+    const l3 = lastLine();
+    assert(done.status === 200 && typeof done.body?.balanceSettled === 'number' && logRows() === before8 + 3 && l3?.action === 'offboard_settled' && l3?.subject_pubkey === ott.pk,
+        `removing Ottoline answers the balance it settled, and that is a line too (${show(done)} ${JSON.stringify(l3)})`);
+    const logRead = await call('GET', ada, '/api/names/health/log');
+    const top = logRead.body?.log?.[0];
+    assert(logRead.status === 200 && top?.action === 'offboard_settled' && top?.subject === ott.pk && top?.subjectCallsign === 'Ottoline'
+        && logRead.body.log[2]?.action === 'offboard_preview' && logRead.body.log[2]?.actor === ada.pk,
+        `the admins and the owner read every such look: who, whose, when (${show(logRead)})`);
+    const missing = await call('GET', null, `/api/local/admin/members/${'f'.repeat(64)}/offboard/preview`, undefined, adaSession);
+    assert(missing.status === 404 && logRows() === before8 + 3, `no member, no balance, no line (${show(missing)})`);
+
+    // ── 9. the texts say what the node does ────────────────────────────────────────────────────────
+    console.log('── 9. the privacy policy and the guide say what the node does ──');
+    const policy = fs.readFileSync(new URL('../../website/privacy.html', import.meta.url), 'utf8');
+    const guide = fs.readFileSync(new URL('../../../packages/beanpool-guide/content/settings/what-the-admins-can-see.md', import.meta.url), 'utf8');
+    assert(!/no admin sees your balance/i.test(policy) && !/admins never see your balance/i.test(guide),
+        'neither says no admin ever sees a balance: an admin removing a member sees it (section 8)');
+    assert(/removes your account/.test(policy) && /removes your account/.test(guide), 'both say an admin removing your account sees your balance');
+    assert(/votes on removing you/.test(policy) && /votes on removing you/.test(guide), 'both say a vote on removing you shows it to the voters');
+    assert(/sees your balance while removing you, the node records who, whose and when/.test(policy) && /can see who looked, at whose balance, and when/.test(guide),
+        'both say that look is logged where the admins and the owner read it (section 8)');
+    assert(/take your consent back at any time/.test(policy) && /take your consent back at any time/.test(guide), 'both say consent can be withdrawn at any time (section 6c)');
+    assert(/never shown to an admin/.test(policy) && /No admin ever sees your trades/.test(guide), 'and both say trades are never shown (section 3: no trade on the wire)');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

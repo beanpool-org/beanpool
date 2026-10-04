@@ -256,6 +256,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('known_floor_exceptions', 'set_by');
     move('names_debts', 'repaying_pubkey');
     move('health_access_log', 'actor_pubkey');
+    move('health_access_log', 'subject_pubkey');
     move('known_consents', 'member_pubkey');
     move('known_consent_log', 'member_pubkey');
     move('names_debts', 'settled_by');

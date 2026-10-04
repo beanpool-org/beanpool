@@ -37,6 +37,9 @@ export interface HealthLogLine {
     actor: string;
     actorCallsign: string | null;
     action: string;
+    /** Whose balance, for a look while removing a member (offboard_preview, offboard_settled). */
+    subject?: string | null;
+    subjectCallsign?: string | null;
     at: string;
 }
 
@@ -80,5 +83,7 @@ export function departedRows(body: HealthExceptionsBody, entries: Pick<OpenedEnt
 export function healthLogText(l: HealthLogLine): string {
     const who = l.actorCallsign ? `@${l.actorCallsign}` : 'An admin';
     const when = new Date(l.at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    if (l.action === 'offboard_preview') return `${who} saw ${l.subjectCallsign ? `@${l.subjectCallsign}'s` : 'a member\'s'} balance while removing them · ${when}`;
+    if (l.action === 'offboard_settled') return `${who} removed a member and saw the balance it settled · ${when}`;
     return `${who} opened the exceptions · ${when}`;
 }

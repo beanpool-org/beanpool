@@ -425,7 +425,7 @@ export const TABLES: Record<string, TableEntry> = {
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
     known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
     known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
-    health_access_log: plain('id actor_pubkey action at updated_at'),
+    health_access_log: plain('id actor_pubkey action subject_pubkey at updated_at'),
     known_consents: plain('member_pubkey version consented_at updated_at'),
     known_consent_log: plain('id member_pubkey action version at updated_at'),
     names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note updated_at'),

@@ -36,6 +36,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { errorMessage } from './error-message.js';
@@ -464,16 +465,12 @@ function scrubReportFile(filePath: string): boolean {
         restrictMode(filePath);
         return false;
     }
-    const tempPath = `${filePath}.scrub-${process.pid}.tmp`;
     try {
-        fs.writeFileSync(tempPath, JSON.stringify(report, null, 2), { mode: 0o600 });
-        restrictMode(tempPath);
-        fs.renameSync(tempPath, filePath);
+        writeFileAtomic(filePath, JSON.stringify(report, null, 2), { mode: 0o600 });
         restrictMode(filePath);
         return true;
     } catch {
-        // A full or read-only disk. Leave the original where it is and move on.
-        try { fs.unlinkSync(tempPath); } catch { /* it may never have been created */ }
+        // A full or read-only disk. Leave the original where it is and move on (writeFileAtomic removed its temp file).
         return false;
     }
 }

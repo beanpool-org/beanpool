@@ -9,6 +9,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { generateKeyPair } from '@libp2p/crypto/keys';
 import { BeanPoolMerkleTree } from '@beanpool/core';
@@ -57,13 +58,13 @@ export async function ensureGenesis(): Promise<GenesisState> {
 
     // Persist the private key separately (never exposed via API)
     const privateKeyBytes = keypair.raw;
-    fs.writeFileSync(
+    writeFileAtomic(
         path.join(DATA_DIR, 'community.key'),
         Buffer.from(privateKeyBytes)
     );
 
     // Persist genesis state
-    fs.writeFileSync(GENESIS_PATH, JSON.stringify(genesis, null, 2));
+    writeFileAtomic(GENESIS_PATH, JSON.stringify(genesis, null, 2));
     console.log('🌱 Genesis Block written to data/genesis.json');
 
     return genesis;

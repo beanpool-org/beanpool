@@ -125,6 +125,7 @@ export const SUITES = [
     'test-breakglass-and-backup-codes',
     'test-beanpool-recover',
     'test-claim-cli',
+    'test-atomic-state-writes',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',

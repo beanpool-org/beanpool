@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { db as defaultDb, closeDbDataVersionProbe } from '../db/db.js';
 import { closeOpenCopies } from './open-copies.js';
@@ -135,7 +136,7 @@ export function initShutdownRecovery(options?: {
         }
 
         try {
-            fs.writeFileSync(reportPath, JSON.stringify(activeShutdownStatus, null, 2), 'utf8');
+            writeFileAtomic(reportPath, JSON.stringify(activeShutdownStatus, null, 2));
         } catch {}
     } else {
         // Previous stop was clean. Check if an unacknowledged report remains.
@@ -163,7 +164,7 @@ export function initShutdownRecovery(options?: {
         pid: process.pid,
     };
     try {
-        fs.writeFileSync(sentinelPath, JSON.stringify(freshSentinel, null, 2), 'utf8');
+        writeFileAtomic(sentinelPath, JSON.stringify(freshSentinel, null, 2));
     } catch {}
 
     // Start heartbeat
@@ -174,7 +175,7 @@ export function initShutdownRecovery(options?: {
             if (fs.existsSync(sentinelPath)) {
                 const current = JSON.parse(fs.readFileSync(sentinelPath, 'utf8')) as SentinelFile;
                 current.lastHeartbeat = new Date().toISOString();
-                fs.writeFileSync(sentinelPath, JSON.stringify(current, null, 2), 'utf8');
+                writeFileAtomic(sentinelPath, JSON.stringify(current, null, 2));
             }
         } catch {}
     }, interval);
@@ -264,7 +265,7 @@ export function markCleanShutdown(dataDir?: string): void {
             const current = JSON.parse(fs.readFileSync(sentinelPath, 'utf8')) as SentinelFile;
             current.running = false;
             current.stoppedAt = new Date().toISOString();
-            fs.writeFileSync(sentinelPath, JSON.stringify(current, null, 2), 'utf8');
+            writeFileAtomic(sentinelPath, JSON.stringify(current, null, 2));
         } else {
             const cleanSentinel: SentinelFile = {
                 running: false,
@@ -273,7 +274,7 @@ export function markCleanShutdown(dataDir?: string): void {
                 stoppedAt: new Date().toISOString(),
                 pid: process.pid,
             };
-            fs.writeFileSync(sentinelPath, JSON.stringify(cleanSentinel, null, 2), 'utf8');
+            writeFileAtomic(sentinelPath, JSON.stringify(cleanSentinel, null, 2));
         }
     } catch {}
 }
@@ -296,7 +297,7 @@ export function acknowledgeShutdownRecovery(dataDir?: string): ShutdownStatus {
         acknowledged: true,
     };
     try {
-        fs.writeFileSync(reportPath, JSON.stringify(activeShutdownStatus, null, 2), 'utf8');
+        writeFileAtomic(reportPath, JSON.stringify(activeShutdownStatus, null, 2));
     } catch {}
     return activeShutdownStatus;
 }

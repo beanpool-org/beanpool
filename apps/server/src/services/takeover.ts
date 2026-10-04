@@ -80,6 +80,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
@@ -146,9 +147,7 @@ function dataPath(name: string): string {
 }
 
 function writeAtomic(file: string, data: string | Buffer, mode: number): void {
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, { mode });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, data, { mode });
 }
 
 // ── What a take-over will not have (§5.5; the standby's list, #958) ─────────────────────────
@@ -849,9 +848,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 }
             }
             const pa = (getNodeConfig() as any).publicAddress ?? null;
-            fs.writeFileSync(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
+            writeFileAtomic(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
             // And what the steps change in the database, so a take-over that stops can put it all back (rollBackTakeover).
-            fs.writeFileSync(path.join(dir, UNDO_STATE_FILE), JSON.stringify(readStandbyState()), { mode: 0o600 });
+            writeFileAtomic(path.join(dir, UNDO_STATE_FILE), JSON.stringify(readStandbyState()), { mode: 0o600 });
             return `data/${j.undoDir}: ${copied.join(', ') || 'no files'}; the roles, web address and settings in the database`;
         }
         case 'identity-files': {

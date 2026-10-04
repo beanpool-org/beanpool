@@ -67,6 +67,37 @@ describe('startKeySession', () => {
         expect(r2.kind === 'failed' && r2.message).toMatch(/already used/);
     });
 
+    it('says the phone link is spent and to tap Manage again, in plain words', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', expired: true })
+            : reply(200, { authenticated: false })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home&from=app`).win);
+        expect(r.kind === 'failed' && r.message).toMatch(/sign-in link from your phone has expired/);
+        expect(r.kind === 'failed' && r.message).toMatch(/Tap Manage again/);
+    });
+
+    it('a damaged link (not a token) is said, never a silent password form', async () => {
+        const fetchMock = vi.fn(async () => reply(200, { authenticated: false }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { win, replaceState } = fakeWindow('#handoff=abc&from=app');
+        const r = await startKeySession(win);
+        expect(r.kind).toBe('failed');
+        expect(r.kind === 'failed' && r.message).toMatch(/cut short or damaged.*Tap Manage again/);
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/settings');
+        // Nothing was posted as a token.
+        expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/local/admin/auth/session']);
+    });
+
+    it('a refused link with a live session cookie in the browser resumes that session (a page loaded twice)', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', replay: true })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32) })
+                : reply(200, { csrfToken: 'csrf3' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home`).win);
+        expect(r).toEqual({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf3', section: 'home' });
+    });
+
     it('never treats a password-authenticated answer as a key session', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => reply(200, { authenticated: true, isKeySession: false, role: 'owner', memberPubkey: null })));
         expect((await startKeySession(fakeWindow('').win)).kind).toBe('none');

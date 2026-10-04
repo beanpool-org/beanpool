@@ -71,17 +71,41 @@ function asRole(r: unknown): KeySessionRole | null {
     return r === 'owner' || r === 'admin' || r === 'moderator' ? r : null;
 }
 
+/** Whether the fragment carries the app's sign-in link at all, usable or not. */
+export function carriesHandoff(hash: string): boolean {
+    return /(^|[#&])handoff=/.test(hash);
+}
+
+/** What the page says when the phone's link can't be used. Never the password form alone, with no word why. */
+export function handoffRefusedMessage(why: 'expired' | 'replay' | 'refused' | 'damaged' | 'unreachable'): string {
+    const again = 'Tap Manage again in the BeanPool app, or sign in below with the admin password.';
+    switch (why) {
+        case 'expired': return `This sign-in link from your phone has expired (they last 60 seconds). ${again}`;
+        case 'replay': return `This sign-in link from your phone was already used. ${again}`;
+        case 'damaged': return `This sign-in link from your phone arrived cut short or damaged. ${again}`;
+        case 'unreachable': return `Could not reach the node to finish signing in with the link from your phone. ${again}`;
+        default: return `This sign-in link from your phone was not accepted. ${again}`;
+    }
+}
+
 /**
- * Run once when the single-node /settings page loads. `win` is injectable for tests.
+ * Run when the single-node /settings page loads, and again whenever a new link reaches the page already open
+ * (App.tsx, hashchange: an Android Custom Tab brought back to the front loads `/settings#handoff=…` into the page it
+ * still shows, and a change of fragment alone reloads nothing). `win` is injectable for tests.
+ *
+ * A link that can't be used is SAID (`failed`), never left as a silent password form, unless the browser already holds a
+ * live session, which is resumed as a reload would: a page that loaded twice burns its own link the first time.
  */
 export async function startKeySession(win: Pick<Window, 'location' | 'history'> = window): Promise<KeySessionStart> {
-    const { token, section } = parseHandoffFragment(win.location.hash || '');
-    if (win.location.hash && /(^|[#&])(handoff|section|from)=/.test(win.location.hash)) {
+    const hash = win.location.hash || '';
+    const { token, section } = parseHandoffFragment(hash);
+    if (hash && /(^|[#&])(handoff|section|from)=/.test(hash)) {
         // Out of the address bar (and so out of history, bookmarks and screenshots) before anything else.
         // `from` (lib/came-from.ts, read before this runs) goes with it.
         win.history.replaceState(null, '', win.location.pathname + win.location.search);
     }
 
+    let refused: string | null = null;
     if (token) {
         try {
             const res = await fetch('/api/local/admin/auth/exchange', {
@@ -95,18 +119,15 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
             if (res.ok && role && typeof body.memberPubkey === 'string' && typeof body.csrfToken === 'string') {
                 return { kind: 'session', session: { memberPubkey: body.memberPubkey, role }, csrfToken: body.csrfToken, section };
             }
-            const why = body.expired
-                ? 'That sign-in link expired (they last 60 seconds).'
-                : body.replay
-                    ? 'That sign-in link was already used.'
-                    : 'That sign-in link was not accepted.';
-            return { kind: 'failed', message: `${why} Open “Manage” again from the BeanPool app, or sign in with the admin password.`, section };
+            refused = handoffRefusedMessage(body.expired ? 'expired' : body.replay ? 'replay' : 'refused');
         } catch {
-            return { kind: 'failed', message: 'Could not reach the node to finish signing in.', section };
+            refused = handoffRefusedMessage('unreachable');
         }
+    } else if (carriesHandoff(hash)) {
+        refused = handoffRefusedMessage('damaged');
     }
 
-    // No link: an earlier sign-in (a key's or the password's) may still hold a live cookie.
+    // No usable link: an earlier sign-in (a key's or the password's) may still hold a live cookie.
     try {
         const res = await fetch('/api/local/admin/auth/session', { credentials: 'same-origin', cache: 'no-store' });
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
@@ -122,7 +143,7 @@ export async function startKeySession(win: Pick<Window, 'location' | 'history'> 
             }
         }
     } catch { /* fall through to the password login */ }
-    return { kind: 'none', section };
+    return refused ? { kind: 'failed', message: refused, section } : { kind: 'none', section };
 }
 
 export type PasswordSignIn =

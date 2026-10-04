@@ -38,7 +38,7 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites,
+    inviteForNamesEntry, readBoundInvites, firstSentence,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
@@ -91,6 +91,8 @@ export default function NamesListScreen() {
     const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
     const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
+    /** The opening paragraph: its first sentence, the rest behind More (the rehearsal's 320dp finding). */
+    const [showWho, setShowWho] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
     const loadingRef = useRef(false);
@@ -801,7 +803,17 @@ export default function NamesListScreen() {
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             {header}
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                {mode.kind === 'list' ? <Text style={styles.body}>{COPY.who}</Text> : null}
+                {mode.kind === 'list' ? (
+                    <>
+                        <Text style={styles.body}>{showWho ? COPY.who : firstSentence(COPY.who).first}</Text>
+                        <Pressable
+                            style={[styles.smallBtn, styles.moreBtn]} onPress={() => setShowWho(!showWho)} accessibilityRole="button"
+                            accessibilityState={{ expanded: showWho }}
+                        >
+                            <Text style={styles.smallBtnText}>{showWho ? COPY.whoLess : COPY.whoMore}</Text>
+                        </Pressable>
+                    </>
+                ) : null}
                 {statusBlocks}
                 {body}
                 {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Working" /> : null}

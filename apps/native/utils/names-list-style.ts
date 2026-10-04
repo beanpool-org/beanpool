@@ -79,6 +79,8 @@ export function namesListStyleSpec(colors: AppColors) {
             borderWidth: 1, borderColor: colors.border.strong,
         },
         smallBtnText: { fontSize: 14, fontWeight: '600' as const, color: colors.text.body, textAlign: 'center' as const },
+        /** More / Less under the opening paragraph: a small button as wide as its words, on a line of its own. */
+        moreBtn: { alignSelf: 'flex-start' as const, flexGrow: 0, flexBasis: 'auto' as const, marginTop: 4, marginBottom: 8 },
         disabled: { opacity: 0.5 },
 
         entry: { padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, gap: 6 },

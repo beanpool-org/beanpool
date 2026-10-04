@@ -434,11 +434,45 @@ async function main(): Promise<void> {
     const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
     assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
     assert(String(terms9.body?.version ?? '').startsWith('4:'), `the wording is version 4, so a member who agreed to wording 3 ("if you trade mostly with one member", not what the two alerts with Beans fire on) is asked again (${show(terms9)})`);
+    // Queue item 29 (Marty, 4 Oct: "Keep disputes, log every look, totals only in member stats").
+    const lastLines = (n: number) => db.prepare('SELECT actor_pubkey, action, subject_pubkey, detail FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(n) as any[];
     const before9 = logRows();
     const disputes9 = await call('GET', null, '/api/local/admin/disputes?minDays=0', undefined, adaSession);
+    const listLine9 = lastLines(1)[0];
+    const shownIds9 = (disputes9.body?.disputes ?? []).map((d: any) => d.id);
+    assert(disputes9.status === 200 && logRows() === before9 + 1 && listLine9?.action === 'disputes_listed' && listLine9?.actor_pubkey === ada.pk
+        && JSON.stringify(JSON.parse(listLine9?.detail ?? 'null')) === JSON.stringify(shownIds9),
+        `an admin's read of the disputes list is a line: who, and the ids of the trades it showed (${disputes9.status} ${JSON.stringify(listLine9)} ${JSON.stringify(shownIds9)})`);
+    // An alert that names a member: Kim, invited and here a year, with no Beans moved since (inactive_member).
+    db.prepare("UPDATE members SET joined_at = ?, invited_by = CASE WHEN invited_by = 'genesis' THEN ? ELSE invited_by END WHERE public_key = ?")
+        .run(new Date(Date.now() - 400 * DAY).toISOString(), ada.pk, kim.pk);
+    const before9b = logRows();
     const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
-    assert(disputes9.status === 200 && data9.status === 200 && typeof data9.body?.memberStats?.[kim.pk]?.deals === 'number' && logRows() === before9,
-        `an admin reads the trade lists and each member's trade counts, and no line is written: "these looks are not logged" (${disputes9.status} ${data9.status})`);
+    const named9 = [...new Set(((data9.body?.health?.flags ?? []) as any[]).flatMap((f) => f.members ?? []))].sort();
+    const alertLines9 = lastLines(logRows() - before9b);
+    assert(data9.status === 200 && named9.length > 0 && alertLines9.length === named9.length
+        && alertLines9.every((l) => l.action === 'alerts_read' && l.actor_pubkey === ada.pk)
+        && JSON.stringify(alertLines9.map((l) => l.subject_pubkey).sort()) === JSON.stringify(named9),
+        `an admin's read of the fraud alerts is a line per member they named (${data9.status} ${named9.length} named, ${alertLines9.length} lines)`);
+    const healthBefore9 = logRows();
+    const health9 = await call('POST', null, '/api/local/admin/health', {}, adaSession);
+    const named9h = new Set(((health9.body?.flags ?? []) as any[]).flatMap((f) => f.members ?? []));
+    assert(health9.status === 200 && named9h.size > 0 && logRows() === healthBefore9 + named9h.size,
+        `the alerts read from /admin/health are logged the same way (${health9.status} ${named9h.size} named, ${logRows() - healthBefore9} lines)`);
+    const stats9 = (data9.body?.memberStats ?? {}) as Record<string, Record<string, unknown>>;
+    assert(Object.keys(stats9).length > 0 && Object.values(stats9).every((s) => !('deals' in s) && !('volume' in s) && !('cancelled' in s))
+        && typeof stats9[kim.pk]?.posts === 'number' && typeof stats9[kim.pk]?.messages === 'number',
+        `member stats carry no member's trades (deals, volume, cancelled), only their posts and messages (${JSON.stringify(stats9[kim.pk])})`);
+    const sums9 = db.prepare(`SELECT SUM(status = 'completed') AS deals, ROUND(COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0), 2) AS volume,
+        SUM(status = 'cancelled') AS cancelled FROM marketplace_transactions`).get() as any;
+    const totals9 = data9.body?.tradeTotals;
+    assert(totals9 && totals9.deals === (sums9.deals ?? 0) && totals9.volume === sums9.volume && totals9.cancelled === (sums9.cancelled ?? 0),
+        `of trades, the community's totals: each trade once (${JSON.stringify(totals9)} vs ${JSON.stringify(sums9)})`);
+    const panel9 = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
+    const panelLog9 = (panel9.body?.log ?? []) as any[];
+    assert(panel9.status === 200 && panelLog9.some((l) => l.action === 'disputes_listed' && JSON.stringify(l.tradeIds) === JSON.stringify(shownIds9))
+        && panelLog9.some((l) => l.action === 'alerts_read' && named9.includes(l.subject)),
+        `the looks are in the log the owner and admins read where they read the balance looks (${panel9.status})`);
 
     // "A trade that isn't finished yet or that an admin settled", and nothing else: one trade read by its id is a trade the
     // list can show (round 4, item 1), and its chat is the two members' one-to-one chat, never a group they share (item 3).
@@ -457,6 +491,10 @@ async function main(): Promise<void> {
         `a finished or cancelled trade nobody disputed is not an admin's to read by its id: 404, no names (${done9.status} ${cancelled9.status})`);
     assert(settled9.status === 200 && settled9.body?.dispute?.id === 't9-settled' && open9.status === 200 && open9.body?.dispute?.id === 't9-open',
         `a trade an admin settled, and one not finished yet, are (${settled9.status} ${open9.status})`);
+    const openLines9 = lastLines(2);
+    assert(openLines9[0]?.action === 'dispute_opened' && openLines9[0]?.detail === JSON.stringify(['t9-open']) && openLines9[0]?.actor_pubkey === ada.pk
+        && openLines9[1]?.action === 'dispute_opened' && openLines9[1]?.detail === JSON.stringify(['t9-settled']),
+        `each read of one dispute is a line naming that trade; a 404 is none (${JSON.stringify(openLines9)})`);
     const listed9 = new Set(((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? []).map((d: any) => d.id));
     assert(['t9-settled', 't9-open'].every(id => listed9.has(id)) && !['t9-done', 't9-cancelled'].some(id => listed9.has(id)),
         `the same trades the list shows (${[...listed9].filter(id => String(id).startsWith('t9-')).join(', ')})`);

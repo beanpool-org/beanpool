@@ -1,20 +1,31 @@
 /**
  * The Ledger's repayment card on the web (#1597 item 4): while the member works a debt off, what is left and why their
  * incoming Beans go to the Commons; and, always, Pay the Commons, where a member paying back a debt enters the pay-back
- * code an admin shared. Asked first; the node's refusals in its own words. Says nothing when the node answers nothing
- * (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
+ * code an admin shared (a link's ?payback=<code>&amount=<left> fills both in). A settle is promised only when the payment
+ * covers what is left. Asked first; one payment at a time; the node's refusals in its own words, and a lost answer says
+ * the payment may have gone through. The banner says nothing when the node answers nothing (an older node, no signal). Wraps at 320px and 130% text: no fixed widths, every control at least 48px tall.
  */
-import { useEffect, useState } from 'react';
-import { getMyRepayment, payTheCommons, parseBeans, debtCodeOk, REPAYMENT_WORDS, type Repayment } from '../lib/debts';
+import { useEffect, useRef, useState } from 'react';
+import { getMyRepayment, payTheCommons, parseBeans, debtCodeOk, payFailureWords, REPAYMENT_WORDS, type Repayment } from '../lib/debts';
+
+/** The pay-back link's code, and what is left on that debt (null when the link doesn't say). */
+function linkParams(): { code: string; left: number | null } {
+    try {
+        const q = new URLSearchParams(window.location.search);
+        const code = q.get('payback') ?? '';
+        const amount = q.get('amount');
+        return { code, left: code && amount ? parseBeans(amount) : null };
+    } catch { return { code: '', left: null }; }
+}
 
 export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
     const [repayment, setRepayment] = useState<Repayment | null>(null);
-    // A link with ?payback=<code> opens the form with the code in it.
-    const [code, setCode] = useState(() => {
-        try { return new URLSearchParams(window.location.search).get('payback') ?? ''; } catch { return ''; }
-    });
+    // A link with ?payback=<code>&amount=<left> opens the form with both in it.
+    const [link] = useState(linkParams);
+    const [code, setCode] = useState(link.code);
     const [open, setOpen] = useState(() => code !== '');
-    const [amount, setAmount] = useState('');
+    const [amount, setAmount] = useState(link.left !== null ? String(link.left) : '');
+    const inFlight = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [paid, setPaid] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -31,16 +42,19 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
         if (beans === null) { setError(REPAYMENT_WORDS.badAmount); return; }
         const debt = code.trim();
         if (debt && !debtCodeOk(debt)) { setError(REPAYMENT_WORDS.badCode); return; }
-        if (!window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt))) return;
+        const left = debt && debt.toLowerCase() === link.code.trim().toLowerCase() ? link.left : null;
+        if (inFlight.current || !window.confirm(REPAYMENT_WORDS.payConfirm(beans, !!debt, left))) return;
+        inFlight.current = true;
         setBusy(true);
         try {
             const r = await payTheCommons(beans, debt || undefined);
-            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!debt));
+            setPaid(REPAYMENT_WORDS.paid(r.amount, r.transactionId, !!debt, left));
             setAmount('');
             onPaid?.();
-        } catch (e: any) {
-            setError(typeof e?.message === 'string' && e.message ? e.message : 'Your community’s server didn’t answer. Nothing was paid.');
+        } catch (e) {
+            setError(payFailureWords(e));
         } finally {
+            inFlight.current = false;
             setBusy(false);
         }
     };

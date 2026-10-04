@@ -15,7 +15,7 @@ const IDENTITY = { publicKey: PUB, privateKey: bytesToHex(toEd25519Pkcs8(SEED)),
 const identityMock = vi.hoisted(() => ({ loadIdentity: vi.fn() }));
 vi.mock('./identity', () => identityMock);
 
-import { getMyRepayment, payTheCommons, beans, parseBeans, debtCodeOk, REPAYMENT_WORDS } from './debts';
+import { getMyRepayment, payTheCommons, beans, parseBeans, debtCodeOk, payFailureWords, coversLeft, PAY_UNANSWERED, REPAYMENT_WORDS } from './debts';
 
 const fetchMock = vi.fn();
 const reply = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, statusText: '', json: async () => body, text: async () => JSON.stringify(body), headers: new Headers() });
@@ -72,6 +72,20 @@ describe('POST /api/commons/pay', () => {
         await expect(payTheCommons(6)).rejects.toThrow('You hold 5 Beans: you can pay the Commons only what you hold.');
         expect(JSON.parse(sent().body)).toEqual({ amount: 6 });
     });
+
+    it('a lost answer never says nothing was paid: no answer, a 2xx without JSON, a server error may have paid; a refusal did not', async () => {
+        expect(PAY_UNANSWERED).toBe('Your community’s server didn’t answer, so this payment may have gone through. Check your Ledger before you pay again.');
+        const failure = async () => { try { await payTheCommons(3); } catch (e) { return payFailureWords(e); } return 'paid'; };
+        fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+        expect(await failure()).toBe(PAY_UNANSWERED);
+        fetchMock.mockResolvedValue({ ...reply(200, null), json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+        expect(await failure()).toBe(PAY_UNANSWERED);
+        fetchMock.mockResolvedValue({ ...reply(502, null), statusText: 'Bad Gateway', json: async () => { throw new SyntaxError('<html>'); } });
+        expect(await failure()).toBe(PAY_UNANSWERED);
+        fetchMock.mockResolvedValue(reply(404, { error: 'There is no such debt record.' }));
+        expect(await failure()).toBe('There is no such debt record.');
+        expect(payFailureWords(null)).toBe(PAY_UNANSWERED);
+    });
 });
 
 describe('words', () => {
@@ -80,10 +94,26 @@ describe('words', () => {
         expect(beans(300)).toBe('300 Beans');
         expect(REPAYMENT_WORDS.banner({ amount: 300, repaid: 120.5, left: 179.5 })).toMatch(/^You’re working off a debt to the Commons: 179\.50 Beans left of 300 Beans\./);
         expect(REPAYMENT_WORDS.paid(80, 'tx-7', true)).not.toContain('Ʀ');
+        expect(REPAYMENT_WORDS.paid(150, 'tx-7', true, 300)).not.toContain('Ʀ');
         expect(parseBeans('12,5')).toBe(12.5);
         expect(parseBeans('1.001')).toBeNull();
         expect(parseBeans('0')).toBeNull();
         expect(debtCodeOk('f'.repeat(32))).toBe(true);
         expect(debtCodeOk('g'.repeat(32))).toBe(false);
+    });
+});
+
+describe('one payment of at least what is left settles a debt (the node’s settleByPayment): a settle is promised only then', () => {
+    it('150 of 300 says it won’t settle; 300 of 300 promises it; not knowing what is left, nothing is promised', () => {
+        expect(coversLeft(150, 300)).toBe(false);
+        expect(coversLeft(300, 300)).toBe(true);
+        expect(coversLeft(300, null)).toBe(false);
+        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true, 300)).toBe('Paid 150 Beans to the Commons. That is less than the 300 Beans left, so it won’t settle your debt: '
+            + 'an admin can settle a debt only with one payment of at least what is left. Tell an admin, and give them this reference: tx-1');
+        expect(REPAYMENT_WORDS.payConfirm(150, true, 300)).toContain('300 Beans are left, so this payment won’t settle your debt');
+        expect(REPAYMENT_WORDS.paid(300, 'tx-1', true, 300)).toBe('Paid 300 Beans to the Commons. Give this reference to an admin, who settles your debt with it: tx-1');
+        expect(REPAYMENT_WORDS.paid(150, 'tx-1', true)).not.toContain('who settles your debt with it');
+        expect(REPAYMENT_WORDS.payConfirm(150, true)).toContain('only if this one payment is at least what is left');
+        expect(REPAYMENT_WORDS.payIntro).toContain('one payment of at least what is left');
     });
 });

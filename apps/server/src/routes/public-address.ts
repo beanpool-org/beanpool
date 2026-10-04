@@ -124,35 +124,92 @@ const ADDRESS_OWNER_ONLY = 'Only an owner of this node can change its public add
 const HELD_STATES = new Set(['live', 'pending', 'paused']);
 /** The most names Settings asks the registrar about at once: the turned-away list's size. */
 const EXTRA_NAMES_MAX = 8;
+/** How long Settings waits for one /holder answer, and how long the answers it got are reused (#1583 review r4176052022). */
+const HOLDER_WAIT_MS = 3_000;
+const HOLDER_CACHE_MS = 60_000;
+
+/** A name as the registrar keys it: trimmed, lower case, no trailing dot (#1583 review r4176051940). */
+const foldName = (n: unknown): string => String(n ?? '').trim().replace(/\.$/, '').toLowerCase();
+
+/**
+ * Why `name` (folded) is not one to release by name, or null: it is the stored address, the name the public-address agent
+ * asks for, or the owner's pending Settings pick (a claim that got no answer here, still their latest choice, which the
+ * connector or Settings' status read may store at any moment: #1583 review r4176051848).
+ */
+function notReleasable(name: string): string | null {
+    const host = `${name}.${REGISTRAR_ZONE}`;
+    if (foldName((getNodeConfig() as any).publicAddress?.name) === name || foldName(nameAskedFor()) === name) {
+        return `${host} is this community's address; Take offline releases it.`;
+    }
+    if (turnedAwayList().some((e) => e.why === 'unanswered' && foldName(e.name) === name)) {
+        return `${host} is the name you chose last; another pick or Take offline replaces it.`;
+    }
+    return null;
+}
 
 /**
  * Names this server's key may hold besides its stored address (#1576 review r4175512149): the install's late claim and
- * every name on the turned-away list or kept as former in the record of names, never the stored name nor the one the
- * public-address agent asks for. Newest first.
+ * every name on the turned-away list or kept as former in the record of names, never the stored name, the one the
+ * public-address agent asks for, nor the owner's pending pick. Newest first.
  */
 function extraNameCandidates(): string[] {
-    const stored = (getNodeConfig() as any).publicAddress?.name ?? null;
-    const asked = nameAskedFor();
     const suffix = `.${REGISTRAR_ZONE}`;
     const former = registrarNames().filter((e) => e.role !== 'current' && e.address.endsWith(suffix)).map((e) => e.address.slice(0, -suffix.length));
-    const names = [...turnedAwayList().map((e) => e.name).reverse(), ...former];
-    return [...new Set(names)].filter((n) => isAddressLabel(n) && n !== stored && n !== asked).slice(0, EXTRA_NAMES_MAX);
+    const names = [...turnedAwayList().map((e) => e.name).reverse(), ...former].map(foldName);
+    return [...new Set(names)].filter((n) => isAddressLabel(n) && !notReleasable(n)).slice(0, EXTRA_NAMES_MAX);
 }
+
+/** Names being released right now, and names a Settings claim is asking for: neither starts while the other runs. */
+const releasesInFlight = new Set<string>();
+const claimsInFlight = new Set<string>();
 
 /**
  * Who holds `name`, as Settings needs it: `held` when the registrar says this key holds it in a state that keeps it
  * (live, waiting, paused), `releasable` when that answer came from /holder, which a registrar has only since it reads a
  * release's name (#1271 after #1116). An older registrar (no /holder) can't say: then nothing is held as far as this
  * knows, and nothing is released by name, as an older release would let go of the key's first name, the stored one.
+ * An answer about another name says nothing about this one (#1583 review r4176051981).
  */
 async function heldByThisKey(name: string): Promise<{ held: boolean; state: string | null; known: boolean }> {
     try {
         const r = await askNameHolder(name);
-        if (!r.ok || !r.json) return { held: false, state: null, known: false };
+        if (!r.ok || !r.json || foldName(r.data?.name) !== name) return { held: false, state: null, known: false };
         if (r.data?.held !== 'you') return { held: false, state: null, known: true };
         const state = typeof r.data?.state === 'string' ? r.data.state : null;
         return { held: !!state && HELD_STATES.has(state), state, known: true };
     } catch { return { held: false, state: null, known: false }; }
+}
+
+/** Settings' /holder answers, reused for HOLDER_CACHE_MS; any address write here clears them. Never used to release. */
+const holderCache = new Map<string, { at: number; h: { held: boolean; state: string | null; known: boolean } }>();
+export function clearHolderCache(): void { holderCache.clear(); }
+
+/** heldByThisKey for Settings' list: from the cache, or asked with a short wait (no answer in time: can't say, for a minute too). */
+async function heldForSettings(name: string): Promise<{ held: boolean; state: string | null; known: boolean }> {
+    const hit = holderCache.get(name);
+    if (hit && Date.now() - hit.at < HOLDER_CACHE_MS) return hit.h;
+    let timer: NodeJS.Timeout | undefined;
+    const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), HOLDER_WAIT_MS); });
+    const h = await Promise.race([heldByThisKey(name), late]);
+    clearTimeout(timer);
+    const answer = h ?? { held: false, state: null, known: false };
+    holderCache.set(name, { at: Date.now(), h: answer });
+    return answer;
+}
+
+/**
+ * The owner's address is claimed again at once: a release by name was answered about it (a registrar that ignored the
+ * name). Within the registrar's hold the name comes back to this key.
+ */
+async function reclaimStored(stored: any): Promise<boolean> {
+    try {
+        const since = publicAddressGeneration();
+        const answer = await claimAddress(stored.name, stored.mode === 'direct' ? 'direct' : 'tunnel', LOOPBACK_ORIGIN, stored.contact, stored.communityName);
+        return !!(await persistAddressIfUnchanged(answer, 'claim', since));
+    } catch (e: any) {
+        console.error(`[PublicAddr] could not claim "${stored?.name}" back: ${e?.message || e}`);
+        return false;
+    }
 }
 
 export function createPublicAddressRoutes(deps: RouteDeps): Router {
@@ -209,6 +266,9 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         const mode: 'tunnel' | 'direct' = b.mode === 'direct' ? 'direct' : 'tunnel';
         if (!name) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
+        if (releasesInFlight.has(name)) { ctx.status = 409; ctx.body = { error: `${name}.${REGISTRAR_ZONE} is being released right now; try again in a moment.` }; return; }
+        claimsInFlight.add(name);
+        clearHolderCache();
         try {
             probeLogs.length = 0;
             addProbeLog('1/4', `⏳ Requesting tunnel allocation for "${name}.beanpool.org"...`, 'info');
@@ -244,6 +304,8 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             void noteUnansweredClaim(name, e);
             ctx.status = 400;
             ctx.body = { error: e.message };
+        } finally {
+            claimsInFlight.delete(name);
         }
     });
 
@@ -255,10 +317,13 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         if (getNodeRole() !== 'primary') { ctx.body = { success: true, names: [] }; return; }
         const names: { name: string; hostname: string; state: string | null; releasable: boolean; fromInstall: boolean }[] = [];
         const list = turnedAwayList();
-        const late = new Set(list.filter((e) => e.why === 'late-claim').map((e) => e.name));
-        const install = new Set(list.filter((e) => e.why === 'late-claim' || e.why === 'install-request-ended' || e.why === 'request-replaced').map((e) => e.name));
-        for (const name of extraNameCandidates()) {
-            const h = await heldByThisKey(name);
+        const late = new Set(list.filter((e) => e.why === 'late-claim').map((e) => foldName(e.name)));
+        const install = new Set(list.filter((e) => e.why === 'late-claim' || e.why === 'install-request-ended' || e.why === 'request-replaced').map((e) => foldName(e.name)));
+        const candidates = extraNameCandidates();
+        // Asked all at once, each with a short wait, and reused for a minute: Settings never waits on the registrar.
+        const answers = await Promise.all(candidates.map((name) => heldForSettings(name)));
+        for (const [i, name] of candidates.entries()) {
+            const h = answers[i];
             const fromInstall = install.has(name);
             if (h.held) names.push({ name, hostname: `${name}.${REGISTRAR_ZONE}`, state: h.state, releasable: true, fromInstall });
             // An older registrar can't say who holds it: the agent's late claim was given to this key, so it is shown,
@@ -277,31 +342,59 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
         const name = String(b.name || '').toLowerCase().trim();
         if (!isAddressLabel(name)) { ctx.status = 400; ctx.body = { error: 'name required' }; return; }
         if (getNodeRole() !== 'primary') { ctx.status = 409; ctx.body = { error: 'Only the main server releases names.' }; return; }
-        const stored = (getNodeConfig() as any).publicAddress;
-        if (stored?.name === name || nameAskedFor() === name) {
-            ctx.status = 409;
-            ctx.body = { error: `${name}.${REGISTRAR_ZONE} is this community's address; Take offline releases it.` };
-            return;
-        }
+        const host = `${name}.${REGISTRAR_ZONE}`;
+        const busy = () => releasesInFlight.has(name) || claimsInFlight.has(name);
+        // Read before /holder, and read again after it (#1583 review r4176051800): a Settings claim, Settings' status read
+        // or the connector may store the name meanwhile.
+        const since = publicAddressGeneration();
+        const before = notReleasable(name);
+        if (before || busy()) { ctx.status = 409; ctx.body = { error: before || `${host} is being changed right now; nothing was released.` }; return; }
         const h = await heldByThisKey(name);
         if (!h.held) {
             ctx.status = 409;
-            ctx.body = { error: `The address service does not say this community holds ${name}.${REGISTRAR_ZONE}; nothing was released.` };
+            ctx.body = { error: `The address service does not say this community holds ${host}; nothing was released.` };
             return;
         }
-        // The stored address is not touched: nothing below writes it, nor the tunnel.
-        const since = publicAddressGeneration();
+        // From this check to the send, no await: nothing can store the name in between.
+        const after = notReleasable(name);
+        if (after || busy() || publicAddressGeneration() !== since) {
+            ctx.status = 409;
+            ctx.body = { error: after || `This community's address changed meanwhile; nothing was released. Open Settings again.` };
+            return;
+        }
+        // Turned away before the release goes out: neither the connector nor Settings' status read stores it while it is
+        // in flight, and a Settings claim of it waits (claimsInFlight/releasesInFlight).
+        noteTurnedAway(name, 'taken-offline');
+        releasesInFlight.add(name);
+        clearHolderCache();
+        const sending = releaseAddress(name);
         try {
-            const result = await releaseAddress(name);
-            if (result?.name && result.name !== name) {
-                console.warn(`[PublicAddr] asked to release "${name}", the address service answered about "${result.name}"`);
+            const result = await sending;
+            const answered = foldName(result?.name);
+            if (result?.status !== 'released' || answered !== name) {
+                // Not this name released: a registrar that ignored the name, or one that says this key has no such row.
+                const stored = (getNodeConfig() as any).publicAddress;
+                const said = answered ? `${answered}.${REGISTRAR_ZONE} ${result?.status ?? 'answered'}` : `"${result?.status ?? 'no status'}"`;
+                if (answered && stored?.name && foldName(stored.name) === answered) {
+                    console.error(`[PublicAddr] SECURITY asked to release "${name}", the address service released this community's address "${answered}"; claiming it back`);
+                    const back = await reclaimStored(stored);
+                    ctx.status = 502;
+                    ctx.body = { error: `Not released: the address service answered about ${answered}.${REGISTRAR_ZONE}, this community's address, instead. ${back ? 'It was claimed back.' : 'Claiming it back failed: claim it again in Settings.'}` };
+                    return;
+                }
+                console.warn(`[PublicAddr] asked to release "${name}", the address service answered ${said}`);
+                ctx.status = 502;
+                ctx.body = { error: `Not released: the address service did not release ${host} (it answered ${said}).` };
+                return;
             }
-            noteTurnedAway(name, 'taken-offline');
-            console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result?.status ?? 'answered'})`);
-            ctx.body = { success: true, name, status: result?.status ?? null, addressUnchanged: publicAddressGeneration() === since };
+            console.log(`[PublicAddr] the owner released "${name}", a name this community held unused (${result.status})`);
+            ctx.body = { success: true, name, status: result.status, addressUnchanged: publicAddressGeneration() === since };
         } catch (e: any) {
             ctx.status = 502;
             ctx.body = { error: `Not released: ${e?.message || 'the address service did not answer'}` };
+        } finally {
+            releasesInFlight.delete(name);
+            clearHolderCache();
         }
     });
 
@@ -481,6 +574,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             addProbeLog('1/4', `⏳ Releasing domain & deleting tunnel on Cloudflare registrar...`, 'info');
             const prevConfig = (getNodeConfig() as any).publicAddress;
             const hostname = prevConfig?.hostname;
+            clearHolderCache();
             // Named: with no name the registrar releases this key's first name, which can be another one it holds. Unnamed
             // only when nothing is stored here.
             const result = await releaseAddress(prevConfig?.name);

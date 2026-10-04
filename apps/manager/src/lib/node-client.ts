@@ -229,7 +229,10 @@ export interface NodeDataPayload {
     posts?: unknown[];
     reportCount?: number;
     escrowDisputesCount?: number;
+    /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
+    /** Of trades, only the community's totals: completed deals, their volume in Beans, cancelled. */
+    tradeTotals?: { deals: number; volume: number; cancelled: number };
     tradeVolume?: number;
     circulation?: number;
     commonsBalance?: number;

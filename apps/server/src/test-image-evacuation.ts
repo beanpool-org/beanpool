@@ -31,6 +31,8 @@
  *      and the stager carries the rows a copy names over from the standby's live copy, thousands of them in one
  *      statement: test-standby-paged-copies.ts step 7. The force-resync's clear this section and a 13th
  *      checked, which spared the named rows, is gone with it.)
+ *  13. An evacuation whose move lands in the same millisecond does not disturb updated_at (an update that
+ *      changes nothing re-fires the touch trigger).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -658,6 +660,66 @@ async function main(): Promise<void> {
     assert(!((omitExport as any).photos as any[]).some(ph => ph.post_id === kept!.post_id && ph.order_num === kept!.order_num),
         'and does not carry it, as §5 requires');
     store.put(kept!.storage_key, keptBytes, { mime: 'image/jpeg' });
+
+    // ── 13. same-millisecond watermark restore keeps updated_at (#1547) ─────────────────────────
+    // When a photo's move happens to land in the same millisecond as the row's existing updated_at watermark,
+    // restoreWatermark's UPDATE without a guard is an update that changes nothing. The schema's touch trigger
+    // (WHEN NEW.updated_at IS OLD.updated_at) fires AGAIN and stamps a later time: the photo's watermark moves,
+    // and every peer re-downloads it.
+    {
+        const sameMsPostId = crypto.randomUUID();
+        db.prepare(`
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+            VALUES (?, 'offer', 'food', 'Same-ms watermark', 'test', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
+        `).run(sameMsPostId, authorKey);
+
+        const W = '2026-03-01T12:00:00.000Z';
+        const W_plus_1 = '2026-03-01T12:00:00.001Z';
+        const sameMsPhotoBytes = makePhoto('same-ms');
+        db.prepare(`
+            INSERT INTO post_photos (post_id, order_num, photo_data, updated_at)
+            VALUES (?, 0, ?, ?)
+        `).run(sameMsPostId, dataUrl(sameMsPhotoBytes), W);
+
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS _test_evac_watermark_clock (tick INTEGER NOT NULL DEFAULT 0, w0 TEXT NOT NULL, w1 TEXT NOT NULL);
+            DELETE FROM _test_evac_watermark_clock;
+            INSERT INTO _test_evac_watermark_clock (tick, w0, w1) VALUES (0, '${W}', '${W_plus_1}');
+            DROP TRIGGER IF EXISTS post_photos_touch_updated_at;
+            CREATE TRIGGER post_photos_touch_updated_at
+            AFTER UPDATE ON post_photos
+            FOR EACH ROW
+            WHEN NEW.updated_at IS OLD.updated_at
+            BEGIN
+                UPDATE _test_evac_watermark_clock SET tick = tick + 1;
+                UPDATE post_photos
+                   SET updated_at = (SELECT CASE WHEN tick = 1 THEN w0 ELSE w1 END FROM _test_evac_watermark_clock)
+                 WHERE rowid = NEW.rowid;
+            END;
+        `);
+
+        try {
+            evacuateImagesOnce(10);
+            const row = db.prepare('SELECT updated_at, storage_key FROM post_photos WHERE post_id = ? AND order_num = 0')
+                .get(sameMsPostId) as { updated_at: string | null; storage_key: string | null } | undefined;
+            assert(typeof row?.storage_key === 'string', 'the same-millisecond test photo was evacuated to the store');
+            assert(row?.updated_at === W, `an evacuation whose move lands in the same millisecond keeps updated_at (expected ${W}, got ${row?.updated_at})`);
+        } finally {
+            db.exec('DROP TRIGGER IF EXISTS post_photos_touch_updated_at');
+            db.exec(`
+                CREATE TRIGGER IF NOT EXISTS post_photos_touch_updated_at
+                AFTER UPDATE ON post_photos
+                FOR EACH ROW
+                WHEN NEW.updated_at IS OLD.updated_at
+                BEGIN
+                    UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+                END;
+            `);
+            db.exec('DROP TABLE IF EXISTS _test_evac_watermark_clock');
+            assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='post_photos_touch_updated_at'").get(),
+                'the real post_photos_touch_updated_at trigger was restored afterwards');
+        }
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

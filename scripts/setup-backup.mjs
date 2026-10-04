@@ -95,10 +95,14 @@ function passwordNeeds2faHint(status, body) {
         '(an owner\'s automation token, read or admin scope) and the primary\'s replication token in BACKUP_REPLICATION_TOKEN.';
 }
 
-/** Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. */
+/**
+ * Upsert a set of KEY=VALUE lines into an .env file, preserving other lines. The file holds the replication
+ * token, which reads the whole ledger: it is left owner-only (0600), an existing one narrowed before it is written.
+ */
 function upsertEnv(envPath, kv) {
     let lines = [];
     if (fs.existsSync(envPath)) {
+        ownerOnly(envPath);
         lines = fs.readFileSync(envPath, 'utf8').split('\n');
     }
     const remaining = { ...kv };
@@ -119,7 +123,17 @@ function upsertEnv(envPath, kv) {
         if (out.length && out[out.length - 1].trim() !== '') out.push('');
         out.push(...appended);
     }
-    fs.writeFileSync(envPath, out.join('\n').replace(/\n{3,}/g, '\n\n'));
+    fs.writeFileSync(envPath, out.join('\n').replace(/\n{3,}/g, '\n\n'), { mode: 0o600 });
+    ownerOnly(envPath);
+}
+
+/** chmod 600, or a warning when this user may write the file but not change its mode (another owner). */
+function ownerOnly(file) {
+    try {
+        fs.chmodSync(file, 0o600);
+    } catch (e) {
+        console.warn(`  ⚠️  Could not make ${file} owner-only (${e.code || e.message}): run chmod 600 on it. It holds the replication token.`);
+    }
 }
 
 /**

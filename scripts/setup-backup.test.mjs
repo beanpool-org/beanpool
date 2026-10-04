@@ -125,3 +125,26 @@ test('with BEANPOOL_TOKEN and no replication token: it stops before anything is 
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+// The standby's .env holds the replication token, which reads the whole ledger: owner-only (0600), like
+// manager-nodes.json (#1571 review). A new one is made 0600; an existing one is set to 0600 when updated.
+for (const [label, before] of [['a new .env', null], ['an existing 0644 .env', 0o644]]) {
+    test(`${label} is left 0600 (owner only)`, async () => {
+        const primary = await standIn({ '/api/local/admin/backup-enroll': [200, JSON.stringify(ENROLL)] });
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-setup-backup-test-'));
+        const envPath = path.join(root, '.env');
+        try {
+            if (before !== null) {
+                fs.writeFileSync(envPath, 'OTHER=kept\n');
+                fs.chmodSync(envPath, before);
+            }
+            const { code, out } = await runWithToken(primary.url, root, [], { BACKUP_REPLICATION_TOKEN: REPLICATION });
+            assert.equal(code, 0, out);
+            assert.equal((fs.statSync(envPath).mode & 0o777).toString(8), '600', out);
+            if (before !== null) assert.ok(fs.readFileSync(envPath, 'utf8').includes('OTHER=kept'), 'other lines kept');
+        } finally {
+            await primary.close();
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    });
+}

@@ -52,6 +52,10 @@ Some communities have admins who know every member by name. If yours has turned 
 - An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.
 - If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid.
 
+## Frozen by the admins
+
+Your community's admins can freeze a member's credit line. If they freeze yours, the Ledger says **Your credit line is frozen**: you can't go below zero while it lasts, but you can still trade with the Beans you hold, sell and receive. Your level stays the one you earned. To ask why, or to have it opened again, ask one of the admins.
+
 ## Spending paused
 
 If you go below what your Offers allow, for example because you took an Offer down, the Ledger says **Spending paused**. You can still earn and sell. Post an Offer, or earn back up, and it lifts. Nothing is taken from you.

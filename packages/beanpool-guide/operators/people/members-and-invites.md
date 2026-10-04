@@ -98,7 +98,7 @@ Owners and admins can:
 
 - **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.
 - **Lift suspension**: ends a suspension early and closes its vote.
-- **Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.
+- **Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line, that they can still trade with the Beans they hold, and to ask an admin; their level stays the one they earned.
 - **Promote** and **Demote**: whether they can vouch for others.
 - **Grant Operator**: lets them act for enterprises they are a keeper of.
 - **Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key. See Re-Key below.

@@ -98,7 +98,7 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 ### One member's known floor
 
-An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own.
+An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line would give them.
 
 **Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
 

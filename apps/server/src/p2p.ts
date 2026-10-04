@@ -22,6 +22,7 @@ import { yamux } from '@libp2p/yamux';
 import { identify } from '@libp2p/identify';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { announceAddrsFor } from './p2p-announce.js';
 
@@ -49,7 +50,7 @@ async function loadOrCreateIdentity() {
 
         console.log('🔑 Generating new Ed25519 identity...');
         const privateKey = await generateKeyPair('Ed25519');
-        fs.writeFileSync(KEY_PATH, privateKeyToProtobuf(privateKey));
+        writeFileAtomic(KEY_PATH, privateKeyToProtobuf(privateKey));
         console.log('🔑 Identity saved to disk.');
         return privateKey;
     } catch (e) {

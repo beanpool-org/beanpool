@@ -13,6 +13,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { Libp2p } from 'libp2p';
@@ -239,7 +240,7 @@ function saveConnectors(): void {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs.writeFileSync(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
+        writeFileAtomic(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
     } catch (e) {
         console.error('[Connectors] Failed to save connectors:', e);
     }

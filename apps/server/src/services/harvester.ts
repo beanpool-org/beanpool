@@ -30,6 +30,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Readable } from 'node:stream';
@@ -180,7 +181,7 @@ export function getNodes(): FleetNodeConfig[] {
 export function saveNodes(nodes: FleetNodeConfig[]): void {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     if (fs.existsSync(NODES_FILE)) fs.chmodSync(NODES_FILE, 0o600);
-    fs.writeFileSync(NODES_FILE, JSON.stringify(nodes, null, 2), { mode: 0o600 });
+    writeFileAtomic(NODES_FILE, JSON.stringify(nodes, null, 2), { mode: 0o600 });
 }
 
 export function loadHarvestState(): Record<string, NodeHarvestState> {
@@ -194,7 +195,7 @@ export function loadHarvestState(): Record<string, NodeHarvestState> {
 
 function saveHarvestState(state: Record<string, NodeHarvestState>): void {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    writeFileAtomic(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
 function normalizeUrl(url: string): string {
@@ -723,7 +724,7 @@ async function harvesterSigner(): Promise<{ peerId: string; seed: Uint8Array }> 
     } else {
         fs.mkdirSync(DATA_DIR, { recursive: true });
         bytes = privateKeyToProtobuf(await generateKeyPair('Ed25519'));
-        fs.writeFileSync(keyPath, bytes, { mode: 0o600 });
+        writeFileAtomic(keyPath, bytes, { mode: 0o600 });
     }
     const priv = privateKeyFromProtobuf(bytes);
     if (priv.type !== 'Ed25519') throw new Error('harvester-seal.key is not an Ed25519 key');

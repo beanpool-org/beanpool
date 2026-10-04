@@ -115,3 +115,7 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-23 - Add loading indicators for EconomySection enterprises and proposals
 **Learning:** `EconomySection.tsx` fell through to "No pending proposals." while `loadingCommons` was `true`, misleading operators into thinking no proposals existed before data finished loading.
 **Action:** Render explicit loading indicators with `animate-spin` spinners when `loadingTreasuries` or `loadingCommons` is `true`.
+
+## 2026-12-05 - Add loading indicator for AutomationTokensPanel
+**Learning:** `AutomationTokensPanel.tsx` rendered "No tokens yet." when `tokens` was `null` (loading state), misleading node operators before data arrived.
+**Action:** Render an explicit loading indicator and spinner when `tokens === null && !listMessage`.

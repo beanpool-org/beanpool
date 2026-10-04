@@ -8,9 +8,13 @@
  *   node_config 'credit_cap'            the community's cap (absent = CREDIT_CAP_DEFAULT)
  *   known_floor_exceptions              an admin's exception for one member (amount, or frozen)
  *   confirmations                       the names list's confirmations (#1411); live = not revoked and not awaiting a second
+ *
+ * The trust profile reads these for every author on a board page, so each statement is compiled once per handle
+ * (statements.ts). A missing table throws at the compile, inside the same try, and nothing is kept.
  */
 import type Database from 'better-sqlite3';
 import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, knownGrantFor, type KnownFloorException } from '@beanpool/core';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -20,7 +24,7 @@ export const CREDIT_CAP_KEY = 'credit_cap';
 
 function configValue(db: Db, key: string): string | null {
     try {
-        const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string | null } | undefined;
+        const row = prepared(db, 'SELECT value FROM node_config WHERE key = ?').get(key) as { value: string | null } | undefined;
         return row?.value ?? null;
     } catch {
         return null;
@@ -59,7 +63,7 @@ export function knownFloor(db: Db): number {
 
 export function isConfirmed(db: Db, pubkey: string): boolean {
     try {
-        const row = db.prepare(
+        const row = prepared(db,
             'SELECT 1 FROM confirmations WHERE member_pubkey = ? AND revoked_at IS NULL AND (needs_second = 0 OR seconded_at IS NOT NULL) LIMIT 1',
         ).get(pubkey);
         return !!row;
@@ -70,7 +74,7 @@ export function isConfirmed(db: Db, pubkey: string): boolean {
 
 export function knownFloorException(db: Db, pubkey: string): KnownFloorException | null {
     try {
-        const row = db.prepare('SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pubkey) as
+        const row = prepared(db, 'SELECT amount, frozen FROM known_floor_exceptions WHERE member_pubkey = ?').get(pubkey) as
             { amount: number | null; frozen: number } | undefined;
         return row ? { amount: row.amount, frozen: row.frozen === 1 } : null;
     } catch {
@@ -104,7 +108,7 @@ export const KNOWN_PLEDGE_PREFIX = 'known:';
 /** The known part of a keeper's active pledges, across every enterprise (as recorded, before any shrink of G). */
 export function memberKnownPledged(db: Db, pubkey: string): number {
     try {
-        const row = db.prepare(
+        const row = prepared(db,
             "SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
         ).get(pubkey) as { total: number } | undefined;
         return Number(row?.total || 0);
@@ -116,6 +120,8 @@ export function memberKnownPledged(db: Db, pubkey: string): number {
 /** How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed). */
 function countedKnownPledged(db: Db, pubkey: string): { grant: number; pledged: number; counted: number } {
     const grant = memberKnownGrant(db, pubkey);
+    // No grant (the dial off, or not confirmed): nothing of it counts and no room is left, so the pledges aren't read.
+    if (grant === 0) return { grant, pledged: 0, counted: 0 };
     const pledged = memberKnownPledged(db, pubkey);
     return { grant, pledged, counted: Math.min(pledged, Math.floor(grant / 2)) };
 }
@@ -142,7 +148,7 @@ export function enterpriseKnownShareOf(db: Db, enterprisePubkey: string, exceptK
     if (!confirmationDialOn(db)) return 0;
     let rows: { pk: string; amount: number }[];
     try {
-        rows = db.prepare(`
+        rows = prepared(db, `
             SELECT p.keeper AS pk, SUM(p.amount) AS amount
             FROM enterprise_pledges p
             JOIN members m ON m.public_key = p.keeper

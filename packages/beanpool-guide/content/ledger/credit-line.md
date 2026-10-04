@@ -28,7 +28,7 @@ It starts at zero. It opens when you complete your first trade in the market (a 
 
 - **Trust:** completed trades build trust, especially with many different people. See "The 500-bean partner limit".
 - **Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.
-- The deepest any credit line goes is 2,000 beans.
+- The deepest any credit line goes is 2,000 beans, unless your community has set a higher cap (up to 5,000).
 
 ## Your Offers set how much you can use
 
@@ -42,6 +42,14 @@ You can only use as much of your credit line as your live Offers allow:
 - 5: −2,000.
 
 The line under the bar tells you, for example "Post an offer to open your credit line".
+
+## In a known community
+
+Some communities have admins who know every member by name. If yours has turned on **the known floor**, a member an admin has confirmed gets a credit line straight away: 1,000 Beans unless your community chose another amount. That is about 25 hours of work the community is trusting you for.
+
+- One live Offer lets you use all of it. With no Offers, you can't use it.
+- Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).
+- An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.
 
 ## Spending paused
 

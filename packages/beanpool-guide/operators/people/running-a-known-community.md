@@ -1,7 +1,7 @@
 ---
 slug: running-a-known-community
 title: Running a known community
-summary: The names list: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.
+summary: The names list and the known floor: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.
 related: members-and-invites, roles, what-the-server-sees, backups-and-replicas
 ---
 
@@ -9,7 +9,7 @@ related: members-and-invites, roles, what-the-server-sees, backups-and-replicas
 
 Some communities want their admins to know every member by name, the way a LETS committee keeps a membership list. The **names list** is that list, kept in the BeanPool app by your owners and admins. Each entry is a name and a short note ("Damo's neighbour, Left Bank Rd"). An admin can then **confirm** a member: this account is the person on that entry.
 
-A confirmation is a fact about a member, not a trust badge, and for now it changes nothing else: no credit, no limits. Later versions will build on it.
+A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line.
 
 The global community keeps no names list. Nobody there is confirmed by name.
 
@@ -72,6 +72,27 @@ The app reads and writes nothing whenever it can't check what the server says, a
 - **Two admins confirm each member**: an owner's setting at the bottom of the list, off to start with. When it is on, a confirmation waits until a second admin confirms it too: not the admin who made it, and not the member. Where nobody else could (an admin, in a community of two admins), one admin is enough.
 
 When a member is removed, or deletes their account, their confirmation ends by itself. Their entry stays on the list until an admin deletes it.
+
+## The known floor
+
+In a LETS, a member the committee knows can go into debt by an agreed amount from day one. The **known floor** is that amount here. Your owner sets it in the manager: **People & Safety → Invites & QR → The known floor**.
+
+- **The switch.** "Confirmed members get the known floor" is off in every community until an owner turns it on. While it is off, nobody's limit changes.
+- **The known floor.** 1,000 Beans to start: about 25 hours of work the community is trusting each confirmed member for. 40 Beans is an hour.
+- **The cap.** The most anyone here may owe, from every source together: the known floor, a vouch, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.
+- **One offer.** A confirmed member can use their whole known floor while they keep at least one offer listed. With none, they can't go below zero on it. Trust they earn by trading still opens up in steps as they list more offers, as it does for everyone.
+- **Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.
+- **Enterprises.** An enterprise counts half of each confirmed keeper's known floor towards its own.
+
+### One member's known floor
+
+An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own.
+
+**Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
+
+### Everyone sees the changes
+
+Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read it. A raise above the community's known floor is its own line, so other admins notice.
 
 ## The PDF copy
 

@@ -13,8 +13,9 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { RedirectRefusedError } from './credential-redirect.js';
 import {
-    type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, pronounOf, timeInWords, whyInWords,
+    type PullOutcome, type StandbyReport, type WhyCode, MAX_TABLES_NAMED, differsInWords, pronounOf, timeInWords, whyCode, whyInWords,
 } from './standby-report.js';
 
 const KEY = 'standby_copy_record';
@@ -340,23 +341,8 @@ export function whyOf(stage: 'fetch' | 'import', e: unknown): WhyCode {
         return 'import-error';
     }
     if (err?.name === 'AbortError') return 'timeout';
-    const redir = /a redirect to (.*?)\. It was not followed/.exec(msg)
-        || /a redirect to (no address|an address that is not a URL)/.exec(msg)
-        || /a redirect to ([^\s,]+)/.exec(msg);
-    if (redir) {
-        const raw = redir[1].replace(/\.+$/, '').trim();
-        try {
-            const host = new URL(raw).host;
-            return host ? `redirect:${host}` : 'redirect';
-        } catch {
-            try {
-                const host = new URL(`http://${raw}`).host;
-                return host ? `redirect:${host}` : 'redirect';
-            } catch {
-                return 'redirect';
-            }
-        }
-    }
+    // A redirect refused (credential-redirect.ts), by its type: the host it pointed at, when it is one a code can carry.
+    if (e instanceof RedirectRefusedError) return (e.host && whyCode(`redirect:${e.host}`)) || 'redirect';
     const http = /^primary returned HTTP (\d{3})$/.exec(msg);
     if (http && /^[1-5]\d\d$/.test(http[1])) return `http-${Number(http[1])}`;
     if (e instanceof SyntaxError) return 'unparseable';

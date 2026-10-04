@@ -79,7 +79,7 @@ import {
 import { errorMessage } from '../error-message.js';
 import { EXPORT_CATEGORIES, STATE_HASH_TABLES } from '@beanpool/engine';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
-import { redirectRefusal } from './credential-redirect.js';
+import { RedirectRefusedError, redirectRefusal } from './credential-redirect.js';
 
 // Said once per value, not on every 60 s pull.
 let lastProfileNote: string | null = null;
@@ -409,7 +409,7 @@ class CopyRequests {
             const refused = redirectRefusal(res, this.base + route);
             if (refused) {
                 await res.body?.cancel().catch(() => {});
-                throw new Error(refused);
+                throw refused;
             }
             // The body is read under the same timer: a copy's page that stops arriving is abandoned like one that never came.
             if (res.status === 200 && body === 'page') (res as Response & { text_?: string }).text_ = (await readUpTo(res, pageMaxBytes())).toString('utf-8');
@@ -1098,7 +1098,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
         // An object the main server answered 404 for: that answer, as the report says a copy's own 404.
         const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : e instanceof PhotoObjectNotItsPhoto ? 'http-410' : whyOf(stage, e);
-        recordQuietly(() => noteCopyFailed(stage === 'import' || whyCode === 'redirect' || whyCode.startsWith('redirect:') ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
+        recordQuietly(() => noteCopyFailed(stage === 'import' || e instanceof RedirectRefusedError ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and
         // its cursor stays where the last copy that landed put it. Nor is one whose pages all came and whose listing photos'
@@ -1696,7 +1696,7 @@ async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<
     const refused = redirectRefusal(res, url);
     if (refused) {
         await res.body?.cancel().catch(() => {});
-        throw new SwapError(`the main server at ${refused}`, true, null);
+        throw new SwapError(`the main server at ${refused.message}`, true, null);
     }
     return res;
 }

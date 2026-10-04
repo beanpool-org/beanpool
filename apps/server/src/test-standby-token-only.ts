@@ -79,6 +79,7 @@ const { createBackupRoutes } = await import('./routes/backup.js');
 const { migrateStandbyPassword, requestResync, getBackupStatus } = await import('./services/backup-puller.js');
 const { readCopyRecord, standbyReport, whyOf } = await import('./services/standby-copy-record.js');
 const { whyInWords } = await import('./services/standby-report.js');
+const { RedirectRefusedError } = await import('./services/credential-redirect.js');
 const { db } = await import('./db/db.js');
 const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
@@ -316,11 +317,16 @@ async function main() {
                 assert(readCopyRecord().lastWhy === 'network', `4b. refused connection still codes lastWhy as 'network' (got: ${readCopyRecord().lastWhy})`);
                 assert(standbyReport().why === 'network', `4b. standby report carries 'network' for refused connection (got: ${standbyReport().why})`);
 
-                // Direct tests for whyOf:
-                assert(whyOf('fetch', new Error(`http://127.0.0.1:1111 answered HTTP 302, a redirect to https://other.example/api/sync-copy. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.`)) === 'redirect:other.example',
+                // Direct tests for whyOf: a refused redirect is known by its type, never by its message's words.
+                const toOther = 'http://127.0.0.1:1111 answered HTTP 302, a redirect to https://other.example/api/sync-copy. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.';
+                assert(whyOf('fetch', new RedirectRefusedError(toOther, 'other.example')) === 'redirect:other.example',
                     "4b. whyOf codes redirect to other.example with host only");
-                assert(whyOf('fetch', new Error(`http://127.0.0.1:1111 answered HTTP 302, a redirect to no address. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.`)) === 'redirect',
+                assert(whyOf('fetch', new RedirectRefusedError('http://127.0.0.1:1111 answered HTTP 302, a redirect to no address. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.', null)) === 'redirect',
                     "4b. whyOf codes redirect to no address as 'redirect'");
+                assert(whyOf('fetch', new RedirectRefusedError(toOther, 'bad host/with "quotes"')) === 'redirect',
+                    "4b. whyOf codes a redirect whose host no code can carry as 'redirect'");
+                assert(whyOf('fetch', new Error(toOther)) === 'network',
+                    "4b. whyOf does not read a plain error's words as a redirect");
                 assert(whyOf('fetch', new TypeError('fetch failed: connect ECONNREFUSED 127.0.0.1:1234')) === 'network',
                     "4b. whyOf codes connection failure as 'network'");
                 assert(whyOf('fetch', Object.assign(new Error('timeout'), { name: 'AbortError' })) === 'timeout',

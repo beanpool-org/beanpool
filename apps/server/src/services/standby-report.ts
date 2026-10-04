@@ -40,7 +40,12 @@ export type WhyCode =
     | `http-${number}`
     | 'redirect'
     | `redirect:${string}`;
-const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d|redirect(:[a-zA-Z0-9.:_\[\]-]+)?)$/;
+const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d|redirect(:[a-zA-Z0-9.:_\[\]-]{1,260})?)$/;
+
+/** This, as a code from the list, or null when it is none. */
+export function whyCode(v: unknown): WhyCode | null {
+    return typeof v === 'string' && WHY.test(v) ? (v as WhyCode) : null;
+}
 
 /** What a whole copy found different: a copied table by name, or one of these. */
 export const LEDGER_DIFFERS = { ledger: 'ledger', commons: 'commons' } as const;

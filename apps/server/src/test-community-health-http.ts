@@ -11,6 +11,7 @@
  *   4. the owner sets the two lines (an admin can't); each change is a line in the known floor's log; the consent text
  *      follows them, and a member's consent to the old text is still theirs but a new consent needs the new one
  *   5. every opening of the exceptions writes a line; every admin and the owner reads the log; a member can't
+ *   6b. a tightened line reaches only a member who agreed to it: each is seen within the less intrusive of their lines and now
  *   7. Settings (the manager): every owner and admin reads the totals, the lines and the access log; only an owner moves the
  *      lines; the exceptions are not in it (they open on an admin's phone, where the names are)
  *   6. the consent: the terms are public before joining; a member consents to the version they were shown; a stale
@@ -257,20 +258,30 @@ async function main(): Promise<void> {
     const row = db.prepare('SELECT version, consented_at FROM known_consents WHERE member_pubkey = ?').get(una.pk) as any;
     assert(row?.version === terms2.body.version && !!row?.consented_at, 'the consent row: the text version and when');
 
+    // ── 6b. tightened lines reach only who agreed to them ────────────────────────────────────────
+    const tight = await call('POST', founder, '/api/names/health/settings', { debtLinePct: 5, quietDays: 7 });
+    assert(tight.status === 200 && tight.body?.debtLinePct === 5, `the owner tightens the line to 5% (${show(tight)})`);
+    const ex4 = await exceptions(ada);
+    const lea4 = (ex4.body?.exceptions ?? []).find((e: any) => e.memberPubkey === lea.pk);
+    assert(lea4?.reasons?.join() === 'quiet_in_debit',
+        `Leander agreed to 50%: his 100 of 1,000 is still no past-the-line exception at 5%, only quiet (${JSON.stringify(lea4)})`);
+    const neo4 = (ex4.body?.exceptions ?? []).find((e: any) => e.memberPubkey === neo.pk);
+    assert(!neo4, 'Neopolis, who agreed to 60 days, is not quiet after 7 days in debit');
+
     // ── 7. Settings (the manager) ────────────────────────────────────────────────────────────────
     console.log('── 7. Settings ──');
     const { handshakeToken } = mintHandshakeToken(ada.pk, 'admin');
     const s = consumeHandshakeToken(handshakeToken);
     const adaSession = { 'X-Admin-Session': s.sessionId! };
     const mgr = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
-    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 90 && mgr.body?.log?.length === 4
+    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 5
         && mgr.body?.exceptions === undefined, `an admin's Settings reads the totals, the lines and the access log, and no exceptions (${show(mgr)})`);
     const mgrO = await call('GET', null, '/api/local/admin/community-health', undefined, owner);
     assert(mgrO.status === 200 && mgrO.body?.known === true, `and the owner's (${show(mgrO)})`);
     const mgrSetA = await call('POST', null, '/api/local/admin/community-health', { debtLinePct: 70 }, adaSession);
     assert(mgrSetA.status === 403, `an admin can't move the lines from Settings (${show(mgrSetA)})`);
     const mgrSet = await call('POST', null, '/api/local/admin/community-health', { debtLinePct: 70 }, owner);
-    assert(mgrSet.status === 200 && mgrSet.body?.debtLinePct === 70 && mgrSet.body?.quietDays === 30, `the owner does (${show(mgrSet)})`);
+    assert(mgrSet.status === 200 && mgrSet.body?.debtLinePct === 70 && mgrSet.body?.quietDays === 7, `the owner does (${show(mgrSet)})`);
     const mgrM = await call('GET', kim, '/api/local/admin/community-health');
     assert(mgrM.status === 401 || mgrM.status === 403, `a member's signed request is refused (${show(mgrM)})`);
 

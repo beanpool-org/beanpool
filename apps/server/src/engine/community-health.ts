@@ -146,12 +146,11 @@ export function openExceptions(actor: string, now = Date.now()) {
     assertPlainTablesWritable();
     db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action) VALUES (?, ?, 'exceptions_opened')").run(crypto.randomBytes(16).toString('hex'), actor);
     const { debtLinePct, quietDays } = healthSettings();
-    const quietSince = new Date(now - quietDays * 86_400_000).toISOString();
-    const rows = db.prepare(`SELECT c.member_pubkey, c.entry_id, c.confirmed_at FROM confirmations c
+    const rows = db.prepare(`SELECT c.member_pubkey, c.entry_id, c.confirmed_at, k.version FROM confirmations c
         JOIN known_consents k ON k.member_pubkey = c.member_pubkey
         JOIN members m ON m.public_key = c.member_pubkey AND m.status = 'active'
         WHERE c.revoked_at IS NULL AND (c.needs_second = 0 OR c.seconded_at IS NOT NULL)`).all() as
-        Array<{ member_pubkey: string; entry_id: string; confirmed_at: string }>;
+        Array<{ member_pubkey: string; entry_id: string; confirmed_at: string; version: string }>;
     const lastSale = db.prepare("SELECT MAX(completed_at) AS at FROM marketplace_transactions WHERE seller_pubkey = ? AND status = 'completed'");
     const exceptions: HealthException[] = [];
     for (const r of rows) {
@@ -159,8 +158,14 @@ export function openExceptions(actor: string, now = Date.now()) {
         const b = getBalance(r.member_pubkey);
         if (!(b.balance < 0)) continue;
         const floor = Math.abs(b.floor);
+        // A member is seen only within what they agreed to AND what the community says now: the less intrusive of the
+        // two lines. An owner who tightens the lines reaches a member only once they consent to the new text.
+        const [, agreedPct, agreedDays] = r.version.split(':').map(Number);
+        const pct = Math.max(debtLinePct, Number.isInteger(agreedPct) ? agreedPct : 100);
+        const days = Math.max(quietDays, Number.isInteger(agreedDays) ? agreedDays : 3650);
+        const quietSince = new Date(now - days * 86_400_000).toISOString();
         const reasons: HealthException['reasons'] = [];
-        if (-b.balance > (floor * debtLinePct) / 100) reasons.push('past_debt_line');
+        if (-b.balance > (floor * pct) / 100) reasons.push('past_debt_line');
         const saleAt = (lastSale.get(r.member_pubkey) as { at: string | null }).at;
         // Quiet: no sale since the window opened, and confirmed before it opened (a new member has had no chance yet).
         if ((!saleAt || saleAt < quietSince) && r.confirmed_at < quietSince) reasons.push('quiet_in_debit');

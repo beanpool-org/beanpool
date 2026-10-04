@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    exceptionRows, departedRows, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, HEALTH_COPY, type HealthExceptionsBody,
+    exceptionRows, departedRows, nameFor, healthLogText, tradeLookText, readHealthTotals, totalsRows, healthLogSections, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody,
 } from '../community-health';
 
 const entries = [
@@ -80,11 +80,44 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
         expect(HEALTH_COPY.totalsMissing).toMatch(/couldn’t be read/);
     });
 
+    it('a total the node couldn’t count shows “Not known just now”, never 0 Beans (review of #1610, finding 1)', () => {
+        // The Commons pot's row holding no number: the server keeps NaN for the pot and for the circulation, and JSON sends null.
+        const wire = JSON.parse(JSON.stringify({ ...SUMMARY, totals: { ...SUMMARY.totals, commonsPot: NaN, beansInCirculation: NaN } }));
+        expect(wire.totals.commonsPot).toBeNull();
+        const t = readHealthTotals(wire);
+        expect(t).not.toBeNull();
+        expect(totalsRows(t!)).toEqual([
+            { label: 'Beans in circulation', value: 'Not known just now' },
+            { label: 'Credit held (all balances above 0)', value: '3,800 Beans' },
+            { label: 'Debt owed (all balances below 0)', value: '1,251 Beans' },
+            { label: 'Members in debit', value: '3' },
+            { label: 'Commons pot', value: 'Not known just now' },
+            { label: 'Trades this month', value: '17' },
+        ]);
+        // Any total left unknown says so, a count as much as a sum of Beans.
+        const counts = readHealthTotals({ totals: { ...SUMMARY.totals, membersInDebit: null, tradesThisMonth: null } });
+        expect(totalsRows(counts!).filter((r) => r.value === 'Not known just now').map((r) => r.label)).toEqual(['Members in debit', 'Trades this month']);
+        for (const zero of ['0', '0 Beans']) expect(totalsRows(counts!).map((r) => r.value)).not.toContain(zero);
+        // Nothing the phone can read at all is no totals, not six unknowns.
+        expect(readHealthTotals({ totals: {} })).toBeNull();
+    });
+
+    it('a node from before #1599 has no totals route: the screen says it needs an update, not “just now”', () => {
+        expect(notOnThisNode({ ok: false, status: 404, code: null })).toBe(true);
+        // Every 404 of a current node carries a code (the global node's feature_off); a lost connection is status 0.
+        expect(notOnThisNode({ ok: false, status: 404, code: 'feature_off' })).toBe(false);
+        expect(notOnThisNode({ ok: false, status: 0, code: null })).toBe(false);
+        expect(notOnThisNode({ ok: true })).toBe(false);
+        expect(HEALTH_COPY.totalsNotOnThisNode).toMatch(/needs an update/);
+    });
+
     it('two lists: the looks at a balance, and the looks at trades and alerts, each line in plain words, newest first', () => {
         const { balance, trades } = healthLogSections(LOG_ANSWER);
         expect(balance.heading).toBe('WHO LOOKED AT A MEMBER’S BALANCE');
         expect(balance.hint).toMatch(/opening of the exceptions/);
         expect(balance.hint).toMatch(/while removing them/);
+        // A vote on removing a member shows their balance to its voters, unlogged: the hint says so, so the list isn't read as complete.
+        expect(balance.hint).toMatch(/A vote on removing a member also shows their balance and any debt to everyone who can vote in it, and those looks are not in this list\./);
         expect(balance.lines.map((l) => l.key)).toEqual(['b2', 'b1']);
         expect(balance.lines[0].text).toMatch(/^@Tester opened the exceptions · /);
         expect(balance.lines[1].text).toMatch(/^@Ada saw @Kimberly's balance while removing them · /);
@@ -121,9 +154,25 @@ describe('the Community health screen: totals and the two lists (rehearsal 5 Oct
         const none = healthLogSections(null);
         expect(none.balance.lines).toEqual([]);
         expect(none.trades.lines).toEqual([]);
+        // A failed read (a timeout, a standby) never says nobody looked (review of #1610, finding 2).
+        expect(none.balance.empty).toBe('The log couldn’t be read just now.');
+        expect(none.trades.empty).toBe('The log couldn’t be read just now.');
         const some = healthLogSections({ log: [null, { id: 'x' }, LOG_ANSWER.log[0]], tradeLog: 'nope' });
         expect(some.balance.lines.map((l) => l.key)).toEqual(['b2']);
         expect(some.trades.lines).toEqual([]);
+        expect(some.trades.empty).toBe('The log couldn’t be read just now.');
+        // Lines the phone couldn't read are not "nobody" either.
+        const bad = healthLogSections({ log: [{ id: 'x' }], tradeLog: [null] });
+        expect(bad.balance.empty).toBe('The log couldn’t be read just now.');
+        expect(bad.trades.empty).toBe('The log couldn’t be read just now.');
+    });
+
+    it('a node from before #1599 has no log at all: both lists say it needs an update, never “nobody”', () => {
+        const old = healthLogSections(null, 'not_on_this_node');
+        expect(old.balance.lines).toEqual([]);
+        expect(old.balance.empty).toMatch(/doesn’t keep this log yet: it needs an update/);
+        expect(old.trades.empty).toBe(old.balance.empty);
+        for (const s of [old.balance, old.trades]) expect(s.empty).not.toMatch(/Nobody/);
     });
 
     it('a look of a kind this phone doesn’t know yet still shows who and when', () => {

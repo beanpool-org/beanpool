@@ -33,7 +33,7 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
+    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
 } from '../utils/community-health';
 import {
     NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
@@ -54,7 +54,8 @@ type Picked = { pubkey: string; callsign: string } | null;
 type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked }
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
     // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
-    | { kind: 'health'; body: HealthExceptionsBody | null; totals: HealthTotals | null; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
+    // `totalsMissing`: why there are no totals (a node from before #1599 needs an update; otherwise "just now").
+    | { kind: 'health'; body: HealthExceptionsBody | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -454,7 +455,9 @@ export default function NamesListScreen() {
             kind: 'health',
             body: ex.ok ? ex.value : null,
             totals: summary.ok ? readHealthTotals(summary.value) : null,
-            logs: healthLogSections(lines.ok ? lines.value : null),
+            totalsMissing: notOnThisNode(summary) ? HEALTH_COPY.totalsNotOnThisNode : HEALTH_COPY.totalsMissing,
+            // A log the phone couldn't read says so in both lists, never "nobody has looked".
+            logs: lines.ok ? healthLogSections(lines.value) : healthLogSections(null, notOnThisNode(lines) ? 'not_on_this_node' : 'unreadable'),
             refused: ex.ok ? null : ex.message,
         });
     };
@@ -619,7 +622,7 @@ export default function NamesListScreen() {
                             </View>
                         ))}
                     </View>
-                ) : <Text style={styles.hint}>{HEALTH_COPY.totalsMissing}</Text>}
+                ) : <Text style={styles.hint}>{mode.totalsMissing}</Text>}
                 {mode.refused ? (
                     <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
                 ) : null}

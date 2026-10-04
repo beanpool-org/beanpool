@@ -69,7 +69,8 @@ const holdsAddress = (): boolean => {
 
 /**
  * The registrar's word that a name can't be had (apps/registrar handleClaim): invalid 400, blocked or reserved 403, taken
- * 409. Any other answer (a 401 from a clock out of step, 408, 429, a page in front of the registrar) is asked again.
+ * 409, in its own JSON (registrar-client marks it `registrar`). Any other answer (a 401 from a clock out of step, 408,
+ * 429, a 400 or 403 page from a proxy or firewall in front of the registrar) is asked again.
  */
 const REFUSED = new Set([400, 403, 409]);
 
@@ -142,7 +143,7 @@ export async function reconcile(): Promise<void> {
         // registrar that did not answer, or answered anything else, leaves the request standing for the next check.
         const r = getLocalConfig().addressRequest;
         const status = Number(e?.status);
-        if (!envEnabled() && r && r.name === name && REFUSED.has(status)) {
+        if (!envEnabled() && r && r.name === name && REFUSED.has(status) && e?.registrar === true) {
             updateLocalConfig({ addressRequest: { ...r, refused: String(e?.message || `refused (${status})`).slice(0, 300) } });
         }
     }

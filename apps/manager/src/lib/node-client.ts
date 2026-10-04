@@ -2675,6 +2675,23 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
     return data as T;
 }
 
+/**
+ * The members an admin lowered or froze the known floor of (GET /api/local/admin/known-floor's exceptions), for the
+ * members list's mark. Empty with the dial off, on a node older than the known floor, or when it can't be read.
+ */
+export async function fetchKnownFloorMarks(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<Record<string, { amount: number | null; frozen: boolean }>> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/known-floor'), { headers: buildAdminHeaders(adminPassword, tfaToken) }).catch(() => null);
+    if (!res || !res.ok) return {};
+    const data = await res.json().catch(() => null) as { confirmation?: unknown; exceptions?: unknown } | null;
+    if (!data || data.confirmation !== true || !Array.isArray(data.exceptions)) return {};
+    const marks: Record<string, { amount: number | null; frozen: boolean }> = {};
+    for (const e of data.exceptions as Array<Record<string, unknown>>) {
+        if (!e || typeof e.memberPubkey !== 'string') continue;
+        marks[e.memberPubkey] = { amount: Number.isInteger(e.amount) ? e.amount as number : null, frozen: e.frozen === true };
+    }
+    return marks;
+}
+
 /** Open Decisions and removals in their grace window: the ones an admin can still halt. */
 export async function fetchAdminDecisions(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AdminDecisionItem[]> {
     const data = await postAdmin<{ decisions?: AdminDecisionItem[] }>(nodeUrl, '/api/local/admin/decisions', {}, adminPassword, tfaToken);

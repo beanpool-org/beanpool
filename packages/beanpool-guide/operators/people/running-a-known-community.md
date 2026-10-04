@@ -100,6 +100,10 @@ In a LETS, a member the committee knows can go into debt by an agreed amount fro
 
 An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own.
 
+It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
+
+A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls.
+
 **Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
 
 ### Everyone sees the changes

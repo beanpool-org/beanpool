@@ -945,6 +945,22 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
     return result;
 }
 
+/**
+ * The alerts' names-free summary (POST /api/local/admin/alerts-summary): each alert's kind and severity, the ones that
+ * name members with no member, description or Beans, and the reports' count. The node logs nothing for it, so the
+ * background flag check reads this, never the full data (review r4177560410).
+ */
+export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ flags: NodeHealthFlag[]; reportCount: number }> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/alerts-summary'), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const json = await res.json();
+    return { flags: Array.isArray(json?.flags) ? json.flags : [], reportCount: typeof json?.reportCount === 'number' ? json.reportCount : 0 };
+}
+
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/data');
     const res = await fetch(endpoint, {

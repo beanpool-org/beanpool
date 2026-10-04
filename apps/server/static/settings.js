@@ -1285,7 +1285,9 @@
         }
 
         // Community Health dashboard
-        async function loadHealthDashboard() {
+        // A reload (at sign-in, after a change) asks for the alerts' names-free summary, which logs nothing; the alerts that
+        // name members come only when the admin asks to see them, and that look is logged (review r4177560410).
+        async function loadHealthDashboard(namedAlerts = false) {
             try {
                 // The admin route, not the public one: GET /api/community/health deliberately
                 // omits `flags` (fraud analysis + member public keys) because it answers
@@ -1294,7 +1296,7 @@
                 const res = await fetch('/api/local/admin/health', {
                     method: 'POST',
                     headers: adminHeaders({ 'Content-Type': 'application/json' }),
-                    body: '{}'
+                    body: namedAlerts === true ? '{}' : JSON.stringify({ alerts: 'summary' })
                 });
                 if (!res.ok) return;
                 const h = await res.json();
@@ -1340,7 +1342,9 @@
                         const bgColor = f.severity === 'alert' ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)';
                         const labelColor = f.severity === 'alert' ? '#ef4444' : '#f59e0b';
                         return `<div style="border:1px solid ${borderColor};background:${bgColor};border-radius:10px;padding:0.75rem;margin-bottom:0.5rem;"><div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.2rem;"><span>${icon}</span><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:${labelColor};">${esc(f.type.replace(/_/g, ' '))}</span></div><div style="font-size:0.8rem;color:#cbd5e1;">${esc(f.description)}</div></div>`;
-                    }).join('');
+                    }).join('') + (healthFlags.some(f => f.namesHidden) ? '<button type="button" class="show-named-alerts" style="margin-top:0.5rem;font-size:0.75rem;padding:0.35rem 0.75rem;border:1px solid #334155;border-radius:6px;background:transparent;color:#cbd5e1;cursor:pointer;">Show who the alerts name (this look is logged)</button>' : '');
+                    const showBtn = fEl.querySelector('.show-named-alerts');
+                    if (showBtn) showBtn.addEventListener('click', () => loadHealthDashboard(true));
                 }
             } catch { /* offline */ }
         }
@@ -1859,13 +1863,15 @@
             } catch { /* ignore */ }
         }
 
-        async function loadAdminData() {
+        // A reload (a tab switch, after a moderation action) asks for the alerts' names-free summary, which logs nothing;
+        // the alerts that name members come only when the admin asks to see them, and that look is logged (r4177560410).
+        async function loadAdminData(namedAlerts = false) {
             if (!authToken) return;
             try {
                 const res = await fetch('/api/local/admin/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: authToken })
+                    body: JSON.stringify(namedAlerts === true ? { password: authToken } : { password: authToken, alerts: 'summary' })
                 });
                 if (!res.ok) return;
                 adminDataCache = await res.json();
@@ -2066,7 +2072,9 @@
                         <div style="font-size:0.7rem;color:#64748b;margin-top:0.15rem;">${esc(f.members.join(', '))}</div>
                     </div>
                 </div>
-            `).join('');
+            `).join('') + (flags.some(f => f.namesHidden) ? '<button type="button" class="show-named-alerts" style="margin-top:0.5rem;font-size:0.75rem;padding:0.35rem 0.75rem;border:1px solid #334155;border-radius:6px;background:transparent;color:#cbd5e1;cursor:pointer;">Show who the alerts name (this look is logged)</button>' : '');
+            const showBtn = el.querySelector('.show-named-alerts');
+            if (showBtn) showBtn.addEventListener('click', () => loadAdminData(true));
         }
 
         function renderAdminPosts() {

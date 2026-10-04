@@ -15,6 +15,7 @@ import {
     fetchGatewayConfig,
     updateGatewayConfig,
     fetchNodeData,
+    fetchAlertsSummary,
     fetchNodeLogs,
     freezeNodeUser,
     pruneNodeUser,
@@ -597,6 +598,15 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             dataInFlightRef.current[p.id] = true;
             (async () => {
                 try {
+                    // The five-minute tick is no admin's look at the alerts (review r4177560410): it asks for their
+                    // names-free summary, which the node doesn't log, and keeps the rest of the last data in hand.
+                    // A Refresh pressed by the operator still reads the full data, alerts and names, logged.
+                    if (!manual) {
+                        const summary = await fetchAlertsSummary(p.url, nodeCredential(p), getTfaSessionToken(p.id));
+                        const prev = fleetNodeDataRef.current[p.id];
+                        applyHealthFromData(p.id, { ...(prev ?? {}), health: { ...(prev?.health ?? {}), flags: summary.flags } } as NodeDataPayload);
+                        return;
+                    }
                     const nData = await fetchNodeData(p.url, nodeCredential(p), getTfaSessionToken(p.id));
                     setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
                     applyHealthFromData(p.id, nData);

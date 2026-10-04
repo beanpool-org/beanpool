@@ -77,12 +77,16 @@ export function sweepExpiredDebts(now = Date.now()): number {
 }
 
 /**
- * A payment to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open. Inside the
- * payment's conservingTransaction, so the link and the payment are written together or not at all.
+ * A payment of `beans` to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open,
+ * and the payment no more than is left on it. A pay-back link carries what was left when an admin shared it, and a
+ * work-off may have lowered it since: the node says the true amount, so nobody pays the Commons more than they owe.
+ * Before the payment's conservingTransaction (a refusal is no ledger rebuild); the link is written inside it.
  */
-export function assertPayableDebt(debtId: unknown): string {
+export function assertPayableDebt(debtId: unknown, beans: number): string {
     const row = debtRow(debtId);
     requireOpen(row);
+    const left = round2(row.amount - row.repaid);
+    if (beans > left) throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
     return row.id;
 }
 

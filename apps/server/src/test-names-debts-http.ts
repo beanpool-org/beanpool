@@ -593,6 +593,49 @@ async function main(): Promise<void> {
         `a new ticket bound to the entry confirms its joiner (${show(kit3Joins)}; ${JSON.stringify(usedBy(kit3))})`);
     assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
 
+    // ── 15. a stale pay-back link; paying all one holds ────────────────────────────────────────
+    console.log('── 15. a stale pay-back link meets what is left; all one holds, to the cent ──');
+    const louEntry = makeEntry();
+    const louOld = await debtor('Lou', 300, louEntry);
+    await call('POST', louOld, '/api/member/purge', { action: 'purge_account' });
+    const louDebt = debtsOf(louEntry)[0];
+    const lou = makeMember('Lou again');
+    const louWork = await call('POST', ada, `/api/names/debts/${louDebt?.id}/work-off`, { memberPubkey: lou.pk });
+    transfer('genesis', lou.pk, 100, 'Lou digs a drain', 'direct', true);
+    const louRevoke = await call('POST', ada, `/api/names/confirmations/${louWork.body?.id}/revoke`);
+    transfer('genesis', lou.pk, 560, 'Lou is paid for a season', 'direct', true);
+    const louWhy = await call('GET', lou, '/api/commons/repayment');
+    assert(louWork.status === 201 && louRevoke.status === 200 && debtsOf(louEntry)[0].repaid === 100 && balanceRow(lou) === 560 && louWhy.body?.repayment === null,
+        `setup: a 300-Bean debt shared as a link, then 100 worked off and the work-off ended; Lou holds 560 and his app can't see the debt (${JSON.stringify(debtsOf(louEntry)[0])}; ${show(louWhy)})`);
+    const louCommons = getCommonsBalanceExact();
+    const staleId = hex(16);
+    const stale = await call('POST', lou, '/api/commons/pay', { amount: 300, debtId: louDebt.id, requestId: staleId });
+    assert(stale.status === 409 && /^Only 200 Beans are left on that debt\./.test(stale.body?.error ?? '') && balanceRow(lou) === 560 && getCommonsBalanceExact() === louCommons,
+        `the link's 300 is refused in plain words with the true 200 left, and nothing moves (${show(stale)}; ${balanceRow(lou)})`);
+    const staleRow = db.prepare('SELECT 1 FROM money_requests WHERE payer_pubkey = ? AND request_id = ?').get(lou.pk, staleId);
+    const staleAgain = await call('POST', lou, '/api/commons/pay', { amount: 300, debtId: louDebt.id, requestId: staleId });
+    assert(!staleRow && staleAgain.status === 409 && staleAgain.body?.error === stale.body?.error && balanceRow(lou) === 560,
+        `a refusal records nothing: the same id sent again is refused again, in the same words (${show(staleAgain)})`);
+    const linkCount = () => (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(louDebt.id) as any).n as number;
+    assert(linkCount() === 0, 'and no payment is linked to the debt');
+    const louPays = await call('POST', lou, '/api/commons/pay', { amount: 200, debtId: louDebt.id, requestId: hex(16) });
+    const louSettled = await call('POST', ada, `/api/names/debts/${louDebt.id}/settle`, { transactionId: louPays.body?.transactionId });
+    assert(louPays.status === 200 && balanceRow(lou) === 360 && louSettled.status === 200 && louSettled.body?.settled_how === 'pay_back' && debtsOf(louEntry)[0].status === 'settled',
+        `200, what is left, is paid and settles the debt: Lou keeps 360 (${show(louPays)}; ${show(louSettled)})`);
+    // Decay leaves fractions of a cent, and getBalance rounds: Ivy holds 4.996, shown as 5. The check before the
+    // transaction tests what ledger.moveToCommons tests inside it, so 5 is refused there, in plain words.
+    const ivy = makeMember('Ivy');
+    db.prepare('UPDATE accounts SET balance = 4.996 WHERE public_key = ?').run(ivy.pk);
+    db.prepare("UPDATE accounts SET balance = balance - 4.996 WHERE public_key = 'genesis'").run();
+    initStateEngine();
+    const ivyShown = await call('GET', ivy, `/api/ledger/balance/${ivy.pk}`);
+    const ivyAll = await call('POST', ivy, '/api/commons/pay', { amount: 5 });
+    assert(ivyAll.status === 409 && ivyAll.body?.error === 'You hold 4.99 Beans: you can pay the Commons only what you hold.',
+        `holding 4.996 (shown as ${ivyShown.body?.balance}), paying 5 is refused before the transaction, saying 4.99 (${show(ivyAll)})`);
+    const ivyHeld = await call('POST', ivy, '/api/commons/pay', { amount: 4.99 });
+    assert(ivyHeld.status === 200 && r2(balanceRow(ivy)) === 0.01, `4.99 is paid (${show(ivyHeld)}; ${balanceRow(ivy)})`);
+    assert(nodeTotal() === total, `every Bean is still counted (${nodeTotal()})`);
+
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────
     console.log('── 7. the 3-year sweep ──');
     const count = () => (db.prepare('SELECT COUNT(*) n FROM names_debts').get() as any).n as number;

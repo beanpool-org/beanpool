@@ -5071,9 +5071,14 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;
-    const { balance } = getBalance(memberPubkey);
-    if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
-    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);
+    // The same test as ledger.moveToCommons's guard inside the transaction, on the raw balance (decay leaves fractions of a
+    // cent; getBalance's is rounded): a refusal is here, in plain words, never a rollback and a ledger rebuild.
+    const raw = ledger.getAccount(memberPubkey).balance;
+    if (raw - beans < 0) {
+        const held = Math.max(0, Math.floor(raw * 100) / 100);
+        throw Object.assign(new Error(`You hold ${held} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+    }
     const answer = conservingTransaction(() => {
         const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });

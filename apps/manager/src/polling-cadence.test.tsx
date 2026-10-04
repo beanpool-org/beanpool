@@ -422,8 +422,9 @@ describe('Node Settings polling cadence', () => {
 
         await tick(60_000);
 
-        // Tried again well inside the five minutes...
-        expect(countOf(SUMMARY)).toBeGreaterThanOrEqual(1);
+        // Tried again well inside the five minutes, and again after that: the first try comes from the startup read's
+        // own wind-back, so only a second one shows the tick's catch winding the stamp back (confirmation 2, r4177813547)...
+        expect(countOf(SUMMARY)).toBeGreaterThanOrEqual(2);
         // ...but backed off to roughly every thirty seconds rather than riding the 5-second tick,
         // which is the bandwidth bug this PR exists to fix.
         expect(countOf(SUMMARY)).toBeLessThanOrEqual(3);
@@ -434,8 +435,8 @@ describe('Node Settings polling cadence', () => {
         // overwrite the screen they are now looking at: the sidebar copies are keyed by node id
         // and stay correct either way, but `nodeData` belongs to whichever node is on screen now.
         //
-        // The five-minute tick no longer fetches the payload (it reads the alerts' summary, review r4177560410), so
-        // the payload held here is the one the startup refresh asks for while Node 0 is on screen.
+        // The payload held here is the one the startup refresh asks for while Node 0 is on screen, through
+        // `loadNodeData`. The fleet Refresh's full read, through `diagSuccess`, is the next test.
         localStorage.setItem('bp_fleet_active_tab', 'members');
         seedProfiles('https://localhost:8443', 'https://other.example.org');
         holds = [['localhost:8443', DATA]];
@@ -458,6 +459,49 @@ describe('Node Settings polling cadence', () => {
         expect(screen.getAllByText('Bravo Member').length).toBeGreaterThan(0);
 
         // Node 0's payload finally lands, long after Node 0 stopped being the node on screen.
+        await release('localhost:8443', {
+            success: true,
+            health: { flags: [] },
+            reports: [],
+            members: [{ publicKey: 'aaaa', name: 'Alfa Member', standing: 'Newcomer' }],
+        });
+
+        expect(screen.queryByText('Alfa Member')).toBeNull();
+        expect(screen.getAllByText('Bravo Member').length).toBeGreaterThan(0);
+    });
+
+    it("never paints a fleet Refresh's payload that arrived after the operator switched node", async () => {
+        // The five-minute tick reads the alerts' summary now (review r4177560410), so the one full read left in
+        // `diagSuccess` is a fleet Refresh of the node on screen (confirmation 2, r4177813417). The operator presses
+        // Refresh on Node 0 and selects Node 1 before Node 0's ~4 MB payload lands.
+        seedProfiles('https://localhost:8443', 'https://other.example.org');
+        await act(async () => {
+            render(<App isFleetMode={true} />);
+        });
+        await tick(30_000);
+
+        holds = [['localhost:8443', DATA]];
+        calls = [];
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /Refresh Fleet Telemetry/i }));
+        });
+        await tick(2_000);
+        // The fleet Refresh calls no `loadNodeData`, so the one payload held is the full read in `diagSuccess`.
+        expect(held.filter((h) => h.href.includes('localhost:8443')).length).toBe(1);
+
+        dataPayload = {
+            success: true,
+            health: { flags: [] },
+            reports: [],
+            members: [{ publicKey: 'bbbb', name: 'Bravo Member', standing: 'Newcomer' }],
+        };
+        // Node 1's card on the overview puts Node 1 on screen, on its members tab.
+        await act(async () => {
+            fireEvent.click(screen.getByRole('heading', { level: 4, name: 'Node 1' }));
+        });
+        await tick(2_000);
+        expect(screen.getAllByText('Bravo Member').length).toBeGreaterThan(0);
+
         await release('localhost:8443', {
             success: true,
             health: { flags: [] },

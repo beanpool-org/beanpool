@@ -43,7 +43,8 @@ export const QUIET_DAYS_DEFAULT = 60;
  * (reviews r4177560405, r4177560417; wording 5 unreleased, so no bump): every member, admins included, sees each
  * member's trust profile (POST /api/trust/profile: finished and cancelled trades, the share finished, how many
  * different members, the trades with the viewer, Trust Points), unlogged, as Marty decided on 2026-09-29; and the
- * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look like the disputes.
+ * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look of its own
+ * (stranded_escrows_read).
  */
 export const CONSENT_WORDING_VERSION = 5;
 

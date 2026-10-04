@@ -683,11 +683,12 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
 
             // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
             // admin log's line reads only its first bytes, for its type, and only while someone is watching the log.
+            // A member's socket only, as on the way out: a frame a log socket sent made a line on every other log socket.
             const bytes: Buffer = Buffer.isBuffer(data) ? data
                 : typeof data === 'string' ? Buffer.from(data)
                     : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
             let watching = false;
-            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
                 const trafficPayload = wsTrafficLine(id, 'in', bytes.length, bytes.subarray(0, FRAME_TYPE_PROBE).toString('utf8'));
                 for (const client of logClients) {
@@ -885,7 +886,8 @@ export const LOG_SOCKET_SIGNIN_ENDED = 4401;
 
 /**
  * Closes every /ws/logs socket whose session has ended: logged out, signed out everywhere (session_epoch bumped), timed
- * out, its member no longer an admin, or (a password session) the password or its 2FA changed. Run when a session ends
+ * out, its member no longer an admin, or (a password session, or the password itself with no session) the password or
+ * its 2FA changed or break-glass turned on. Run when a session ends
  * (onAdminSessionsEnded) and every LOG_SESSION_SWEEP_MS for the ends nothing announces (a role taken away, a password
  * changed). At most maxLogSockets sockets, so the sweep is a handful of reads.
  */
@@ -989,7 +991,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
-                // The session it was opened under, closed with it (closeEndedLogSockets); null for the password itself.
+                // The session it was opened under (or the password and 2FA, with none), closed with it (closeEndedLogSockets).
                 ws._adminSession = redeemed.binding;
 
                 addLogClient(ws);

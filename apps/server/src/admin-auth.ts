@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, type AdminSessionBinding } from './admin-key-auth.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
 import { isBreakGlassCodeShape } from './break-glass-code.js';
@@ -762,10 +762,11 @@ export function revokeCsrfTokensBoundTo(binding: string): void {
 // Prevents transmitting raw admin passwords in URL query parameters.
 // A ticket asked for by a session (the admin_session cookie) is bound to it: redeemed only while that session is live
 // at the same session_epoch, and the log socket it opens is closed when the session ends (https-server.ts). One asked
-// for with the password itself (no session) is bound to nothing: the caller presents the credential on each request,
-// and there is no sign-in to end.
+// for with the password itself (no session) is bound to that password and its second factor: redeemed, and its socket
+// kept open, only while both are still in force and break-glass is off, so turning 2FA off, break-glass on, or
+// changing the password (what an owner does about a leaked password) ends the stream opened with it.
 const WS_TICKET_TTL_MS = 30_000; // 30 seconds
-const wsTickets = new Map<string, { expiry: number; binding: AdminSessionBinding | null }>();
+const wsTickets = new Map<string, { expiry: number; binding: AdminSessionBinding }>();
 
 // Periodic background cleanup for expired WebSocket tickets
 if (typeof setInterval !== 'undefined') {
@@ -778,10 +779,13 @@ if (typeof setInterval !== 'undefined') {
     if (wsCleanupTimer.unref) wsCleanupTimer.unref();
 }
 
-/** A ticket for the session `sessionId` (ctx.state.adminSessionId), or for no session; null if that session has ended. */
+/**
+ * A ticket for the session `sessionId` (ctx.state.adminSessionId), or for the password in force now (no session); null
+ * if that session has ended, or (no session) in break-glass mode.
+ */
 export function issueWsTicket(sessionId?: string | null): string | null {
-    const binding = sessionId ? adminSessionBinding(sessionId) : null;
-    if (sessionId && !binding) return null;
+    const binding = sessionId ? adminSessionBinding(sessionId) : passwordCredentialBinding();
+    if (!binding) return null;
     const ticket = crypto.randomBytes(32).toString('hex');
     wsTickets.set(ticket, { expiry: Date.now() + WS_TICKET_TTL_MS, binding });
     const now = Date.now();
@@ -792,15 +796,16 @@ export function issueWsTicket(sessionId?: string | null): string | null {
 }
 
 /**
- * Spends a ticket: what it is bound to (`binding` null for a ticket asked for with the password itself), or null if it
- * is unknown, spent, expired, or its session has ended or been signed out everywhere since it was issued.
+ * Spends a ticket: what it is bound to, or null if it is unknown, spent, expired, or its session has ended or been
+ * signed out everywhere since it was issued (or, asked for with the password itself, the password or its 2FA has
+ * changed or break-glass is on).
  */
-export function redeemWsTicket(ticket: string): { binding: AdminSessionBinding | null } | null {
+export function redeemWsTicket(ticket: string): { binding: AdminSessionBinding } | null {
     const entry = wsTickets.get(ticket);
     if (!entry) return null;
     wsTickets.delete(ticket); // Single-use: consume immediately
     if (Date.now() > entry.expiry) return null;
-    if (entry.binding && !adminSessionBindingLive(entry.binding)) return null;
+    if (!adminSessionBindingLive(entry.binding)) return null;
     return { binding: entry.binding };
 }
 

@@ -1103,6 +1103,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }

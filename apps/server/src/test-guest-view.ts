@@ -1342,6 +1342,7 @@ async function main(): Promise<void> {
             'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/send',
             'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
             'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
+            'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
             'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
             'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',

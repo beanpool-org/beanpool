@@ -59,18 +59,21 @@ export function KnownConsentCard() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {offer && (
                     <button type="button" onClick={() => { void agree(); }} disabled={busy} aria-busy={busy}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: 'none', background: '#10b981', color: '#fff', fontWeight: 700 }}>
                         {busy ? 'Saving…' : 'I agree'}
                     </button>
                 )}
                 {agreed && (
                     <button type="button" onClick={() => { void withdraw(); }} disabled={busy} aria-busy={busy} data-testid="known-consent-withdraw"
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)' }}>
                         {busy ? 'Saving…' : 'Withdraw'}
                     </button>
                 )}
                 {offer && !agreed && (
                     <button type="button" onClick={() => setHidden(true)}
+                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         style={{ ...button, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-primary)' }}>
                         Not now
                     </button>

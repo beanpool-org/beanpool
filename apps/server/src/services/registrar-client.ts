@@ -139,7 +139,7 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
     return both.sort((a, b) => protoVersion(b) - protoVersion(a))[0] ?? null;
 }
 
-async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any }> {
+async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
     const headers = await signRequest(method, path, bodyText, proto);
     if (bodyText) headers['content-type'] = 'application/json';
     const controller = new AbortController();
@@ -148,8 +148,10 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
         const baseUrl = getRegistrarUrl();
         const res = await fetch(`${baseUrl}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
         clearTimeout(timer);
-        const data = await res.json().catch(() => ({} as any));
-        return { ok: res.ok, status: res.status, data };
+        // `json`: the body was a JSON object, sent as JSON. Anything else (an HTML page) reads as {}.
+        const parsed = /\bjson\b/i.test(res.headers.get('content-type') || '') ? await res.json().catch(() => undefined) : undefined;
+        const json = !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+        return { ok: res.ok, status: res.status, data: json ? parsed : {}, json };
     } catch (err: any) {
         clearTimeout(timer);
         if (err.name === 'AbortError') throw new Error('Registrar request timed out after 5s');
@@ -159,7 +161,7 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
 
 // A signed request, retried once under a protocol both sides speak after a 401 that lists them. Its answer as it came,
 // whatever its status; throws only when nothing answered (a timeout, a network error).
-async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any }> {
+async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
     const bodyText = body ? JSON.stringify(body) : '';
     let res = await sendSigned(method, path, bodyText, SEND_PROTO);
     const retry = res.status === 401 ? retryProto(SEND_PROTO, res.data?.accepted_proto, Object.keys(PROTOCOLS) as Proto[]) : null;
@@ -177,8 +179,11 @@ async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Pr
     if (!res.ok) {
         const why = data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`);
         // `ref`: where the address service logged what went wrong (it no longer sends Cloudflare's answer to a node).
-        // `status`: the registrar answered and refused (a 4xx is its word, a name taken or not allowed); no status, nothing answered.
-        throw Object.assign(new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why), { status: res.status });
+        // `status`: something answered with it; no status, nothing answered. `registrar`: the answer is the registrar's own
+        // JSON (an `error` string), so a 4xx is its word (a name taken or not allowed). A page from something in front of it
+        // (a proxy's 400, a firewall's 403) is not, though it carries the same status.
+        const registrar = res.json && typeof data.error === 'string';
+        throw Object.assign(new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why), { status: res.status, registrar });
     }
     return data;
 }

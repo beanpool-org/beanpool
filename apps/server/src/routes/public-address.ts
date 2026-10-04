@@ -11,7 +11,7 @@ import Router from '@koa/router';
 import http from 'node:http';
 import { buildAttestation, claimAddress, updateAddressMetadata, addressStatus, releaseAddress, rotateAddress, nodePubkeyHex } from '../services/registrar-client.js';
 import { syncTunnel, restartTunnel, persistAddress, getTunnelStatus, dockerSocketMounted, LOOPBACK_ORIGIN, type TunnelStatus } from '../services/tunnel-connector.js';
-import { getNodeConfig, getNodeRole, updateNodeConfig } from '../state-engine.js';
+import { getNodeConfig, getNodeRole, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
 import { dropAddressRequest } from '../services/public-address-agent.js';
 import { requireAdminRole } from '../admin-auth.js';
@@ -186,7 +186,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
                 name, mode, hostname: result.hostname, status: result.status, tunnelToken: result.tunnelToken, communityName, contact: b.contact,
                 ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}),
             } } as any);
-            dropAddressRequest();   // the owner's choice ends what `beanpool claim` asked for at install
+            dropAddressRequest(`the owner claimed "${name}" in Settings`);   // the owner's choice ends what `beanpool claim` asked for at install
             if (result.tunnelToken) addProbeLog('2/4', `⚡ Starting the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             if (result.tunnelToken) {
@@ -238,8 +238,15 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             };
         }
 
+        // An answer that comes after the address was written another way (a claim or Take offline in another tab, the
+        // agent) is shown, never stored over the newer write.
+        const since = publicAddressGeneration();
         try {
             const result = await addressStatus();
+            if (result.status === 'live' && publicAddressGeneration() !== since) {
+                ctx.body = { success: true, pubkey: nodePubkeyHex(), ...addressFields(ctx, result), ...serverSide() };
+                return;
+            }
             if (result.status === 'live') {
                 recordRegistrarAnswer(result, 'stored');
                 const prev = (getNodeConfig() as any).publicAddress || {};
@@ -362,7 +369,7 @@ export function createPublicAddressRoutes(deps: RouteDeps): Router {
             // Recorded before the stored address goes.
             recordRegistrarAnswer(result, 'released');
             updateNodeConfig({ publicAddress: null } as any);
-            dropAddressRequest();   // a release never brings back the name asked for at install
+            dropAddressRequest('the owner took the address offline in Settings');   // a release never brings back the name asked for at install
             addProbeLog('2/4', `⏳ Stopping the tunnel inside this server...`, 'info');
             const tunnel = await syncTunnel();
             addProbeLog('3/4', tunnel.state === 'off' ? `✅ Tunnel stopped` : `❌ Tunnel still ${describeTunnel(tunnel)}`, tunnel.state === 'off' ? 'success' : 'error');

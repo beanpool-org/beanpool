@@ -134,8 +134,13 @@ async function startRegistrar(): Promise<http.Server> {
             const p = new URL(req.url || '/', 'http://registrar').pathname;
             const body = text ? JSON.parse(text) : null;
             reg.calls.push({ method: req.method || '', path: p, body });
-            // An answer, or [HTTP status, body] for one that refuses.
-            const answer = (out: any) => Array.isArray(out) ? send(out[0], out[1]) : send(200, out);
+            // An answer, [HTTP status, body] for one that refuses, { html: [status, page] } for a page from something in front
+            // of the registrar, or a promise of one (an answer held back).
+            const answer = (out: any): void => void Promise.resolve(out).then((o) => {
+                if (o?.html) { res.writeHead(o.html[0], { 'Content-Type': 'text/html' }); return void res.end(o.html[1]); }
+                if (Array.isArray(o)) send(o[0], o[1]);
+                else send(200, o);
+            });
             if (p === '/api/registrar/status') return answer(reg.status());
             if (p === '/api/registrar/claim') return answer(reg.claim(body));
             if (p === '/api/registrar/offline') return send(200, reg.offline());
@@ -560,6 +565,11 @@ async function main(): Promise<void> {
         await section('13. a request from beanpool claim ends once this server holds any address, however it got it', async () => {
             const post = settingsPost!;
             const request = (name: string) => updateLocalConfig({ addressRequest: { name, mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            // The log line says what ended the request.
+            const said: string[] = [];
+            const log = console.log;
+            console.log = (...a: unknown[]) => { said.push(a.map(String).join(' ')); log(...a); };
+            const ended = () => said.filter((l) => l.includes("beanpool claim's request for \"install-name\" ends")).at(-1) || '';
             reg.status = () => ({ status: 'none' });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
             // The registrar did not answer during the install, so the request stood; the owner then set a name in Settings.
@@ -567,14 +577,18 @@ async function main(): Promise<void> {
             const set = await post('/api/local/admin/public-address/claim', { name: 'gamma', mode: 'tunnel' });
             assert(set.status === 200 && pa()?.name === 'gamma', `Settings claimed gamma (${set.status})`);
             assert(getLocalConfig().addressRequest == null, `the Settings claim ends the request (${JSON.stringify(getLocalConfig().addressRequest)})`);
+            assert(/the owner claimed "gamma" in Settings/.test(ended()), `and says so (${ended()})`);
             // An address saved any other way (this agent, a take-over): the 2 s tick ends it.
             request('install-name');
             await checkAddressRequest(Date.now());
             assert(getLocalConfig().addressRequest == null, 'the 2 s tick ends a request while any address is held');
+            assert(/this server holds "gamma" now/.test(ended()) && !/Settings/.test(ended()), `and says what is held, not "Settings" (${ended()})`);
             request('install-name');
             const off = await post('/api/local/admin/public-address/offline');
             assert(off.status === 200 && pa() === null, `Take offline released gamma (${off.status})`);
             assert(getLocalConfig().addressRequest == null, 'Take offline ends a standing request too');
+            assert(/the owner took the address offline in Settings/.test(ended()), `and says so (${ended()})`);
+            console.log = log;
             const before = claims().length;
             await checkAddressRequest(Date.now() + 60_000);
             await reconcile();
@@ -616,6 +630,73 @@ async function main(): Promise<void> {
             await checkAddressRequest(t1 + 1_000_000);
             await reconcile();
             assert(claims().length === n + 1, 'and never asked for again');
+            updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('15. the agent\'s claim answered after the owner set a name in Settings: the owner\'s name stays', async () => {
+            const post = settingsPost!;
+            reg.status = () => ({ status: 'none' });
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
+            // The registrar holds back its answer to the install's name until the owner has claimed theirs.
+            let answerAgent: () => void = () => {};
+            reg.claim = (b) => b.name !== 'install-race' ? live(b.name, `eyJ.token-${b.name}`)
+                : new Promise((r) => { answerAgent = () => r(live(b.name, 'eyJ.token-install-race')); });
+            const t2 = Date.now() + 20_000_000;
+            const off0 = offlines();
+            writeAddressRequestFile(DATA!, { name: 'install-race', contact: null, at: t2 });
+            const agent = checkAddressRequest(t2);
+            assert(await until(() => claims().some((c) => c.body?.name === 'install-race')), 'the agent asked for the install\'s name');
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick', `Settings claimed owner-pick while the agent waited (${set.status})`);
+            answerAgent();
+            await agent;
+            assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick',
+                `the agent's late answer does not move the community off the owner's name (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick', 'the tunnel still runs the owner\'s name');
+            assert(getLocalConfig().addressRequest == null, 'the request stays ended');
+            assert(offlines() === off0, 'nothing is released: the owner\'s name is never touched');
+            // The 5-min tick's own claim (not under the 2 s check) is held to the same rule.
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            updateLocalConfig({ addressRequest: { name: 'install-race', mode: 'tunnel', contact: null, requestedAt: t2, refused: null } });
+            const n = claims().length;
+            const tick = reconcile();
+            assert(await until(() => claims().length > n), 'the tick asked for the install\'s name');
+            const set2 = await post('/api/local/admin/public-address/claim', { name: 'owner-two', mode: 'tunnel' });
+            assert(set2.status === 200 && pa()?.name === 'owner-two', `Settings claimed owner-two while the tick waited (${set2.status})`);
+            answerAgent();
+            await tick;
+            assert(pa()?.name === 'owner-two', `nor does the tick's late answer (${pa()?.name})`);
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it for the next section (${off.status})`);
+        });
+
+        await section('16. a 400 or 403 page from something in front of the registrar is no refusal: the request stands', async () => {
+            reg.status = () => ({ status: 'none' });
+            const refused = () => getLocalConfig().addressRequest?.refused;
+            const t3 = Date.now() + 30_000_000;
+            const page = (code: number, title: string) => ({ html: [code, `<!DOCTYPE html><html><head><title>${title}</title></head><body>no</body></html>`] });
+            reg.claim = () => page(403, 'Attention Required! | Cloudflare');
+            writeAddressRequestFile(DATA!, { name: 'behind-proxy', contact: null, at: t3 });
+            await checkAddressRequest(t3);
+            assert(getLocalConfig().addressRequest?.name === 'behind-proxy' && !refused(), `a firewall's 403 page: the request stands (${refused()})`);
+            reg.claim = () => page(400, '400 Bad Request');
+            await checkAddressRequest(t3 + 11_000);
+            assert(!refused(), `nor a proxy's 400 page (${refused()})`);
+            const n = claims().length;
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            await checkAddressRequest(t3 + 42_000);
+            assert(claims().length === n + 1 && pa()?.name === 'behind-proxy' && getLocalConfig().addressRequest == null,
+                `asked again on the back-off, and claimed once the registrar answers (${pa()?.name})`);
+            const off = await settingsPost!('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it (${off.status})`);
+            // The registrar's own JSON 403 (a reserved name) still ends a request.
+            reg.claim = () => [403, { error: 'name reserved' }];
+            writeAddressRequestFile(DATA!, { name: 'reserved-one', contact: null, at: t3 + 1_000_000 });
+            await checkAddressRequest(t3 + 1_000_000);
+            assert(/name reserved/.test(refused() || ''), `the registrar's own JSON 403 is its word: refused (${refused()})`);
             updateLocalConfig({ addressRequest: null });
             reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
         });

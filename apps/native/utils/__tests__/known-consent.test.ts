@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readKnownConsent, shouldOfferConsent, consentHeading } from '../known-consent';
+import { readKnownConsent, shouldOfferConsent, consentHeading, readConsentTerms, joinAsksConsent } from '../known-consent';
 
 const TERMS = { known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: 'In this community, the admins can see your balance…', confirmed: true, consentedAt: null, consentedVersion: null };
 
@@ -22,5 +22,13 @@ describe('known consent', () => {
         expect(shouldOfferConsent(changed)).toBe(true);
         expect(consentHeading(changed)).toBe('Your community changed what its admins can see');
         expect(consentHeading(readKnownConsent(TERMS)!)).toBe("What this community's admins can see");
+    });
+
+    it('the join screen asks only in a known community, and an older node (404 body) shows nothing', () => {
+        const terms = readConsentTerms({ known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: TERMS.text });
+        expect(joinAsksConsent(terms)).toBe(true);
+        expect(joinAsksConsent(readConsentTerms({ known: false, version: '1:50:60', text: TERMS.text }))).toBe(false);
+        expect(readConsentTerms({ error: 'Not found' })).toBeNull();
+        expect(joinAsksConsent(null)).toBe(false);
     });
 });

@@ -65,6 +65,7 @@ import { returnToApp } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { readConsentTerms, joinAsksConsent, type ConsentTerms } from '../utils/known-consent';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
 import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
@@ -147,6 +148,12 @@ export default function WelcomeScreen() {
         getSavedNodes().then(setSavedNodes).catch(() => {});
     }, [mode]);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
+    // A known community's consent text, shown before joining (community modes slice 6), and the member's tick. Never
+    // required: unticked, the join goes on and the admins simply never see this member's balance.
+    const [joinTerms, setJoinTerms] = useState<ConsentTerms | null>(null);
+    // The version of the text the member ticked: a text that changes as they type the address is unticked again.
+    const [joinTickedVersion, setJoinTickedVersion] = useState<string | null>(null);
+    const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
     // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
     // vault: a callsign and the community's address, looked up as they type.
@@ -797,6 +804,31 @@ export default function WelcomeScreen() {
         return () => { cancelled = true; };
     }, [mode, globalPhase]);
 
+    // The community's consent text, read (public, no key) from the node the invite or the typed address names, as the
+    // member fills the step in. An older node, a plain community or no answer: nothing is shown.
+    useEffect(() => {
+        if (mode !== 'create') return;
+        let origin: string | null;
+        try { origin = extractNodeOrigin(inviteCode.trim()); } catch { origin = null; }
+        const nodeUrl = normalizeNodeUrl(origin || createAnchorUrl.trim());
+        if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) { setJoinTerms(null); return; }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            const ctl = new AbortController();
+            const stop = setTimeout(() => ctl.abort(), NEXT_REQUEST_TIMEOUT_MS);
+            fetch(`${nodeUrl}/api/community/consent-terms`, { signal: ctl.signal })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((body) => {
+                    if (cancelled) return;
+                    const terms = readConsentTerms(body);
+                    setJoinTerms(joinAsksConsent(terms) ? terms : null);
+                })
+                .catch(() => { if (!cancelled) setJoinTerms(null); })
+                .finally(() => clearTimeout(stop));
+        }, 600);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [mode, inviteCode, createAnchorUrl]);
+
     async function handleCreate() {
         // A second tap while Next is out starts nothing, not even its checks below.
         if (nextOutRef.current) return;
@@ -937,6 +969,13 @@ export default function WelcomeScreen() {
                 // Redemption is done — it just succeeded, or the node has this member already.
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
+
+                // The consent the member ticked above, recorded now they are a member: signed with their key, on the anchor
+                // just set. Never in the way: a refusal (the lines changed meanwhile) or no answer leaves Settings to offer it.
+                if (joinTerms && joinConsentTicked) {
+                    const { signedRequestWithMethod } = await import('../utils/db');
+                    await signedRequestWithMethod('POST', '/api/names/consent', { version: joinTerms.version }).catch(() => null);
+                }
 
                 // Record wizard state so an interrupted setup (avatar/seed) resumes
                 await setPendingOnboarding({
@@ -2413,6 +2452,24 @@ export default function WelcomeScreen() {
                                         <Text style={{ color: colors.text.body, fontSize: 14, fontWeight: '600' }}>{s}</Text>
                                     </Pressable>
                                 ))}
+                            </View>
+                        )}
+
+                        {joinTerms && (
+                            <View style={{ marginBottom: 12 }} testID="join-consent">
+                                <Text style={styles.checkboxText} accessibilityRole="header">What this community's admins can see</Text>
+                                <Text style={{ color: colors.text.body, fontSize: 14, lineHeight: 20, marginTop: 6 }}>{joinTerms.text}</Text>
+                                <Pressable
+                                    style={[styles.checkbox, { marginVertical: 8, minHeight: 48 }, joinConsentTicked && styles.checkboxActive]}
+                                    onPress={() => setJoinTickedVersion(joinConsentTicked ? null : joinTerms.version)}
+                                    disabled={loading}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: joinConsentTicked }}
+                                    accessibilityLabel="I agree"
+                                >
+                                    <Text style={[styles.checkboxText, { flexShrink: 1 }]}>{joinConsentTicked ? '✅ ' : '⬜ '} I agree</Text>
+                                </Pressable>
+                                <Text style={{ color: colors.text.muted, fontSize: 13, lineHeight: 18 }}>Up to you: you join either way. If you don&apos;t agree, the admins never see your balance. You can agree later in Settings.</Text>
                             </View>
                         )}
 

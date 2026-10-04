@@ -32,3 +32,22 @@ export function shouldOfferConsent(c: KnownConsent | null): boolean {
 export function consentHeading(c: KnownConsent): string {
     return c.consentedVersion ? 'Your community changed what its admins can see' : 'What this community\'s admins can see';
 }
+
+/** The text a known community shows on its join screen (GET /api/community/consent-terms, public), before joining. */
+export interface ConsentTerms {
+    known: boolean;
+    version: string;
+    text: string;
+}
+
+/** A whole answer from GET /api/community/consent-terms, or null (an older node answers 404: the join shows nothing). */
+export function readConsentTerms(v: unknown): ConsentTerms | null {
+    const o = v as Partial<ConsentTerms> | null;
+    if (!o || typeof o.known !== 'boolean' || typeof o.version !== 'string' || typeof o.text !== 'string') return null;
+    return { known: o.known, version: o.version, text: o.text };
+}
+
+/** Whether the join screen shows the tick: only a known community, with text to agree to. */
+export function joinAsksConsent(t: ConsentTerms | null): t is ConsentTerms {
+    return !!t && t.known && t.text.length > 0 && t.version.length > 0;
+}

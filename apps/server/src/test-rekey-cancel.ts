@@ -395,6 +395,45 @@ async function runTests() {
             `H: not known: Lift suspension makes Lou active, as the answer says (${lu.status} ${JSON.stringify(lu.json)})`);
         const liftLog = db.prepare("SELECT COUNT(*) AS c FROM system_logs WHERE message LIKE ?").get(`Lifted the suspension of ${lou.pubKeyHex.slice(0, 12)}%`) as any;
         assert(liftLog.c === 1, `H: the lift is logged (${liftLog.c})`);
+
+        // A later action on the same report never lowers what the first recorded (review 4176372892): a report suspends
+        // Rae, and the same report is actioned again without suspendUser (a takedown after the fact sends none).
+        const rae = makeKeypair(), raeNew = makeKeypair();
+        join(rae, 'RaeActionedTwice');
+        const raeReport = submitReport(rep.pubKeyHex, rae.pubKeyHex, 'Repeated harassment in the market posts')!;
+        const suspendedMember = (id: string) => (db.prepare('SELECT suspended_member AS s FROM abuse_reports WHERE id = ?').get(id) as { s: number | null }).s;
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${raeReport.id}/action`, { suspendUser: true });
+        const again = await as(ownerSession, 'POST', `/api/local/admin/reports/${raeReport.id}/action`, { suspendUser: false });
+        assert(again.status === 200 && suspendedMember(raeReport.id) === 1,
+            `H: Rae: actioning the report again without a suspension keeps its record that it suspended her (${again.status} ${suspendedMember(raeReport.id)})`);
+        await issue(ownerSession, rae.pubKeyHex);
+        db.prepare('UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ?').run(rae.pubKeyHex);
+        const rc = await cancel(ownerSession, rae.pubKeyHex);
+        assert(rc.status === 200 && rc.json.status === 'suspended' && getMember(rae.pubKeyHex)?.status === 'suspended' && /report/.test(rc.json.note ?? ''),
+            `H: Rae: an older code over that report's suspension, cancelled: she stays suspended (${rc.status} ${JSON.stringify(rc.json)})`);
+        const raeCode = await issue(ownerSession, rae.pubKeyHex);
+        db.prepare("UPDATE rekey_requests SET prior_status = NULL WHERE old_pubkey = ? AND status = 'pending'").run(rae.pubKeyHex);
+        const raeDone = await reEnroll(raeCode.json.code, raeNew);
+        assert(raeDone.status === 200 && getMember(raeNew.pubKeyHex)?.status === 'suspended',
+            `H: Rae: an older code over it, completed: her new key stays suspended (${raeDone.status} ${getMember(raeNew.pubKeyHex)?.status})`);
+        // A report actioned before the node kept the record stays not known: a later action without a suspension
+        // doesn't make it "suspended nobody".
+        const roz = makeKeypair();
+        join(roz, 'RozActionedTwice');
+        const rozReport = submitReport(rep.pubKeyHex, roz.pubKeyHex, 'Repeated harassment in the market posts')!;
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${rozReport.id}/action`, { suspendUser: true });
+        db.prepare('UPDATE abuse_reports SET suspended_member = NULL WHERE id = ?').run(rozReport.id);
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${rozReport.id}/action`, { suspendUser: false });
+        assert(suspendedMember(rozReport.id) === null, `H: Roz: a later action leaves a not-known record not known (${suspendedMember(rozReport.id)})`);
+        // And a later action that does suspend raises a record of none.
+        const sid = makeKeypair();
+        join(sid, 'SidActionedTwice');
+        const sidReport = submitReport(rep.pubKeyHex, sid.pubKeyHex, 'Spam links posted in the market listings')!;
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${sidReport.id}/action`, { suspendUser: false });
+        const sid0 = suspendedMember(sidReport.id);
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${sidReport.id}/action`, { suspendUser: true });
+        assert(sid0 === 0 && suspendedMember(sidReport.id) === 1 && getMember(sid.pubKeyHex)?.status === 'suspended',
+            `H: Sid: a first action records none, a later one that suspends records it (${sid0} → ${suspendedMember(sidReport.id)})`);
     }
 
     // ── I. An admin's emergency suspension while the code waits (review 4176287725) ────────────

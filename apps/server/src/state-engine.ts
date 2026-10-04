@@ -6554,8 +6554,11 @@ export function actionReport(
             bumpPostsVersion();
             suspended = subject;
         }
-        // Whether this action suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
-        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(suspended ? 1 : 0, reportId);
+        // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
+        // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
+        // it, and leaves a report actioned before the node kept it (NULL, not known) as it is.
+        const record = suspended ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
+        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(record, reportId);
         return true;
     })();
     const suspendedKey = suspended as string | null;

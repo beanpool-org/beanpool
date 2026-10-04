@@ -34,8 +34,11 @@ export const QUIET_DAYS_DEFAULT = 60;
  * trades", so a member who agreed to it is asked again. Wording 3 (fix round 4) names the rest of what an admin sees:
  * memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert, the one-to-one chat
  * only, and that whoever runs the server holds the whole database with its backups, snapshots and standby copies.
+ * Wording 4 (review r4177156495) says what the two named-with-Beans alerts fire on: a pair who buy from each other back
+ * and forth, about evenly, past the volume cap (wash_trading, which shows the total and how evenly it went), and members
+ * who send the member who invited them Beans past a limit in a window (sybil_funnel); not "trade mostly with one member".
  */
-export const CONSENT_WORDING_VERSION = 3;
+export const CONSENT_WORDING_VERSION = 4;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -75,7 +78,9 @@ export function consentTerms() {
         + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
         + `they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or `
         + `cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud `
-        + `alert that names you, and how many Beans moved, if you trade mostly with one member or with members you invited; `
+        + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
+        + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total, if members you `
+        + `invited send you Beans past a limit within a set number of days, or if you are one of those members; `
         + `one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly `
         + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
         + `of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `

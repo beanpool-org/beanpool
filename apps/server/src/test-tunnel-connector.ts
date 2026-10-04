@@ -747,6 +747,9 @@ async function main(): Promise<void> {
             assert(rot.status === 409 && pa()?.name === 'owner-next' && pa()?.tunnelToken === 'eyJ.token-owner-next',
                 `the rotate's late answer is not stored over it (${rot.status} ${pa()?.name} ${pa()?.tunnelToken})`);
             assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-next', 'the tunnel runs the newer claim\'s token');
+            // Any write meanwhile answers so, the agent's own re-store of the same name too: never "a claim elsewhere".
+            assert(/the address was written meanwhile/.test(rot.body?.error || '') && /open Settings again/.test(rot.body?.error || '') && !/elsewhere/.test(rot.body?.error || ''),
+                `and says the address was written meanwhile (${rot.body?.error})`);
             reg.rotate = (b) => [200, { ...live(b.name, `T-rotate-${b.name}`), rotated: true }];
             // Take offline names the name it releases.
             const offs = reg.calls.filter((c) => c.path === '/api/registrar/offline').length;

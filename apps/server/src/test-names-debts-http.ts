@@ -778,6 +778,24 @@ async function main(): Promise<void> {
     assert(pdPays.status === 200 && pdRan.success && pdAfter.status === 'forgiven' && pdAfter.repaid === 80 && pdAgain.status === 409 && pdAgain.body?.error === 'That debt is forgiven already.'
         && pdSettle.status === 409 && balanceRow(pd) === 420,
         `80 paid, then forgiven: 80 stays recorded as repaid, the 120 left is forgiven, and Pd paid 80, never more (${JSON.stringify(pdAfter)}; ${show(pdAgain)}; ${balanceRow(pd)})`);
+    // (e) confirmation 4: the work-off banner's Pay the Commons pays with the code the repayment answer carries (both apps
+    // fill it in from it), so a payment made there comes off the debt, and the next receipt sweeps nothing
+    const peDebt = await leftDebt('Pe old', 200);
+    const pe = makeMember('Pe', 510);
+    const peWork = await workOffOf(peDebt.id, pe);
+    const peWhy = await call('GET', pe, '/api/commons/repayment');
+    const notPe = await call('GET', sam, '/api/commons/repayment');
+    const peCode = peWhy.body?.repayment?.debtId;
+    assert(peWork.status === 201 && peWhy.status === 200 && peCode === peDebt.id && notPe.status === 200 && notPe.body?.repayment === null,
+        `Pe reads her own debt's code in her repayment; another member reads none (${show(peWhy)}; ${show(notPe)})`);
+    const peCommons = getCommonsBalanceExact();
+    const pePays = await call('POST', pe, '/api/commons/pay', { amount: 200, ...(peCode ? { debtId: peCode } : {}), requestId: hex(16) });
+    const peMid = recordOf(peDebt.id);
+    transfer('genesis', pe.pk, 10, 'Pe is paid 10', 'direct', true);
+    const peAfter = recordOf(peDebt.id);
+    assert(pePays.status === 200 && pePays.body?.settled === true && peMid.repaid === 200 && peAfter.status === 'settled' && peAfter.settled_how === 'pay_back'
+        && balanceRow(pe) === 320 && r2(getCommonsBalanceExact() - peCommons) === 200,
+        `Pe pays 200 from the banner with that code: it comes off the debt at once, the next 10 received stays hers, and 200 was paid once (510 → ${balanceRow(pe)}; ${JSON.stringify(peAfter)})`);
     assert(Math.abs(exactTotal() - total17) < 1e-6, `every Bean is still counted, to a millionth (${total17} → ${exactTotal()})`);
 
     // ── 7. the 3-year sweep ────────────────────────────────────────────────────────────────────

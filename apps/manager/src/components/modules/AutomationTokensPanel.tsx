@@ -290,6 +290,12 @@ export function AutomationTokensPanel({ activeNode, viewer = { kind: 'password' 
 
             <div className="space-y-2">
                 <span className="text-xs font-semibold text-nature-300">Tokens on this node</span>
+                {tokens === null && !listMessage && (
+                    <p className="text-[11px] text-nature-400 m-0 flex items-center gap-2" data-testid="automation-tokens-loading">
+                        <span className="animate-spin text-xs">🔄</span>
+                        <span>Loading tokens…</span>
+                    </p>
+                )}
                 {listMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{listMessage}</p>}
                 {tokens && tokens.length === 0 && <p className="text-[11px] text-nature-400 m-0">No tokens yet.</p>}
                 {tokens && tokens.length > 0 && (

@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';

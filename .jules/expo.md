@@ -132,6 +132,11 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `door-work-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
 
+## 2026-10-24 - [Export ErrorBoundary in profile-setup.tsx]
+**Issue:** `profile-setup.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `profile-setup.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
 ## 2026-10-24 - [Export ErrorBoundary and refine search parameters in settings-signin.tsx]
 **Issue:** `settings-signin.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error handling and typed search parameters strictly as `{ community?: string }`.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and array parameter extraction to allow `string | string[]`.

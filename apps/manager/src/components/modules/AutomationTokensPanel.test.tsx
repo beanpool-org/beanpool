@@ -145,6 +145,22 @@ describe('AutomationTokensPanel', () => {
         expect(screen.queryByTestId('automation-token-value')).not.toBeInTheDocument();
     });
 
+    it('shows loading state indicator while tokens are fetching', async () => {
+        let resolveFetch: (val: any) => void;
+        const fetchPromise = new Promise((resolve) => { resolveFetch = resolve; });
+        vi.spyOn(globalThis, 'fetch').mockReturnValue(fetchPromise as any);
+
+        render(<AutomationTokensPanel activeNode={node} viewer={OWNER_KEY} />);
+        expect(screen.getByTestId('automation-tokens-loading')).toBeInTheDocument();
+
+        await act(async () => {
+            resolveFetch!(new Response(JSON.stringify({ tokens: [], scopes: ['read', 'backups', 'admin'] }), { status: 200 }));
+        });
+
+        await waitFor(() => expect(screen.queryByTestId('automation-tokens-loading')).not.toBeInTheDocument());
+        expect(screen.getByText('No tokens yet.')).toBeInTheDocument();
+    });
+
     it('a password session sees no "Make a token" form, only why, and still lists and revokes', async () => {
         const calls = fakeNode({ tokens: [row] });
         vi.spyOn(window, 'confirm').mockReturnValue(true);

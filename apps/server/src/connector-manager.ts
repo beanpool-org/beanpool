@@ -22,6 +22,7 @@ import { pruneTombstones as pruneExpiredTombstones, TOMBSTONE_RETENTION_DAYS } f
 import { logger } from './logger.js';
 import { getNodeRole } from './config/node-role.js';
 import { sweepExpiredDebts } from './engine/names-debts.js';
+import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -325,6 +326,10 @@ export function initConnectorManager(node: Libp2p): void {
     const sweepDebts = () => { try { if (getNodeRole() === 'primary') sweepExpiredDebts(); } catch (e) { console.error('[NamesDebts] sweep failed:', e); } };
     sweepDebts();
     setInterval(sweepDebts, 24 * 60 * 60 * 1000);
+    // A retried payment's id is kept a week (engine/money-requests.ts), then goes, on a main server.
+    const pruneRequests = () => { try { pruneMoneyRequests(); } catch (e) { console.error('[MoneyRequests] prune failed:', e); } };
+    pruneRequests();
+    setInterval(pruneRequests, 24 * 60 * 60 * 1000);
 
     // Auto‑connect enabled connectors on boot
     if (connectors.some(c => c.enabled)) {

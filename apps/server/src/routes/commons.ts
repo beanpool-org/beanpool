@@ -3,6 +3,7 @@
  */
 
 import { repaymentOf } from '../engine/names-debts.js';
+import { REQUEST_ID_REUSED_CODE } from '../engine/money-requests.js';
 import Router from '@koa/router';
 import {
     createProject, updateProject, deleteProject,
@@ -50,13 +51,13 @@ router.get('/api/commons/balance', async (ctx) => {
 router.post('/api/commons/pay', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
-    const { amount, debtId } = (ctx as any).requestBody || {};
+    // `requestId` (engine/money-requests.ts): the app's id for this one payment, so a retry is never paid twice.
+    const { amount, debtId, requestId } = (ctx as any).requestBody || {};
     try {
-        const txn = payToCommons(actor, amount, debtId);
-        ctx.body = { transactionId: txn.id, amount: txn.amount };
+        ctx.body = payToCommons(actor, amount, debtId, requestId);
     } catch (e: any) {
         ctx.status = typeof e?.status === 'number' ? e.status : 400;
-        ctx.body = { error: e?.message || 'Could not pay the Commons' };
+        ctx.body = { error: e?.message || 'Could not pay the Commons', ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
     }
 });
 

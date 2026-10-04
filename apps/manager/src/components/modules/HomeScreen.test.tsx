@@ -175,6 +175,22 @@ describe('HomeScreen Component', () => {
         expect(screen.queryByTestId('standby-health-banner')).toBeNull();
     });
 
+    it("shows the owners' banner when the standby's address redirects", () => {
+        const standbyHealth = {
+            incident: {
+                id: 'inc2', startedAt: Date.now(), pushed: true,
+                lines: ["The standby's address redirects to other.example: point it at the server itself."],
+                whatToDo: ["Open the standby's own Settings, under Live Backup Server, for what it says; a force-resync there copies this server afresh."],
+            },
+            standbys: [
+                { id: 'a'.repeat(32), label: 'The standby', lastPullAt: 1, lastCopyAt: 1, lastExactAt: 1, healthy: false },
+            ],
+        };
+        render(<HomeScreen {...defaultProps} diag={{ standbyHealth } as any} />);
+        const banner = screen.getByTestId('standby-health-banner');
+        expect(banner).toHaveTextContent("The standby's address redirects to other.example: point it at the server itself.");
+    });
+
     it("shows the owners' banner while backups off the server need them, and opens the Backups tab", async () => {
         const problems = ['Off-box backup to "Cloudflare R2" failed: HTTP 503. Last one that arrived: 2026-10-01 02:00 UTC. Next try: 2026-10-02 02:15 UTC.'];
         const onNavigate = vi.fn();

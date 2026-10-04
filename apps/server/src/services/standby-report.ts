@@ -29,8 +29,18 @@ export type PullOutcome = 'ok' | 'refused' | 'fetch-failed';
  * the report's `oversized`), any other failure to import; and for a copy that never came, a timeout, an unreachable main
  * server, an answer that wasn't a copy, or an HTTP status.
  */
-export type WhyCode = 'conservation' | 'signature' | 'oversized' | 'import-error' | 'timeout' | 'network' | 'unparseable' | `http-${number}`;
-const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d)$/;
+export type WhyCode =
+    | 'conservation'
+    | 'signature'
+    | 'oversized'
+    | 'import-error'
+    | 'timeout'
+    | 'network'
+    | 'unparseable'
+    | `http-${number}`
+    | 'redirect'
+    | `redirect:${string}`;
+const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d|redirect(:[a-zA-Z0-9.:_\[\]-]+)?)$/;
 
 /** What a whole copy found different: a copied table by name, or one of these. */
 export const LEDGER_DIFFERS = { ledger: 'ledger', commons: 'commons' } as const;
@@ -190,6 +200,12 @@ export function whyInWords(why: string | null): string {
     if (why === 'unparseable') return "the main server's answer was not a copy";
     const http = /^http-(\d{3})$/.exec(why);
     if (http) return `the main server answered HTTP ${http[1]}`;
+    if (why === 'redirect' || why.startsWith('redirect:')) {
+        const host = why.includes(':') ? why.slice(why.indexOf(':') + 1) : null;
+        return host
+            ? `the standby's address redirects to ${host}: point it at the server itself`
+            : "the standby's address redirects: point it at the server itself";
+    }
     return why;
 }
 

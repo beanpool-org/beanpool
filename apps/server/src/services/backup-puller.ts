@@ -1098,7 +1098,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
         // An object the main server answered 404 for: that answer, as the report says a copy's own 404.
         const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : e instanceof PhotoObjectNotItsPhoto ? 'http-410' : whyOf(stage, e);
-        recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
+        recordQuietly(() => noteCopyFailed(stage === 'import' || whyCode === 'redirect' || whyCode.startsWith('redirect:') ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and
         // its cursor stays where the last copy that landed put it. Nor is one whose pages all came and whose listing photos'

@@ -77,6 +77,8 @@ const { checkAdminAuth, resetAdminAuthTarpit } = await import('./admin-auth.js')
 const { resetPasswordBrake } = await import('./password-brake.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { migrateStandbyPassword, requestResync, getBackupStatus } = await import('./services/backup-puller.js');
+const { readCopyRecord, standbyReport, whyOf } = await import('./services/standby-copy-record.js');
+const { whyInWords } = await import('./services/standby-report.js');
 const { db } = await import('./db/db.js');
 const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
@@ -272,6 +274,7 @@ async function main() {
             });
             await new Promise<void>(r => redirecting.listen(0, '127.0.0.1', () => r()));
             const redirectingUrl = `http://127.0.0.1:${(redirecting.address() as AddressInfo).port}`;
+            const elsewhereHost = (elsewhere.address() as AddressInfo).port ? `127.0.0.1:${(elsewhere.address() as AddressInfo).port}` : new URL(elsewhereUrl).host;
             try {
                 for (const status of [302, 307, 308]) {
                     code = status;
@@ -285,14 +288,51 @@ async function main() {
                     assert(!pwCopy.ok && (pwCopy.error || '').includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/api/local/admin/sync-copy.`)
                         && !(pwCopy.error || '').includes(ADMIN_PW),
                         `4b. a ${status} on a password copy is not followed, and the error names where it pointed (got: ${pwCopy.error})`);
+                    assert(readCopyRecord().lastWhy === `redirect:${elsewhereHost}`,
+                        `4b. a ${status} password copy codes lastWhy as 'redirect' with host (${readCopyRecord().lastWhy})`);
+                    assert(standbyReport().why === `redirect:${elsewhereHost}`,
+                        `4b. a ${status} standby report carries why 'redirect' with host (${standbyReport().why})`);
                     // A standby with a token: the copy sends the token.
                     updateLocalConfig({ backupAdminPassword: null, backupReplicationToken: 'redirect-test-token' });
                     const tokCopy = await requestResync();
                     assert(!tokCopy.ok && (tokCopy.error || '').includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/api/local/admin/sync-copy.`)
                         && !(tokCopy.error || '').includes('redirect-test-token'),
                         `4b. a ${status} on a token copy is not followed, and the error names where it pointed (got: ${tokCopy.error})`);
+                    assert(readCopyRecord().lastWhy === `redirect:${elsewhereHost}`,
+                        `4b. a ${status} token copy codes lastWhy as 'redirect' with host (${readCopyRecord().lastWhy})`);
+                    assert(standbyReport().why === `redirect:${elsewhereHost}`,
+                        `4b. a ${status} token standby report carries why 'redirect' with host (${standbyReport().why})`);
                 }
                 assert(elsewhereSeen.length === 0, `4b. the other origin received nothing: no password, no token, no request (got ${JSON.stringify(elsewhereSeen)})`);
+
+                // Connection refused: still coded as 'network', never 'redirect'.
+                const dummy = http.createServer();
+                await new Promise<void>(r => dummy.listen(0, '127.0.0.1', () => r()));
+                const closedPort = (dummy.address() as AddressInfo).port;
+                await new Promise<void>(r => dummy.close(() => r()));
+                updateLocalConfig({ backupPrimaryUrl: `http://127.0.0.1:${closedPort}`, backupAdminPassword: null, backupReplicationToken: 'network-test-token' });
+                const netCopy = await requestResync();
+                assert(!netCopy.ok, '4b. copy to a closed port fails');
+                assert(readCopyRecord().lastWhy === 'network', `4b. refused connection still codes lastWhy as 'network' (got: ${readCopyRecord().lastWhy})`);
+                assert(standbyReport().why === 'network', `4b. standby report carries 'network' for refused connection (got: ${standbyReport().why})`);
+
+                // Direct tests for whyOf:
+                assert(whyOf('fetch', new Error(`http://127.0.0.1:1111 answered HTTP 302, a redirect to https://other.example/api/sync-copy. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.`)) === 'redirect:other.example',
+                    "4b. whyOf codes redirect to other.example with host only");
+                assert(whyOf('fetch', new Error(`http://127.0.0.1:1111 answered HTTP 302, a redirect to no address. It was not followed: no credential was sent there and nothing from it was read. Set the address the node answers on itself.`)) === 'redirect',
+                    "4b. whyOf codes redirect to no address as 'redirect'");
+                assert(whyOf('fetch', new TypeError('fetch failed: connect ECONNREFUSED 127.0.0.1:1234')) === 'network',
+                    "4b. whyOf codes connection failure as 'network'");
+                assert(whyOf('fetch', Object.assign(new Error('timeout'), { name: 'AbortError' })) === 'timeout',
+                    "4b. whyOf codes AbortError as 'timeout'");
+
+                // Direct tests for whyInWords:
+                assert(whyInWords('redirect:other.example') === "the standby's address redirects to other.example: point it at the server itself",
+                    "4b. whyInWords formats redirect:other.example naming host only");
+                assert(whyInWords('redirect') === "the standby's address redirects: point it at the server itself",
+                    "4b. whyInWords formats redirect without host");
+                assert(whyInWords('network') === "the main server could not be reached",
+                    "4b. whyInWords formats network reason");
             } finally {
                 await new Promise<void>(r => redirecting.close(() => r()));
                 await new Promise<void>(r => elsewhere.close(() => r()));

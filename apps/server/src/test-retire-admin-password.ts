@@ -5,7 +5,9 @@
  *   1. Who may retire it: an owner's key session only. The password (session, header + code), an admin's key, a
  *      moderator's key and an automation token are refused, and nothing changes.
  *   2. An owner with no break-glass code is sent to make one first; one owner without "I accept one owner" is refused;
- *      with it the password is retired, and the log says the owner accepted being the only owner.
+ *      an owner's phone session past the step-up window, a replayed hand-off token and a session whose owner was
+ *      demoted are refused (PR #1587 review); with the tick the password is retired, and the log says the owner
+ *      accepted being the only owner.
  *   3. After it: the header, the body password, the password sign-in, verify-password, change-password (a key session's
  *      too) and ws tickets answer 403 password_retired; the live password session, its 2FA session and the log stream it
  *      opened end at once; /api/local/status says passwordRetired; the community got a critical announcement.
@@ -32,7 +34,7 @@ import { db } from './db/db.js';
 import { updateLocalConfig, getLocalConfig, hashPassword, setBreakGlassMode, initAdminPassword } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { resetAdminAuthTarpit, PASSWORD_RETIRED_CODE } from './admin-auth.js';
-import { issueBreakGlassCode, retireBreakGlassCode } from './admin-key-auth.js';
+import { issueBreakGlassCode, retireBreakGlassCode, backdateAdminSessionForTests, PHONE_STEP_UP_WINDOW_MS } from './admin-key-auth.js';
 import { logger } from './logger.js';
 
 let BASE = '', WSS = '';
@@ -188,6 +190,39 @@ async function main(): Promise<void> {
         const kTicket = await call('POST', '/api/local/admin/ws-ticket', { body: {}, headers: asCookie(o.sessionId, o.csrf) });
         const keyLogs = await openLogs(kTicket.body?.ticket ?? '');
         assert(typeof keyLogs !== 'number', "the owner's key session opens a log stream");
+
+        // The phone's step-up (decision D2): an owner's hand-off session past the window must press Manage again.
+        const stale = await keySignIn(owner);
+        assert(stale.status === 200 && !!stale.sessionId, `a second hand-off session for the owner (${show(stale)})`);
+        backdateAdminSessionForTests(stale.sessionId!, PHONE_STEP_UP_WINDOW_MS + 60_000);
+        const byStale = await call('POST', '/api/local/admin/auth/retire-password', { body: { acceptOneOwner: true }, headers: asCookie(stale.sessionId, stale.csrf) });
+        assert(byStale.status === 403 && byStale.body?.code === 'step_up_required',
+            `an owner's phone session six minutes on is asked for the phone's unlock again (${show(byStale)})`);
+        // A replayed step-up: the hand-off token Manage gave is single use, so it opens no second session.
+        const chal = await call('POST', '/api/local/admin/auth/challenge', { body: {} });
+        const solved = await call('POST', '/api/local/admin/auth/verify-challenge', {
+            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), owner.priv).toString('hex') },
+        });
+        const first = await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
+        assert(first.status === 200 && !!first.sessionId, `the hand-off token opens one session (${show(first)})`);
+        const replayed = await call('POST', '/api/local/admin/auth/exchange', { body: { token: solved.body?.handshakeToken } });
+        assert(replayed.status === 401 && replayed.body?.replay === true && !replayed.sessionId, `replaying it opens none (${show(replayed)})`);
+        const reSolved = await call('POST', '/api/local/admin/auth/verify-challenge', {
+            body: { challengeId: chal.body?.challengeId, memberPubkey: owner.pub, signature: crypto.sign(null, Buffer.from(chal.body?.challenge ?? ''), owner.priv).toString('hex') },
+        });
+        assert(!reSolved.body?.handshakeToken, `and the signed challenge cannot be answered twice for a new token (${show(reSolved)})`);
+        // A session whose owner was demoted: the role change bumps the member's session epoch, so that session is ended.
+        const second = seedMember('Sol');
+        grantNodeRole(second.pub, 'owner', owner.pub);
+        const s = await keySignIn(second);
+        const beforeDemote = await call('POST', '/api/local/admin/auth/retire-password', { body: {}, headers: asCookie(s.sessionId, s.csrf) });
+        assert(beforeDemote.status === 409 && beforeDemote.body?.code === 'break_glass_code_needed',
+            `while an owner, the second owner's session passes the owner check (it stops at the break-glass code: ${show(beforeDemote)})`);
+        grantNodeRole(second.pub, 'admin', owner.pub);
+        const byDemoted = await call('POST', '/api/local/admin/auth/retire-password', { body: { acceptOneOwner: true }, headers: asCookie(s.sessionId, s.csrf) });
+        assert(byDemoted.status === 401 && byDemoted.body?.sessionExpired === true,
+            `demoted to admin, the same session is ended (the role change bumps its epoch) and cannot retire it (${show(byDemoted)})`);
+        assert(!getLocalConfig().passwordRetired && !!getLocalConfig().adminHash, 'none of those retired it');
 
         const memberEvents: any[] = [];
         const memberWs = { _memberPubkey: moderator.pub, _memberFeed: true, send: (d: string) => { try { memberEvents.push(JSON.parse(d)); } catch { /* not json */ } } };

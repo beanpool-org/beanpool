@@ -549,12 +549,14 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
 
     // An admin's freeze takes the line away, not the tier: tiers are merit badges, and a frozen member keeps the one their
     // line would give them (rehearsal 5 Oct, b: a frozen Resident showed "Newcomer"). That is either freeze: the whole line
-    // (members.credit_frozen) or the known floor's (an exception, which counts as the community's known floor here, less
-    // their counted known pledges exactly as unfrozen, so a freeze never raises a keeper's tier: r4178376530). A lowered or
-    // raised exception is the member's line itself, so its tier follows it as before.
-    const knownFrozen = confirmationDialOn(db) && knownFloorException(db, publicKey)?.frozen === true && isConfirmed(db, publicKey);
+    // (members.credit_frozen) or the known floor's: a frozen exception keeps the amount it froze (config/known-floor.ts; NULL
+    // is the community's known floor), so the tier reads that amount as if unfrozen, less their counted known pledges exactly
+    // as unfrozen. So a freeze never moves a tier, up or down (r4178376530, r4178445093). A lowered or raised exception is
+    // the member's line itself, so its tier follows it.
+    const exception = knownFloorException(db, publicKey);
+    const knownFrozen = confirmationDialOn(db) && exception?.frozen === true && isConfirmed(db, publicKey);
     const tierKnownGrant = knownFrozen
-        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: null }))
+        ? memberUsableKnownGrant(db, publicKey, knownGrantFor({ dialOn: true, confirmed: true, knownFloor: knownFloor(db), cap, exception: { amount: exception!.amount, frozen: false } }))
         : knownGrant;
     const tierAllowance = (activated || tierKnownGrant > 0) ? Math.min(cap, tierKnownGrant + otherAllowance) : 0;
     const tier = getTier(c.CREDIT_BASE_FLOOR - tierAllowance);

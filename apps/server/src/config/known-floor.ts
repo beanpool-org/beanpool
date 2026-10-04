@@ -113,6 +113,8 @@ export function readKnownFloorLog(limit = 100): KnownFloorLogLine[] {
 /**
  * An owner's or admin's exception for one member: `amount` (a lower training limit, or higher up to the cap), `frozen`,
  * or `clear` (back to the community's known floor). Only for an active member; an admin can't set their own.
+ * A freeze keeps the amount it froze (NULL: the community's known floor) and only sets the flag: their tier reads the kept
+ * amount (trust.ts), and `frozen: false` with no amount unfreezes them back to it. `clear` drops both.
  */
 export function setKnownFloorException(actor: string, body: { memberPubkey?: unknown; amount?: unknown; frozen?: unknown; clear?: unknown }) {
     const pk = body.memberPubkey;
@@ -131,19 +133,30 @@ export function setKnownFloorException(actor: string, body: { memberPubkey?: unk
     } else {
         if (body.frozen !== undefined && typeof body.frozen !== 'boolean') throw new KnownFloorError(400, 'bad_frozen', 'frozen must be true or false.');
         const frozen = body.frozen === true;
+        // Unfreezing with no amount goes back to the kept one; with none kept, back to the community's known floor.
+        const unfreeze = body.frozen === false && body.amount === undefined;
+        if (unfreeze && !old?.frozen) throw new KnownFloorError(409, 'not_frozen', "This member's known floor isn't frozen.");
         let amount: number | null = null;
-        if (!frozen) {
+        if (unfreeze) {
+            amount = old!.amount;
+        } else if (!frozen) {
             amount = wholeBeans(body.amount, 'The amount');
             const cap = savedCreditCap(db);
             if (amount > cap) throw new KnownFloorError(400, 'above_cap', `A member's known floor can't be more than the cap (${cap.toLocaleString('en')} Beans).`);
         }
         db.transaction(() => {
-            db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-                ON CONFLICT(member_pubkey) DO UPDATE SET amount = excluded.amount, frozen = excluded.frozen, set_by = excluded.set_by, set_at = excluded.set_at`)
-                .run(pk, amount, frozen ? 1 : 0, actor);
+            if (unfreeze && amount === null) {
+                db.prepare('DELETE FROM known_floor_exceptions WHERE member_pubkey = ?').run(pk);
+            } else {
+                // A freeze leaves the amount as it is (a fresh row's is NULL); anything else writes it.
+                db.prepare(`INSERT INTO known_floor_exceptions (member_pubkey, amount, frozen, set_by, set_at) VALUES (?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                    ON CONFLICT(member_pubkey) DO UPDATE SET amount = CASE WHEN excluded.frozen = 1 THEN amount ELSE excluded.amount END,
+                        frozen = excluded.frozen, set_by = excluded.set_by, set_at = excluded.set_at`)
+                    .run(pk, amount, frozen ? 1 : 0, actor);
+            }
             // A raise above the community's known floor is its own line, so every admin sees it (design §7.3).
-            const action = frozen ? 'exception_frozen' : amount! > knownFloor(db) ? 'exception_raised' : 'exception_lowered';
-            log(actor, action, pk, describe(old), frozen ? 'frozen' : String(amount));
+            const action = frozen ? 'exception_frozen' : unfreeze ? 'exception_unfrozen' : amount! > knownFloor(db) ? 'exception_raised' : 'exception_lowered';
+            log(actor, action, pk, describe(old), frozen ? 'frozen' : amount === null ? 'default' : String(amount));
         })();
     }
     clearEnterpriseFloorCache(db);

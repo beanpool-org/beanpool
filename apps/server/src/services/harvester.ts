@@ -42,6 +42,7 @@ import { extractBackupArchive } from './restore-checks.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
 import { isAutomationTokenShape } from '../automation-tokens.js';
+import { redirectRefusal } from './credential-redirect.js';
 
 export interface FleetNodeConfig {
     id: string;
@@ -604,11 +605,19 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
     }
 
     const url = `${baseUrl}/api/local/admin/backup`;
+    // Never followed: a redirect would carry the password and the replication token to wherever it points, and that
+    // origin's answer would be kept as this node's backup (credential-redirect.ts).
     const res = await fetch(url, {
         method: 'POST',
         headers,
+        redirect: 'manual',
         signal: AbortSignal.timeout(120000),
     });
+    const refused = redirectRefusal(res, url);
+    if (refused) {
+        await res.body?.cancel().catch(() => {});
+        throw new Error(refused);
+    }
 
     if (!res.ok) {
         const body: any = await res.json().catch(() => null);

@@ -19,12 +19,13 @@ import {
     getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, isOwnerLevelActor, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
     canVouch, getMemberTrustProfile,
     getMemberStats,
+    getTradeTotals,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
     adminRejectProject,
     adminHaltDecision, adminAccelerateDecision,
     adminEmergencySuspend, adminLiftSuspension,
-    getAllDecisions, tallyDecision,
+    getAllDecisions, tallyDecision, decisionForAdmin,
     getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
@@ -34,6 +35,7 @@ import {
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
 import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
+import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
 import {
     BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
     type BurstActorRole, type BurstRefusal,
@@ -52,7 +54,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -74,14 +76,17 @@ import {
     revokeAdminSession,
     enrolAdminOwnerKey,
     issueBreakGlassCode,
+    retireBreakGlassCode,
     createPasswordSession,
     setAdminSessionCookie,
     clearAdminSessionCookie,
     ADMIN_SESSION_COOKIE,
+    endPasswordSessions,
 } from '../admin-key-auth.js';
-import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import { isBreakGlassMode, setBreakGlassMode, isPasswordRetired, updateLocalConfig, removeFirstPasswordFile } from '../config/local-config.js';
 import {
     issueRekeyCode,
+    cancelRekeyCode,
     completeRekey,
     getRekeyStatus,
     getOffboardPreview,
@@ -109,7 +114,13 @@ export function createAdminRoutes(deps: RouteDeps): Router {
 // admin passwords in URL query strings (which browser console & proxy logs capture).
 router.post('/api/local/admin/ws-ticket', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const ticket = issueWsTicket();
+    // Bound to the session this request rides (none for the password itself): the log socket ends with it.
+    const ticket = issueWsTicket((ctx.state as any)?.adminSessionId);
+    if (!ticket) {
+        ctx.status = 401;
+        ctx.body = { error: 'Your sign-in has ended' };
+        return;
+    }
     ctx.body = { ticket };
 });
 
@@ -226,6 +237,8 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
             replay: res.replay,
             expired: res.expired,
             revoked: res.revoked,
+            // Whose link it was (only to the holder of the token): /settings compares it with any sign-in still live here.
+            mintedFor: res.mintedFor,
         };
         return;
     }
@@ -259,13 +272,15 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
  */
 router.post('/api/local/admin/auth/password', async (ctx) => {
     ctx.set('Cache-Control', 'no-store');
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.password !== 'string' || !body.password.trim()) {
         ctx.status = 400;
         ctx.body = { error: 'Enter the admin password' };
         return;
     }
-    if (!(await checkAdminPasswordAuth(ctx as any))) return;
+    // opensSession: this session is held to the 2FA setup card while the node's 2FA is off (admin-auth.ts step 7c).
+    if (!(await checkAdminPasswordAuth(ctx as any, { opensSession: true }))) return;
     // checkAdminAuth hands a header client a 2FA session for its next requests (X-Admin-2FA-Session); this sign-in's
     // next requests ride the cookie, so it is not handed out.
     const tfa = (ctx.state as any)?.tfaSessionToken;
@@ -294,19 +309,30 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
 const revocationNonces = new NonceStore(60_000);
 
 /**
- * POST /api/local/admin/auth/revoke-all
- * Revoke all web sessions for a member by bumping session_epoch in SQLite.
- * Gated by checkAdminAuth or signature header.
+ * POST /api/local/admin/auth/revoke-all — "Sign out everywhere" (Settings' Owners & admins, the app's admin rows).
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite. Who can end whose:
+ *   - a key session (owner, admin, moderator) or the app's signed request: the caller's own; the signed request always
+ *     the signer's, whatever the body names;
+ *   - an owner's key session, or the password: another member's too, named in the body (from the phone, after its
+ *     unlock again); the password naming nobody is refused (400), as it has no sessions of its own;
+ *   - an automation token: nobody's (403 token_not_allowed, as on every sign-in route).
+ * test-automation-tokens section 4b measures each over HTTP.
  */
 router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     let targetPubkey = body.memberPubkey || body.pubkey;
+    // The caller's own key, from their authentication alone (a key session, or the app's signature), never the body.
+    let selfPubkey = '';
 
     // Check if called with an active admin session or password auth
     const isAuthed = await checkAdminAuth(ctx as any);
+    // An automation token has no sessions of its own, so it signs out nobody: checkAdminAuth refuses it here as on every
+    // sign-in route (403 token_not_allowed), and that answer stands rather than falling through to the app's signature.
+    if (!isAuthed && ctx.status === 403 && (ctx.body as any)?.code === TOKEN_REFUSED_CODE) return;
     if (isAuthed) {
         const callerPubkey = (ctx.state as any)?.actor;
         const callerRole = (ctx.state as any)?.adminRole;
+        if ((ctx.state as any)?.isKeySession && typeof callerPubkey === 'string') selfPubkey = callerPubkey;
         if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
             ctx.status = 403;
             ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
@@ -315,7 +341,13 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
         // your own sessions is not asked.
         if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
-        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
+        // The password is nobody's own session: it signs out only the member it names, never one picked for it.
+        if (!targetPubkey && !callerPubkey) {
+            ctx.status = 400;
+            ctx.body = { error: 'Name the member to sign out everywhere (memberPubkey)' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey;
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
         // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts
@@ -342,6 +374,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
+                selfPubkey = verdict.signer;
             } else {
                 ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
                 ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
@@ -362,12 +395,18 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     }
 
     const newEpoch = revokeAllMemberSessions(targetPubkey);
+    // An owner signing out their OWN sessions everywhere (a key session naming itself or nobody, or the app's signed
+    // request) also retires their break-glass code (#1531), so a code a stolen session made does not outlive it. Signing
+    // someone else out leaves their code alone, as does the password, which is nobody's own session.
+    const breakGlassCodeRetired = !!selfPubkey && selfPubkey === targetPubkey && nodeRoleOf(targetPubkey) === 'owner'
+        && retireBreakGlassCode(targetPubkey);
     clearAdminSessionCookie(ctx);
     ctx.status = 200;
     ctx.body = {
         success: true,
         memberPubkey: targetPubkey,
         sessionEpoch: newEpoch,
+        breakGlassCodeRetired,
     };
 });
 
@@ -403,6 +442,8 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
                 authenticated: true,
                 isKeySession: true,
                 memberPubkey: res.session.memberPubkey,
+                // Whose session, in words: /settings names it when a link from the phone finds someone else signed in.
+                callsign: getMember(res.session.memberPubkey)?.callsign ?? null,
                 role: res.session.role,
                 sessionEpoch: res.session.sessionEpoch,
                 hardExpiresAt: res.session.hardExpiresAt,
@@ -488,6 +529,8 @@ function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: strin
 }
 
 const handleEnrol = async (ctx: any) => {
+    // First, so a refusal is never cached either: a new owner's answer carries their break-glass code (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
@@ -525,6 +568,7 @@ const handleEnrol = async (ctx: any) => {
             actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
             isBreakGlass,
             role: requestedRole,
+            madeBy: (ctx.state as any)?.isKeySession ? 'key-session' : isBreakGlass ? 'break-glass' : 'password',
         });
         ctx.body = {
             success: true,
@@ -554,6 +598,8 @@ router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
  * password, as it does every route but enrolment.
  */
 router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
@@ -580,8 +626,8 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
         }
     }
     try {
-        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password');
-        ctx.set('Cache-Control', 'no-store');
+        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
+            state.isKeySession ? 'key-session' : 'password');
         ctx.body = {
             success: true,
             memberPubkey: target,
@@ -625,6 +671,104 @@ router.get('/api/local/admin/auth/break-glass-status', async (ctx) => {
 });
 router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
     ctx.body = { breakGlassMode: isBreakGlassMode() };
+});
+
+// ===================== RETIRE THE ADMIN PASSWORD (node sign-in design step 10, D1(c), D6) =====================
+
+/** The owners whose role acts now (a visitor's old row or a suspended owner is not one). */
+function actingOwners() {
+    return listNodeRoles().filter(r => r.role === 'owner' && nodeRoleOf(r.member_pubkey) === 'owner');
+}
+
+/** What Access & Security's "Retire the admin password" card shows. */
+function passwordRetirementView(callerPubkey: string | null) {
+    const retired = getLocalConfig().passwordRetired || null;
+    const owners = actingOwners();
+    return {
+        passwordRetired: !!retired,
+        retiredAt: retired?.at ?? null,
+        retiredByCallsign: retired?.byCallsign ?? null,
+        owners: owners.length,
+        // The caller's own break-glass code: retiring needs one (below). Null for a caller with no key (the password).
+        hasBreakGlassCode: callerPubkey ? !!owners.find(o => o.member_pubkey === callerPubkey)?.has_break_glass : null,
+    };
+}
+
+/**
+ * GET /api/local/admin/auth/password-retirement — owners only.
+ */
+router.get('/api/local/admin/auth/password-retirement', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can see whether the admin password is retired')) return;
+    const state = ctx.state as any;
+    ctx.body = passwordRetirementView(state.isKeySession ? state.actor : null);
+});
+
+/**
+ * POST /api/local/admin/auth/retire-password { acceptOneOwner?: true } — retires the admin password for good.
+ * An owner signed in with their own key only (never the password itself, never a token), with the phone step-up of every
+ * owner-only change. Refused while the caller has no break-glass code: with the password gone it is how an owner whose
+ * phone is lost gets back in without the server's shell, and Settings makes one in a tap (step 3). Refused with one owner
+ * unless the owner ticks "I accept one owner" (D6), which is logged. Then: the hash, the salt and the 2FA that guarded the
+ * password are deleted, passwordRetired records when and by whom, every password session ends now (and the log sockets
+ * they opened), the first-password file goes, a SECURITY line is logged and the community gets a critical announcement.
+ * No route sets a password again; ADMIN_PASSWORD in .env is ignored on every later start (initAdminPassword).
+ */
+router.post('/api/local/admin/auth/retire-password', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const state = ctx.state as any;
+    if (!state.isKeySession || state.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Only an owner signed in with their own key (Manage in the app, or "Sign in with your phone" on a computer) can retire the admin password',
+            code: 'owner_key_required',
+        };
+        return;
+    }
+    if (!requirePhoneStepUp(ctx)) return;
+    if (isPasswordRetired()) {
+        ctx.status = 409;
+        ctx.body = { error: 'The admin password is already retired', code: 'password_retired', ...passwordRetirementView(state.actor) };
+        return;
+    }
+    const owners = actingOwners();
+    const me = owners.find(o => o.member_pubkey === state.actor);
+    if (!me?.has_break_glass) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'Make your break-glass code first (Access & Security, Break-glass code) and keep it somewhere safe: once the password is gone, it is how you get back in if your phone is lost.',
+            code: 'break_glass_code_needed',
+        };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const oneOwner = owners.length < 2;
+    if (oneOwner && body.acceptOneOwner !== true) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'This community has one owner. Add a second owner first, or tick "I accept one owner": if your phone and your 12 words are both lost, only your break-glass code or "beanpool recover" on the server get you back in.',
+            code: 'one_owner',
+            owners: owners.length,
+        };
+        return;
+    }
+    const at = Date.now();
+    const callsign = me.callsign || null;
+    updateLocalConfig({
+        adminHash: null, salt: null,
+        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [],
+        passwordRetired: { at, by: state.actor, byCallsign: callsign, acceptedOneOwner: oneOwner },
+    });
+    removeFirstPasswordFile('The admin password was retired');
+    const ended = endPasswordSessions();
+    const who = `${callsign || 'an owner'} (${String(state.actor).slice(0, 12)}…)`;
+    logger.security('AUTH', `The admin password was retired for good by ${who}${oneOwner ? ', who accepted being the only owner' : ''}; ${ended} password session(s) ended`);
+    adminBroadcastAnnouncement('Admin Password Retired',
+        `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,
+        'critical');
+    ctx.body = { success: true, ...passwordRetirementView(state.actor), acceptedOneOwner: oneOwner, endedSessions: ended };
 });
 
 // ===================== LEDGER AUDIT ENDPOINTS =====================
@@ -712,7 +856,12 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
 router.get('/api/local/admin/stranded-escrows', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        ctx.body = { success: true, ...listStrandedEscrows() };
+        const listed = listStrandedEscrows();
+        // A look at the trades these escrows were stuck in, like a look at the disputes (review r4177560417 item 4): a
+        // line of its own in the log the owner and admins read, naming each trade (or the escrow, when its trade is
+        // gone), first.
+        if (!logDisputesOrRefuse(ctx, 'stranded_escrows_read', listed.escrows.map(e => e.tradeId ?? e.escrowId))) return;
+        ctx.body = { success: true, ...listed };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to list stranded escrows' };
@@ -790,8 +939,58 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
  */
 router.post('/api/local/admin/health', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = getCommunityHealth();
+    ctx.body = healthFor(ctx);
 });
+
+/**
+ * A background check of the alerts (the manager's five-minute tick, the built-in page's reloads) is no admin's look: it
+ * asks with `alerts: 'summary'` and gets each alert's kind and severity, the ones that name members with no member, no
+ * description and no Beans, and nothing is logged (review r4177560410).
+ */
+function wantsAlertsSummary(ctx: any): boolean {
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    return body?.alerts === 'summary' || ctx.query?.alerts === 'summary';
+}
+
+function alertsSummary<T extends { flags: Array<{ type: string; severity: string; description: string; members: string[] }> }>(health: T): T {
+    return {
+        ...health,
+        flags: health.flags.map(f => (Array.isArray(f.members) && f.members.length)
+            ? { type: f.type, severity: f.severity, description: 'An alert that names members: open the alerts to see it.', members: [], namesHidden: true }
+            : f),
+    } as T;
+}
+
+/**
+ * The manager's background check: each alert's kind and severity, names-free, the reports' count, and each report's id
+ * (the same reports /admin/data lists, no reporter, member or reason), which is what lights the manager's ALERT dot for a
+ * report filed since its last full read and keeps a report it dismissed dark (confirmation 1, r4177719213). Logs nothing.
+ */
+router.post('/api/local/admin/alerts-summary', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    const reportIds = db.prepare('SELECT id FROM abuse_reports ORDER BY created_at DESC').pluck().all() as string[];
+    ctx.body = { flags: alertsSummary(getCommunityHealth()).flags, reportCount: getReportCount(), reportIds };
+});
+
+function healthFor(ctx: any) {
+    const health = getCommunityHealth();
+    return wantsAlertsSummary(ctx) ? alertsSummary(health) : withLoggedAlerts(ctx, health);
+}
+
+/**
+ * The fraud alerts that name members are an admin's look at those members' trades (queue item 29, Marty 4 Oct): a line
+ * per member named in the log the owner and admins read, first. Not logged (a standby, which writes no plain table):
+ * the alerts that name someone are left out of the answer.
+ */
+function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx: any, health: T): T {
+    try {
+        logAlertsLook((ctx.state as any)?.actor || 'owner:password', health.flags);
+        return health;
+    } catch {
+        return { ...health, flags: health.flags.filter(f => !(Array.isArray(f.members) && f.members.length)) };
+    }
+}
 
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -842,7 +1041,7 @@ router.post('/api/local/admin/data', async (ctx) => {
         // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
         // who voted for what: that is for members (includeVoters), and the manager never shows it.
         posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
-        health: getCommunityHealth(),
+        health: healthFor(ctx),
         reports: getReports().reports,
         reportCount: getReportCount(),
         escrowDisputesCount: (db.prepare(`
@@ -851,7 +1050,9 @@ router.post('/api/local/admin/data', async (ctx) => {
             WHERE status = 'pending'
               AND (julianday('now') - julianday(created_at)) >= 7
         `).pluck().get() as number) || 0,
+        // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
         memberStats: getMemberStats(),
+        tradeTotals: getTradeTotals(),
     };
 });
 
@@ -873,7 +1074,17 @@ router.post('/api/local/admin/logs', async (ctx) => {
     const parsedOffset = parseInt(String(body.offset), 10);
     const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
-    let sql = 'SELECT * FROM system_logs WHERE 1=1';
+    // A removal's settled balance is a look at another member's balance, which an admin has only while removing them
+    // (logged: health_access_log). So this answers none, to any reader: not the metadata's balanceSettled, and not the
+    // "(settled balance: N)" a node wrote into the message before; the search reads the message as answered, so it can't
+    // find the number either (review r4176631042).
+    const message = `CASE WHEN instr(message, ' (settled balance: ') > 0
+        THEN substr(message, 1, instr(message, ' (settled balance: ') - 1)
+            || substr(substr(message, instr(message, ' (settled balance: ') + 19), instr(substr(message, instr(message, ' (settled balance: ') + 19), ')') + 1)
+        ELSE message END`;
+    let sql = `SELECT id, timestamp, level, category, ${message} AS message,
+        CASE WHEN json_valid(metadata) THEN json_remove(metadata, '$.balanceSettled') ELSE metadata END AS metadata
+        FROM system_logs WHERE 1=1`;
     const params: any[] = [];
 
     if (level && level !== 'ALL') {
@@ -885,7 +1096,7 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += " AND message LIKE ? ESCAPE '\\'";
+        sql += ` AND ${message} LIKE ? ESCAPE '\\'`;
         params.push(likeContains(String(searchQuery)));
     }
 
@@ -1465,6 +1676,7 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
         ctx.body = { error: result.error };
         return;
     }
+    logger.info('ADMIN', `Lifted the suspension of ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
     ctx.body = { success: true };
 });
 
@@ -1822,16 +2034,20 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 });
 
 // Admin: the Decisions an admin can still act on — open votes and removals in their grace window — with
-// totals only. Like every other Decision response, never who voted how.
+// totals only. Like every other Decision response, never who voted how. A vote on removing a member carries their
+// balance and debt only to an admin who may vote in it (decisionForAdmin); every other admin gets balanceHidden.
 router.post('/api/local/admin/decisions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
     // The subject's name only: getMember read their photo too, once a Decision (#1478).
     const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    // The admin's own key, from their key session only. An automation token carries its maker's key as the actor, but a
+    // token is a script, not a voter (#1613's deciding review); a password session has no key at all.
+    const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
     ctx.body = {
         decisions: actionable.map(d => {
             const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
-            return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
+            return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
         }),
     };
 });
@@ -2162,6 +2378,8 @@ router.get('/api/local/admin/disputes', async (ctx) => {
     const total = counts[status];
 
     const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    // Every look at the disputes is a line in the log the owner and admins read, naming the trades shown: first.
+    if (!logDisputesOrRefuse(ctx, 'disputes_listed', disputes.map(d => d.id))) return;
     ctx.body = {
         disputes,
         total,
@@ -2182,8 +2400,21 @@ router.get('/api/local/admin/disputes/:id', async (ctx) => {
         ctx.body = { error: 'Dispute not found' };
         return;
     }
+    if (!logDisputesOrRefuse(ctx, 'dispute_opened', [dispute.id])) return;
     ctx.body = { dispute };
 });
+
+/** A look at the disputes that can't be logged (a standby writes no plain table) isn't answered. */
+function logDisputesOrRefuse(ctx: any, action: TradeLookAction, tradeIds: string[]): boolean {
+    try {
+        logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds);
+        return true;
+    } catch {
+        ctx.status = 503;
+        ctx.body = { error: 'This server cannot log a look at the disputes right now, so it shows none.', code: 'LOOK_NOT_LOGGED' };
+        return false;
+    }
+}
 
 router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -2259,6 +2490,22 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     }
 });
 
+// Undo an unused code (engine/member-wizards cancelRekeyCode): who may make it may cancel it, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/cancel', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...cancelRekeyCode(pubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
+        ctx.body = { error: e?.message || 'Failed to cancel the re-key code' };
+    }
+});
+
 router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey } = ctx.params;
@@ -2293,17 +2540,19 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { pubkey } = ctx.params;
+        const actor = resolveAdminActor(ctx);
+        if (!actor) return;
         const preview = getOffboardPreview(pubkey);
 
         // Security / Privacy: Only return active members roster to key-authenticated sessions.
         // Password-only sessions cannot execute gift_to_member, so withholding the list
         // prevents leaking the member roster.
-        const actor = resolveAdminActor(ctx);
-        if (!actor) return;
         if (actor === 'owner:password') {
             preview.activeMembers = [];
         }
 
+        // The member's balance, outside their consent: a line in the access log the admins and the owner read, first.
+        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview');
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
@@ -2343,7 +2592,13 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
-        ctx.body = result;
+        // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
+        try {
+            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled');
+            ctx.body = result;
+        } catch {
+            ctx.body = { ...result, balanceSettled: undefined };
+        }
     } catch (e: any) {
         ctx.status = e?.statusCode || e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };

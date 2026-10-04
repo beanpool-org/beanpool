@@ -194,13 +194,16 @@ async function main(): Promise<void> {
     const env = { ADMIN_PASSWORD: PW, NODE_ROLE: 'primary', CF_RECORD_NAME: undefined };
     const ids = Object.fromEntries(NAMES.map((n) => [n, keypair()])) as Record<(typeof NAMES)[number], Id>;
     const k = Object.fromEntries(NAMES.map((n) => [n, ids[n].pk])) as Keys;
-    const admin = { 'X-Admin-Password': PW };
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the admin calls send an owner's
+    // automation token, made on the node once it is set up (it outlives the restarts).
+    let admin: Record<string, string> = {};
     const nodes: NodeProc[] = [];
     try {
         console.log(`\n— 1. a main server with a pot of ${POT}, Decisions due, listings and an enterprise —`);
         let node = await spawnNode(SCRIPT, dir, env);
         nodes.push(node);
         const setup: Setup = await node.send('setup', k);
+        admin = await node.send('owner-token', { scope: 'admin' });
         assert(setup.audit?.ok === true && setup.pot === POT, `the ledger adds up with a pot of ${POT} (${JSON.stringify(setup.audit)})`);
         const before = await node.send('state', { k, setup });
 

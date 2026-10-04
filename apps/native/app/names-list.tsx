@@ -19,7 +19,7 @@
  * is at least 48dp tall and every row wraps at 320dp and 1.3× text.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -33,19 +33,29 @@ import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { getAllCommunityMembers } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
-    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
+    exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
+} from '../utils/community-health';
+import {
+    NAMES_COPY as COPY, DEVICE_NAMES_STORE as STORE, openNamesList, fetchNamesList, fetchNamesLog, fetchHealthExceptions, fetchHealthLog, fetchHealthSummary, checkEachOther, removeOldKeyAndOpen, unkeptRemovalsOf,
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
+    inviteForNamesEntry, readBoundInvites,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
+import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
+import { makeOfflineTicket } from '../utils/member-statements';
 
 export { ErrorBoundary };
 
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked };
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked }
+    // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
+    // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
+    // `totalsMissing`: why there are no totals (a node from before #1599 needs an update; otherwise "just now").
+    | { kind: 'health'; body: HealthExceptionsBody | null; totals: HealthTotals | null; totalsMissing: string; logs: { balance: HealthLogSection; trades: HealthLogSection }; refused: string | null };
 
 export default function NamesListScreen() {
     const { theme, colors } = useTheme();
@@ -81,6 +91,9 @@ export default function NamesListScreen() {
     const [typedCode, setTypedCode] = useState('');
     const [checkError, setCheckError] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
+    // Invites bound to entries (community modes slice 3): the node's list, and the one just made, shown as a QR code.
+    const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
+    const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
@@ -348,6 +361,27 @@ export default function NamesListScreen() {
         setMode({ kind: 'list' });
     };
 
+    const refreshBoundInvites = useCallback(async () => {
+        if (!anchor || !identity) return;
+        const r = await readBoundInvites(anchor, identity);
+        if (r.ok) setBoundInvites(r.value.invites);
+    }, [anchor, identity]);
+    useEffect(() => { if (opened) refreshBoundInvites(); }, [opened, refreshBoundInvites]);
+
+    /** Invite this person: a code bound to the entry, or with no signal an offline ticket bound to it. */
+    const inviteEntry = async (entry: OpenedEntry) => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const made = await inviteThisPerson(
+            () => inviteForNamesEntry(anchor, identity, entry.id),
+            () => makeOfflineTicket(anchor, identity.publicKey, identity.privateKey, { namesEntryId: entry.id }),
+        );
+        finish();
+        if (!made.ok) { setError(made.message); return; }
+        setInvited({ name: entry.text?.name ?? 'this person', code: made.code, offline: made.offline });
+        if (!made.offline) refreshBoundInvites();
+    };
+
     const second = async (entry: OpenedEntry) => {
         if (!anchor || !identity || !entry.confirmation) return;
         if (!begin()) return;
@@ -407,6 +441,27 @@ export default function NamesListScreen() {
         ]);
     };
 
+    /**
+     * Reads the community's totals and opens the exceptions (the node logs this opening before it answers), then reads
+     * the access log, this opening included.
+     */
+    const openHealth = async () => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const [summary, ex] = await Promise.all([fetchHealthSummary(anchor, identity), fetchHealthExceptions(anchor, identity)]);
+        const lines = await fetchHealthLog(anchor, identity, 30);
+        finish();
+        setMode({
+            kind: 'health',
+            body: ex.ok ? ex.value : null,
+            totals: summary.ok ? readHealthTotals(summary.value) : null,
+            totalsMissing: notOnThisNode(summary) ? HEALTH_COPY.totalsNotOnThisNode : HEALTH_COPY.totalsMissing,
+            // A log the phone couldn't read says so in both lists, never "nobody has looked".
+            logs: lines.ok ? healthLogSections(lines.value) : healthLogSections(null, notOnThisNode(lines) ? 'not_on_this_node' : 'unreadable'),
+            refused: ex.ok ? null : ex.message,
+        });
+    };
+
     const setTwoAdmins = async (on: boolean) => {
         if (!anchor || !identity || !opened) return;
         if (!begin()) return;
@@ -428,6 +483,7 @@ export default function NamesListScreen() {
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">
                 {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? 'Confirm a member'
+                    : mode.kind === 'health' ? 'Community health'
                     : mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title}
             </Text>
         </View>
@@ -542,6 +598,63 @@ export default function NamesListScreen() {
                 ))}
             </>
         );
+    } else if (mode.kind === 'health') {
+        const rows = mode.body ? exceptionRows(mode.body, entries) : [];
+        const departed = mode.body ? departedRows(mode.body, entries) : [];
+        const logList = (section: HealthLogSection) => (
+            <>
+                <Text style={styles.label} accessibilityRole="header">{section.heading}</Text>
+                <Text style={styles.hint}>{section.hint}</Text>
+                {section.lines.length === 0 ? <Text style={styles.hint}>{section.empty}</Text> : null}
+                {section.lines.map((l) => <Text key={l.key} style={styles.logLine}>{l.text}</Text>)}
+            </>
+        );
+        body = (
+            <>
+                <Text style={styles.label} accessibilityRole="header">{HEALTH_COPY.totalsHeading}</Text>
+                <Text style={styles.hint}>{HEALTH_COPY.totalsHint}</Text>
+                {mode.totals ? (
+                    <View style={styles.entry}>
+                        {totalsRows(mode.totals).map((t) => (
+                            <View key={t.label} accessible accessibilityLabel={`${t.label}: ${t.value}`}>
+                                <Text style={styles.hint}>{t.label}</Text>
+                                <Text style={styles.entryName}>{t.value}</Text>
+                            </View>
+                        ))}
+                    </View>
+                ) : <Text style={styles.hint}>{mode.totalsMissing}</Text>}
+                {mode.refused ? (
+                    <View style={styles.warn} accessibilityLiveRegion="polite"><Text style={styles.warnText}>{mode.refused}</Text></View>
+                ) : null}
+                {mode.body ? (
+                    <>
+                        <Text style={styles.body}>
+                            Only members who agreed to what the admins can see, past {mode.body.settings.debtLinePct}% of their floor or in debit
+                            with no sale for {mode.body.settings.quietDays} days. Their trades are never shown.
+                        </Text>
+                        <Text style={styles.label}>PAST A LINE</Text>
+                        {rows.length === 0 ? <Text style={styles.hint}>Nobody is past a line.</Text> : null}
+                        {rows.map((r) => (
+                            <View key={r.key} style={styles.entry}>
+                                <Text style={styles.entryName}>{r.name}</Text>
+                                <Text style={styles.entryNote}>{r.detail}</Text>
+                            </View>
+                        ))}
+                        <Text style={styles.label}>LEFT WITH A DEBT</Text>
+                        {departed.length === 0 ? <Text style={styles.hint}>Nobody left owing Beans.</Text> : null}
+                        {departed.map((r) => (
+                            <View key={r.key} style={styles.entry}>
+                                <Text style={styles.entryName}>{r.name}</Text>
+                                <Text style={styles.entryNote}>{r.detail}</Text>
+                            </View>
+                        ))}
+                    </>
+                ) : null}
+                {logList(mode.logs.balance)}
+                {logList(mode.logs.trades)}
+                <View style={styles.buttonRow}>{btn('Back to the list', () => setMode({ kind: 'list' }), 'secondary')}</View>
+            </>
+        );
     } else if (mode.kind === 'check') {
         const who = mode.picked?.callsign ?? '';
         body = (
@@ -634,6 +747,7 @@ export default function NamesListScreen() {
                 <View style={styles.buttonRow}>
                     {btn('Add a name', () => openForm(null), 'primary')}
                     {btn('Export as PDF', exportPdf, 'secondary', 'Makes a PDF of the list on this phone, to keep with your paper copy')}
+                    {btn('Community health', () => { void openHealth(); }, 'secondary', 'Opens who is past a debt line (every opening is logged for all admins)')}
                 </View>
                 <TextInput
                     style={styles.search} value={query} onChangeText={setQuery} placeholder="Search names and notes"
@@ -656,8 +770,12 @@ export default function NamesListScreen() {
                                 <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere)}</Text>
                             )}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
+                            {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
+                                <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
+                            ) : null}
                             <View style={styles.buttonRow}>
                                 {btn(e.text ? 'Change' : 'Type it again', () => openForm(e), 'small')}
+                                {!e.confirmation && e.text ? btn('Invite this person', () => inviteEntry(e), 'small') : null}
                                 {!e.confirmation && e.text ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {acts?.second ? btn('Confirm as second admin', () => second(e), 'small') : null}
                                 {acts?.revoke ? btn('Revoke', () => revoke(e), 'small') : null}
@@ -730,6 +848,32 @@ export default function NamesListScreen() {
                         <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
                     </View>
                     <View style={styles.buttonRow}>{btn(COPY.stopScan, () => setScanning(false), 'secondary')}</View>
+                </SafeAreaView>
+            </Modal>
+            <Modal visible={!!invited} animationType="slide" onRequestClose={() => setInvited(null)}>
+                <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
+                    <ScrollView contentContainerStyle={styles.scroll}>
+                        <Text style={styles.headerTitle} accessibilityRole="header">Invite {invited?.name}</Text>
+                        <Text style={styles.body}>
+                            {invited?.offline
+                                ? 'No signal, so this is an offline ticket. When they join with it, they are confirmed as this person, by you.'
+                                : 'When they join with this invite, they are confirmed as this person, by you. Give it to them yourself.'}
+                        </Text>
+                        {invited && anchor ? (
+                            <View style={styles.keyCard}>
+                                <View style={styles.qrBox}>
+                                    <QRCode value={invited.offline ? invited.code : inviteLink(anchor, invited.code)} size={200} quietZone={8} backgroundColor="#ffffff" color="#000000" />
+                                </View>
+                                <Text style={styles.codeText} selectable>{invited.code}</Text>
+                            </View>
+                        ) : null}
+                        <View style={styles.buttonRow}>
+                            {btn('Share', () => {
+                                if (invited && anchor) Share.share({ message: invited.offline ? invited.code : `Join us on BeanPool: ${inviteLink(anchor, invited.code)}\n\nOr enter this invite code in the app: ${invited.code}` }).catch(() => {});
+                            }, 'secondary')}
+                            {btn('Done', () => setInvited(null))}
+                        </View>
+                    </ScrollView>
                 </SafeAreaView>
             </Modal>
         </SafeAreaView>

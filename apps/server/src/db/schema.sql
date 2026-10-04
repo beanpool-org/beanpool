@@ -164,6 +164,12 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
     -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
     issued_by TEXT,
+    -- An invite bound to a names-list entry (community modes slice 3, engine/names-list.ts): redeeming it confirms the
+    -- joiner against that entry, by the invite's maker. Only the entry's id: the server never sees the name. NULL for
+    -- every other invite. `names_bind_outcome` is what the redeem did with the binding: 'confirmed', or why it didn't
+    -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
+    names_entry_id TEXT,
+    names_bind_outcome TEXT,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
@@ -565,7 +571,10 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whether actioning it suspended its member: 1 it did, 0 it didn't, NULL not actioned or actioned before this was kept
+    -- (state-engine.ts actionReport; read by member-wizards.ts cancelRekeyCode for a code with no prior status).
+    suspended_member INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
@@ -1423,7 +1432,11 @@ CREATE TABLE IF NOT EXISTS node_roles (
     granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by       TEXT,
     session_epoch    INTEGER NOT NULL DEFAULT 0,
-    break_glass_hash TEXT
+    break_glass_hash TEXT,
+    -- When the owner's break-glass code was last made, and from which kind of session (engine/node-roles.ts
+    -- BreakGlassMadeBy). Both NULL when there is no code, or for a code made before they were recorded.
+    break_glass_made_at TEXT,
+    break_glass_made_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 
@@ -1598,6 +1611,132 @@ CREATE TABLE IF NOT EXISTS confirmations (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_member ON confirmations(member_pubkey) WHERE revoked_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(entry_id) WHERE revoked_at IS NULL;
+
+-- Debts and a second chance (community modes slice 5, engine/names-debts.ts): a confirmed member who left in debt. The
+-- debt went to the Commons when they left; this says so, on the entry (by id only: the names are sealed). While `open`, no
+-- key is confirmed against the entry. Settled by a payment to the Commons (`settle_ref` the transaction), worked off
+-- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid` reaches `amount`), or forgiven by
+-- a community Decision (`settle_ref` the Decision). Each record goes 3 years after `removed_at`, whatever its status.
+CREATE TABLE IF NOT EXISTS names_debts (
+    id               TEXT PRIMARY KEY,
+    entry_id         TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    reason           TEXT NOT NULL CHECK (reason IN ('removed', 'account_deleted')),
+    removed_at       DATETIME NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'forgiven')),
+    repaying_pubkey  TEXT,
+    repaid           REAL NOT NULL DEFAULT 0,
+    settled_how      TEXT CHECK (settled_how IS NULL OR settled_how IN ('pay_back', 'work_off', 'forgiven')),
+    settled_by       TEXT,
+    settled_at       DATETIME,
+    settle_ref       TEXT,
+    note             TEXT,
+    -- The work-off under way (engine/names-debts.ts): the confirmation that started it, and, once it set the 0 known
+    -- floor, the member's floor before ('default', 'frozen' or Beans) and the set_at it wrote. Its revoke puts back that
+    -- floor and nothing else, only while the floor is still the one it wrote.
+    work_off_confirmation_id TEXT,
+    work_off_floor_before    TEXT,
+    work_off_floor_set_at    TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debts_entry ON names_debts(entry_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_names_debts_repaying ON names_debts(repaying_pubkey) WHERE status = 'open' AND repaying_pubkey IS NOT NULL;
+-- A member's payment to the Commons made FOR an open debt (POST /api/commons/pay with `debtId`), written with the payment.
+-- Only such a payment settles that debt by paying it back (engine/names-debts.ts settleByPayment), and only once: never a
+-- payment made for another debt or for none, never a repayment sweep's own row. Kept off the memo, which others may read.
+CREATE TABLE IF NOT EXISTS names_debt_payments (
+    transaction_id   TEXT PRIMARY KEY,
+    debt_id          TEXT NOT NULL,
+    payer_pubkey     TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    paid_at          DATETIME NOT NULL,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
+
+-- A member's money write made safe to retry (engine/money-requests.ts; POST /api/commons/pay first): the id the app made
+-- for one payment, written with the payment, and the answer it got, which a repeat with the same id gets back without paying
+-- again. `fingerprint` is what the payment was, so the same id for a different one is refused. Kept 7 days (the age rule).
+CREATE TABLE IF NOT EXISTS money_requests (
+    payer_pubkey     TEXT NOT NULL,
+    request_id       TEXT NOT NULL,
+    route            TEXT NOT NULL,
+    fingerprint      TEXT NOT NULL,
+    answer           TEXT NOT NULL,
+    created_at       DATETIME NOT NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (payer_pubkey, request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_money_requests_created ON money_requests(created_at);
+
+-- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
+-- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
+-- balance outside that member's consent: while removing them (`subject_pubkey` is whose). And every look an admin takes
+-- at trades and alerts (queue item 29, Marty 4 Oct): the disputes list and one dispute (`detail` is a JSON array of the
+-- trade ids shown), the escrows a member's removal left stuck on an older node (`detail` the same), and the fraud
+-- alerts, one line per member they named (`subject_pubkey`). Every owner and admin reads it; no member does.
+CREATE TABLE IF NOT EXISTS health_access_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
+                                                   'disputes_listed', 'dispute_opened', 'alerts_read',
+                                                   'stranded_escrows_read')),
+    subject_pubkey TEXT,
+    detail         TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent at joining a known community (design §4.4, §7.5): when, and which text (`version` = wording:debt
+-- line:days). Without a row, a member is in no exception. One row per member; consenting again replaces it.
+CREATE TABLE IF NOT EXISTS known_consents (
+    member_pubkey  TEXT PRIMARY KEY,
+    version        TEXT NOT NULL,
+    consented_at   DATETIME NOT NULL,
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
+-- easily as they agreed). Withdrawing deletes their known_consents row with its tombstone, so they are in no exception from
+-- that moment, on a standby too;
+-- this keeps that it happened, and to which text. Only the member reads their own.
+CREATE TABLE IF NOT EXISTS known_consent_log (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('agreed', 'withdrawn')),
+    version        TEXT NOT NULL,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
+
+-- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
+-- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
+-- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.
+CREATE TABLE IF NOT EXISTS known_floor_exceptions (
+    member_pubkey  TEXT PRIMARY KEY,
+    amount         INTEGER,
+    frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3): every owner and admin
+-- reads it. `member_pubkey` is null for a community-wide setting.
+CREATE TABLE IF NOT EXISTS known_floor_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    member_pubkey  TEXT,
+    old_value      TEXT,
+    new_value      TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
 -- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
@@ -2263,7 +2402,9 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     expires_at       DATETIME NOT NULL,
     completed_at     DATETIME,
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
-    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The member’s status before the code suspended them; a cancelled code puts it back (NULL on a code made before it was kept).
+    prior_status     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);

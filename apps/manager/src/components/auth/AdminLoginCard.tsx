@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HelpLink } from '../manual/Manual';
 import { resolveNodeApiUrl } from '../../lib/node-client';
 import { signInWithPassword, type KeySession } from '../../lib/key-session';
@@ -30,6 +30,22 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
     // Asked before sign-in; the form shows meanwhile and whenever the answer is not "unclaimed" (useClaimState).
     const claim = useClaimState(resolveNodeApiUrl(nodeUrl, CLAIM_PATH));
     const [passwordFoldOpen, setPasswordFoldOpen] = useState(false);
+    // This server has no admin password (the claim check answers password: false), so no password field is drawn: a new
+    // install never had one (node sign-in step 8), or an owner retired it (design step 10; the answer says which).
+    const noPassword = claim.kind === 'claimed' && claim.password === false;
+    const passwordRetired = claim.kind === 'claimed' && claim.password === false && claim.retired === true;
+    // If the operator has entered a password or submitted (an error shown, 2FA open, or in flight)
+    // before the first claim check answers "unclaimed", start the fold open so their form and result stay visible.
+    const wasUnclaimedRef = useRef(claim.kind === 'unclaimed');
+    useEffect(() => {
+        if (!wasUnclaimedRef.current && claim.kind === 'unclaimed') {
+            wasUnclaimedRef.current = true;
+            if (password || error || showTotpField || loading) {
+                setPasswordFoldOpen(true);
+            }
+        }
+    }, [claim.kind, password, error, showTotpField, loading]);
+
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -165,7 +181,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
 
                 {claim.kind === 'unclaimed' ? (
                     <>
-                    <UnclaimedCard codeId={claim.codeId} />
+                    <UnclaimedCard codeId={claim.codeId} primaryAddress={claim.primaryAddress} address={claim.address} addresses={claim.addresses} />
                     {/* Stage B: the password still works, second. Stage C's nodes answer password: false and have none. */}
                     {claim.password && (
                         <details open={passwordFoldOpen} className="mt-6 border-t border-nature-800/80 pt-2" data-testid="claim-password-fold">
@@ -181,6 +197,17 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
                         </details>
                     )}
                     </>
+                ) : noPassword ? (
+                    <div data-testid={passwordRetired ? 'password-retired-signin' : 'no-password-signin'}>
+                        <p className="text-xs text-nature-300 mt-0 mb-4 leading-relaxed">
+                            {passwordRetired
+                                ? 'This server has no admin password: an owner retired it. Sign in with the BeanPool app on your phone.'
+                                : 'This server has no admin password. Owners and admins sign in with the BeanPool app on your phone.'}
+                        </p>
+                        {onKeySession
+                            ? <PhoneSignIn onSignedIn={onKeySession} />
+                            : <p className="text-xs text-amber-300 m-0">Open this server&apos;s own /settings page to sign in with your phone, or use an automation token.</p>}
+                    </div>
                 ) : mode === 'phone' && onKeySession ? (
                     <PhoneSignIn onSignedIn={onKeySession} onUsePassword={() => setMode('password')} />
                 ) : (

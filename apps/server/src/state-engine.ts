@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
@@ -54,6 +54,8 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
+import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
+import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
 import { scrubPostsOf } from './engine/post-scrub.js';
@@ -107,6 +109,7 @@ import {
     getDecision,
     publicDecision,
     decisionForReader,
+    decisionForAdmin,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -143,6 +146,7 @@ export {
     getDecision,
     publicDecision,
     decisionForReader,
+    decisionForAdmin,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -1850,11 +1854,16 @@ export function getMemberTrustProfile(publicKey: string): {
     tier: TierInfo;
     earnedCredit: number;
     grantedCredit: number;
+    knownGrant: number;
+    otherAllowance: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
     vouched: boolean;
     activated: boolean;
+    knownFrozen: boolean;
+    creditFrozen: boolean;
+    tierCredit: number;
 } {
     return engine.getMemberTrustProfile(db, publicKey);
 }
@@ -2136,9 +2145,9 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
     const account = ledger.getAccount(publicKey);
-    const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
+    const { floor, tier, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
     const balance = Math.round(account.balance * 100) / 100;
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
@@ -2148,8 +2157,15 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         balance,
         floor: effectiveFloor,
         usableFloor: uFloor,
+        // The known floor's part of the limit (community modes slice 4): one live offer unlocks all of it. 0 elsewhere.
+        knownGrant: isTreasury ? 0 : knownGrant,
         liveOffers,
         frozen: balance < uFloor,
+        // knownFrozen / creditFrozen: the community's admins froze this member's known floor (an exception,
+        // config/known-floor.ts) / their whole line (adminSetCreditFrozen, the manager's "Freeze"). Not `frozen` above,
+        // which is the spend-freeze below the usable floor: the app tells the member the admins froze the line.
+        knownFrozen: !isTreasury && knownFrozen,
+        creditFrozen: !isTreasury && creditFrozen,
         tier,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
@@ -2367,6 +2383,8 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
@@ -2789,6 +2807,8 @@ export function payFromCommons(
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
@@ -2901,7 +2921,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         SELECT COALESCE(SUM(p.amount), 0) as total
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
-        WHERE p.enterprise = ? AND p.released_at IS NULL
+        WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
           AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
     `).get(enterprisePubkey) as any;
     const pledgeBacking = Number(pledgeRow?.total || 0);
@@ -2920,20 +2940,30 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         legacyFloor = 0;
     }
 
-    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
-    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
-        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
+    // A confirmed keeper's known pledges (community modes slice 4, engine known-floor.ts); 0 with the confirmation dial off.
+    const knownShare = enterpriseKnownShareOf(enterprisePubkey);
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit + knownShare);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0 || knownShare > 0) {
+        const allowance = Math.min(engine.creditCap(db), effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 || knownShare > 0 };
     }
 
     return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
+/** The keepers' known pledges to this enterprise, as its floor counts them (engine enterpriseKnownShareOf). */
+export function enterpriseKnownShareOf(enterprisePubkey: string): number {
+    return engine.enterpriseKnownShareOf(db, enterprisePubkey);
+}
+
 export function usableFloor(publicKey: string): number {
     const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
-        const { floor } = getMemberTrustProfile(publicKey);
-        return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        const { floor, knownGrant, otherAllowance } = getMemberTrustProfile(publicKey);
+        if (knownGrant <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        // A confirmed member in a known community: one band for the known grant, the bands for the rest (slice 4).
+        const usable = usableAllowance({ knownGrant, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
+        return Math.max(floor, -usable);
     }
 
     if (m.status === 'completed') return 0;
@@ -3202,13 +3232,16 @@ function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): n
         WHERE p.enterprise = ?
           AND p.keeper != ?
           AND p.released_at IS NULL
+          AND p.id NOT LIKE 'known:%'
           AND m.status = 'active'
           AND COALESCE(m.credit_frozen, 0) = 0
     `).get(treasuryPubkey, memberPubkey) as any;
     const otherPledges = Number(totalRow?.total || 0);
     const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
     const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-    return Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+    // The other keepers' known share and the community's cap count as the spend check counts them (both main's with the dial off).
+    const othersKnown = engine.enterpriseKnownShareOf(db, treasuryPubkey, memberPubkey);
+    return Math.min(engine.creditCap(db), Math.max(legacyFloor, otherPledges + othersKnown));
 }
 
 /**
@@ -3228,6 +3261,71 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
         "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
     ).get(memberPubkey, treasuryPubkey) as any;
     return Number(row?.total || 0);
+}
+
+/** The known part of one keeper's active pledge to one enterprise (engine known-floor.ts KNOWN_PLEDGE_PREFIX). */
+function activeKnownPledge(treasuryPubkey: string, memberPubkey: string): number {
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+    ).get(memberPubkey, treasuryPubkey) as any;
+    return Number(row?.total || 0);
+}
+
+/** A keeper's earned credit not yet pledged (main's Rule 3 headroom; known pledges draw on their known grant instead). */
+function earnedPledgeRoom(keeperPubkey: string): number {
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
+    ).get(keeperPubkey) as any;
+    return Math.max(0, earnedCredit - Number(row?.total || 0));
+}
+
+/**
+ * Write one keeper's pledge to one enterprise as up to two rows: the earned part as on main, the known part under the
+ * known prefix. Runs inside the caller's transaction.
+ */
+function insertPledgeRows(keeperPubkey: string, enterprisePubkey: string, earnedPart: number, knownPart: number, at: string): string {
+    let id = '';
+    if (earnedPart > 0) {
+        id = crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(id, keeperPubkey, enterprisePubkey, earnedPart, at);
+    }
+    if (knownPart > 0) {
+        const knownId = engine.KNOWN_PLEDGE_PREFIX + crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(knownId, keeperPubkey, enterprisePubkey, knownPart, at);
+        if (!id) id = knownId;
+    }
+    return id;
+}
+
+/**
+ * Split a new pledge: earned headroom first, then half the keeper's known grant. A known part comes off the keeper's own
+ * known line, so it is refused while their own debt is using that line (their balance would fall below their new floor):
+ * the same lock a pledge has on the enterprise side. Runs inside the caller's transaction, after the rows are written.
+ */
+function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: number; knownPart: number } {
+    const earnedRoom = earnedPledgeRoom(keeperPubkey);
+    const knownRoom = engine.knownPledgeRoom(db, keeperPubkey);
+    if (amount > earnedRoom + knownRoom) {
+        // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
+        if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
+            throw new Error(`Pledge amount (${amount}) exceeds available earned credit (${earnedRoom} available to add across all enterprises)`);
+        }
+        throw new Error(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
+    }
+    const earnedPart = Math.min(amount, earnedRoom);
+    return { earnedPart, knownPart: amount - earnedPart };
+}
+
+function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
+    const { balance } = getBalance(keeperPubkey);
+    const floor = usableFloor(keeperPubkey);
+    if (balance < floor) {
+        // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
+        throw new KeeperChangeRefused(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+    }
 }
 
 /**
@@ -3259,14 +3357,13 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
             const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
             const toRelease = keeperPledge - lockedNeeded;
             if (toRelease > 0) {
+                // The known part is released first, as releaseEnterpriseBacking does; what stays locked keeps its kind.
+                const knownLocked = Math.max(0, activeKnownPledge(treasuryPubkey, memberPubkey) - toRelease);
                 const nowIso = new Date().toISOString();
                 db.prepare(
                     "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
                 ).run(nowIso, memberPubkey, treasuryPubkey);
-                db.prepare(`
-                    INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                    VALUES (?, ?, ?, ?, ?, NULL)
-                `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                insertPledgeRows(memberPubkey, treasuryPubkey, lockedNeeded - knownLocked, knownLocked, nowIso);
             }
         }
     }
@@ -3347,12 +3444,8 @@ export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: strin
     if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
         return 0;
     }
-    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-    const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-    ).get(keeperPubkey) as any;
-    const totalPledged = Number(row?.total || 0);
-    return Math.max(0, earnedCredit - totalPledged);
+    // Earned credit not yet pledged, plus what is left of half their known grant (0 with the dial off).
+    return earnedPledgeRoom(keeperPubkey) + engine.knownPledgeRoom(db, keeperPubkey);
 }
 
 /**
@@ -3443,25 +3536,13 @@ export function pledgeEnterpriseBacking(
             throw new Error('Pledge amount must be a positive number');
         }
 
-        const totalPledgedRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-        ).get(keeperPubkey) as any;
-        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
-        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
-
-        if (parsedAmount > availableToAdd) {
-            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
-        }
+        // Earned credit first (main's Rule 3), then half the keeper's known grant (engine known-floor.ts, the bound).
+        const { earnedPart, knownPart } = splitNewPledge(keeperPubkey, parsedAmount);
 
         const pledgeToAdd = parsedAmount;
-        const pledgeId = crypto.randomUUID();
         const pledgedAt = new Date().toISOString();
-
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+        const pledgeId = insertPledgeRows(keeperPubkey, enterprisePubkey, earnedPart, knownPart, pledgedAt);
+        if (knownPart > 0) assertKeeperOwnDebtCovered(keeperPubkey);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -3531,37 +3612,33 @@ export function releaseEnterpriseBacking(
         const balance = getBalance(enterprisePubkey).balance;
         const deficit = Math.max(0, -balance);
 
-        const totalPledgesRow = db.prepare(`
-            SELECT COALESCE(SUM(p.amount), 0) as total
-            FROM enterprise_pledges p
-            JOIN members m ON m.public_key = p.keeper
-            WHERE p.enterprise = ?
-              AND p.released_at IS NULL
-              AND m.status = 'active'
-              AND COALESCE(m.credit_frozen, 0) = 0
-        `).get(enterprisePubkey) as any;
-        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
-        const newTotalPledges = currentTotalPledges - toRelease;
         const legacyFloor = Number(t.legacy_credit_floor || 0);
-
-        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
-        if (newAllowance < deficit) {
-            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
-        }
-
         const remainingPledge = currentKeeperPledge - toRelease;
+        // The known part goes first (it gives the keeper their own known line back); the rest is pledged again as before.
+        const knownPledge = activeKnownPledge(enterprisePubkey, keeperPubkey);
+        const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
         db.prepare(
             "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
         ).run(nowIso, keeperPubkey, enterprisePubkey);
+        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
 
-        if (remainingPledge > 0) {
-            const newPledgeId = crypto.randomUUID();
-            db.prepare(`
-                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                VALUES (?, ?, ?, ?, ?, NULL)
-            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
+        // refused, the transaction writes nothing.
+        const earnedRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND p.id NOT LIKE 'known:%'
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, Number(earnedRow?.total || 0) + enterpriseKnownShareOf(enterprisePubkey)));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -3793,10 +3870,9 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     }
 
     if (pledged > 0) {
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(crypto.randomUUID(), memberPubkey, enterprisePubkey, pledged, new Date().toISOString());
+        const { earnedPart, knownPart } = splitNewPledge(memberPubkey, pledged);
+        insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
+        if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -4940,6 +5016,92 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
     return 0;
 }
 
+/**
+ * Working off a debt (community modes slice 5, engine/names-debts.ts; design §4.2 (b), the Rule 7 sweep pattern): a member
+ * an admin confirmed with a repayment flag sends every Bean above 0 they hold to the Commons, until what they repay reaches
+ * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
+ * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
+ * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
+ * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * Returns what moved.
+ */
+export function sweepRepayment(memberPubkey: string): number {
+    const debt = repaymentOf(memberPubkey);
+    if (!debt) return 0;
+    const { balance } = getBalance(memberPubkey);
+    // Down to the cent, never up: rounding up would take a part of a cent below 0.
+    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    if (!(amount > 0)) return 0;
+    try {
+        conservingTransaction(() => {
+            const txn = moveToCommons(memberPubkey, amount, 'Working off a debt to the Commons', { allowMemberDebit: true });
+            if (!txn) throw new Error('the Commons refused the repayment');
+            const repaid = Math.round((debt.repaid + amount) * 100) / 100;
+            const done = repaid >= debt.amount;
+            db.prepare(`UPDATE names_debts SET repaid = ?, status = CASE WHEN ? THEN 'settled' ELSE status END,
+                        settled_how = CASE WHEN ? THEN 'work_off' ELSE settled_how END,
+                        settled_by = CASE WHEN ? THEN 'node' ELSE settled_by END,
+                        settled_at = CASE WHEN ? THEN ? ELSE settled_at END, settle_ref = CASE WHEN ? THEN ? ELSE settle_ref END
+                        WHERE id = ? AND status = 'open'`)
+                .run(repaid, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, new Date().toISOString(), done ? 1 : 0, txn.id, debt.id);
+        });
+    } catch (err) {
+        console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
+        return 0;
+    }
+    // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
+    return amount;
+}
+
+/**
+ * Paying back a debt (design §4.2 (a)): a member sends Beans they hold to the Commons. Only what is above 0: a payment to
+ * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
+ * (engine/names-debts.ts settleByPayment).
+ *
+ * Safe to retry (engine/money-requests.ts): with a `requestId`, a repeat of the same payment gets the first answer back
+ * and pays nothing; the same id for a different payment is refused (409). Without one (an older app), paid each time.
+ * The checks run before the payment's conservingTransaction (a refusal is no ledger rebuild); the id is written inside it.
+ */
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown, requestId?: unknown): PaidToCommons {
+    const request = moneyRequestOf(memberPubkey, PAY_COMMONS_ROUTE, requestId, { amount, debtId });
+    if (request) {
+        const first = priorAnswer<PaidToCommons>(request);
+        if (first) return first;
+    }
+    const m = getMember(memberPubkey);
+    if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
+        throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+        throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
+    }
+    // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
+    const beans = Math.round(amount * 100) / 100;
+    const { balance } = getBalance(memberPubkey);
+    if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+    const answer = conservingTransaction(() => {
+        const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
+        if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
+        if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
+        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount };
+        if (request) recordAnswer(request, paid);
+        return paid;
+    });
+    try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }
+    return answer;
+}
+
+/** POST /api/commons/pay's answer: the payment's reference (what an admin settles a debt with) and the Beans paid. */
+export interface PaidToCommons {
+    transactionId: string;
+    amount: number;
+}
+const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
+
 export { recordDeferredWageClaim } from './engine/escrow.js';
 
 // ===================== ENTERPRISE LIFECYCLE (PAUSE, WIND-UP, LEDGER) =====================
@@ -5605,6 +5767,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
+    // A seller working off a debt: the release is a transfer(), whose after-commit hook sweeps the sale's Beans above 0 to
+    // the Commons (sweepRepayment), as it does for a release or refund by an admin's dispute ruling.
     return res;
 }
 
@@ -5694,17 +5858,31 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
         .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at, r.post_audience_scope));
 
-    // Chat context between buyer and seller
+    // Chat context between buyer and seller: their one-to-one chat only, the one the trade's system messages go to
+    // (injectSystemMessage), never a group or event chat the two of them happen to share.
     const convRow = db.prepare(`
         SELECT c.id FROM conversations c
         JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
         JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        WHERE c.type = 'dm' AND c.post_id IS NULL
+          AND (SELECT COUNT(*) FROM conversation_participants cp WHERE cp.conversation_id = c.id) = 2
         LIMIT 1
     `).get(r.buyer_pubkey, r.seller_pubkey) as any;
 
     let chat: { conversationId: string | null; messages: Message[] } | undefined = undefined;
     if (convRow?.id) {
-        const msgs = getConversationMessages(convRow.id, 50, 0);
+        // The two members' own messages as they are; of the node's plaintext notices in that chat (escrow placed,
+        // released, cancelled, a ruling: amounts and both keys), only this trade's, by the transactionId each notice
+        // carries. A repeatable listing the pair traded before shares this post id, so the post id is not enough; a
+        // notice without a transactionId is left out.
+        const msgs = getConversationMessages(convRow.id, 50, 0).filter(m => {
+            if (m.type !== 'system' && m.authorPubkey !== 'SYSTEM') return true;
+            try {
+                return JSON.parse(m.metadata || '{}')?.transactionId === r.id;
+            } catch {
+                return false;
+            }
+        });
         chat = {
             conversationId: convRow.id,
             messages: msgs
@@ -5817,6 +5995,8 @@ export function countEscrowDisputes(minDays = 7): { pending: number; resolved: n
     return { pending: row.pending, resolved: row.resolved, all: row.all_count };
 }
 
+/** One trade on the Escrow Disputes list, by id: exactly the trades the list can show (one not finished yet, or one an
+ *  admin settled), so a finished or cancelled trade nobody disputed stays out of an admin's view (null → 404). */
 export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
     const row = db.prepare(`
         SELECT mt.*,
@@ -5836,7 +6016,7 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
-        WHERE mt.id = ?
+        WHERE mt.id = ? AND (mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL)
     `).get(transactionId) as any;
 
     if (!row) return null;
@@ -6362,14 +6542,15 @@ export function getReportCount(): number {
  * Returns one row per member with post counts, message counts, trade volume, and escrow cancellation counts.
  * Single-pass SQL — no per-member queries needed on the frontend.
  */
-export function getMemberStats(): Record<string, { posts: number; messages: number; deals: number; volume: number; cancelled: number }> {
+/**
+ * Each member's posts up and messages sent, for the admins' member stats. No trade figures: an admin sees those only
+ * as the community's totals (getTradeTotals; queue item 29, Marty 4 Oct: "totals only in member stats").
+ */
+export function getMemberStats(): Record<string, { posts: number; messages: number }> {
     const rows = db.prepare(`
         SELECT m.public_key,
             COALESCE(p.post_count, 0) as post_count,
-            COALESCE(msg.msg_count, 0) as msg_count,
-            COALESCE(d.deal_count, 0) as deal_count,
-            COALESCE(d.volume, 0) as volume,
-            COALESCE(d.cancelled_count, 0) as cancelled_count
+            COALESCE(msg.msg_count, 0) as msg_count
         FROM members m
         LEFT JOIN (
             SELECT author_pubkey, COUNT(*) as post_count 
@@ -6381,31 +6562,21 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
             FROM messages WHERE author_pubkey != 'SYSTEM' 
             GROUP BY author_pubkey
         ) msg ON m.public_key = msg.author_pubkey
-        LEFT JOIN (
-            SELECT pubkey,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as deal_count,
-                SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END) as volume,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
-            FROM (
-                SELECT buyer_pubkey as pubkey, status, credits FROM marketplace_transactions
-                UNION ALL
-                SELECT seller_pubkey as pubkey, status, credits FROM marketplace_transactions
-            ) combined
-            GROUP BY pubkey
-        ) d ON m.public_key = d.pubkey
     `).all() as any[];
 
-    const stats: Record<string, { posts: number; messages: number; deals: number; volume: number; cancelled: number }> = {};
-    for (const r of rows) {
-        stats[r.public_key] = {
-            posts: r.post_count,
-            messages: r.msg_count,
-            deals: r.deal_count,
-            volume: Math.round(r.volume * 100) / 100,
-            cancelled: r.cancelled_count
-        };
-    }
+    const stats: Record<string, { posts: number; messages: number }> = {};
+    for (const r of rows) stats[r.public_key] = { posts: r.post_count, messages: r.msg_count };
     return stats;
+}
+
+/** The community's trades in total, each trade once: how many finished, the Beans they came to, how many cancelled. */
+export function getTradeTotals(): { deals: number; volume: number; cancelled: number } {
+    const r = db.prepare(`SELECT
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS deals,
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0) AS volume,
+            COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
+        FROM marketplace_transactions`).get() as { deals: number; volume: number; cancelled: number };
+    return { deals: r.deals, volume: Math.round(r.volume * 100) / 100, cancelled: r.cancelled };
 }
 
 export function dismissReport(reportId: string): boolean {
@@ -6542,6 +6713,10 @@ export function actionReport(
         if (suspendUser && subject && !isClosedAccountKey(subject)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
             db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
+            // A re-key code waiting for them (or an expired one still holding their key, which a new code inherits from)
+            // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
+            // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
+            db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
             try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
@@ -6550,6 +6725,11 @@ export function actionReport(
             bumpPostsVersion();
             suspended = subject;
         }
+        // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
+        // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
+        // it, and leaves a report actioned before the node kept it (NULL, not known) as it is.
+        const record = suspended ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
+        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(record, reportId);
         return true;
     })();
     const suspendedKey = suspended as string | null;
@@ -7499,7 +7679,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
         dropWithheldNotesOf(publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
-        dropNamesListHoldOf(publicKey, 'removed');
+        dropNamesListHoldOf(publicKey, 'removed', balance);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -7744,7 +7924,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
         // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
         // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
-        dropNamesListHoldOf(publicKey, 'account_deleted');
+        dropNamesListHoldOf(publicKey, 'account_deleted', balance);
         // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
         // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
         // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.
@@ -7897,10 +8077,20 @@ export function getNodeConfig(): NodeConfig {
     return finalConfig;
 }
 
+let publicAddressWrites = 0;
+/**
+ * How many times the stored public address has been written since this server started, by any writer (Settings' claim and
+ * Take offline, the address agent, a take-over). A registrar call that began at one count stores its answer only while the
+ * count is the same (services/tunnel-connector.ts persistAddressIfUnchanged): a late answer never overwrites an address
+ * set after the call began.
+ */
+export const publicAddressGeneration = (): number => publicAddressWrites;
+
 export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     const current = getNodeConfig();
     const next = { ...current, ...update };
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('node_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
+    if ('publicAddress' in update) publicAddressWrites++;
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');

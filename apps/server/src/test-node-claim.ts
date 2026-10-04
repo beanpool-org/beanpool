@@ -10,21 +10,23 @@
  *
  *   A. First start: data/claim-code.txt, 0600, holding claim-xxxx-xxxx-xxxx-xxxx; the code is in no line of the output;
  *      GET says unclaimed with the code's id and the salt, and no scrypt parameters. local-config.json holds K, which is
- *      what the core helper derives from the code and the salt. The admin password still signs in.
+ *      what the core helper derives from the code and the salt. A new install made no admin password: no
+ *      first-admin-password.txt, and no password signs in.
  *   B. Refusals, none of which claims: a proof from a wrong code; a signature for another code id; a signature for
  *      another host (the node knows none of its names); key A's signature sent as key B; a code id that is not the
  *      waiting one; a proof made for another host, code id or key; a claim made for host A relayed to the node as host B.
  *   C. The brake: a second wrong proof from the same source within 10 s is 429.
  *   D. The right proof, from that braked source: 200 (a right proof is never braked); the key is a member once and the
  *      owner; the file is gone; K is deleted at the burn; the answer carries no secret. The same request again: 200,
- *      still one member. Another key: 409. The password still signs in.
+ *      still one member. Another key: 409. Still no password signs in, and GET says so (password: false, not retired).
  *   E. A restart after the claim: no file, no new code, GET says claimed.
  *   F. A new code after the file was lost: a statement for the old code id is refused.
- *   G. The claim file cannot be written: the node starts anyway, no code, and the password still works.
+ *   G. The claim file cannot be written, on a node with a password (the suites' ADMIN_PASSWORD seam): the node starts
+ *      anyway, no code, and the password still works.
  *   H. A flood of wrong proofs from many sources never delays a right proof: it answers 200 at once. Their SECURITY lines
  *      stop at the node-wide budget, with one "and M more" line a minute; the claim's own line is always written.
- *   I. The password's first invite, then the claim: the claim follows whether the node has an owner; the password still
- *      signs in; with an owner, the next start has no file and no waiting code.
+ *   I. On a node with a password (the seam), the password's first invite, then the claim: the claim follows whether the node has an owner; the password still
+ *      signs in; with an owner, the next start has no file and no waiting code, and GET says claimed with password: true.
  *   J. Two keys with the right proof at once: one owner, the other 409.
  *   K. No request this suite sent carried the code.
  *   L. A stranger sharing the installer's address: 350 requests (GETs and wrong proofs) meet no per-address limiter, only
@@ -43,6 +45,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { claimKeyFromCode, claimProof, claimText, signedRequestBytes } from '@beanpool/core';
+import { generateTotpCode } from './totp.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const CHILD_FLAG = '--child';
@@ -78,8 +81,11 @@ interface Boot { port: number; output: () => string; stop: () => Promise<void> }
 
 async function boot(dataDir: string, env: Record<string, string> = {}): Promise<Boot> {
     fs.mkdirSync(dataDir, { recursive: true });
-    const childEnv: Record<string, string | undefined> = { ...process.env, BEANPOOL_DATA_DIR: dataDir, ...env };
+    const childEnv: Record<string, string | undefined> = { ...process.env, BEANPOOL_DATA_DIR: dataDir };
+    // A new install, unless the case asks for a node with a password (config/local-config.ts initAdminPassword).
     delete childEnv.ADMIN_PASSWORD;
+    delete childEnv.BEANPOOL_SUITE_ENV_PASSWORD;
+    Object.assign(childEnv, env);
     delete childEnv.BEANPOOL_ADDRESSES;
     delete childEnv.CF_RECORD_NAME;
     delete childEnv.CF_API_TOKEN;
@@ -176,7 +182,31 @@ const readCode = (dir: string) => fs.readFileSync(path.join(dir, FILE_NAME), 'ut
 const modeOf = (file: string) => fs.statSync(file).mode & 0o777;
 const printed = (output: string, code: string) => [code, code.slice(6, 15), code.slice(15)].some((p) => output.includes(p));
 const pendingIn = (dir: string) => { const c = JSON.parse(fs.readFileSync(path.join(dir, 'local-config.json'), 'utf-8')).claim; return !!c && !c.claimedBy; };
-const signsIn = async (b: Boot, password: string) => (await request(b, 'POST', '/api/local/admin/data', { password })).status === 200;
+/** The password sign-in to Settings (POST /api/local/admin/auth/password), with a code once the node's 2FA is on. */
+const signsIn = async (b: Boot, password: string, totpCode?: string) =>
+    (await request(b, 'POST', '/api/local/admin/auth/password', { password }, totpCode ? { 'X-Admin-TOTP': totpCode } : {})).status === 200;
+/** Step 7c: with the node's 2FA off, the password alone opens no admin route. */
+const aloneRefused = async (b: Boot, password: string, route = '/api/local/admin/data') => {
+    const r = await request(b, 'POST', route, { password });
+    return r.status === 403 && r.json?.code === 'password_needs_2fa';
+};
+
+/**
+ * Turn the node's 2FA on from Settings: sign in with the password, set up an authenticator, confirm a code. Returns its backup
+ * codes. The code goes as totpCode (the route takes either name): K1 counts any "code" field as a claim code.
+ */
+async function turnOn2fa(b: Boot, password: string): Promise<string[]> {
+    const signIn = await request(b, 'POST', '/api/local/admin/auth/password', { password });
+    const cookie = ([] as string[]).concat(signIn.headers['set-cookie'] ?? []).find((h) => h.startsWith('admin_session='))?.split(';')[0] ?? '';
+    const asSession = { Cookie: cookie, 'X-CSRF-Token': String(signIn.json?.csrfToken ?? '') };
+    const setup = await request(b, 'POST', '/api/local/admin/2fa/setup', {}, asSession);
+    if (signIn.status !== 200 || setup.status !== 200 || !setup.json?.secret) {
+        throw new Error(`could not set up 2FA (sign-in ${signIn.status}, setup ${setup.status} ${JSON.stringify(setup.json)})`);
+    }
+    const verify = await request(b, 'POST', '/api/local/admin/2fa/verify', { totpCode: generateTotpCode(String(setup.json.secret)) }, asSession);
+    if (verify.status !== 200) throw new Error(`could not turn 2FA on (verify ${verify.status} ${JSON.stringify(verify.json)})`);
+    return setup.json.backupCodes as string[];
+}
 
 function dbFacts(dir: string, pub: string): { rows: number; role: string | null; grantedBy: string | null; inviteCode: string | null } {
     const db = new Database(path.join(dir, 'state.db'), { readonly: true });
@@ -218,8 +248,9 @@ async function main(): Promise<void> {
     assert(!JSON.stringify(config).includes(code) && config.claim?.salt === salt, 'A8. local-config.json holds the salt, not the code');
     assert(config.claim?.key === Buffer.from(keyOf(code, salt)).toString('hex'), 'A9. its K is what the core helper derives from the code and the salt');
     assert(!printed(a.output(), config.claim?.key || 'none'), 'A10. K is in no line of the output');
-    const password = fs.readFileSync(path.join(dirA, 'first-admin-password.txt'), 'utf-8').trim();
-    assert(await signsIn(a, password), 'A11. the first admin password still signs in');
+    assert(!fs.existsSync(path.join(dirA, 'first-admin-password.txt')), 'A11. a new install made no admin password: no first-admin-password.txt');
+    const password = 'Claim-Suite-Guess-61!';
+    assert(!(await signsIn(a, password)), 'A12. no password signs in');
 
     console.log('\nB. Refusals');
     const alice = newKey();
@@ -277,7 +308,9 @@ async function main(): Promise<void> {
     assert(r.status === 409 && r.json.code === 'claim_already_claimed', `D6. another key with the right proof: 409 (${r.status} ${r.json.code})`);
     const get2 = await claimInfo(a);
     assert(get2.unclaimed === false && get2.salt === undefined, `D7. GET says claimed, with no salt (${JSON.stringify(get2)})`);
-    assert(await signsIn(a, password), 'D8. the admin password still signs in');
+    assert(get2.password === false && get2.passwordRetired === undefined,
+        `D7b. and that this server has no admin password, not retired: Settings shows the phone sign-in, no password form (${JSON.stringify(get2)})`);
+    assert(!(await signsIn(a, password)), 'D8. still no password signs in');
     await a.stop();
     const facts = dbFacts(dirA, alice.pub);
     assert(facts.rows === 1, `D9. the key is a member once (${facts.rows})`);
@@ -320,11 +353,12 @@ async function main(): Promise<void> {
     console.log('\nG. The claim file cannot be written');
     const dirG = path.join(root, 'g');
     fs.mkdirSync(path.join(dirG, FILE_NAME, 'in-the-way'), { recursive: true });
-    const g = await boot(dirG, env);
+    const pwG = 'Claim-Suite-Node-G-61!';
+    const g = await boot(dirG, { ...env, ADMIN_PASSWORD: pwG, BEANPOOL_SUITE_ENV_PASSWORD: '1' });
     const getG = await request(g, 'GET', '/api/local/claim', undefined, { Host: HOST });
     assert(getG.status === 200 && getG.json.unclaimed === true && getG.json.codeId === null, `G1. the node serves, with no code (${JSON.stringify(getG.json)})`);
     assert(/No claim code this start/.test(g.output()), 'G2. the log says why');
-    const pwG = fs.readFileSync(path.join(dirG, 'first-admin-password.txt'), 'utf-8').trim();
+    assert(getG.json.password === true, `G2b. GET says this server has an admin password, so Settings keeps its fold (${getG.json.password})`);
     assert(await signsIn(g, pwG), 'G3. the admin password works');
     await g.stop();
 
@@ -410,13 +444,16 @@ async function main(): Promise<void> {
 
     console.log('\nI. The password\'s first invite, then the claim');
     const dirI = path.join(root, 'i');
-    let iNode = await boot(dirI, env);
+    const pwI = 'Claim-Suite-Node-I-61!';
+    const envI = { ...env, ADMIN_PASSWORD: pwI, BEANPOOL_SUITE_ENV_PASSWORD: '1' };
+    let iNode = await boot(dirI, envI);
     const infoI = await claimInfo(iNode);
     const codeI = readCode(dirI);
     codes.push(codeI);
-    const pwI = fs.readFileSync(path.join(dirI, 'first-admin-password.txt'), 'utf-8').trim();
-    const seeded = await request(iNode, 'POST', '/api/admin/seed-invite', { password: pwI });
-    assert(seeded.status === 200, `I1. the password makes the first invite, as on main (${seeded.status})`);
+    assert(await aloneRefused(iNode, pwI, '/api/admin/seed-invite'), 'I0. (step 7c) with 2FA off, the password alone makes no invite: 403 password_needs_2fa');
+    const backupI = await turnOn2fa(iNode, pwI);
+    const seeded = await request(iNode, 'POST', '/api/admin/seed-invite', { password: pwI }, { 'X-Admin-TOTP': backupI[0] });
+    assert(seeded.status === 200, `I1. the password, with a code (2FA on), makes the first invite (${seeded.status})`);
     // Measured, not decided here: on a fresh node the seed invite takes its "already have members" branch (the SYSTEM
     // rows count), so no owner is made and the node still has no owner. Whichever way that goes, the claim follows
     // nodeHasOwner().
@@ -424,11 +461,13 @@ async function main(): Promise<void> {
     console.log(`  (after the password's first invite the node is ${afterSeed ? 'still unclaimed' : 'claimed'})`);
     r = await claim(iNode, claimBody(alice, codeI, infoI.salt, infoI.codeId), '203.0.113.40');
     assert(afterSeed ? r.status === 200 : r.status === 409, `I2. the claim follows whether an owner exists (${r.status})`);
-    assert(await signsIn(iNode, pwI), 'I3. the password still signs in');
+    assert(await signsIn(iNode, pwI, backupI[1]), 'I3. the password still signs in (with a code: 2FA is on)');
     await iNode.stop();
-    iNode = await boot(dirI, env);
+    iNode = await boot(dirI, envI);
     assert(!fs.existsSync(path.join(dirI, FILE_NAME)), 'I4. with an owner, the next start has no claim file');
     assert(!pendingIn(dirI), 'I5. and no waiting code');
+    const claimedI = await claimInfo(iNode);
+    assert(claimedI.unclaimed === false && claimedI.password === true, `I6. GET says claimed, and that this server has an admin password (${JSON.stringify(claimedI)})`);
     await iNode.stop();
 
     console.log('\nJ. Two keys at once');

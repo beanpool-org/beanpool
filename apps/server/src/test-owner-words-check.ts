@@ -32,6 +32,7 @@ import { initStateEngine, grantNodeRole, revokeNodeRole } from './state-engine.j
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -201,8 +202,15 @@ async function main() {
     const benSession = await keySession(ben);
     const moSession = await keySession(mo);
     {
-        const pw = await admin('POST', LIST, { 'x-admin-password': adminPass });
-        assert(pw.status === 200, `the admin password reads the list (got ${pw.status})`);
+        // Step 7c: with the node's 2FA off, the admin password alone reads nothing (it used to read the list); with 2FA
+        // on, the password and a code read it. 2FA goes off again after.
+        const alone = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.owners,
+            `with 2FA off the admin password alone is refused (got ${alone.status} ${alone.body?.code})`);
+        const twoFa = turnOn2faForTests(adminPass);
+        const pw = await admin('POST', LIST, twoFa.headers());
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+        assert(pw.status === 200, `with 2FA on, the admin password with a code reads the list (got ${pw.status})`);
         const owners = pw.body.owners as any[];
         assert(owners.length === 2 && owners.map((o) => o.callsign).join(',') === 'wcAnna,wcBen', `the list is the owners, oldest first (${owners.map((o) => o.callsign)})`);
         assert(typeof owners[0].wordsCheckedAt === 'number' && owners[1].wordsCheckedAt === null, 'Anna checked, Ben not yet');
@@ -238,7 +246,8 @@ async function main() {
     {
         const core = await import('@beanpool/core');
         const OPEN = core.OWNER_LOCK_OPEN_CHECK_PATH;
-        const before = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        // Step 7c: the password alone reads nothing with 2FA off; Settings reads the list under Ben's owner key session.
+        const before = await admin('POST', LIST, { 'x-admin-session': benSession });
         const current = before.body.lock?.envelopeId as string | null;
         assert(typeof current === 'string' && /^[0-9a-f]{32}$/.test(current), `this server holds a take-over lock (${current})`);
         assert(before.body.owners.every((o: any) => o.lockOpen === null), 'before any report, no owner has one');
@@ -266,7 +275,7 @@ async function main() {
             assert(r.status === 400, `body ${JSON.stringify(bad)} → 400 (got ${r.status})`);
         }
 
-        const list = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        const list = await admin('POST', LIST, { 'x-admin-session': benSession });
         const byName = Object.fromEntries((list.body.owners as any[]).map((o) => [o.callsign, o]));
         assert(byName.wcAnna.lockOpen?.opened === true && byName.wcAnna.lockOpen.current === true && byName.wcAnna.lockOpen.checkedAt === ts,
             `Who can unlock: @wcAnna's device opened the current lock (${JSON.stringify(byName.wcAnna.lockOpen)})`);
@@ -281,7 +290,7 @@ async function main() {
     // ── 3b. A removed owner drops off the list ──
     revokeNodeRole(anna.pub, 'owner', ben.pub);
     {
-        const pw = await admin('POST', LIST, { 'x-admin-password': adminPass });
+        const pw = await admin('POST', LIST, { 'x-admin-session': benSession });
         assert(pw.body.owners.length === 1 && pw.body.owners[0].callsign === 'wcBen', 'a removed owner is no longer listed');
         const a = await signed('POST', WC, anna, STATEMENT);
         assert(a.status === 403, `and can no longer record a check (got ${a.status})`);

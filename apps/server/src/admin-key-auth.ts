@@ -42,9 +42,10 @@ import {
     grantNodeRole,
     NODE_ROLE_ACTS,
     type MemberNodeRole,
+    type BreakGlassMadeBy,
 } from './engine/node-roles.js';
-import { getLocalConfig, isBreakGlassMode } from './config/local-config.js';
-import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
+import { getLocalConfig, isBreakGlassMode, isPasswordRetired } from './config/local-config.js';
+import { issueCsrfToken, revokeCsrfTokensBoundTo, restamp2faSessions } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
@@ -395,6 +396,10 @@ export function backdateAdminSessionForTests(sessionId: string, ms: number): voi
  * - 60-second expiry: expired tokens are rejected
  * - session_epoch verification: if epoch bumped since minting, token is rejected
  * - Node role verification: member must still hold a node role
+ *
+ * A refusal for a token the node made names the key it was made for (`mintedFor`), so /settings can tell it from an
+ * earlier sign-in still live in that browser. Only the holder of the token learns it: a token the node never made, or
+ * one long pruned, names nobody.
  */
 export function consumeHandshakeToken(token: string, now = Date.now(), opts: { idleTtlMs?: number } = {}): {
     ok: boolean;
@@ -402,6 +407,7 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
     replay?: boolean;
     expired?: boolean;
     revoked?: boolean;
+    mintedFor?: string;
     session?: AdminSession;
     sessionId?: string;
     csrfToken?: string;
@@ -421,12 +427,12 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
 
     // Replay check: single use!
     if (entry.used) {
-        return { ok: false, error: 'Handshake token already used (replay detected)', replay: true };
+        return { ok: false, error: 'Handshake token already used (replay detected)', replay: true, mintedFor: entry.memberPubkey };
     }
 
     // Expiry check: 60-second window
     if (now > entry.expiresAt) {
-        return { ok: false, error: 'Handshake token has expired', expired: true };
+        return { ok: false, error: 'Handshake token has expired', expired: true, mintedFor: entry.memberPubkey };
     }
 
     // Single-use: burn token immediately
@@ -436,14 +442,14 @@ export function consumeHandshakeToken(token: string, now = Date.now(), opts: { i
     // session_epoch check
     const currentEpoch = getNodeRoleSessionEpoch(entry.memberPubkey);
     if (currentEpoch !== entry.sessionEpoch) {
-        return { ok: false, error: 'Session epoch revoked', revoked: true };
+        return { ok: false, error: 'Session epoch revoked', revoked: true, mintedFor: entry.memberPubkey };
     }
 
     // Node role check, against the role held NOW rather than the one recorded when the token was minted:
     // an owner demoted to admin in the seconds between must not open an owner-level session.
     const liveRole = nodeRoleOf(entry.memberPubkey);
     if (!liveRole) {
-        return { ok: false, error: 'Member no longer holds a node role' };
+        return { ok: false, error: 'Member no longer holds a node role', mintedFor: entry.memberPubkey };
     }
 
     // Mint browser session (2h idle, or the phone hand-off's 15 min / 12h hard). Never longer than the default.
@@ -528,7 +534,9 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
         // The password is owner level and opens no session in break-glass mode (checkAdminAuth). A changed password,
         // or a second factor turned on, off or replaced, ends every session the old one opened, except the session
         // that made the change (restampPasswordSession).
-        const ended = isBreakGlassMode()
+        const ended = isPasswordRetired()
+            ? 'The admin password was retired: it signs nobody in'
+            : isBreakGlassMode()
             ? 'Break-glass mode is on: the admin password signs in to key enrolment only'
             : session.credentialStamp !== passwordCredentialStamp()
                 ? 'The admin password or its 2FA changed since this sign-in'
@@ -568,35 +576,114 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 }
 
 /**
+ * Which session something long-lived was opened under (a /ws/logs ticket, then its socket): the session, its member
+ * and that member's session_epoch at the time. A password session's member is '' and its epoch 0. Opened with the
+ * password itself and no session (passwordCredentialBinding): sessionId '', and the password and second factor then
+ * in force.
+ */
+export interface AdminSessionBinding {
+    sessionId: string;
+    memberPubkey: string;
+    sessionEpoch: number;
+    /** No session only: passwordCredentialStamp() when it was opened. */
+    credentialStamp?: string;
+}
+
+/**
+ * The binding for something opened with the password itself (and, with 2FA on, a code), with no session: it carries on
+ * only while that password and second factor are in force and break-glass is off, as a password session does. Null in
+ * break-glass mode, where the password opens no admin route but key enrolment.
+ */
+export function passwordCredentialBinding(): AdminSessionBinding | null {
+    if (isBreakGlassMode() || isPasswordRetired()) return null;
+    return { sessionId: '', memberPubkey: '', sessionEpoch: 0, credentialStamp: passwordCredentialStamp() };
+}
+
+/** The binding for a session that is live now, or null. */
+export function adminSessionBinding(sessionId: string, now = Date.now()): AdminSessionBinding | null {
+    const session = adminSessions.get(sessionId);
+    if (!session || !adminSessionBindingLive({ sessionId, memberPubkey: session.memberPubkey, sessionEpoch: session.sessionEpoch }, now)) return null;
+    return { sessionId, memberPubkey: session.memberPubkey, sessionEpoch: session.sessionEpoch };
+}
+
+/**
+ * Whether what was opened under `b` may carry on: its session would pass validateAdminSession now, for the same member
+ * and epoch, and still holds a role above moderator (the admin's log is not a moderator route); with no session, the
+ * password and second factor it was opened with are still in force and break-glass is off. Changes nothing: no
+ * session is ended and no idle window slides, so an open log socket keeps no session alive.
+ */
+export function adminSessionBindingLive(b: AdminSessionBinding, now = Date.now()): boolean {
+    if (!b.sessionId) return !!b.credentialStamp && !isBreakGlassMode() && !isPasswordRetired() && b.credentialStamp === passwordCredentialStamp();
+    const session = adminSessions.get(b.sessionId);
+    if (!session || session.memberPubkey !== b.memberPubkey || session.sessionEpoch !== b.sessionEpoch) return false;
+    if (now > session.hardExpiresAt || now > session.idleExpiresAt) return false;
+    if (session.kind === 'password') return !isBreakGlassMode() && !isPasswordRetired() && session.credentialStamp === passwordCredentialStamp();
+    if (getNodeRoleSessionEpoch(session.memberPubkey) !== b.sessionEpoch) return false;
+    const liveRole = nodeRoleOf(session.memberPubkey);
+    return !!liveRole && liveRole !== 'moderator';
+}
+
+// Told whenever a session ends here, or every session of a member does: https-server.ts closes the log sockets those
+// sessions opened at once, rather than on its next sweep.
+const sessionsEndedListeners = new Set<() => void>();
+
+/** Calls `fn` each time a session or a member's sessions end; returns the call that stops it. */
+export function onAdminSessionsEnded(fn: () => void): () => void {
+    sessionsEndedListeners.add(fn);
+    return () => { sessionsEndedListeners.delete(fn); };
+}
+
+function noteSessionsEnded(): void {
+    for (const fn of sessionsEndedListeners) {
+        try { fn(); } catch (err: any) { logger.warn('AUTH', `A sessions-ended listener failed: ${err?.message || err}`); }
+    }
+}
+
+/**
  * Revokes all web sessions for a member by bumping their session_epoch in SQLite.
- * Existing sessions are invalidated on their next request via the epoch check.
+ * Existing sessions are invalidated on their next request via the epoch check, and the log sockets they opened close now.
  */
 export function revokeAllMemberSessions(memberPubkey: string): number {
     if (!memberPubkey) return 0;
     const newEpoch = bumpNodeRoleSessionEpoch(memberPubkey);
     logger.info('AUTH', `Revoked all web sessions for ${memberPubkey} (new session_epoch: ${newEpoch})`);
+    noteSessionsEnded();
     return newEpoch;
 }
 
 /**
- * Revokes a single browser session (e.g. logout).
+ * Revokes a single browser session (e.g. logout), and closes the log sockets it opened.
  */
 export function revokeAdminSession(sessionId: string): void {
     if (!sessionId) return;
-    adminSessions.delete(sessionId);
+    const had = adminSessions.delete(sessionId);
     revokeCsrfTokensBoundTo(sessionId);
+    if (had) noteSessionsEnded();
 }
 
 // ===================== PASSWORD SESSIONS =====================
+
+/** Ends every session opened with the password now (the password was retired), and closes the log sockets they opened. */
+export function endPasswordSessions(): number {
+    let ended = 0;
+    for (const [id, s] of adminSessions) {
+        if (s.kind !== 'password') continue;
+        adminSessions.delete(id);
+        revokeCsrfTokensBoundTo(id);
+        ended++;
+    }
+    noteSessionsEnded();
+    return ended;
+}
 
 /** At most this many password sessions at once; a new one ends the oldest. Each is a sign-in with the password. */
 export const MAX_PASSWORD_SESSIONS = 32;
 
 /**
- * Which password and second factor are in force now: a password session opened under any other ends
- * (validateAdminSession). Never leaves the process.
+ * Which password and second factor are in force now: a password session or 2FA session opened under any other ends
+ * (validateAdminSession, isValid2faSession). Never leaves the process.
  */
-function passwordCredentialStamp(): string {
+export function passwordCredentialStamp(): string {
     const c = getLocalConfig();
     const second = c.totpEnabled && c.totpSecret ? c.totpSecret : '';
     return crypto.createHash('sha256').update(`${c.adminHash || ''}|${c.salt || ''}|${second}`).digest('hex');
@@ -632,14 +719,15 @@ export function createPasswordSession(now = Date.now()): { sessionId: string; cs
 }
 
 /**
- * After a route changed the admin password or the 2FA in force: the caller's own password session (if it is one)
- * carries on under the new ones, every other password session ends on its next request. Call it only once the
- * change is on disk.
+ * After a route changed the admin password or the 2FA in force: the caller's own password session (if it is one) and
+ * 2FA session (restamp2faSessions) carry on under the new ones, every other password or 2FA session ends on its next
+ * request. Call it only once the change is on disk.
  */
 export function restampPasswordSession(ctx: any): void {
     const id = ctx?.state?.adminSessionId;
     const session = typeof id === 'string' ? adminSessions.get(id) : undefined;
     if (session?.kind === 'password') session.credentialStamp = passwordCredentialStamp();
+    restamp2faSessions(ctx);
 }
 
 export const ADMIN_SESSION_COOKIE = 'admin_session';
@@ -717,16 +805,29 @@ export async function verifyBreakGlassCode(code: string, ownerPubkey?: string): 
 /**
  * A new break-glass code for a key that holds the owner role now, shown once by the caller. The stored hash is replaced,
  * so any earlier code of that owner's stops working. Grants nothing: a key without the owner role gets an error, and
- * nothing is stored. `by` names who asked, for the log line, which never carries the code.
+ * nothing is stored. `by` names who asked, for the log line, which never carries the code; `madeBy` is the kind of
+ * session, kept beside the hash for Settings (engine/node-roles.ts BreakGlassMadeBy).
  */
-export function issueBreakGlassCode(ownerPubkey: string, by: string): string {
+export function issueBreakGlassCode(ownerPubkey: string, by: string, madeBy: BreakGlassMadeBy): string {
     if (nodeRoleOf(ownerPubkey) !== 'owner') {
         throw Object.assign(new Error('Only a key that holds the owner role has a break-glass code'), { status: 409 });
     }
     const code = generateBreakGlassCode();
-    setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code));
+    setNodeRoleBreakGlassHash(ownerPubkey, hashBreakGlassCode(code), madeBy);
     logger.security('AUTH', `A new break-glass code was made for owner ${ownerPubkey.slice(0, 12)}… by ${by}; any earlier code of theirs no longer works`);
     return code;
+}
+
+/**
+ * "Sign out everywhere" by an owner, for their own sessions (#1531): their break-glass code stops working too, so a code
+ * a stolen session made does not outlive the session. The owner makes a new one from Settings when they need it.
+ * Returns whether there was a code to retire.
+ */
+export function retireBreakGlassCode(ownerPubkey: string): boolean {
+    if (!getNodeRoleBreakGlassHash(ownerPubkey)) return false;
+    setNodeRoleBreakGlassHash(ownerPubkey, null);
+    logger.security('AUTH', `Owner ${ownerPubkey.slice(0, 12)}… signed out everywhere: their break-glass code no longer works`);
+    return true;
 }
 
 /**
@@ -740,6 +841,8 @@ export function enrolAdminOwnerKey(params: {
     actorPubkey?: string;
     isBreakGlass?: boolean;
     role?: MemberNodeRole;
+    /** The kind of session enrolling, kept beside a new owner's code for Settings. */
+    madeBy?: BreakGlassMadeBy;
 }): {
     success: boolean;
     memberPubkey: string;
@@ -747,7 +850,7 @@ export function enrolAdminOwnerKey(params: {
     breakGlassCode?: string;
     alertEmitted?: boolean;
 } {
-    const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner' } = params;
+    const { targetPubkey, actorPubkey, isBreakGlass = false, role = 'owner', madeBy = null } = params;
 
     // A visitor's row is answered as a key with no row is (grantNodeRole gives it no role either).
     const member = getMember(db, targetPubkey);
@@ -761,12 +864,16 @@ export function enrolAdminOwnerKey(params: {
         grantNodeRole(targetPubkey, role, actorPubkey || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'));
     }
 
-    // Generate per-owner break-glass code only for owners
+    // Generate per-owner break-glass code only for a new owner. An owner who already holds the role keeps theirs, or
+    // keeps having none (#1531): re-enrolling them must not let any owner session re-make another owner's code, which
+    // "Make a break-glass code" refuses a key session (routes/admin.ts). Their own code is theirs to make, in Settings.
     let breakGlassCode: string | undefined;
     if (role === 'owner') {
-        breakGlassCode = generateBreakGlassCode();
-        const hash = hashBreakGlassCode(breakGlassCode);
-        setNodeRoleBreakGlassHash(targetPubkey, hash);
+        if (currentRole !== 'owner') {
+            breakGlassCode = generateBreakGlassCode();
+            const hash = hashBreakGlassCode(breakGlassCode);
+            setNodeRoleBreakGlassHash(targetPubkey, hash, madeBy);
+        }
     } else {
         setNodeRoleBreakGlassHash(targetPubkey, null);
     }

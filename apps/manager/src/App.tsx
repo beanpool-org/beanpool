@@ -15,6 +15,7 @@ import {
     fetchGatewayConfig,
     updateGatewayConfig,
     fetchNodeData,
+    fetchAlertsSummary,
     fetchNodeLogs,
     freezeNodeUser,
     pruneNodeUser,
@@ -70,7 +71,7 @@ import { ApplianceSection } from './components/modules/ApplianceSection';
 import { ColdStartWizard } from './components/modules/ColdStartWizard';
 import { SectionErrorBoundary } from './components/common/SectionErrorBoundary';
 import { useTimeout } from './lib/use-timeout';
-import { startKeySession, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
+import { startKeySession, carriesHandoff, endKeySession, sectionTargetFor, isModeratorSession, forgetStoredAdminSecrets, type KeySession } from './lib/key-session';
 import { ModeratorView } from './components/modules/ModeratorView';
 import { readCameFrom, backLink, profileLink } from './lib/came-from';
 import { useSidebarMode, nextSidebarMode } from './lib/sidebar-mode';
@@ -80,19 +81,8 @@ import { PhoneTopBar, PhoneMenu, useSettingsHistory, pushMenuEntry, closeMenuEnt
 import { ActivityPauseProvider, usePausablePoll } from './lib/activity-pause';
 import { IdlePausedBanner } from './components/common/IdlePausedBanner';
 import { nodeCredential } from './lib/profiles';
-import { passwordField } from './lib/node-client';
+import { passwordField, isAuthFailure, passwordNeeds2faError } from './lib/node-client';
 import { OwnerPhoneBanner } from './components/auth/OwnerPhoneBanner';
-
-/**
- * Does this error mean "wrong password" rather than "node unreachable"?
- *
- * `fetchDiagnostics` throws `HTTP 401: Unauthorized`; the friendlier per-endpoint
- * messages say the same thing in words. Both are matched, because retrying is futile
- * either way — no amount of waiting turns a rejected password into an accepted one.
- */
-function isAuthFailure(message: string): boolean {
-    return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message);
-}
 
 /**
  * A short digest of a profile's password (fleet mode, held in memory only: lib/profiles.ts), used only to tell
@@ -198,6 +188,11 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     const [keySessionCsrf, setKeySessionCsrf] = useState<string | null>(null);
     const [keySessionChecked, setKeySessionChecked] = useState<boolean>(isFleetMode);
     const [keySessionNotice, setKeySessionNotice] = useState<string | null>(null);
+    /**
+     * The phone's link could not be used and the browser is still signed in as someone else (lib/key-session.ts,
+     * 'other-session'): that session is NOT resumed; the page says who it is and offers Sign out, with its CSRF token.
+     */
+    const [otherSession, setOtherSession] = useState<{ message: string; csrfToken: string } | null>(null);
     /**
      * A moderator's Settings is Reports only (ModeratorView). The owners' loaders (diagnostics, members' data,
      * gateway, logs) never run for them: the node would refuse every one, and none of it is theirs to see.
@@ -333,6 +328,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (keySession || passwordSession) void endKeySession(keySessionCsrf);
         forgetStoredAdminSecrets();
         dropSession();
+    };
+
+    /** After "Sign out everywhere" (Owners & admins): the node already ended this session and cleared its cookie. */
+    const handleSignedOutEverywhere = () => {
+        forgetStoredAdminSecrets();
+        dropSession();
+        setKeySessionNotice('You are signed out everywhere. Sign in again to carry on.');
     };
 
     /**
@@ -498,6 +500,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     /** The newest data payload per profile, readable from callbacks the poll captured. */
     const fleetNodeDataRef = useRef<Record<string, NodeDataPayload>>({});
     fleetNodeDataRef.current = fleetNodeData;
+    /**
+     * The alerts' summary read since a node's last full payload, laid over that payload (its flags and report ids), so
+     * the five-second tick re-reads the dot from what the node said last rather than from the older payload. Dropped
+     * when a full payload lands.
+     */
+    const alertsSummaryRef = useRef<Record<string, NodeDataPayload>>({});
 
     /**
      * The node whose sections are on screen *right now* — not the one that was on screen when a
@@ -590,13 +598,31 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         // Fetch node data to check for active abuse/security flags
         const flagsDue = manual || now - (lastFlagFetchRef.current[p.id] || 0) >= FLAG_REFRESH_MS;
         if (!flagsDue || dataInFlightRef.current[p.id]) {
-            applyHealthFromData(p.id, fleetNodeDataRef.current[p.id]);
+            applyHealthFromData(p.id, alertsSummaryRef.current[p.id] ?? fleetNodeDataRef.current[p.id]);
         } else {
             lastFlagFetchRef.current[p.id] = now;
             dataInFlightRef.current[p.id] = true;
             (async () => {
                 try {
+                    // The five-minute tick is no admin's look at the alerts (review r4177560410), and neither is a
+                    // Refresh for a node the operator isn't viewing (confirmation 1): both ask for the alerts'
+                    // names-free summary, which the node doesn't log, and keep the rest of the last data in hand. Its
+                    // report ids light the dot for a report filed since the last full read, and a dismissed one stays
+                    // dark (r4177719213). Only a Refresh of the node on screen reads the full data, names and all, logged.
+                    if (!manual || p.id !== activeNodeIdRef.current) {
+                        const summary = await fetchAlertsSummary(p.url, nodeCredential(p), getTfaSessionToken(p.id));
+                        const prev = fleetNodeDataRef.current[p.id];
+                        const fromSummary = {
+                            ...(prev ?? {}),
+                            health: { ...(prev?.health ?? {}), flags: summary.flags },
+                            reports: summary.reportIds.map((id) => ({ id })),
+                        } as NodeDataPayload;
+                        alertsSummaryRef.current[p.id] = fromSummary;
+                        applyHealthFromData(p.id, fromSummary);
+                        return;
+                    }
                     const nData = await fetchNodeData(p.url, nodeCredential(p), getTfaSessionToken(p.id));
+                    delete alertsSummaryRef.current[p.id];
                     setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
                     applyHealthFromData(p.id, nData);
                     // The active node's sections read `nodeData`, and this is the same payload
@@ -801,6 +827,9 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     }
                 }
 
+                // A node with two-factor sign-in off refuses the password per request (step 7c): its words, not "offline".
+                const needs2fa = await passwordNeeds2faError(diagRes);
+                if (needs2fa) throw needs2fa;
                 if (diagRes.status === 403 && !isFleetMode) {
                     // The password session is held to the 2FA card (2FA was turned off, here or elsewhere).
                     const body = await diagRes.json().catch(() => null) as Record<string, unknown> | null;
@@ -913,6 +942,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             if (requestedFor === activeNodeIdRef.current) {
                 setNodeData(data);
             }
+            delete alertsSummaryRef.current[activeNode.id];
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
             const flags = data?.health?.flags || [];
@@ -974,36 +1004,62 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         if (refreshToken > 0) refreshAll();
     }, [refreshToken]);
 
-    // Single-node /settings: finish a key sign-in from the app's one-time link, or pick up a live one.
+    // Single-node /settings: finish a key sign-in from the app's one-time link, or pick up a live one. Again whenever a
+    // new link reaches the page already open: an Android Custom Tab brought back to the front loads
+    // `/settings#handoff=…` into the page it still shows (signed out by the node's restart or the 15-min phone idle),
+    // and a change of fragment alone reloads nothing, so without this the link was never read (queue item 26).
     useEffect(() => {
         if (isFleetMode || typeof window === 'undefined') return;
         let cancelled = false;
-        startKeySession().then((res) => {
-            if (cancelled) return;
-            // A moderator lands on Reports whatever the link named (their only screen).
-            const target = sectionTargetFor(res.kind === 'session' ? res.session.role : null, res.section);
-            if (target) {
-                setActiveTab(target.tab);
-                setNavSubTab(target.subTab);
-            }
-            if (res.kind === 'session' || res.kind === 'password') {
-                setKeySessionCsrfToken(res.csrfToken);
-                setKeySessionCsrf(res.csrfToken);
-                if (res.kind === 'session') setKeySession(res.session);
-                else {
-                    setPasswordSession(true);
-                    setTotpGate(res.totpSetupRequired);
+        let run = 0;
+        const begin = (fromNewLink: boolean) => {
+            const mine = ++run;
+            startKeySession().then((res) => {
+                if (cancelled || mine !== run) return;
+                // A moderator lands on Reports whatever the link named (their only screen).
+                const target = sectionTargetFor(res.kind === 'session' ? res.session.role : null, res.section);
+                if (target) {
+                    setActiveTab(target.tab);
+                    setNavSubTab(target.subTab);
                 }
-                // The first automatic poll ran before the cookie existed and was refused; clear that
-                // block so polling resumes, then fetch everything with the session (once the 2FA card is done).
-                authBlockedRef.current = {};
-                if (!(res.kind === 'password' && res.totpSetupRequired)) setRefreshToken((n) => n + 1);
-            } else if (res.kind === 'failed') {
-                setKeySessionNotice(res.message);
-            }
-            setKeySessionChecked(true);
-        });
-        return () => { cancelled = true; };
+                setOtherSession(null);
+                if (res.kind === 'session' || res.kind === 'password') {
+                    // The same account's earlier sign-in, carried on after the phone's link was refused: said, not silent.
+                    setKeySessionNotice(res.kind === 'session' ? res.notice ?? null : null);
+                    setKeySessionCsrfToken(res.csrfToken);
+                    setKeySessionCsrf(res.csrfToken);
+                    if (res.kind === 'session') {
+                        setPasswordSession(false);
+                        setTotpGate(false);
+                        setKeySession(res.session);
+                    } else {
+                        setKeySession(null);
+                        setPasswordSession(true);
+                        setTotpGate(res.totpSetupRequired);
+                    }
+                    // The first automatic poll ran before the cookie existed and was refused; clear that
+                    // block so polling resumes, then fetch everything with the session (once the 2FA card is done).
+                    authBlockedRef.current = {};
+                    if (!(res.kind === 'password' && res.totpSetupRequired)) setRefreshToken((n) => n + 1);
+                } else {
+                    // A new link that found no live session: whatever this page showed as signed in is over.
+                    if (fromNewLink) dropSession();
+                    if (res.kind === 'failed') setKeySessionNotice(res.message);
+                    if (res.kind === 'other-session') {
+                        setKeySessionNotice(null);
+                        setOtherSession({ message: res.message, csrfToken: res.csrfToken });
+                    }
+                }
+                setKeySessionChecked(true);
+            });
+        };
+        begin(false);
+        const onHashChange = () => { if (carriesHandoff(window.location.hash)) begin(true); };
+        window.addEventListener('hashchange', onHashChange);
+        return () => {
+            cancelled = true;
+            window.removeEventListener('hashchange', onHashChange);
+        };
     }, [isFleetMode]);
 
     /**
@@ -1212,6 +1268,28 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         );
     }
 
+    if (!isFleetMode && !passwordSession && !keySession && otherSession) {
+        return (
+            <div className="bp-settings min-h-screen bg-nature-950 text-nature-100 flex items-center justify-center p-4 font-sans">
+                <div role="alert" className="max-w-md w-full bg-nature-900 border border-terra-600 rounded-xl p-5 space-y-4">
+                    <p className="text-sm">{otherSession.message}</p>
+                    <button
+                        type="button"
+                        className="w-full bg-terra-600 hover:bg-terra-500 text-white font-medium rounded-lg px-4 py-3"
+                        onClick={() => {
+                            const { csrfToken } = otherSession;
+                            setOtherSession(null);
+                            forgetStoredAdminSecrets();
+                            void endKeySession(csrfToken).then(() => setKeySessionNotice('Signed out. Tap Manage again in the BeanPool app.'));
+                        }}
+                    >
+                        Sign out
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!isFleetMode && !passwordSession && !keySession) {
         return (
             <div className="bp-settings">
@@ -1398,6 +1476,13 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
 
                 {/* Workspace Body */}
                 <main className="flex-1 p-4 sm:p-6 md:p-8 max-w-7xl w-full mx-auto space-y-6">
+                    {/* The phone's link couldn't be used, so this is the same account's earlier sign-in, carried on. */}
+                    {!isFleetMode && keySession && keySessionNotice && (
+                        <div role="status" className="bg-nature-900 border border-terra-600 text-nature-100 text-sm rounded-lg px-4 py-3 flex items-start gap-3">
+                            <span className="flex-1">{keySessionNotice}</span>
+                            <button type="button" className="text-nature-300 hover:text-white" aria-label="Dismiss" onClick={() => setKeySessionNotice(null)}>×</button>
+                        </div>
+                    )}
                     {!isFleetMode ? (
                         <>
                             {activeTab === 'home' && (() => {
@@ -1529,6 +1614,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                                         initialSubTab={(navSubTab as any) || 'directory'}
                                         onSubTabChange={setNavSubTab}
                                         rolesViewer={keySession ? { kind: 'key', memberPubkey: keySession.memberPubkey, role: keySession.role } : { kind: 'password' }}
+                                        onSignedOutEverywhere={!isFleetMode && keySession ? handleSignedOutEverywhere : undefined}
                                     />
                                 </SectionErrorBoundary>
                             )}

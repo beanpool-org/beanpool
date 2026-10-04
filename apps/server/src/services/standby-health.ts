@@ -337,7 +337,15 @@ function label(id: string, s: HealthState, withAddress = true): string {
 function sentence(p: Problem, s: HealthState, withAddress = true): string {
     const who = label(p.standby, s, withAddress);
     if (p.kind === 'stopped') return `${who} has not made a copy of this server since ${timeInWords(p.since)}.`;
-    if (p.kind === 'refused') return `${who}'s last ${p.count} copies of this server were refused: ${whyInWords(p.why)}.`;
+    if (p.kind === 'refused') {
+        if (p.why === 'redirect' || p.why?.startsWith('redirect:')) {
+            const host = p.why.includes(':') ? p.why.slice(p.why.indexOf(':') + 1) : null;
+            return host
+                ? `${who}'s address redirects to ${host}: point it at the server itself.`
+                : `${who}'s address redirects: point it at the server itself.`;
+        }
+        return `${who}'s last ${p.count} copies of this server were refused: ${whyInWords(p.why)}.`;
+    }
     if (p.kind === 'oversized') {
         return `${who} refuses ${p.refusedInARow > 0 ? 'its' : 'whole'} copies of this server: this server holds more rows of ${differsInWords(p.tables)} `
             + `than one copy carries, and the ledger needs ${pronounOf(p.tables)} whole. `
@@ -355,10 +363,12 @@ function sentence(p: Problem, s: HealthState, withAddress = true): string {
 
 function pushBody(problems: Problem[]): string {
     const kinds = new Set(problems.map((p) => p.kind));
-    const what = kinds.has('stopped') ? 'It has stopped copying this server.'
-        : kinds.has('refused') || kinds.has('oversized') ? 'Its copies of this server are being refused.'
-            : kinds.has('left-out') ? 'Its copies of this server leave something out.'
-                : 'Its copy of this server does not match it.';
+    const redir = problems.some((p) => p.kind === 'refused' && (p.why === 'redirect' || p.why?.startsWith('redirect:')));
+    const what = redir ? 'Its address redirects to another server.'
+        : kinds.has('stopped') ? 'It has stopped copying this server.'
+            : kinds.has('refused') || kinds.has('oversized') ? 'Its copies of this server are being refused.'
+                : kinds.has('left-out') ? 'Its copies of this server leave something out.'
+                    : 'Its copy of this server does not match it.';
     return `${what} If this server were lost, a take-over from it would miss what it has not copied. Open Settings to see what is wrong.`;
 }
 

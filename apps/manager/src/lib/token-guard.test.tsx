@@ -6,7 +6,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { guardTokenFetch, tokenCannotReach, OWNER_PHONE_EVENT, OWNER_PHONE_MESSAGE, TOKEN_REPLACE_ADVICE } from './token-guard';
-import { forgetStandby, freezeNodeUser, fetchNodeData, buildAdminHeaders } from './node-client';
+import { forgetStandby, freezeNodeUser, fetchNodeData, buildAdminHeaders, isManagerApi } from './node-client';
 import { OwnerPhoneBanner } from '../components/auth/OwnerPhoneBanner';
 
 const NODE = 'https://node.example';
@@ -75,6 +75,25 @@ describe('a token never goes to the dashboard\'s own origin', () => {
         }
         expect(inner).not.toHaveBeenCalled();
         expect(events).toHaveLength(0);
+    });
+
+    it('a request with a token to /API/Manager/ is not sent (case-insensitive check)', async () => {
+        for (const url of ['/API/Manager/backups/status', `${window.location.origin}/API/Manager/backups/download-db?nodeId=n1`]) {
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });
+            expect(res.ok, url).toBe(false);
+            expect(res.status, url).toBe(400);
+            expect(res.statusText, url).toBe('A token goes only to its own node');
+        }
+        expect(inner).not.toHaveBeenCalled();
+        expect(events).toHaveLength(0);
+    });
+
+    it('isManagerApi checks the path case-insensitively', () => {
+        expect(isManagerApi('/API/Manager/backups/status')).toBe(true);
+        expect(isManagerApi('/API/Manager')).toBe(true);
+        expect(isManagerApi('/api/manager')).toBe(true);
+        expect(isManagerApi('/api/manager/something')).toBe(true);
+        expect(isManagerApi('/api/local/admin')).toBe(false);
     });
 });
 

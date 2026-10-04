@@ -454,8 +454,11 @@ function newId(name: string): Id {
 interface Answer { status: number; body: any }
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: Method, route: string, opts: { as?: Id; admin?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: Method, route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown; headers?: Record<string, string> } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = { ...(opts.headers ?? {}) };
     if (opts.as) {
@@ -466,7 +469,7 @@ async function api(base: string, method: Method, route: string, opts: { as?: Id;
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -578,7 +581,10 @@ async function main(): Promise<void> {
         readPushIdKey(dir('main'));
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (method: Method, route: string, body?: unknown) => api(m, method, route, { admin: PW_MAIN, body });
+        // Step 7c: the password alone opens no admin route with 2FA off: M's admin calls go under an owner's key session M
+        // makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const A = (method: Method, route: string, body?: unknown) => api(m, method, route, { admin: mOwner, body });
         const S_ = (who: Id, route: string, body: unknown = {}, method: Method = 'POST') => api(m, method, route, { as: who, body });
         const invite = async () => {
             const inv = built('Gwen makes an invite', await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
@@ -1020,7 +1026,10 @@ async function main(): Promise<void> {
         // ── 4. On S, nothing of these is written ──
         console.log('\n— 4. the standby writes none of it itself —');
         const sv = `https://localhost:${await standby.send('serve')}`;
-        const onS = (method: Method, route: string, who: Id | null, body: unknown = {}) => api(sv, method, route, who ? { as: who, body } : { admin: PW_STANDBY, body });
+        // Step 7c: S's admin calls go under an owner's key session S makes, so each refusal below is S's 409 standby, not a
+        // refused credential.
+        const sOwner: Record<string, string> = await standby.send('owner-session');
+        const onS = (method: Method, route: string, who: Id | null, body: unknown = {}) => api(sv, method, route, who ? { as: who, body } : { admin: sOwner, body });
         const routes: [string, Promise<Answer>][] = [
             ['a phone registered', onS('POST', '/api/push-tokens', cy, { publicKey: cy.pk, token: token('on-standby'), registeredAt: 9_000_000 })],
             ['a phone removed', onS('DELETE', '/api/push-tokens', cy, { publicKey: cy.pk, token: SHARED })],
@@ -1080,7 +1089,7 @@ async function main(): Promise<void> {
             conversationId: chatAC, authorPubkey: cy.pk, ...lockedDm(),
         } });
         const threadOnS = await api(sv, 'POST', `/api/treasury/${probe.publicKey}/thread/message`, { as: kip, body: { text: 'On a standby' } });
-        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: PW_STANDBY, body: { title: 'On a standby', body: 'Never sent' } });
+        const announceOnS = await api(sv, 'POST', '/api/local/admin/announcements', { admin: await standby.send('owner-session'), body: { title: 'On a standby', body: 'Never sent' } });
         await sleep(200);
         const httpPushes = await standby.send('pushes');
         assert(httpPushes.length === 0, `a chat message, an enterprise thread post and an announcement over HTTPS push nothing from S (${chatOnS.status}, ${threadOnS.status}, ${announceOnS.status}; ${httpPushes.length} pushes)`);
@@ -1135,7 +1144,9 @@ async function main(): Promise<void> {
         refused.push(...(await main.send('fetches')).blocked);
         await main.send('checkpoint');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
         assert(!missing.some((line) => /notifications on|muted chats|activity list|pricing guide/.test(line)) && missing.some((line) => /photos sent in chats/.test(line))
@@ -1156,7 +1167,7 @@ async function main(): Promise<void> {
             && Object.values(lists).every((l) => JSON.stringify(l) === JSON.stringify(serverList)),
             `the manager's fallback and its e2e fixture list what will be missing as the server does (${Object.entries(lists).map(([k, l]) => `${k} ${l.length} of ${serverList.length}`).join(', ')})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));

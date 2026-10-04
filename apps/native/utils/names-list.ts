@@ -42,6 +42,7 @@ import {
 import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
 import type { BeanPoolIdentity } from './identity';
+import type { HealthExceptionsBody, HealthLogLine } from './community-health';
 
 export const NAMES_PATH = '/api/names';
 
@@ -219,6 +220,18 @@ export const fetchNamesList = (anchor: string, id: BeanPoolIdentity, forExport =
     call<NamesListBody>(anchor, id, 'GET', `${NAMES_PATH}/entries${forExport ? '?for=export' : ''}`, undefined, listTimeoutMs(entries));
 export const fetchNamesLog = (anchor: string, id: BeanPoolIdentity, limit = 50) =>
     call<{ log: NamesLogLine[]; total: number }>(anchor, id, 'GET', `${NAMES_PATH}/log?limit=${Math.max(1, Math.min(200, Math.floor(limit)))}`);
+/** Community health's exceptions (slice 6): by key and entry id, never a name. Each call is an opening, logged first. */
+export const fetchHealthExceptions = (anchor: string, id: BeanPoolIdentity) =>
+    call<HealthExceptionsBody>(anchor, id, 'GET', `${NAMES_PATH}/health/exceptions`);
+/** The community's totals and lines (`readHealthTotals` checks them): every admin and the owner, in any community. Not logged. */
+export const fetchHealthSummary = (anchor: string, id: BeanPoolIdentity) =>
+    call<{ totals?: unknown }>(anchor, id, 'GET', `${NAMES_PATH}/health`);
+/**
+ * The access log, readable by every admin and the owner: `log`, the looks at a member's balance; `tradeLog` (#1608), the
+ * looks at trades and alerts, absent from an older node.
+ */
+export const fetchHealthLog = (anchor: string, id: BeanPoolIdentity, limit = 50) =>
+    call<{ log: HealthLogLine[]; tradeLog?: HealthLogLine[] }>(anchor, id, 'GET', `${NAMES_PATH}/health/log?limit=${Math.max(1, Math.min(500, Math.floor(limit)))}`);
 export const confirmMember = (anchor: string, id: BeanPoolIdentity, memberPubkey: string, entryId: string) =>
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations`, { memberPubkey, entryId });
 export const secondConfirmation = (anchor: string, id: BeanPoolIdentity, confirmationId: string) =>
@@ -1437,6 +1450,16 @@ export function sealedFor(key: Uint8Array, keyId: string, text: { name: string; 
 
 export function addNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId: string, sealed: { id: string; ciphertext: string }) {
     return call<{ id: string }>(anchor, identity, 'POST', `${NAMES_PATH}/entries`, { id: sealed.id, ciphertext: sealed.ciphertext, keyId });
+}
+
+/** An invite bound to this entry (community modes slice 3): redeeming it confirms the joiner against it, by this admin. */
+export function inviteForNamesEntry(anchor: string, identity: BeanPoolIdentity, entryId: string) {
+    return call<{ invite: { code: string } }>(anchor, identity, 'POST', `${NAMES_PATH}/entries/${encodeURIComponent(entryId)}/invite`, {});
+}
+
+/** Every bound invite on this community, for the admins: used or not, and what each did. */
+export function readBoundInvites(anchor: string, identity: BeanPoolIdentity) {
+    return call<{ invites: import('./names-invite').BoundInvite[] }>(anchor, identity, 'GET', `${NAMES_PATH}/invites`);
 }
 
 export function editNamesEntry(anchor: string, identity: BeanPoolIdentity, keyId: string, sealed: { id: string; ciphertext: string }) {

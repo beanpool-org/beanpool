@@ -35,8 +35,9 @@ import { setMemberPhoto } from '@beanpool/engine';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
-const ADMIN = { 'x-admin-password': ADMIN_PW };
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The admin calls go under the owner
+// Olga's key session, opened once she holds the role (below).
+let ADMIN: Record<string, string> = {};
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60 * 1000;
 const VOTES_OFF = /Community votes are switched off on this node/;
@@ -114,6 +115,8 @@ async function main() {
     const jack = member('Jack'), kate = member('Kate'), lena = member('Lena');
     grantNodeRole(olga.pk, 'owner', 'owner:password');
     grantNodeRole(erin.pk, 'admin', 'owner:password');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    ADMIN = ownerSessionHeaders(olga.pk);
     const voters = [alice, bob, carol, dave];
 
     // A Decision already on this node, as if opened before the switch went off.
@@ -136,7 +139,7 @@ async function main() {
         `info says global, with formal Decisions off (${info.status} ${JSON.stringify(info.body?.features)})`);
 
     const effects = [...Object.keys(de.TOUCHES_FOR_EFFECT), 'set_rule'];
-    assert(effects.length === 14 && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper'),
+    assert(effects.length === 15 && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper') && effects.includes('forgive_debt'),
         `every effect there is, the system's own and an unknown one (${effects.join(', ')})`);
     for (const effect of effects) {
         for (const who of [carol, olga]) {

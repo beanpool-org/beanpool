@@ -274,8 +274,11 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     abuse_reports: {
-        kind: 'replicated', payload: 'abuseReports', watermark: 'updated_at',
+        kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
         columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at'),
+        except: {
+            suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
+        },
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
@@ -395,9 +398,9 @@ export const TABLES: Record<string, TableEntry> = {
     group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
     group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
     // Every invite already sent, and who used which.
-    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by updated_at'),
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
     // A replacement phone's code an operator issued.
-    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at'),
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status'),
     // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
     // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
     // server that made them and on one that took over.
@@ -423,6 +426,16 @@ export const TABLES: Record<string, TableEntry> = {
     confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
     // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
     names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
+    known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
+    known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    health_access_log: plain('id actor_pubkey action subject_pubkey detail at updated_at'),
+    known_consents: plain('member_pubkey version consented_at updated_at'),
+    known_consent_log: plain('id member_pubkey action version at updated_at'),
+    names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at updated_at'),
+    names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
+    // A member's retried payment gets its first answer (engine/money-requests.ts), on a standby that took over too. Its
+    // week-old ids go without tombstones, on each server (engine/money-requests.ts pruneMoneyRequests; the age rule).
+    money_requests: plain('payer_pubkey request_id route fingerprint answer created_at updated_at', { agedOut: { column: 'created_at', days: 7 } }),
 
     // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
     // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
@@ -592,6 +605,10 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     totpSecret: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     totpBackupCodesHashes: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     breakGlassMode: { kind: 'takeover-bundle', reason: 'break-glass sign-in' },
+    passwordRetired: {
+        kind: 'takeover-bundle',
+        reason: 'the admin password retired for good; merged sticky, so an older bundle never brings the password back',
+    },
     recoveryCode: { kind: 'takeover-bundle', reason: "the public record of the community's recovery code" },
     identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
     isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },
@@ -600,6 +617,8 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     totpPendingBackupCodesHashes: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
     claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
     addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
+    endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
+    turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
     backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
     backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
     replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },
@@ -645,6 +664,11 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
     door: { kind: 'community-settings', reason: 'who may invite: any member, or only admins (config/door.ts)' },
     names_two_admins: { kind: 'community-settings', reason: 'whether a confirmation against the names list needs a second admin (engine/names-list.ts)' },
+    confirmation: { kind: 'community-settings', reason: 'the confirmation dial: whether a confirmed member holds the known floor (config/known-floor.ts)' },
+    known_floor: { kind: 'community-settings', reason: "the community's known floor in Beans (config/known-floor.ts)" },
+    credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
+    health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
+    health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '

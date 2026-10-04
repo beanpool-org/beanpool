@@ -31,6 +31,7 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
 import { setMemberPhoto } from '@beanpool/engine';
 
@@ -257,15 +258,18 @@ async function main() {
     setStatus(woundUp, 'completed');
     const signedAdminSet = await signedFetch('POST', `/api/enterprise/${woundUp}/location`, adminId, { lat: -28.5, lng: 153.5 });
     assert(signedAdminSet.status === 403, `Admin SET on a wound-up enterprise via the signed route is 403 (got ${signedAdminSet.status})`);
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (its 403 would hide this one's); the
+    // Settings route is called with an owner's automation token.
+    const settingsAdmin = ownerTokenHeaders('admin');
     const settingsAdminSet = await fetch(`${BASE}/api/local/admin/treasury/${woundUp}/location`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json', ...settingsAdmin },
         body: JSON.stringify({ lat: -28.5, lng: 153.5 }),
     });
     assert(settingsAdminSet.status === 403, `Admin SET on a wound-up enterprise via the Settings route is 403 like the signed route (got ${settingsAdminSet.status})`);
     const settingsBadBody = await fetch(`${BASE}/api/local/admin/treasury/${shed}/location`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json', ...settingsAdmin },
         body: JSON.stringify({ lat: 'abc', lng: 153.5 }),
     });
     assert(settingsBadBody.status === 400, `Admin Settings route with a bad body is 400 (got ${settingsBadBody.status})`);

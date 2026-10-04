@@ -97,6 +97,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
     const { tunnelConnectorForTests, resetTunnelConnectorForTests } = await import('./services/tunnel-connector.js');
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
 
     refuseEdge();
     await initTls();
@@ -154,6 +155,12 @@ async function main() {
     const UPDATE = '/api/local/admin/public-address/update';
     const OFFLINE = '/api/local/admin/public-address/offline';
     const password = { 'X-Admin-Password': ADMIN_PASSWORD };
+    // Step 7c: with 2FA off the password alone opens no admin route; the owner's password goes with a code. Each such call
+    // turns 2FA on (admin-auth-test-harness turnOn2faForTests) and off again, so the key-session calls run as before.
+    const withPassword = async (method: 'GET' | 'POST', p: string, body?: unknown) => {
+        const tfa = turnOn2faForTests(ADMIN_PASSWORD);
+        try { return await call(method, p, body, tfa.headers()); } finally { updateLocalConfig({ totpEnabled: false, totpSecret: null }); }
+    };
     const leaks = (text: string) => text.includes(TUNNEL_TOKEN) || /tunnelToken"\s*:/.test(text);
 
     try {
@@ -190,7 +197,10 @@ async function main() {
         const ownerStatus = await call('GET', STATUS, undefined, asOwner);
         assert(ownerStatus.status === 200 && ownerStatus.body?.tunnelToken === TUNNEL_TOKEN, `an owner by key reads the token (${ownerStatus.status})`);
         assert(!ownerStatus.text.includes(EXTRA_SECRET) && !('tunnelTokenOwnerOnly' in (ownerStatus.body || {})), 'and only the named fields');
-        const pwStatus = await call('GET', STATUS, undefined, password);
+        const pwAlone = await call('GET', STATUS, undefined, password);
+        assert(pwAlone.status === 403 && pwAlone.body?.code === 'password_needs_2fa' && !leaks(pwAlone.text),
+            `step 7c: the admin password alone (2FA off) is refused as needing 2FA, with no token (${pwAlone.status} ${pwAlone.body?.code})`);
+        const pwStatus = await withPassword('GET', STATUS);
         assert(pwStatus.status === 200 && pwStatus.body?.tunnelToken === TUNNEL_TOKEN, `the admin password (an owner) reads the token (${pwStatus.status})`);
         assert(tunnelConnectorForTests().wantedToken === TUNNEL_TOKEN && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'after every read the tunnel still runs on the token in the node config');
@@ -225,9 +235,13 @@ async function main() {
         const adminOffline = await call('POST', OFFLINE, {}, asAdmin);
         assert(adminOffline.status === 403 && regStatus === 'live' && (getNodeConfig() as any).publicAddress?.tunnelToken === TUNNEL_TOKEN,
             `an admin's release is refused and the address stays (${adminOffline.status})`);
-        const pwUpdate = await call('POST', UPDATE, { communityName: 'Tok Vale' }, password);
+        const adminExtra = await call('GET', '/api/local/admin/public-address/extra-names', undefined, asAdmin);
+        const adminRelease = await call('POST', '/api/local/admin/public-address/release-name', { name: 'other-name' }, asAdmin);
+        assert(adminExtra.status === 403 && adminRelease.status === 403 && regStatus === 'live',
+            `nor list or release the names it holds besides it (${adminExtra.status} ${adminRelease.status})`);
+        const pwUpdate = await withPassword('POST', UPDATE, { communityName: 'Tok Vale' });
         assert(pwUpdate.status === 200 && !pwUpdate.text.includes(EXTRA_SECRET), `the admin password renames it, named fields only (${pwUpdate.status})`);
-        const pwOffline = await call('POST', OFFLINE, {}, password);
+        const pwOffline = await withPassword('POST', OFFLINE, {});
         assert(pwOffline.status === 200 && pwOffline.body?.status === 'none' && !pwOffline.text.includes(EXTRA_SECRET),
             `the admin password releases it, named fields only (${pwOffline.status} ${pwOffline.text.slice(0, 120)})`);
     } finally {

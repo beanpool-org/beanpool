@@ -17,6 +17,10 @@ export const DEFAULT_ENV = {
     ENABLE_PEER_CONNECTORS: 'true',
     // No test node asks GitHub for the latest release (its 30s timer fires in a slow run and trips the off-machine checks).
     DISABLE_UPDATE_CHECK: 'true',
+    // A new install makes no admin password and ignores ADMIN_PASSWORD (config/local-config.ts initAdminPassword). The
+    // suites that sign in with a password on a fresh data dir still get it from ADMIN_PASSWORD with this; the ones that
+    // check a new install (test-no-password-fresh-install, test-node-claim, test-first-admin-password) remove it.
+    BEANPOOL_SUITE_ENV_PASSWORD: '1',
 };
 
 /**
@@ -55,6 +59,7 @@ export const SUITES = [
     'test-activity-feed',
     'test-member-purge',
     'test-purge-during-rekey',
+    'test-rekey-cancel',
     'test-removed-member-delete',
     'test-keeper-deposit',
     'test-keeper-routes',
@@ -95,6 +100,10 @@ export const SUITES = [
     'test-treasury-eggs',
     'test-enterprise-credit-rules',
     'test-derived-enterprise-floor',
+    'test-known-floor-http',
+    'test-names-debts-http',
+    'test-commons-pay-idempotent-http',
+    'test-community-health-http',
     'test-demurrage-window',
     'test-crowdfund-delete-refund',
     'test-money-pledge-and-hourly-price',
@@ -113,9 +122,11 @@ export const SUITES = [
     'test-totp-admin-2fa',
     'test-2fa-covers-admin-routes',
     'test-2fa-reenrol-needs-code',
+    'test-2fa-session-credential-bound',
     'test-breakglass-and-backup-codes',
     'test-beanpool-recover',
     'test-claim-cli',
+    'test-atomic-state-writes',
     'test-totp-helpers',
     'test-moderation-admin',
     'test-report-dedup-and-sync',
@@ -143,11 +154,15 @@ export const SUITES = [
     'test-admin-auth',
     'test-first-admin-password',
     'test-node-claim',
+    'test-no-password-fresh-install',
     'test-config-write-races',
     'test-admin-key-auth',
     'test-app-admin-handoff',
     'test-web-manager-hardening',
     'test-password-totp-gate',
+    'test-password-needs-2fa',
+    'test-retire-admin-password',
+    'test-retired-password-bundles',
     'test-automation-tokens',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
@@ -195,6 +210,7 @@ export const SUITES = [
     'test-standby-ledger-gate',
     'test-standby-community-settings',
     'test-standby-names-list',
+    'test-standby-known-consents',
     'test-standby-listings-verbatim',
     'test-standby-standing',
     'test-standby-health',
@@ -228,6 +244,7 @@ export const SUITES = [
     'test-logger-sanitization',
     'test-codes-out-of-logs',
     'test-ws-traffic-private',
+    'test-ws-logs-session',
     'test-manager-build',
     'test-onboarding-funnel',
     'test-funnel-cohort',
@@ -365,12 +382,15 @@ export const SUITES = [
     'test-invites-off',
     'test-door-setting',
     'test-names-list',
+    'test-invite-bound-name',
     'test-names-copy',
     'test-names-access-log-migration',
+    'test-health-access-log-migration',
     'test-rip-out-legacy-voting',
     'test-escrow-disputes',
     'test-process-handlers',
     'test-shutdown-recovery',
+    'test-clean-stop',
     'test-storage-health',
     'test-image-store',
     'test-image-store-s3',
@@ -409,6 +429,7 @@ export const SUITES = [
     'test-slice6-review-findings',
     'test-security-followups-0919',
     'test-security-followups-1001',
+    'test-member-error-text',
     'test-storm-smalls',
 ];
 
@@ -451,6 +472,9 @@ export const VARIANTS = [
     // Distance search (G4) with read enforcement opted out. Nothing stands in front of the People list, so its own
     // refusal of a distance to an unsigned caller or a key that is not a member is what holds.
     { name: 'test-distance-search', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // An invite bound to a names-list entry (community modes slice 3) reaches nobody but its maker under the opt-out too:
+    // /api/invite/mine/:publicKey, open to anyone then, leaves bound invites out for anyone but the maker.
+    { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

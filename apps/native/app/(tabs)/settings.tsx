@@ -41,6 +41,7 @@ import { APP_LOCK_NEEDS_SCREEN_LOCK, authenticateUser, getAppLockEnabled, getScr
 import { readWordsBehindLock } from '../../utils/words-behind-lock';
 import { usePutAwayAfterLeave } from '../../utils/words-put-away';
 import { KeeperProtectionPanel } from '../../components/KeeperProtectionPanel';
+import { KnownConsentCard } from '../../components/KnownConsentCard';
 import { NoWordsNotice } from '../../components/NoWordsNotice';
 import { AddWordsForm } from '../../components/AddWordsForm';
 import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../../components/WordsOnScreen';
@@ -1589,6 +1590,9 @@ export default function SettingsScreen() {
             contentContainerStyle={[styles.content, { paddingBottom: 48 }]}
             bottomOffset={16}
         >
+            {/* A known community's consent (community modes slice 6): offered, never required. */}
+            <KnownConsentCard />
+
             {/* ─── Identity Dashboard Card ─── */}
             <View style={styles.identityCard}>
                 <View style={styles.identityInner}>

@@ -95,7 +95,7 @@ describe('a card at 320dp × 1.3', () => {
         expect(s.button.flexShrink).toBe(0);
         expect(s.button.maxWidth).toBe('100%');
         const pad = 2 * num(s.button.paddingHorizontal) + 2 * num(s.button.borderWidth);
-        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Try again', 'Connect']) {
+        for (const label of ['Post an Offer', 'Invite someone', 'Open the Market', 'Open Talk', 'Try again', 'Connect']) {
             expect(textWidth(label, num(s.buttonText.fontSize)) + pad, label).toBeLessThanOrEqual(CARD_INNER);
         }
     });

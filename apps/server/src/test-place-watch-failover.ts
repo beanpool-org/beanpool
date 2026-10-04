@@ -297,7 +297,6 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const wes = newId(), quinn = newId(), wanda = newId(), pru = newId(), del = newId(), rex = newId(), rex2 = newId(), vic = newId();
     const token = (id: Id) => `ExponentPushToken[${id.pk.slice(0, 12)}]`;
 
@@ -418,9 +417,12 @@ async function main(): Promise<void> {
         // ── 5. The take-over ──
         console.log('\n— 5. the main server dies and the standby takes over —');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw(PW_STANDBY));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session
+        // the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         require_(opened.status === 200, `the recovery code opens the keys (${opened.status} ${opened.body?.error ?? ''})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);

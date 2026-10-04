@@ -85,6 +85,12 @@ export function recoverOwner(who: string, dir = dataDir()): RecoverResult {
                     granted_by = CASE WHEN node_roles.role = 'owner' THEN node_roles.granted_by ELSE excluded.granted_by END,
                     granted_at = CASE WHEN node_roles.role = 'owner' THEN node_roles.granted_at ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END`)
                 .run(found.pubkey, RECOVER_ACTOR, hash);
+            // When and from what the code was made, for Settings (#1531), if the node has run since those columns came.
+            const cols = (conn.prepare('PRAGMA table_info(node_roles)').all() as { name: string }[]).map(c => c.name);
+            if (cols.includes('break_glass_made_at') && cols.includes('break_glass_made_by')) {
+                conn.prepare(`UPDATE node_roles SET break_glass_made_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), break_glass_made_by = 'recover'
+                    WHERE member_pubkey = ?`).run(found.pubkey);
+            }
             // As grantNodeRole does on a role change: the member's row moves, so phones' delta reads carry the new role
             // (the node's own caches follow when it delivers the notice).
             if (was?.role !== 'owner') conn.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), found.pubkey);

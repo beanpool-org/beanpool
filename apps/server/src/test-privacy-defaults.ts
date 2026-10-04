@@ -758,7 +758,13 @@ async function main() {
 
         // Settings reads the enterprises with the admin password, and nobody reads them there without it.
         resetAdminAuthTarpit();
-        const admin = await get('/api/local/admin/treasury', undefined, { 'X-Admin-Password': ADMIN_PW });
+        // Step 7c: with 2FA off the password alone opens no admin route, so Settings sends it with 2FA on and a code (2FA goes
+        // off again after).
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        const { updateLocalConfig } = await import('./config/local-config.js');
+        const twoFa = turnOn2faForTests(ADMIN_PW);
+        const admin = await get('/api/local/admin/treasury', undefined, twoFa.headers());
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
         assert(admin.status === 200 && admin.body?.treasuries?.some((t: any) => t.publicKey === enterprise && t.keepers?.some((k: any) => k.publicKey === alice.pk)),
             `Settings lists the enterprises with the admin password (got ${admin.status} ${admin.text.slice(0, 90)})`);
         resetAdminAuthTarpit();

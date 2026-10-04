@@ -2,7 +2,8 @@
  * `beanpool claim --key <64-hex> --callsign <name>`: the claim with no phone and no HTTP, for the day the node's claim
  * route is out of reach or flooded. The key joins (as the HTTP claim's joiner does, claim-code.ts claimNode, invite code
  * `claim:<id>`) and becomes the owner, granted by `claim:<id>`, in one transaction on the command's own connection
- * (never db/db.ts: recover-command.ts says why). It prints the owner's break-glass code once.
+ * (never db/db.ts: recover-command.ts says why). It prints the owner's break-glass code once. A key that is already an
+ * active member keeps its callsign (as claimNode keeps existing.callsign): the terminal and the notice name that one.
  *
  * The burn, as the HTTP claim's: the claim file is deleted here; the owner row closes every claim at once (each claim
  * path asks the database first, claim-code.ts nodeHasOwner); and the node, which alone writes local-config.json, deletes
@@ -24,6 +25,7 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
     if (callsign.length < 2 || callsign.length > 20 || callsign.toUpperCase() === 'SYSTEM') { io.err('Nothing was changed. --callsign takes a name of 2–20 characters.'); return 1; }
     const conn = new Database(path.join(dir, 'state.db'), { fileMustExist: true });
     let code = '';
+    let shown = callsign;
     try {
         conn.pragma('busy_timeout = 10000');
         if (isInvalidatedKey(conn as any, key)) { io.err('Nothing was changed. That key was replaced by a new one.'); return 1; }
@@ -36,7 +38,9 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
             const member = getMember(conn as any, key);
             const visitor = !!member && isVisitorKey(conn as any, key);
             if (member && !visitor && member.status !== 'active') return `That key's account here is ${member.status}.`;
-            const clash = conn.prepare(`SELECT 1 FROM members WHERE lower(callsign) = lower(?) AND public_key != ?
+            // An active member keeps their own callsign; the typed one is used only by a key that joins here.
+            if (member && !visitor) { shown = member.callsign; }
+            const clash = member && !visitor ? null : conn.prepare(`SELECT 1 FROM members WHERE lower(callsign) = lower(?) AND public_key != ?
                 AND status NOT IN ('migrated', 'pruned')`).get(callsign, key);
             if (clash) return `The callsign @${callsign} is in use here. Pick another.`;
             const now = new Date().toISOString();
@@ -57,12 +61,13 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
         conn.close();
     }
     try { fs.unlinkSync(path.join(dir, 'claim-code.txt')); } catch { /* gone already */ }
-    const notice = { pubkey: key, callsign, alreadyOwner: false, at: new Date().toISOString(), claimId };
+    const notice = { pubkey: key, callsign: shown, alreadyOwner: false, at: new Date().toISOString(), claimId };
     const name = `recover-notice-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.json`;
     const tmp = path.join(dir, `.${name}.tmp`);
     fs.writeFileSync(tmp, JSON.stringify(notice), { mode: 0o600 });
     fs.renameSync(tmp, path.join(dir, name));
-    io.out(`@${callsign} is now the owner of this community. The claim code is used up.`);
+    io.out(`@${shown} is now the owner of this community. The claim code is used up.`);
+    if (shown !== callsign) io.out(`That key is already the member @${shown} here; they keep that callsign (--callsign ${callsign} was not used).`);
     io.out(`\nTheir break-glass code (shown once, give it only to them): ${code}`);
     io.out('\nThe community will see a notice that its owner was set from the server.');
     return 0;

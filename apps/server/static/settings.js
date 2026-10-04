@@ -52,6 +52,56 @@
             el.className = `status-msg show ${type}`;
         }
 
+        // Sign-in step 7c: with the node's two-factor sign-in off, the admin password opens no admin route (403
+        // password_needs_2fa). This page signs in with the password, so there it can't work: it says so on the sign-in
+        // view, in the node's words and with the way out, instead of an empty Settings view.
+        function showPasswordNeeds2fa(serverWords) {
+            logout();
+            const el = document.getElementById('login-status');
+            const words = String(serverWords || 'This node needs two-factor sign-in before the admin password opens Settings').trim();
+            const link = document.createElement('a');
+            link.href = '/settings';
+            link.textContent = 'Settings';
+            el.replaceChildren(`${words}${/[.!?]$/.test(words) ? '' : '.'} Open `, link, ' (the new page) to turn it on, then come back.');
+            el.className = 'status-msg show error';
+        }
+        // Sign-in step 10: an owner retired this node's admin password. This page signs in only with the password, so it
+        // draws no password form and points to the phone.
+        function showPasswordRetired() {
+            logout();
+            ['login-password', 'login-totp'].forEach(id => {
+                const field = document.getElementById(id)?.closest('.field');
+                if (field) field.classList.add('hidden');
+            });
+            document.getElementById('login-btn')?.classList.add('hidden');
+            const el = document.getElementById('login-status');
+            const link = document.createElement('a');
+            link.href = '/settings';
+            link.textContent = 'Settings';
+            el.replaceChildren('This server has no admin password: an owner retired it. Open ', link,
+                ' (the new page) and choose "Sign in with your phone", with the BeanPool app.');
+            el.className = 'status-msg show error';
+        }
+        /** True, with the message shown, when an admin call was refused because the password needs two-factor sign-in. */
+        async function refusedForNeeds2fa(res) {
+            if (res.status !== 403) return false;
+            const body = await res.clone().json().catch(() => null);
+            if (body && body.code === 'password_retired') { showPasswordRetired(); return true; }
+            if (!body || body.code !== 'password_needs_2fa') return false;
+            showPasswordNeeds2fa(body.error);
+            return true;
+        }
+        // Any pane: an admin call refused that way while signed in brings the sign-in view back with the message.
+        // Only this node's own answers count: the page also asks sister nodes for their status, and a sister's 403 must
+        // neither sign the operator out nor put its words on this node's sign-in view (#1564 deciding review).
+        const pageFetch = window.fetch.bind(window);
+        const fromThisNode = (res) => { try { return new URL(res.url, location.href).origin === location.origin; } catch { return false; } };
+        window.fetch = async (...args) => {
+            const res = await pageFetch(...args);
+            if (authToken && fromThisNode(res)) await refusedForNeeds2fa(res);
+            return res;
+        };
+
         function showView(name) {
             document.getElementById('view-login').classList.toggle('hidden', name !== 'login');
             document.getElementById('view-settings').classList.toggle('hidden', name !== 'settings');
@@ -398,7 +448,7 @@
                         if (info.location && info.location.lat && info.location.lng) {
                             const marker = L.marker([info.location.lat, info.location.lng], { icon: sisterIcon })
                                 .addTo(settingsMap)
-                                .bindPopup(`<div style="text-align:center;"><b>${info.callsign || c.callsign || 'Sister Node'}</b><br><a href="${c.publicUrl}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
+                                .bindPopup(`<div style="text-align:center;"><b>${esc(info.callsign || c.callsign || 'Sister Node')}</b><br><a href="${esc(c.publicUrl)}" target="_blank" style="color:#3b82f6;font-size:0.8rem;text-decoration:none;">Visit Node ↗</a></div>`);
                             sisterMarkers.push(marker);
                         }
                     }
@@ -512,13 +562,23 @@
                 if (loginData.tfaSessionToken) {
                     tfaSessionToken = loginData.tfaSessionToken;
                 }
-                initLogsWs();
-                let dashboardData = null;
+                // An admin route is asked first: on a node where the password needs two-factor sign-in it is refused,
+                // and Settings never opens empty. /dashboard checks the same credential before it adds the peer links.
+                const gateRes = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
+                if (await refusedForNeeds2fa(gateRes)) return;
                 const dashRes = await fetch(`${API}/dashboard`, { headers: adminHeaders() });
-                if (dashRes.ok) {
-                    dashboardData = await dashRes.json();
-                    hydrateSettings(dashboardData);
+                if (!dashRes.ok) {
+                    // Never the Settings view after a failed load: an empty view tells the operator nothing.
+                    if (!(await refusedForNeeds2fa(dashRes))) {
+                        const err = await dashRes.json().catch(() => ({}));
+                        logout();
+                        showStatus('login-status', err.error || `Settings could not load (HTTP ${dashRes.status})`, 'error');
+                    }
+                    return;
                 }
+                const dashboardData = await dashRes.json();
+                hydrateSettings(dashboardData);
+                initLogsWs();
                 showView('settings');
                 loadVersionInfo();
                 loadHealthDashboard();
@@ -868,7 +928,8 @@
 
         async function refreshConnectors() {
             try {
-                const res = await fetch(`${API}/connectors`);
+                // Admin only, like the routes that change the links.
+                const res = await fetch(`${API}/connectors`, { headers: adminHeaders() });
                 if (res.ok) renderConnectors(await res.json());
             } catch (e) { /* ignore */ }
         }
@@ -1224,7 +1285,9 @@
         }
 
         // Community Health dashboard
-        async function loadHealthDashboard() {
+        // A reload (at sign-in, after a change) asks for the alerts' names-free summary, which logs nothing; the alerts that
+        // name members come only when the admin asks to see them, and that look is logged once in 24 hours per admin and member (review r4177560410).
+        async function loadHealthDashboard(namedAlerts = false) {
             try {
                 // The admin route, not the public one: GET /api/community/health deliberately
                 // omits `flags` (fraud analysis + member public keys) because it answers
@@ -1233,7 +1296,7 @@
                 const res = await fetch('/api/local/admin/health', {
                     method: 'POST',
                     headers: adminHeaders({ 'Content-Type': 'application/json' }),
-                    body: '{}'
+                    body: namedAlerts === true ? '{}' : JSON.stringify({ alerts: 'summary' })
                 });
                 if (!res.ok) return;
                 const h = await res.json();
@@ -1279,7 +1342,9 @@
                         const bgColor = f.severity === 'alert' ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)';
                         const labelColor = f.severity === 'alert' ? '#ef4444' : '#f59e0b';
                         return `<div style="border:1px solid ${borderColor};background:${bgColor};border-radius:10px;padding:0.75rem;margin-bottom:0.5rem;"><div style="display:flex;align-items:center;gap:0.4rem;margin-bottom:0.2rem;"><span>${icon}</span><span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:${labelColor};">${esc(f.type.replace(/_/g, ' '))}</span></div><div style="font-size:0.8rem;color:#cbd5e1;">${esc(f.description)}</div></div>`;
-                    }).join('');
+                    }).join('') + (healthFlags.some(f => f.namesHidden) ? '<button type="button" class="show-named-alerts" style="margin-top:0.5rem;font-size:0.75rem;padding:0.35rem 0.75rem;border:1px solid #334155;border-radius:6px;background:transparent;color:#cbd5e1;cursor:pointer;">Show who the alerts name (your first look at each member in 24 hours is logged)</button>' : '');
+                    const showBtn = fEl.querySelector('.show-named-alerts');
+                    if (showBtn) showBtn.addEventListener('click', () => loadHealthDashboard(true));
                 }
             } catch { /* offline */ }
         }
@@ -1798,13 +1863,15 @@
             } catch { /* ignore */ }
         }
 
-        async function loadAdminData() {
+        // A reload (a tab switch, after a moderation action) asks for the alerts' names-free summary, which logs nothing;
+        // the alerts that name members come only when the admin asks to see them, and that look is logged once in 24 hours per admin and member (r4177560410).
+        async function loadAdminData(namedAlerts = false) {
             if (!authToken) return;
             try {
                 const res = await fetch('/api/local/admin/data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: authToken })
+                    body: JSON.stringify(namedAlerts === true ? { password: authToken } : { password: authToken, alerts: 'summary' })
                 });
                 if (!res.ok) return;
                 adminDataCache = await res.json();
@@ -2005,7 +2072,9 @@
                         <div style="font-size:0.7rem;color:#64748b;margin-top:0.15rem;">${esc(f.members.join(', '))}</div>
                     </div>
                 </div>
-            `).join('');
+            `).join('') + (flags.some(f => f.namesHidden) ? '<button type="button" class="show-named-alerts" style="margin-top:0.5rem;font-size:0.75rem;padding:0.35rem 0.75rem;border:1px solid #334155;border-radius:6px;background:transparent;color:#cbd5e1;cursor:pointer;">Show who the alerts name (your first look at each member in 24 hours is logged)</button>' : '');
+            const showBtn = el.querySelector('.show-named-alerts');
+            if (showBtn) showBtn.addEventListener('click', () => loadAdminData(true));
         }
 
         function renderAdminPosts() {
@@ -2231,7 +2300,8 @@
                 </div>`;
                 return;
             }
-            const { members, profiles, health, reports, memberStats } = adminDataCache;
+            // Each member's posts and messages; of trades, only the community's totals (queue item 29).
+            const { members, profiles, health, reports, memberStats, tradeTotals } = adminDataCache;
             const flags = health?.flags || [];
             const stats = memberStats || {};
             
@@ -2286,19 +2356,15 @@
             const branchStatsCache = {};
             function computeBranchStats(pubkey) {
                 if (branchStatsCache[pubkey]) return branchStatsCache[pubkey];
-                const personal = stats[pubkey] || { posts: 0, messages: 0, deals: 0, volume: 0, cancelled: 0 };
+                const personal = stats[pubkey] || { posts: 0, messages: 0 };
                 const children = tree[pubkey] || [];
-                const agg = { ...personal, memberCount: 1 };
+                const agg = { posts: personal.posts || 0, messages: personal.messages || 0, memberCount: 1 };
                 children.forEach(c => {
                     const childAgg = computeBranchStats(c.publicKey);
                     agg.posts += childAgg.posts;
                     agg.messages += childAgg.messages;
-                    agg.deals += childAgg.deals;
-                    agg.volume += childAgg.volume;
-                    agg.cancelled += childAgg.cancelled;
                     agg.memberCount += childAgg.memberCount;
                 });
-                agg.volume = Math.round(agg.volume * 100) / 100;
                 branchStatsCache[pubkey] = agg;
                 return agg;
             }
@@ -2351,12 +2417,10 @@
                 }
 
                 // Personal stat chips (compact inline indicators)
-                const s = stats[pubkey] || { posts: 0, messages: 0, deals: 0, volume: 0, cancelled: 0 };
+                const s = stats[pubkey] || { posts: 0, messages: 0 };
                 let chipHtml = '<span style="display:inline-flex;gap:3px;margin-left:0.4rem;vertical-align:middle;">';
                 if (s.posts > 0) chipHtml += `<span class="stat-chip posts" title="${s.posts} active posts">📦${s.posts}</span>`;
                 if (s.messages > 0) chipHtml += `<span class="stat-chip msgs" title="${s.messages} messages sent">💬${s.messages}</span>`;
-                if (s.deals > 0) chipHtml += `<span class="stat-chip deals" title="${s.deals} completed deals · B${s.volume} volume">🤝${s.deals}</span>`;
-                if (s.cancelled > 0) chipHtml += `<span class="stat-chip cancelled" title="${s.cancelled} cancelled escrows">🚫${s.cancelled}</span>`;
                 chipHtml += '</span>';
 
                 // Branch stats card (expandable)
@@ -2365,18 +2429,15 @@
                 const statsCardId = `stats-${pubkey.slice(0,12)}`;
                 let statsBtn = '';
                 let statsCard = '';
-                if (hasBranch || s.deals > 0 || s.posts > 0) {
+                if (hasBranch || s.posts > 0 || s.messages > 0) {
                     statsBtn = `<button class="btn btn-sm btn-outline" onclick="event.preventDefault();event.stopPropagation();const c=document.getElementById('${statsCardId}');c.style.display=c.style.display==='none'?'grid':'none';" title="Toggle stats">📊</button>`;
                     statsCard = `<div id="${statsCardId}" class="stats-card" style="display:none;">
                         <div class="stat-row"><span class="label">📦 Posts</span><span class="value">${s.posts}</span></div>
                         <div class="stat-row"><span class="label">💬 Messages</span><span class="value">${s.messages}</span></div>
-                        <div class="stat-row"><span class="label">🤝 Deals</span><span class="value">${s.deals}</span></div>
-                        <div class="stat-row"><span class="label">💰 Volume</span><span class="value">B${s.volume}</span></div>
-                        <div class="stat-row"><span class="label">🚫 Cancelled</span><span class="value">${s.cancelled}</span></div>
                         ${hasBranch ? `
                         <div class="stat-row full-width" style="background:#0f172a;border:1px solid #334155;margin-top:0.2rem;">
                             <span class="label" style="color:#60a5fa;">🌳 Branch (${branchStats.memberCount} members)</span>
-                            <span class="value" style="color:#60a5fa;">📦${branchStats.posts} 💬${branchStats.messages} 🤝${branchStats.deals} 💰B${branchStats.volume}</span>
+                            <span class="value" style="color:#60a5fa;">📦${branchStats.posts} 💬${branchStats.messages}</span>
                         </div>` : ''}
                     </div>`;
                 }
@@ -2455,8 +2516,12 @@
                 el.innerHTML = '<div style="padding:1rem;color:#64748b;">No tree found</div>';
             } else {
                 const rendered = roots.map(r => buildNode(r.publicKey, 0)).join('');
+                const t = tradeTotals;
+                const totalsHtml = t && typeof t.deals === 'number'
+                    ? `<div id="community-trade-totals" style="padding:0.6rem 0.8rem;margin-bottom:0.6rem;border:1px solid #334155;border-radius:8px;font-size:0.8rem;color:#cbd5e1;">🤝 ${Number(t.deals)} deals · 💰 ${Number(t.volume)} Beans · 🚫 ${Number(t.cancelled)} cancelled<br><span style="color:#64748b;">The whole community's trades. No member's trades are shown here.</span></div>`
+                    : '';
                 el.innerHTML = rendered.trim()
-                    ? rendered
+                    ? totalsHtml + rendered
                     : `<div style="padding:1.25rem;color:#64748b;text-align:center;">No members match ${memberSearch.trim() ? '“' + esc(memberSearch.trim()) + '”' : 'this filter'}.</div>`;
             }
 
@@ -3105,8 +3170,9 @@
                     throw new Error(err.error || `HTTP ${res.status}`);
                 }
                 const d = await res.json();
-                // Prefill the primary URL; NEVER echo the admin password or token into the page.
-                const cmd = `node scripts/setup-backup.mjs --primary ${d.primaryUrl} --admin-pw '<ADMIN_PASSWORD>' --token '<REPLICATION_TOKEN>'`;
+                // Prefill the primary URL; NEVER echo a token or the password into the page. The secrets go in the
+                // environment in front of the node command, not as arguments: arguments show in `ps`.
+                const cmd = `BEANPOOL_TOKEN='<AUTOMATION_TOKEN>' BACKUP_REPLICATION_TOKEN='<REPLICATION_TOKEN>' node scripts/setup-backup.mjs --primary ${d.primaryUrl}`;
                 document.getElementById('backup-setup-command').textContent = cmd;
                 document.getElementById('backup-enroll-result').style.display = '';
             } catch (e) {
@@ -4277,12 +4343,22 @@
             try {
                 const res = await fetch(`${API}/status`);
                 const data = await res.json();
-                if (data.isLocked) {
+                if (data.passwordRetired === true) {
+                    showView('login');
+                    showPasswordRetired();
+                } else if (data.isLocked) {
                     showView('login');
                 } else {
-                    // Node not locked — show message
+                    // No admin password (status counts the hash too: routes/community.ts): a new install (config/local-config.ts initAdminPassword).
+                    // No password box to type into: the claim code makes the first owner, who signs in with the app.
                     showView('login');
-                    showStatus('login-status', 'Node not configured. Set ADMIN_PASSWORD and restart.', 'error');
+                    document.getElementById('login-password-field')?.classList.add('hidden');
+                    document.getElementById('login-btn')?.classList.add('hidden');
+                    let unclaimed = false;
+                    try { unclaimed = (await (await fetch(`${API}/claim`)).json()).unclaimed === true; } catch { /* asked again on reload */ }
+                    showStatus('login-status', unclaimed
+                        ? 'This community has no owner yet, and this server has no admin password. Claim it with its one-time claim code: run "beanpool claim" on the server, or use Claim a community in the BeanPool app.'
+                        : 'This server has no admin password. Owners and admins sign in with the BeanPool app.', 'warning');
                 }
             } catch (err) {
                 showView('login');

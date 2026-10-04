@@ -806,6 +806,39 @@ export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
     return true;
 }
 
+/**
+ * Rebuilds health_access_log when its CHECK lacks 'stranded_escrows_read' (a table #1599 made, or one from before the
+ * stranded escrows had a look of their own), keeping every row, with its `detail` where it had one, and adding the
+ * `detail` column the trade looks write; true when it rebuilt. Idempotent.
+ */
+export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='health_access_log'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('stranded_escrows_read')) return false;
+    const hadDetail = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).some(c => c.name === 'detail');
+    const detail = hadDetail ? 'detail' : 'NULL';
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS health_access_log_migration;
+            CREATE TABLE health_access_log_migration (
+                id             TEXT PRIMARY KEY,
+                actor_pubkey   TEXT NOT NULL,
+                action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
+                                                               'disputes_listed', 'dispute_opened', 'alerts_read',
+                                                               'stranded_escrows_read')),
+                subject_pubkey TEXT,
+                detail         TEXT,
+                at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO health_access_log_migration (id, actor_pubkey, action, subject_pubkey, detail, at, updated_at)
+                SELECT id, actor_pubkey, action, subject_pubkey, ${detail}, at, updated_at FROM health_access_log;
+            DROP TABLE health_access_log;
+            ALTER TABLE health_access_log_migration RENAME TO health_access_log;
+        `);
+    })();
+    return true;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -951,6 +984,7 @@ export function initSchema() {
     // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
     // or trigger naming it compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN suspended_member INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
@@ -1102,6 +1136,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
@@ -1245,6 +1281,12 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
     }
 
+    // node_roles: when, and from which kind of session, each owner's break-glass code was last made (#1531). After the
+    // rebuild above, which copies only the columns it knows. Existing rows keep NULL in both (Settings: "made before
+    // this was recorded"); a fresh install gets them from schema.sql, and the ALTER fails harmlessly with no table yet.
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_by TEXT`).run(); } catch { }
+
     // group_members: the status CHECK gains 'removed', so a convenor's removal is kept as a record instead of a
     // deleted row that an open group's Join button re-creates. A CHECK cannot be altered in place, so the table
     // is rebuilt. BEFORE the schema.sql exec on purpose: dropping the table drops its touch trigger and indexes,
@@ -1330,6 +1372,13 @@ export function initSchema() {
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
     }
+    // health_access_log: its CHECK allows the looks at disputes and alerts, and it has `detail` (a table #1599 made has
+    // neither). Before schema.sql, as names_access_log above; the watermark triggers come after.
+    try {
+        if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
+    }
 
     // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):
     // each one's `updated_at` is its watermark. schema.sql declares it with its default for a new table; a table from
@@ -1342,6 +1391,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // The member’s status before a re-key code suspended them, so a cancelled code puts it back (member-wizards cancelRekeyCode).
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }

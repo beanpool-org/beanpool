@@ -43,6 +43,7 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -73,7 +74,7 @@ const FILES_FOR_THE_STAGER = ['genesis.json', 'connectors.json', 'local-config.j
  */
 const CREDENTIALS_LEFT_OUT = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes', 'recoveryCode',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
 ];
 /**
  * node_config: the copy this database was swapped in from, written by the stager into the staging database. The puller's
@@ -177,8 +178,7 @@ export function keepFetchedObjects(since: number | null, until: number, objects 
     };
     const file = path.join(DATA_DIR, KEPT_OBJECTS_FILE);
     try {
-        fs.writeFileSync(`${file}.tmp`, JSON.stringify(kept));
-        fs.renameSync(`${file}.tmp`, file);
+        writeFileAtomic(file, JSON.stringify(kept));
     } catch (e) {
         console.warn(`[Stager] The objects a failed copy fetched could not be kept for the next: ${(e as Error)?.message || e}`);
     }
@@ -436,7 +436,7 @@ export class StagedCopy {
     /** The copy is checked and complete: READY written, so the next start swaps it in (db/swap-at-boot.ts). */
     markReady(info: Record<string, unknown>): void {
         if (this.aborted) throw new StagedCopyRefused(`The copy was stopped: ${this.aborted}`, 'import-error');
-        fs.writeFileSync(path.join(this.dir, READY_FILE), JSON.stringify({ copyId: this.copyId, ...info }, null, 2));
+        writeFileAtomic(path.join(this.dir, READY_FILE), JSON.stringify({ copyId: this.copyId, ...info }, null, 2));
         if (current === this) current = null;
     }
 

@@ -1,7 +1,7 @@
 ---
 slug: running-a-known-community
 title: Running a known community
-summary: The names list: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.
+summary: The names list and the known floor: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.
 related: members-and-invites, roles, what-the-server-sees, backups-and-replicas
 ---
 
@@ -9,7 +9,7 @@ related: members-and-invites, roles, what-the-server-sees, backups-and-replicas
 
 Some communities want their admins to know every member by name, the way a LETS committee keeps a membership list. The **names list** is that list, kept in the BeanPool app by your owners and admins. Each entry is a name and a short note ("Damo's neighbour, Left Bank Rd"). An admin can then **confirm** a member: this account is the person on that entry.
 
-A confirmation is a fact about a member, not a trust badge, and for now it changes nothing else: no credit, no limits. Later versions will build on it.
+A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line.
 
 The global community keeps no names list. Nobody there is confirmed by name.
 
@@ -72,6 +72,69 @@ The app reads and writes nothing whenever it can't check what the server says, a
 - **Two admins confirm each member**: an owner's setting at the bottom of the list, off to start with. When it is on, a confirmation waits until a second admin confirms it too: not the admin who made it, and not the member. Where nobody else could (an admin, in a community of two admins), one admin is enough.
 
 When a member is removed, or deletes their account, their confirmation ends by itself. Their entry stays on the list until an admin deletes it.
+
+## Inviting a named person
+
+In a known community you can invite someone by name, so they are confirmed the moment they join.
+
+Add their name to the list, or open their entry, and tap **Invite this person**. The app shows a QR code, an invite code and **Share**. Give it to them yourself: show the QR code, or send it to them. When they join with it, they are confirmed against that entry, by you.
+
+- Only an admin who could confirm someone against the entry can make it: an owner or admin whose phone holds the list's key.
+- With no signal (a hall, say), the app makes an offline ticket instead, with the entry in it. It confirms them the same way when they join, once your server sees it. A server older than this version can't read such a ticket: invite them once you have signal.
+- When you answer a request to join, you can add their name and invite them in one step.
+- One person, one entry: an entry with a member confirmed against it takes no new invite. If someone else is confirmed against the entry before your invite is used, the person who uses it still joins, but isn't confirmed; the entry says why, and you can confirm them by hand.
+- Your server sees only which entry the invite is for, never the name.
+
+## The known floor
+
+In a LETS, a member the committee knows can go into debt by an agreed amount from day one. The **known floor** is that amount here. Your owner sets it in the manager: **People & Safety → Invites & QR → The known floor**.
+
+- **The switch.** "Confirmed members get the known floor" is off in every community until an owner turns it on. While it is off, nobody's limit changes.
+- **The known floor.** 1,000 Beans to start: about 25 hours of work the community is trusting each confirmed member for. 40 Beans is an hour.
+- **The cap.** The most anyone here may owe, from every source together: the known floor, a vouch, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.
+- **One offer.** A confirmed member can use their whole known floor while they keep at least one offer listed. With none, they can't go below zero on it. Trust they earn by trading still opens up in steps as they list more offers, as it does for everyone.
+- **Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.
+- **Enterprises.** An enterprise counts half of each confirmed keeper's known floor towards its own.
+
+### One member's known floor
+
+An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own. A member whose known floor is frozen is told so on their Ledger, with what they can still do and to ask an admin; their level stays the one their line gives them unfrozen (the known floor less what they have pledged to enterprises), on their profile and their listings alike.
+
+It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance.
+
+A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls.
+
+**Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off.
+
+### Everyone sees the changes
+
+Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read it. A raise above the community's known floor is its own line, so other admins notice.
+
+## Debts and a second chance
+
+When a confirmed member leaves owing Beans, because the community removed them or they deleted their account, the Commons takes on their debt, as it always has. Your server also writes a **debt record** on their entry in the names list: how much, when they left, and whether it is open, settled or forgiven. The record names the entry, never the person: the name stays sealed on the admins' phones.
+
+While a record is open, nobody can be confirmed against that entry. If the person comes back, a second chance is an admin's decision, made with the history in front of them. There are three ways to settle a debt, as in a LETS:
+
+- **Paid back.** The person, on their new account, pays the amount to the Commons for that debt. An admin then checks that payment against the record, and it is settled. A payment made for another debt, or for none, settles nothing, and no payment settles two debts.
+- **Worked off.** An admin confirms them with a known floor of 0 and a repayment flag. Once the confirmation counts (with a second admin's too, where your community asks for one), every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. The admin can raise their known floor after that. If an admin takes the confirmation back, the flag and the floor of 0 end with it: from then on they keep what they receive, and what they already repaid stays repaid.
+- **Forgiven.** The community votes on a Decision to forgive it. The record stays, marked forgiven, and an admin can confirm them again.
+
+**The rule binds the entry, not the person.** Your server can't read the names, so it can't tell when an admin adds a new entry for the same person and confirms them against that one instead. That rests on your admins' honesty; the access log shows who added and who confirmed each entry. The app doesn't yet warn an admin when a new entry's name matches one with an open debt.
+
+Nothing already spent is ever taken back from anyone. A debt record is deleted 3 years after the member left, whatever its status.
+
+## Community health
+
+**Settings → People & Safety → Community health** shows the whole community's totals: Beans in circulation, the credit held and the debt owed, how many members are in debit, the Commons pot and this month's trades. Every owner and admin sees them; they are the community's, not any one member's.
+
+In a known community, an admin's phone also shows the **exceptions**: confirmed members who agreed to it when they joined, and whose balance is past the debt line (50% of their credit line unless you choose another) or who have been in debit with no sale for 60 days (unless you choose another). Each shows with their name from the names list, their balance and their credit line, so an admin who knows them can have a word, the way a LETS committee always has. The phone also lists the open debts of members who left. The exceptions show nothing of anyone's trades. What every admin can see of trades, in any community, is: a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud alert that names two members who buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; a fraud alert that names a member and the members they invited when those members send them Beans past a limit within a set number of days, with the Beans in total and how many of the members they invited have traded with no one but them; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with how much of the group's trading is with each other but no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name a member is logged the first time each admin opens them, and again at that admin's first look after 24 hours, and the looks in between add no line. Both go in Community health, as a list of its own beside the one where the owner and the admins see who opened the exceptions and who looked at a balance; a background check of the alerts, which shows no names, isn't a look and isn't logged. The member stats show how many posts each member has up and messages they have sent, and of trades only the whole community's totals, never one member's. Every member, admins included, sees each member's trust profile: how many of their trades were finished and how many were cancelled, and the share finished, how many Bean payments they have sent to or received from members plus the trades they have finished, with how many different members they have paid, been paid by or traded with, how many payments and trades they have done with the member looking, and their Trust Points. It isn't logged, because every member can see it. The join screen tells every member exactly that. There is no export of balances: if you truly need every balance, you run the server and have the database, and so does that responsibility.
+
+Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again; until a member agrees to the new ones, they show only within the lines they agreed to (a tighter line never reaches them without their say).
+
+Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health.
+
+In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.
 
 ## The PDF copy
 

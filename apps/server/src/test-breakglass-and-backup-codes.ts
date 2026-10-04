@@ -8,6 +8,10 @@
  *      The code is stored scrypt-hashed, opens the break-glass enrol route, and a new code retires the old one.
  *   2. POST /api/node-admin/break-glass, signed with the member key (what the app sends): an owner gets a code for
  *      their own key; an admin, a member and an unsigned request do not.
+ *   2b. A stolen owner session leaves no lasting code (#1531): an owner signing out everywhere (a key session, or the
+ *      app's signed request) retires their own code, and the code is refused at break-glass sign-in; a new one made
+ *      afterwards works. Re-enrolling an owner who already holds the role leaves their code alone; a new owner grant
+ *      still gets one. Settings' roles list shows when, and from which kind of session, each owner's code was made.
  *   3. POST /api/local/admin/2fa/backup-codes: new backup codes for an owner who types the 6-digit code the
  *      authenticator shows now. Missing, wrong, reused, a backup code in its place, an admin, a moderator, and 2FA off
  *      are refused, and nothing changes. The old codes stop working.
@@ -30,6 +34,7 @@ import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge } 
 import { updateLocalConfig, getLocalConfig, hashPassword } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests, verifyAndFindBackupCodeHash } from './totp.js';
 import { logger } from './logger.js';
+import { PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -106,6 +111,9 @@ const BG_SHAPE = /^bg-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 const ISSUE = '/api/local/admin/auth/break-glass/issue';
 const APP_ISSUE = '/api/node-admin/break-glass';
 const BACKUP = '/api/local/admin/2fa/backup-codes';
+const SETUP = '/api/local/admin/2fa/setup';
+/** A route that can answer with a code says no-store from its first line, so a refusal is never cached either (#1531). */
+const noStore = (r: { headers: Headers }) => (r.headers.get('cache-control') || '').includes('no-store');
 
 async function main() {
     console.log('--- TEST: break-glass codes from Settings and the app, 2FA backup codes in Settings ---');
@@ -131,6 +139,8 @@ async function main() {
     const asAdmin = { 'x-admin-session': keySession(admin) };
     const asMod = { 'x-admin-session': keySession(moderator) };
     const asPassword = { 'x-admin-password': PW };
+    /** The password with a code the authenticator shows now (2FA must be on); each call may reuse the same 30-second code. */
+    const asPasswordAndCode = () => { forgetUsedTotpCodesForTests(); return { ...asPassword, 'x-admin-totp': generateTotpCode(SECRET) }; };
     const shown: string[] = [];
 
     console.log('\n1. Break-glass code from Settings');
@@ -167,20 +177,33 @@ async function main() {
         assert(m.status === 403 && !m.body?.breakGlassCode, `a moderator is refused (${m.status})`);
         assert(hashOf(admin.pub) === null && hashOf(moderator.pub) === null, 'no code was stored for the admin or the moderator');
 
-        const pwNone = await post(ISSUE, {}, asPassword);
+        // Step 7c: with the node's 2FA off the password alone makes no code; with 2FA on, the password and a code do.
+        const pwOff = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        assert(pwOff.status === 403 && pwOff.body?.code === PASSWORD_NEEDS_2FA_CODE && hashOf(owner2.pub) === null,
+            `with 2FA off the password alone is refused (${pwOff.status} ${pwOff.body?.code})`);
+        updateLocalConfig({ totpEnabled: true, totpSecret: SECRET } as any);
+        const pwNone = await post(ISSUE, {}, asPasswordAndCode());
         assert(pwNone.status === 400 && !pwNone.body?.breakGlassCode, `the password must name the owner (${pwNone.status})`);
-        const pwMember = await post(ISSUE, { memberPubkey: member.pub }, asPassword);
+        for (const [what, x] of [['another owner, 403', other], ['a break-glass code, 401', asCode], ['an admin, 403', a], ['no owner named, 400', pwNone]] as const) {
+            assert(noStore(x), `a refusal (${what}) is never cached either`);
+        }
+        const enrolRefused = await post('/api/local/admin/auth/enrol', { memberPubkey: member.pub, role: 'owner' }, asAdmin);
+        assert(enrolRefused.status === 403 && noStore(enrolRefused), `enrol: an admin enrolling an owner is refused, and the refusal is never cached (${enrolRefused.status})`);
+        const bgEnrolRefused = await post('/api/local/admin/auth/break-glass/enrol', { memberPubkey: 'not-a-key', role: 'admin' }, asOwner);
+        assert(bgEnrolRefused.status === 400 && noStore(bgEnrolRefused), `break-glass enrol: a bad key is refused, never cached (${bgEnrolRefused.status})`);
+        const pwMember = await post(ISSUE, { memberPubkey: member.pub }, asPasswordAndCode());
         assert(pwMember.status === 409 && hashOf(member.pub) === null, `the password cannot make a code for a member who is not an owner (${pwMember.status})`);
-        const pwAdmin = await post(ISSUE, { memberPubkey: admin.pub }, asPassword);
+        const pwAdmin = await post(ISSUE, { memberPubkey: admin.pub }, asPasswordAndCode());
         assert(pwAdmin.status === 409 && hashOf(admin.pub) === null, `…nor for an admin (${pwAdmin.status})`);
-        const pwOwner = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        const pwOwner = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
         assert(pwOwner.status === 200 && BG_SHAPE.test(pwOwner.body?.breakGlassCode) && pwOwner.body?.memberPubkey === owner2.pub,
             `the password makes a code for a named owner (${pwOwner.status})`);
         shown.push(pwOwner.body?.breakGlassCode);
 
         updateLocalConfig({ breakGlassMode: true } as any);
-        const pwMode = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
-        assert(pwMode.status === 403 && !pwMode.body?.breakGlassCode, `break-glass mode closes it to the password (${pwMode.status})`);
+        const pwMode = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
+        assert(pwMode.status === 403 && pwMode.body?.code !== PASSWORD_NEEDS_2FA_CODE && !pwMode.body?.breakGlassCode, `break-glass mode closes it to the password (${pwMode.status})`);
+        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
         const keyMode = await post(ISSUE, {}, asOwner);
         assert(keyMode.status === 200 && BG_SHAPE.test(keyMode.body?.breakGlassCode), `…not to an owner's key (${keyMode.status})`);
         shown.push(keyMode.body?.breakGlassCode);
@@ -193,6 +216,7 @@ async function main() {
         assert(unsigned.status === 401 && !unsigned.body?.breakGlassCode, `unsigned is refused (${unsigned.status})`);
         const m = await signedPost(APP_ISSUE, {}, member);
         assert(m.status === 403 && !m.body?.breakGlassCode, `a member is refused (${m.status})`);
+        assert(noStore(m), 'a refusal (a member, 403) is never cached either');
         const a = await signedPost(APP_ISSUE, {}, admin);
         assert(a.status === 403 && !a.body?.breakGlassCode && hashOf(admin.pub) === null, `an admin is refused (${a.status})`);
         const before = hashOf(owner2.pub);
@@ -203,6 +227,106 @@ async function main() {
         shown.push(o.body?.breakGlassCode);
         const use = await post('/api/local/admin/auth/break-glass/enrol', { memberPubkey: member.pub, role: 'admin' }, { 'x-break-glass-code': o.body?.breakGlassCode });
         assert(use.status === 200, `the app's code opens the enrol route (${use.status})`);
+    }
+
+    console.log('\n2b. A stolen owner session leaves no lasting code (#1531)');
+    {
+        const ENROL = '/api/local/admin/auth/enrol';
+        const BG_ENROL = '/api/local/admin/auth/break-glass/enrol';
+        const rolesSeen = async () => {
+            // Settings, as the owner's key session reads it (step 7c: with 2FA off the password alone reads no admin route).
+            const res = await fetch(`${BASE}/api/local/admin/node-roles`, { headers: asOwner });
+            const json: any = await res.json().catch(() => null);
+            return (json?.roles || []) as any[];
+        };
+        const rowOf = async (pub: string) => (await rolesSeen()).find(r => r.member_pubkey === pub);
+        const recently = (iso: unknown) => typeof iso === 'string' && Math.abs(Date.now() - Date.parse(iso)) < 60_000;
+        const roleOf = (pub: string) => (db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pub) as { role: string } | undefined)?.role ?? null;
+        // Its own owner, so that signing out everywhere leaves the owner's session section 3 uses alone.
+        const owner3 = seedMember('bgOwner3');
+        grantNodeRole(owner3.pub, 'owner', owner.pub);
+
+        // Settings shows, for each owner, when the code was last made and from which kind of session.
+        const appMade = await rowOf(owner2.pub);
+        assert(appMade?.has_break_glass === true && appMade?.break_glass_made_by === 'app' && recently(appMade?.break_glass_made_at),
+            `Settings shows the app made owner2's code, and when (${JSON.stringify(appMade)})`);
+
+        // The review's measurement (r4172011768): an owner's key session makes a code, then the owner signs out everywhere.
+        const stolen = { 'x-admin-session': keySession(owner3) };
+        const made = await post(ISSUE, {}, stolen);
+        const stolenCode = made.body?.breakGlassCode as string;
+        shown.push(stolenCode);
+        assert(made.status === 200 && BG_SHAPE.test(stolenCode), `a key session makes a code (${made.status})`);
+        const keyMade = await rowOf(owner3.pub);
+        assert(keyMade?.break_glass_made_by === 'key-session' && recently(keyMade?.break_glass_made_at),
+            `Settings shows a key session made it, and when (${JSON.stringify(keyMade)})`);
+
+        const out = await post('/api/local/admin/auth/revoke-all', {}, stolen);
+        assert(out.status === 200 && out.body?.breakGlassCodeRetired === true, `the owner signs out everywhere, and is told the code is retired (${out.status} ${JSON.stringify(out.body)})`);
+        const after = await post(ISSUE, {}, stolen);
+        assert(after.status === 401, `the signed-out session is refused (${after.status})`);
+        assert(hashOf(owner3.pub) === null, 'the owner has no stored code any more');
+        const thief = seedMember('bgThief');
+        const reuse = await post(BG_ENROL, { memberPubkey: thief.pub, role: 'owner' }, { 'x-break-glass-code': stolenCode });
+        assert(reuse.status === 401 && !roleOf(thief.pub), `the code that session made no longer enrols anyone (${reuse.status})`);
+        const gone = await rowOf(owner3.pub);
+        assert(gone?.has_break_glass === false && gone?.break_glass_made_at == null && gone?.break_glass_made_by == null,
+            `Settings shows the owner has no code (${JSON.stringify(gone)})`);
+
+        // The owner makes a new one from Settings when needed, and the normal break-glass flow works with it.
+        const fresh = { 'x-admin-session': keySession(owner3) };
+        const remade = await post(ISSUE, {}, fresh);
+        shown.push(remade.body?.breakGlassCode);
+        assert(remade.status === 200 && BG_SHAPE.test(remade.body?.breakGlassCode), `a new session makes a new code (${remade.status})`);
+        const helper = seedMember('bgHelper');
+        const useNew = await post(BG_ENROL, { memberPubkey: helper.pub, role: 'admin' }, { 'x-break-glass-code': remade.body?.breakGlassCode });
+        assert(useNew.status === 200 && roleOf(helper.pub) === 'admin', `the new code enrols a key (${useNew.status})`);
+
+        // The app's "Sign me out everywhere" (signed with the member key) is the owner's own too.
+        assert(hashOf(owner2.pub) !== null, 'owner2 holds a code before signing out everywhere from the app');
+        const appOut = await signedPost('/api/local/admin/auth/revoke-all', {}, owner2);
+        assert(appOut.status === 200 && appOut.body?.breakGlassCodeRetired === true && hashOf(owner2.pub) === null,
+            `signing out everywhere from the app retires that owner's code (${appOut.status} ${JSON.stringify(appOut.body)})`);
+
+        // Re-enrolling an owner who already holds the role keeps their code, from a key session or the password.
+        // Step 7c: with the node's 2FA off the password alone makes no code; with 2FA on, the password and a code do.
+        const pwAlone = await post(ISSUE, { memberPubkey: owner2.pub }, asPassword);
+        assert(pwAlone.status === 403 && pwAlone.body?.code === PASSWORD_NEEDS_2FA_CODE && hashOf(owner2.pub) === null,
+            `with 2FA off the password alone makes no code (${pwAlone.status} ${pwAlone.body?.code})`);
+        updateLocalConfig({ totpEnabled: true, totpSecret: SECRET } as any);
+        const pwMade = await post(ISSUE, { memberPubkey: owner2.pub }, asPasswordAndCode());
+        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
+        shown.push(pwMade.body?.breakGlassCode);
+        const pwRow = await rowOf(owner2.pub);
+        assert(pwMade.status === 200 && pwRow?.break_glass_made_by === 'password', `Settings shows the password made it (${JSON.stringify(pwRow)})`);
+        const held = hashOf(owner2.pub);
+        const byKey = await post(ENROL, { memberPubkey: owner2.pub, role: 'owner' }, fresh);
+        assert(byKey.status === 200 && !byKey.body?.breakGlassCode && hashOf(owner2.pub) === held,
+            `a key session re-enrolling an existing owner gets no code, and theirs is unchanged (${byKey.status} ${JSON.stringify(byKey.body)})`);
+        const byPwAlone = await post(ENROL, { memberPubkey: owner2.pub, role: 'owner' }, asPassword);
+        assert(byPwAlone.status === 403 && byPwAlone.body?.code === PASSWORD_NEEDS_2FA_CODE && hashOf(owner2.pub) === held,
+            `with 2FA off the password alone cannot re-enrol (${byPwAlone.status} ${byPwAlone.body?.code})`);
+        updateLocalConfig({ totpEnabled: true, totpSecret: SECRET } as any);
+        const byPw = await post(ENROL, { memberPubkey: owner2.pub, role: 'owner' }, asPasswordAndCode());
+        updateLocalConfig({ totpEnabled: false, totpSecret: null } as any);
+        assert(byPw.status === 200 && !byPw.body?.breakGlassCode && hashOf(owner2.pub) === held,
+            `…nor does the password (${byPw.status} ${JSON.stringify(byPw.body)})`);
+        const stillWorks = seedMember('bgStill');
+        const usePw = await post(BG_ENROL, { memberPubkey: stillWorks.pub, role: 'admin' }, { 'x-break-glass-code': pwMade.body?.breakGlassCode });
+        assert(usePw.status === 200, `owner2's code still works after both re-enrolments (${usePw.status})`);
+        const unchanged = await rowOf(owner2.pub);
+        assert(unchanged?.break_glass_made_by === 'password' && unchanged?.break_glass_made_at === pwRow?.break_glass_made_at,
+            'and Settings still shows when and how it was made');
+
+        // A new owner grant still gets a code.
+        const grantee = seedMember('bgGrantee');
+        const granted = await post(ENROL, { memberPubkey: grantee.pub, role: 'owner' }, fresh);
+        shown.push(granted.body?.breakGlassCode);
+        assert(granted.status === 200 && BG_SHAPE.test(granted.body?.breakGlassCode) && !!hashOf(grantee.pub),
+            `a new owner grant still gets a code (${granted.status})`);
+        const grantRow = await rowOf(grantee.pub);
+        assert(grantRow?.break_glass_made_by === 'key-session' && recently(grantRow?.break_glass_made_at),
+            `Settings shows the new owner's code was made by a key session (${JSON.stringify(grantRow)})`);
     }
 
     console.log('\n3. 2FA backup codes in Settings');
@@ -228,6 +352,9 @@ async function main() {
         assert(a.status === 403 && !a.body?.backupCodes && oldHashes() === start, `an admin with a right code: refused (${a.status})`);
         const m = await post(BACKUP, { code: now }, asMod);
         assert(m.status === 403 && !m.body?.backupCodes && oldHashes() === start, `a moderator with a right code: refused (${m.status})`);
+        for (const [what, x] of [['2FA off, 409', off], ['no code, 401', missing], ['a wrong code, 401', wrong], ['an admin, 403', a]] as const) {
+            assert(noStore(x), `a refusal (${what}) is never cached either`);
+        }
 
         forgetUsedTotpCodesForTests();
         const ok = await post(BACKUP, { code: now }, asOwner);
@@ -244,9 +371,11 @@ async function main() {
             `the same code a second time: refused (${reuse.status})`);
 
         // The password with this request's own code inline: the code checked here is the body's, and must be current too.
-        const inline = generateTotpCode(SECRET, -1);
-        let body = generateTotpCode(SECRET, 0);
-        if (body === inline) body = generateTotpCode(SECRET, 1);
+        // This step and the next (not the previous and this one): if the 30-s step rolls over before the server checks them,
+        // they are still within its ±1 step and the body's is still the later one. A previous-step code went stale at a
+        // rollover and failed main's CI (run 37148410779: 401 Invalid 2FA code).
+        const inline = generateTotpCode(SECRET, 0);
+        const body = generateTotpCode(SECRET, 1);   // equal to `inline` about once in a million: a replay, refused
         forgetUsedTotpCodesForTests();
         const pwWrong = await post(BACKUP, { code: wrongCode() }, { ...asPassword, 'x-admin-totp': inline });
         assert(pwWrong.status === 401 && !pwWrong.body?.backupCodes, `the password + an inline code, with a wrong code to check: refused (${pwWrong.status})`);
@@ -254,6 +383,13 @@ async function main() {
         const pw = await post(BACKUP, { code: body }, { ...asPassword, 'x-admin-totp': inline });
         assert(pw.status === 200 && pw.body?.backupCodes?.length === 8, `the password + its code, with a current code: new codes (${pw.status} ${JSON.stringify(pw.body)})`);
         shown.push(...(pw.body?.backupCodes || []));
+
+        // 2FA setup answers with a new secret and backup codes: never cached, refusal or not.
+        const setupAdmin = await post(SETUP, {}, asAdmin);
+        assert(setupAdmin.status === 403 && !setupAdmin.body?.secret && noStore(setupAdmin), `2FA setup: an admin is refused, never cached (${setupAdmin.status})`);
+        const setup = await post(SETUP, {}, asOwner);
+        assert(setup.status === 200 && setup.body?.backupCodes?.length === 8 && noStore(setup), `2FA setup: the owner's secret and codes are never cached (${setup.status})`);
+        shown.push(...(setup.body?.backupCodes || []));
     }
 
     console.log('\n4. The log');

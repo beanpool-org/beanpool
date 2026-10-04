@@ -32,6 +32,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { createHmac } from 'node:crypto';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
@@ -68,10 +69,30 @@ function envelopePath(): string {
 
 // ── What is sealed (§2.1) ──────────────────────────────────────────────────────────────────
 
-/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials. */
+/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials.
+ *  `passwordRetired` is never copied plain: {@link bundledLocalConfigUpdates} merges it. */
 export const BUNDLED_LOCAL_CONFIG_FIELDS = [
-    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode',
+    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode', 'passwordRetired',
 ] as const;
+
+/**
+ * What a take-over (`admin-settings`) and a sealed-backup restore write into this server's local-config from a bundle.
+ * The admin password's retirement is sticky: retired when the bundle says so OR this server already is (a bundle
+ * sealed before the retirement carries no such field), and then no hash, salt or the 2FA that guarded the password
+ * come with it. So an older envelope or backup never brings a retired password back, and a restore never clears the
+ * flag. A server that never saw the retirement, given a bundle sealed before it, cannot learn of it from that bundle.
+ */
+export function bundledLocalConfigUpdates(
+    bundled: Record<string, unknown>, current: Record<string, unknown>,
+): Record<string, unknown> {
+    const updates: Record<string, unknown> = {};
+    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = bundled[f] ?? null;
+    updates.passwordRetired = bundled.passwordRetired || current.passwordRetired || null;
+    if (updates.passwordRetired) {
+        Object.assign(updates, { adminHash: null, salt: null, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+    }
+    return updates;
+}
 
 /**
  * Identity files, raw bytes as base64 so a take-over writes back exactly what was read.
@@ -328,9 +349,7 @@ function readStored(): StoredEnvelope | null {
 
 function writeStored(s: StoredEnvelope): void {
     const target = envelopePath();
-    const tmp = `${target}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    fs.renameSync(tmp, target);
+    writeFileAtomic(target, JSON.stringify(s), { mode: 0o600 });
 }
 
 function removeStored(): boolean {

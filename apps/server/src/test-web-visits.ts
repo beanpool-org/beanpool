@@ -51,6 +51,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engin
 import { db } from './db/db.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { limiterKeyForIp } from './client-ip.js';
 import {
@@ -328,13 +329,20 @@ async function main(): Promise<void> {
         assert(JSON.stringify(Object.keys(body.series[0]).sort()) === JSON.stringify(['day', 'uniques', 'visits']), 'each day is (day, visits, uniques) only');
 
         resetAdminAuthTarpit();
+        // Step 7c: with 2FA off the owner's password alone is refused (as needing 2FA, not as a wrong one); with 2FA on, it
+        // and a fresh code read the counts. 2FA goes off again after.
+        r = await send('GET', route, { 'X-Admin-Password': PW });
+        assert(r.status === 403 && JSON.parse(r.body).code === 'password_needs_2fa' && !r.body.includes('"series"'),
+            `the owner's password alone, 2FA off: 403 password_needs_2fa, no counts (got ${r.status})`);
+        const tfa = turnOn2faForTests(PW);
         for (const [q, want] of [['0', 1], ['7', 7], ['9999', 400], ['abc', 30], ['-5', 1]] as const) {
-            r = await send('GET', `${route}?days=${q}`, { 'X-Admin-Password': PW });
+            r = await send('GET', `${route}?days=${q}`, tfa.headers());
             body = JSON.parse(r.body);
             assert(r.status === 200 && body.days === want && body.series.length === want, `the owner's password, days=${q}: ${want} days (got ${r.status}, ${body.days})`);
         }
-        r = await send('POST', route, { 'X-Admin-Password': PW, 'Content-Type': 'application/json' });
+        r = await send('POST', route, { ...tfa.headers(), 'Content-Type': 'application/json' });
         assert(r.status === 404 || r.status === 405, `read-only: a POST is no route (got ${r.status})`);
+        updateLocalConfig({ totpEnabled: false, totpSecret: null });
     }
 
     // ── 5. the prune ────────────────────────────────────────────────────────────────────────────

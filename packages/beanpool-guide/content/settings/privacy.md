@@ -12,14 +12,16 @@ Tap the sliders button at the top right of the screen. Settings is not one of th
 ## What members of your community can see
 
 - Your name, photo, bio, when you joined and when you were last active.
-- Your trust badge, how many trades you have done, and your reviews.
+- Your trust badge, your reviews, and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.
 - Your posts, and where their pins are. See "Where your pin goes".
 - How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret.
 
 ## What only you can see
 
 - **Your balance and your trades.** Nobody else in your community can read them, in the app or from your community's server. A trade shows only its two people: you and the other person.
-- If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only.
+- If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.
+- If an admin removes your account, the admin who starts it sees your balance, so that what you hold or owe can be settled. The other admins and the owner can see who looked and when.
+- In a known community, if you agreed to it when you joined and an admin has confirmed you, the admins can see your balance once it passes one of your community's lines. You can take that back at any time in Settings. In any community, any admin can also see some of your trades: a trade that isn't finished yet or that an admin settled, a trade whose Beans were left stuck when a member was removed on an older server, fraud alerts, and an alert if no Beans have moved in or out of your account for a set number of days. Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours. The owner and the admins can see that log. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged. Whoever runs your community's server holds its whole database, with its backups, snapshots and standby copies. See "What the admins can see".
 
 The owners and admins who run your community's server can still see what is stored there. See "Who else can see things".
 

@@ -696,7 +696,7 @@
         <div id="view-login">
             <div class="glass">
                 <h3>🔒 Admin Login</h3>
-                <div class="field">
+                <div class="field" id="login-password-field">
                     <label>Password</label>
                     <div class="pwd-wrapper">
                         <input type="password" id="login-password" placeholder="Enter admin password">
@@ -1933,7 +1933,7 @@
                         <button onclick="copyBackupCommand()" style="position:absolute;top:0.5rem;right:0.5rem;background:#1e293b;border:1px solid #334155;color:#94a3b8;border-radius:4px;padding:0.2rem 0.4rem;cursor:pointer;font-size:0.65rem;" title="Copy command">📋</button>
                     </div>
                     <p style="font-size:0.72rem;color:#64748b;margin:0.5rem 0 0;">
-                        Replace <code style="color:#f59e0b;">&lt;ADMIN_PASSWORD&gt;</code> with this node's admin password and <code style="color:#f59e0b;">&lt;REPLICATION_TOKEN&gt;</code> with the token from Replication Access above (neither is shown here). The password is used once, to fetch the community's identity, and is not kept on the backup; the backup copies with the token. After it finishes on the other machine, restart that node — it will begin pulling within ~60s.
+                        Replace <code style="color:#f59e0b;">&lt;AUTOMATION_TOKEN&gt;</code> with a <strong>Read</strong> automation token (Access &amp; Security → Automation tokens, made by an owner) and <code style="color:#f59e0b;">&lt;REPLICATION_TOKEN&gt;</code> with the token from Replication Access above (neither is shown here). Both go in the environment, in front of the command, so neither shows in the other machine's process list. The automation token is used once, to fetch the community's identity, and is not kept on the backup; the backup copies with the replication token. After it finishes on the other machine, restart that node — it will begin pulling within ~60s.
                     </p>
                 </div>
                 <div class="status-msg" id="backup-enroll-status"></div>

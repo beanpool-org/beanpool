@@ -13,6 +13,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { Libp2p } from 'libp2p';
@@ -20,6 +21,9 @@ import { sendHandshake } from './handshake.js';
 import { errorMessage } from './error-message.js';
 import { pruneTombstones as pruneExpiredTombstones, TOMBSTONE_RETENTION_DAYS } from './db/db.js';
 import { logger } from './logger.js';
+import { getNodeRole } from './config/node-role.js';
+import { sweepExpiredDebts } from './engine/names-debts.js';
+import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -236,7 +240,7 @@ function saveConnectors(): void {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs.writeFileSync(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
+        writeFileAtomic(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
     } catch (e) {
         console.error('[Connectors] Failed to save connectors:', e);
     }
@@ -319,6 +323,14 @@ export function initConnectorManager(node: Libp2p): void {
     // Daily-ish tombstone GC: drop tombstones older than the retention.
     pruneTombstones();
     setInterval(pruneTombstones, 24 * 60 * 60 * 1000);
+    // A departed member's debt record goes 3 years after they left (engine/names-debts.ts), on a main server.
+    const sweepDebts = () => { try { if (getNodeRole() === 'primary') sweepExpiredDebts(); } catch (e) { console.error('[NamesDebts] sweep failed:', e); } };
+    sweepDebts();
+    setInterval(sweepDebts, 24 * 60 * 60 * 1000);
+    // A retried payment's id is kept a week (engine/money-requests.ts), then goes, on a main server.
+    const pruneRequests = () => { try { pruneMoneyRequests(); } catch (e) { console.error('[MoneyRequests] prune failed:', e); } };
+    pruneRequests();
+    setInterval(pruneRequests, 24 * 60 * 60 * 1000);
 
     // Auto‑connect enabled connectors on boot
     if (connectors.some(c => c.enabled)) {

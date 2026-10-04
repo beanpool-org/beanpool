@@ -30,9 +30,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import { getNodeRole, getNodeConfig, updateNodeConfig } from '../state-engine.js';
-import { recordRegistrarAnswer } from '../engine/registrar-names.js';
-import { addressStatus, claimAddress, healAddress } from './registrar-client.js';
+import { getNodeRole, getNodeConfig, updateNodeConfig, publicAddressGeneration } from '../state-engine.js';
+import { recordRegistrarAnswer, registrarNames, registrarHostOf } from '../engine/registrar-names.js';
+import { turnedAwayList } from '../config/turned-away-names.js';
+import { addressStatus, askNameHolder, claimAddress, healAddress } from './registrar-client.js';
 import { takeoverHoldsTunnel } from './takeover.js';
 import { logger } from '../logger.js';
 
@@ -434,6 +435,89 @@ export function persistAddress(pa: any, use: 'stored' | 'claim' = 'stored'): Pro
 }
 
 /**
+ * persistAddress for the answer to a registrar call that began when the address's write count was `since`
+ * (publicAddressGeneration): stored only if nothing wrote the address meanwhile (Settings' claim or Take offline, a
+ * take-over, another check's answer). Checked and written with no await between, so nothing can land in the gap.
+ * null: not stored, and nothing else done.
+ */
+export function persistAddressIfUnchanged(pa: any, use: 'stored' | 'claim', since: number, asked: string | null = null): Promise<TunnelStatus> | null {
+    if (publicAddressGeneration() !== since) return null;
+    if (use === 'stored' && answersAboutAnotherName(pa, (getNodeConfig() as any).publicAddress, asked)) return null;
+    return persistAddress(pa, use);
+}
+
+const otherNamesSaid = new Set<string>();
+/**
+ * With nothing stored: does `answer` name a name this server left? One its record keeps as former (taken offline, or
+ * moved off by a claim of another; engine/registrar-names.ts), or one on its turned-away list (config/turned-away-names.ts:
+ * an install request that ended without being given here, a Settings claim that got no answer and was then replaced, a
+ * replaced `beanpool claim` request, a name taken offline). Never `asked`, nor the record's current name.
+ */
+function turnedAwayHere(answer: any, asked: string | null): boolean {
+    const host = registrarHostOf(answer);
+    if (!host || (asked && registrarHostOf({ name: asked }) === host)) return false;
+    const entry = registrarNames().find((e) => e.address === host);
+    if (entry) return entry.role !== 'current';
+    return turnedAwayList().some((e) => e.why !== 'unanswered' && registrarHostOf({ name: e.name }) === host);
+}
+/**
+ * Does the registrar's `answer` (a status or heal) name another name than the one `stored` here? Then it is never stored:
+ * a key can hold two names (an install's claim answered after the owner's pick), and a registrar older than the one that
+ * reads /status's `name` answers about the key's first name, whichever was asked. Storing it would move the community
+ * onto a name nobody chose. Said once per pair.
+ *
+ * With nothing stored (Take offline, a fresh server) every registrar answers about the key's first name, which can be one
+ * the owner took offline or the install's late claim. Then a name this server turned away is never stored (turnedAwayHere);
+ * any other is, as a fresh server learns a name made for its key elsewhere. `asked`: the name the public-address agent
+ * asks for (its env's, or `beanpool claim`'s request while it stands), never turned away.
+ */
+export function answersAboutAnotherName(answer: any, stored: any, asked: string | null = null): boolean {
+    if (!stored?.name) {
+        if (!turnedAwayHere(answer, asked)) return false;
+        const pair = `→${answer?.name ?? ''}`;
+        if (!otherNamesSaid.has(pair)) {
+            otherNamesSaid.add(pair);
+            say('warn', `the address service answered that this server's key holds "${answer?.name}", a name this server left `
+                + '(taken offline, moved off, or asked for at install and then dropped): not stored; this server stays offline. Claim it in Settings to use it.');
+        }
+        return true;
+    }
+    if (answer?.name === stored.name) return false;
+    const pair = `${stored.name}→${answer?.name ?? ''}`;
+    if (!otherNamesSaid.has(pair)) {
+        otherNamesSaid.add(pair);
+        say('warn', `the address service answered about ${answer?.name ? `"${answer.name}"` : 'no name'} when asked about "${stored.name}": `
+            + `not stored; this server stays on "${stored.name}"`);
+    }
+    return true;
+}
+
+/**
+ * A claim of `name` that got no answer in time (registrar-client gives up after 5 s) can still complete at the registrar:
+ * then this key holds the name, and nothing here says so. Asks who holds it and says it when it is this key's; an older
+ * registrar (no /holder) or none answering: said as a maybe. `err`: the claim's error; anything but a timeout is no
+ * concern here.
+ */
+export async function noteUnansweredClaim(name: string, err: any): Promise<void> {
+    if (!/timed out/.test(String(err?.message || ''))) return;
+    try {
+        const r = await askNameHolder(name);
+        if (r.json && r.data?.held === 'you') {
+            say('warn', `the claim of "${name}" got no answer in time, but the address service gives it to this server's key `
+                + `(${r.data.state || 'held'}); it is not used here: claim "${name}" in Settings to use it`);
+            return;
+        }
+        if (r.ok && r.json && typeof r.data?.held === 'string') return;   // not this key's: nothing is held
+    } catch { /* nothing answered */ }
+    say('warn', `the claim of "${name}" got no answer in time; the address service may still give it to this server's key`);
+}
+
+/** A heal's answer that came after the address was written another way: the newer write stands, the next tick looks again. */
+function addressChangedMeanwhile(pa: any): void {
+    say('info', `the address changed while the address service was asked about ${pa.hostname || pa.name}; its answer is not stored`);
+}
+
+/**
  * Save the registrar's answer. The registrar leaves `tunnelToken` out of its status when its own call to Cloudflare
  * fails (apps/registrar/src/index.js), so saving the answer as it came would drop a token that still works, and
  * the take-over keys would be re-locked without it until the next good answer (967 follow-up #2). So a missing
@@ -461,12 +545,14 @@ function maybeHeal(): void {
 }
 
 /** The saved name, claimed again: the registrar's heal (its own name) re-asserts the tunnel, ingress and DNS. */
-async function reclaimSaved(pa: any, why: string): Promise<boolean> {
+async function reclaimSaved(pa: any, why: string, since: number): Promise<boolean> {
     say('info', `${why}: asking the address service to re-make ${pa.hostname || pa.name} (a heal of this server's own name)`);
     const res = await claimAddress(pa.name, 'tunnel', LOOPBACK_ORIGIN);
     if (res?.status === 'live') {
         const { changed: _changed, ...answer } = res;
-        await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+        const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
+        if (!stored) { addressChangedMeanwhile(pa); return false; }
+        await stored;
         return true;
     }
     recordRegistrarAnswer({ name: pa.name, hostname: pa.hostname, ...res }, 'status');
@@ -479,22 +565,26 @@ async function healDeadTunnel(): Promise<void> {
     lastHealAt = Date.now();
     try {
         const pa = savedTunnelAddress();
+        const since = publicAddressGeneration();
         if (!pa?.name || getNodeRole() !== 'primary') return;
-        const st = await addressStatus();
+        const st = await addressStatus(pa.name);
+        if (answersAboutAnotherName(st, pa)) return;
         if (st?.status === 'live') {
             const token = typeof st.tunnelToken === 'string' ? st.tunnelToken.trim() : '';
-            if ((st.name && st.name !== pa.name) || (token && token !== running?.token)) {
+            if (token && token !== running?.token) {
+                const stored = persistAddressIfUnchanged(st, 'stored', since);
+                if (!stored) { addressChangedMeanwhile(pa); return; }
                 say('info', `Cloudflare refuses the tunnel; the address service has a new token for ${st.hostname || st.name}: running it`);
-                await persistAddress(st, 'stored');
+                await stored;
                 return;
             }
             // Live, on the same token (or the registrar couldn't read it from Cloudflare): the tunnel is gone at
             // Cloudflare though the name is still this server's.
-            await reclaimSaved(pa, 'Cloudflare refuses the tunnel although the address service has the name live');
+            await reclaimSaved(pa, 'Cloudflare refuses the tunnel although the address service has the name live', since);
             return;
         }
         // Paused by the registrar's sweep (it removes the tunnel too): this server takes it back by proving its key.
-        if (healable(st, pa)) { await healPaused(pa, st); return; }
+        if (healable(st, pa)) { await healPaused(pa, st, since); return; }
         // Any other answer is written on the name it concerns; the agent, the name watch and Settings act on it.
         recordRegistrarAnswer(st, 'status');
         say('warn', `Cloudflare refuses the tunnel, and the address service answers "${st?.status ?? 'nothing'}" for ${pa.hostname || pa.name}; Settings shows it`);
@@ -522,13 +612,15 @@ function healable(st: any, pa: any): boolean {
  * whose token only this signed request gets, or through an attestation at the name. A live answer is saved and run; any
  * other is written on the name, and the next tick asks again. Never throws.
  */
-async function healPaused(pa: any, st: any): Promise<void> {
+async function healPaused(pa: any, st: any, since: number): Promise<void> {
     say('info', `the address service paused ${pa.hostname || pa.name} (${st.reason || 'no reason given'}): asking for it back, which proves this server's key`);
     try {
         const res = await healAddress(pa.name, LOOPBACK_ORIGIN);
         if (res?.status === 'live') {
             const { changed: _changed, attest: _attest, ...answer } = res;
-            await persistAddress({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored');
+            const stored = persistAddressIfUnchanged({ ...pa, ...answer, name: pa.name, mode: 'tunnel', origin: LOOPBACK_ORIGIN }, 'stored', since);
+            if (!stored) { addressChangedMeanwhile(pa); return; }
+            await stored;
             say('info', `${pa.hostname || pa.name} is live again${res.tunnelToken ? ', on a fresh tunnel' : ''}`);
             return;
         }
@@ -542,13 +634,15 @@ async function healPaused(pa: any, st: any): Promise<void> {
 /**
  * The public-address agent's tick (every 5 min): if the registrar's status `st` is a pause of this server's own tunnel
  * name that its heal lifts, heal it. True when it was one (healed or not). Not two at once with the dead-tunnel heal.
+ * `since`: the address's write count when the tick began (publicAddressGeneration); a heal answered after another write
+ * is not stored.
  */
-export async function healPausedAddress(st: any): Promise<boolean> {
+export async function healPausedAddress(st: any, since = publicAddressGeneration()): Promise<boolean> {
     const pa = savedTunnelAddress();
     if (!healable(st, pa) || getNodeRole() !== 'primary') return false;
     if (registrarBusy) return true;
     registrarBusy = true;
-    try { await healPaused(pa, st); } finally { registrarBusy = false; }
+    try { await healPaused(pa, st, since); } finally { registrarBusy = false; }
     return true;
 }
 
@@ -570,14 +664,15 @@ async function moveOriginToLoopback(): Promise<void> {
     lastOriginAttemptAt = Date.now();
     try {
         const pa = savedTunnelAddress();
+        const since = publicAddressGeneration();
         if (!pa?.name) return;
         // Only a name the registrar says is live and this key's: a claim of a released one would take it back.
-        const st = await addressStatus();
-        if (st?.status !== 'live' || (st.name && st.name !== pa.name)) {
+        const st = await addressStatus(pa.name);
+        if (st?.status !== 'live' || st.name !== pa.name) {
             say('info', `not moving ${pa.hostname || pa.name} to ${LOOPBACK_ORIGIN} yet: the address service answers "${st?.status ?? 'nothing'}"`);
             return;
         }
-        if (await reclaimSaved(pa, `moving the tunnel's destination to ${LOOPBACK_ORIGIN}`)) {
+        if (await reclaimSaved(pa, `moving the tunnel's destination to ${LOOPBACK_ORIGIN}`, since)) {
             say('info', `${pa.hostname || pa.name} now leads to ${LOOPBACK_ORIGIN} inside this server`);
         }
     } catch (e: any) {

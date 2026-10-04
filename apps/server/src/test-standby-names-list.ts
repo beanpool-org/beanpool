@@ -341,9 +341,11 @@ async function main(): Promise<void> {
         console.log('\n— 4. M is killed; S takes over with the recovery code —');
         await standby.send('pull');
         await main.kill('SIGKILL');
-        const openedTk = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const openedTk = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(openedTk.status === 200 && openedTk.body.success, `the code opens the keys (${openedTk.status} ${j(openedTk.body)})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openedTk.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openedTk.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'S restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup'));

@@ -229,7 +229,10 @@ export interface NodeDataPayload {
     posts?: unknown[];
     reportCount?: number;
     escrowDisputesCount?: number;
+    /** Each member's posts and messages counts; no member's trades (queue item 29). */
     memberStats?: Record<string, unknown>;
+    /** Of trades, only the community's totals: completed deals, their volume in Beans, cancelled. */
+    tradeTotals?: { deals: number; volume: number; cancelled: number };
     tradeVolume?: number;
     circulation?: number;
     commonsBalance?: number;
@@ -534,6 +537,42 @@ export async function downloadAdminFile(
     return downloadNotice(res);
 }
 
+/**
+ * Sign-in step 7c: a node with two-factor sign-in off refuses the admin password sent with a request, 403
+ * password_needs_2fa. A profile with only a password then needs one of these, said after the node's own words.
+ */
+export const PASSWORD_NEEDS_2FA_HINT = 'This profile signs in with the admin password; an owner\'s token works without it';
+
+/** Sign-in step 10: the node answered 403 password_retired. A profile with only a password needs a token from now on. */
+export const PASSWORD_RETIRED_HINT = "This node's password is retired: use a token";
+
+/** The error for a request refused that way: the node's words plus the hint. Null for any other answer; the body is left unread. */
+export async function passwordNeeds2faError(res: Response): Promise<Error | null> {
+    if (res.status !== 403) return null;
+    // A copy, so the caller can still read the body; a stand-in Response without clone() is read as it is.
+    const copy = typeof res.clone === 'function' ? res.clone() : res;
+    const body = await Promise.resolve().then(() => copy.json()).catch(() => null) as { error?: unknown; code?: unknown } | null;
+    if (body?.code === 'password_retired') {
+        return new Error(`${PASSWORD_RETIRED_HINT} (an owner makes one in Settings, Access & Security, Automation tokens).`);
+    }
+    if (body?.code !== 'password_needs_2fa') return null;
+    const words = typeof body.error === 'string' && body.error.trim() ? body.error.trim() : 'This node needs two-factor sign-in for the admin password';
+    return new Error(`${words}${/[.!?]$/.test(words) ? '' : '.'} ${PASSWORD_NEEDS_2FA_HINT}.`);
+}
+
+/**
+ * Does this error mean "the credential was refused" rather than "node unreachable"?
+ *
+ * `fetchDiagnostics` throws `HTTP 401: Unauthorized`; the friendlier per-endpoint
+ * messages say the same thing in words. Both are matched, because retrying is futile
+ * either way — no amount of waiting turns a rejected password into an accepted one.
+ * A password refused because the node's two-factor sign-in is off (passwordNeeds2faError) is one too.
+ */
+export function isAuthFailure(message: string): boolean {
+    return /\b401\b/.test(message) || /unauthor/i.test(message) || /admin password/i.test(message)
+        || message.includes(PASSWORD_NEEDS_2FA_HINT) || message.includes(PASSWORD_RETIRED_HINT);
+}
+
 export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<DiagnosticsResponse> {
     const endpoint = resolveNodeApiUrl(nodeUrl, '/api/local/admin/diagnostics');
     const res = await fetch(endpoint, {
@@ -541,7 +580,7 @@ export async function fetchDiagnostics(nodeUrl: string, adminPassword?: string, 
         cache: 'no-store',
     });
     if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        throw (await passwordNeeds2faError(res)) ?? new Error(`HTTP ${res.status}: ${res.statusText}`);
     }
     return res.json();
 }
@@ -904,6 +943,27 @@ export function normalizeNodeData(raw: unknown): NodeDataPayload {
     }
 
     return result;
+}
+
+/**
+ * The alerts' names-free summary (POST /api/local/admin/alerts-summary): each alert's kind and severity, the ones that
+ * name members with no member, description or Beans, the reports' count and each report's id (no reporter, member or
+ * reason). The node logs nothing for it, so the background flag check reads this, never the full data (review
+ * r4177560410), and a report's id is enough to light the ALERT dot and to keep a dismissed one dark (r4177719213).
+ */
+export async function fetchAlertsSummary(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<{ flags: NodeHealthFlag[]; reportCount: number; reportIds: string[] }> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/alerts-summary'), {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+        body: JSON.stringify({ ...passwordField(adminPassword) }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    const json = await res.json();
+    return {
+        flags: Array.isArray(json?.flags) ? json.flags : [],
+        reportCount: typeof json?.reportCount === 'number' ? json.reportCount : 0,
+        reportIds: Array.isArray(json?.reportIds) ? json.reportIds.filter((id: unknown): id is string => typeof id === 'string') : [],
+    };
 }
 
 export async function fetchNodeData(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<NodeDataPayload> {
@@ -1436,6 +1496,12 @@ export interface NodeRoleRecord {
     granted_at: string;
     granted_by: string | null;
     callsign?: string;
+    /** Whether this owner holds a break-glass code now. */
+    has_break_glass?: boolean;
+    /** When their code was last made (null: no code, or made before nodes recorded it; absent from an older node). */
+    break_glass_made_at?: string | null;
+    /** From which kind of session: 'key-session' | 'app' | 'password' | 'break-glass' | 'recover'. */
+    break_glass_made_by?: string | null;
 }
 
 export async function fetchNodeRoles(
@@ -1701,7 +1767,7 @@ export const HARVESTER_UNAVAILABLE = 'No harvested backups here: the server behi
 
 /** True for the dashboard's own /api/manager routes, which never get a node's credential. */
 export function isManagerApi(path: string): boolean {
-    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname;
+    const p = new URL(path, typeof window !== 'undefined' ? window.location.href : 'http://localhost').pathname.toLowerCase();
     return p === '/api/manager' || p.startsWith('/api/manager/');
 }
 
@@ -2609,6 +2675,23 @@ async function postAdmin<T>(nodeUrl: string, path: string, body: Record<string, 
     return data as T;
 }
 
+/**
+ * The members an admin lowered or froze the known floor of (GET /api/local/admin/known-floor's exceptions), for the
+ * members list's mark. Empty with the dial off, on a node older than the known floor, or when it can't be read.
+ */
+export async function fetchKnownFloorMarks(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<Record<string, { amount: number | null; frozen: boolean }>> {
+    const res = await fetch(resolveNodeApiUrl(nodeUrl, '/api/local/admin/known-floor'), { headers: buildAdminHeaders(adminPassword, tfaToken) }).catch(() => null);
+    if (!res || !res.ok) return {};
+    const data = await res.json().catch(() => null) as { confirmation?: unknown; exceptions?: unknown } | null;
+    if (!data || data.confirmation !== true || !Array.isArray(data.exceptions)) return {};
+    const marks: Record<string, { amount: number | null; frozen: boolean }> = {};
+    for (const e of data.exceptions as Array<Record<string, unknown>>) {
+        if (!e || typeof e.memberPubkey !== 'string') continue;
+        marks[e.memberPubkey] = { amount: Number.isInteger(e.amount) ? e.amount as number : null, frozen: e.frozen === true };
+    }
+    return marks;
+}
+
 /** Open Decisions and removals in their grace window: the ones an admin can still halt. */
 export async function fetchAdminDecisions(nodeUrl: string, adminPassword?: string, tfaToken?: string): Promise<AdminDecisionItem[]> {
     const data = await postAdmin<{ decisions?: AdminDecisionItem[] }>(nodeUrl, '/api/local/admin/decisions', {}, adminPassword, tfaToken);
@@ -2701,6 +2784,16 @@ export interface IssueRekeyCodeResponse {
     operator: string;
 }
 
+/** The node’s answer to a cancelled re-key code: the member’s status now, and a note when it was guessed (an older code). */
+export interface CancelRekeyCodeResponse {
+    success: boolean;
+    cancelled: true;
+    oldPubkey: string;
+    callsign: string;
+    status: string;
+    note?: string;
+}
+
 export interface CompleteRekeyResponse {
     success: boolean;
     oldPubkey: string;
@@ -2763,6 +2856,26 @@ export async function issueRekeyCodeApi(
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+}
+
+/** Cancels a re-key code nobody has used: the member’s key works again and their status is put back. */
+export async function cancelRekeyCodeApi(
+    nodeUrl: string,
+    pubkey: string,
+    adminPassword?: string,
+    tfaToken?: string
+): Promise<CancelRekeyCodeResponse> {
+    const endpoint = resolveNodeApiUrl(nodeUrl, `/api/local/admin/members/${encodeURIComponent(pubkey)}/rekey/cancel`);
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: buildAdminHeaders(adminPassword, tfaToken),
+    });
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // A node before the cancel answers 404 with no message.
+        throw new Error(body.error || (res.status === 404 ? 'This node can’t cancel a re-key code yet: update it first.' : `HTTP ${res.status}: ${res.statusText}`));
     }
     return res.json();
 }
@@ -2952,4 +3065,32 @@ export function removeAppAddress(nodeUrl: string, address: string, adminPassword
     return appAddressesCall(nodeUrl, '/api/local/admin/app-addresses/remove', {
         method: 'POST', headers: buildAdminHeaders(adminPassword, tfaToken), body: JSON.stringify({ address }),
     });
+}
+
+export type SignOutEverywhereResult = { ok: true; breakGlassCodeRetired: boolean } | { ok: false; message: string };
+
+/**
+ * "Sign out everywhere" for the person signed in to this node's Settings with their key (POST auth/revoke-all, same
+ * origin, the session cookie and its CSRF token): the node ends every Settings session of theirs, on every computer and
+ * phone, and retires a break-glass code one of those sessions made. Names nobody in the body, so it can only ever be the
+ * caller's own key. Never claims success unless the node said so.
+ */
+export async function signOutEverywhere(): Promise<SignOutEverywhereResult> {
+    let res: Response;
+    try {
+        res = await fetch('/api/local/admin/auth/revoke-all', {
+            method: 'POST',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: buildAdminHeaders(),
+            body: '{}',
+        });
+    } catch {
+        return { ok: false, message: 'Could not reach the node, so you may still be signed in elsewhere. Check the connection and try again.' };
+    }
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+    if (res.ok && body.success === true) return { ok: true, breakGlassCodeRetired: body.breakGlassCodeRetired === true };
+    const said = typeof body.error === 'string' && body.error ? body.error : null;
+    if (res.status === 401) return { ok: false, message: said ? `${said}. Sign in again, then try once more.` : 'Your sign-in here has already ended. Sign in again, then try once more.' };
+    return { ok: false, message: said ?? `The node did not sign you out (${res.status}). Nothing changed.` };
 }

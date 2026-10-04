@@ -78,6 +78,7 @@ const { gatewayAdmit, resetGatewayRateLimit } = await import('./gateway-rate-lim
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
 const { getStandbyHealthBanner } = await import('./services/standby-health.js');
+const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
 const { noteEnvelopeFetch, getEnvelopeHolders, makeRecoveryCode } = await import('./services/takeover-envelope.js');
 const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
 const { createPlainBackup, createSealedBackup } = await import('./services/sealed-backup.js');
@@ -180,9 +181,12 @@ async function main() {
     for (const id of ['rep-token-state', 'rep-token-only', 'rep-token-only-notice', 'rep-last-pull', 'rep-total-pulls', 'rep-rejected', 'rep-recent']) {
         els[id] = { textContent: '', innerHTML: '', style: {}, checked: false };
     }
+    const tfa = turnOn2faForTests(ADMIN_PW);
     const settingsCtx = vm.createContext({
         API: `${base}/api/local`, authToken: ADMIN_PW, relativeTime: () => 'now', JSON,
-        fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, init); },
+        // Step 7c: with the node's 2FA off the password alone opens no admin route, so the panel's owner has 2FA on and
+        // their password goes with a code.
+        fetch: (u: string, init: any) => { resetBrakes(); return fetch(u, { ...init, headers: { ...(init?.headers || {}), 'X-Admin-TOTP': tfa.code() } }); },
         document: { getElementById: (id: string) => els[id] || null, createElement: () => ({ style: {} }) },
     });
     vm.runInContext(settingsSrc.slice(start, end) + '\nthis.loadReplicationAccess = loadReplicationAccess;', settingsCtx);

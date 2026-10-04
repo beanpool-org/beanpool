@@ -4,11 +4,11 @@
  * Verifies:
  * A. TOTP secret generation, RFC 6238 code verification, and ±1 window drift tolerance
  * B. Backup code generation, SHA-256 hashing, and single-use consumption
- * C. checkAdminAuth allows password-only login when 2FA disabled
+ * C. checkAdminAuth refuses the password alone when 2FA disabled (sign-in step 7c: 403 password_needs_2fa)
  * D. checkAdminAuth requires 2FA code (x-admin-totp header) when 2FA enabled
  * E. Valid 6-digit TOTP code grants admin access (including space/hyphen formatting)
  * F. Single-use backup code grants admin access via SHA-256 timing-safe hash lookup and is consumed
- * G. Disabling 2FA restores password-only access
+ * G. Disabling 2FA returns to that refusal (step 7c), not to password-only access
  * H. Pending secret setup protection — calling /2fa/setup does NOT disarm active 2FA (#135 CR)
  * I. otpauth URI formatting preserves unencoded colon label separator (#135 CR2)
  */
@@ -86,13 +86,15 @@ const salt = randomBytes(16).toString('hex');
 const adminHash = scryptSync(testPass, salt, 64).toString('hex');
 updateLocalConfig({ adminHash, salt });
 
-// C. Password-only auth when 2FA disabled
+// C. Password-only auth when 2FA disabled: refused since sign-in step 7c (a password session needs 2FA on)
 resetAdminAuthTarpit();
 (async () => {
     const ctxNo2FA = mockCtx({ 'x-admin-password': testPass });
     const okNo2FA = await checkAdminAuth(ctxNo2FA);
-    assert.strictEqual(okNo2FA, true, 'C. Password-only login must succeed when 2FA is disabled');
-    console.log('  C. Password-only login succeeds when 2FA disabled');
+    assert.strictEqual(okNo2FA, false, 'C. Password-only login is refused when 2FA is disabled (step 7c)');
+    assert.strictEqual(ctxNo2FA.status, 403, 'C. …with 403');
+    assert.strictEqual(ctxNo2FA.body?.code, 'password_needs_2fa', 'C. …as needing 2FA, not as a wrong password');
+    console.log('  C. Password-only login is refused (password_needs_2fa) when 2FA disabled');
 
     // D. Require 2FA code when enabled
     updateLocalConfig({
@@ -154,7 +156,7 @@ resetAdminAuthTarpit();
     assert.strictEqual(okPendingCheck, true, 'H. Active secret must still authenticate while a new setup is pending');
     console.log('  H. Pending setup secret does NOT disarm currently active 2FA');
 
-    // G. Disabling 2FA restores password-only access
+    // G. Disabling 2FA returns to the step 7c refusal of the password alone
     updateLocalConfig({
         totpEnabled: false,
         totpSecret: null,
@@ -166,8 +168,9 @@ resetAdminAuthTarpit();
     resetAdminAuthTarpit();
     const ctxAfterDisable = mockCtx({ 'x-admin-password': testPass });
     const okAfterDisable = await checkAdminAuth(ctxAfterDisable);
-    assert.strictEqual(okAfterDisable, true, 'G. Password-only login succeeds after 2FA is disabled');
-    console.log('  G. Disabling 2FA restores password-only access');
+    assert.strictEqual(okAfterDisable, false, 'G. Password-only login is refused after 2FA is disabled (step 7c)');
+    assert.strictEqual(ctxAfterDisable.body?.code, 'password_needs_2fa', 'G. …as needing 2FA (not totpRequired)');
+    console.log('  G. Disabling 2FA returns to the password_needs_2fa refusal');
 
     console.log('✅ #135 TOTP 2FA admin authentication test PASSED!');
 

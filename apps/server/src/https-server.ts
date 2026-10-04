@@ -41,10 +41,11 @@ import {
 import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
+import { checkAdminAuth, redeemWsTicket } from './admin-auth.js';
+import { adminSessionBindingLive, onAdminSessionsEnded } from './admin-key-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients, startSystemLogRetention } from './logger.js';
 import {
@@ -295,6 +296,8 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
+    // The consent a known community asks for at joining (engine/community-health.ts): read before joining.
+    '/api/community/consent-terms',
     '/api/node/config',
     '/api/directory/info',
     '/api/commons/balance',          // the Commons pot, a community total: public on a local community (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT)
@@ -645,8 +648,10 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             conn.msgSentCount++;
             conn.lastActivityAt = Date.now();
 
+            // A member's socket only: a line about a log socket's frame went to every other log socket, whose own
+            // send made a line back, until the stack ran out (thousands of frames a log line with two streams open).
             let watching = false;
-            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
                 const dataStr = typeof data === 'string' ? data : data.toString();
                 // What kind of frame, how big, which way and when: never what it says (wsTrafficLine).
@@ -680,11 +685,12 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
 
             // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
             // admin log's line reads only its first bytes, for its type, and only while someone is watching the log.
+            // A member's socket only, as on the way out: a frame a log socket sent made a line on every other log socket.
             const bytes: Buffer = Buffer.isBuffer(data) ? data
                 : typeof data === 'string' ? Buffer.from(data)
                     : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
             let watching = false;
-            for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
             if (watching) {
                 const trafficPayload = wsTrafficLine(id, 'in', bytes.length, bytes.subarray(0, FRAME_TYPE_PROBE).toString('utf8'));
                 for (const client of logClients) {
@@ -877,6 +883,25 @@ function claimsWsSignature(params: URLSearchParams): boolean {
     return params.has('pubkey') || params.has('sig') || params.has('ts') || params.has('nonce');
 }
 
+/** The close code a log socket gets when the sign-in it was opened under ends (signed out, signed out everywhere, role taken away). */
+export const LOG_SOCKET_SIGNIN_ENDED = 4401;
+
+/**
+ * Closes every /ws/logs socket whose session has ended: logged out, signed out everywhere (session_epoch bumped), timed
+ * out, its member no longer an admin, or (a password session, or the password itself with no session) the password or
+ * its 2FA changed or break-glass turned on. Run when a session ends
+ * (onAdminSessionsEnded) and every LOG_SESSION_SWEEP_MS for the ends nothing announces (a role taken away, a password
+ * changed). At most maxLogSockets sockets, so the sweep is a handful of reads.
+ */
+function closeEndedLogSockets(logsWss: WebSocketServer): void {
+    logsWss.clients.forEach((ws: any) => {
+        if (ws._adminSession && ws.readyState === WebSocket.OPEN && !adminSessionBindingLive(ws._adminSession)) {
+            ws.close(LOG_SOCKET_SIGNIN_ENDED, 'Your sign-in ended');
+        }
+    });
+}
+const LOG_SESSION_SWEEP_MS = 1000;
+
 function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
     return async (req, socket, head) => {
         const reqUrl = req.url || '';
@@ -954,10 +979,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // A single-use ticket from POST /api/local/admin/ws-ticket (checkAdminAuth), and nothing else. The admin
             // password in the query string (`?auth=`) is no longer taken: a URL lands in the tunnel's, proxies' and
             // browsers' logs and history, and no client has sent one since the tickets (Fable's web review, L5).
+            // A ticket a session asked for is spent only while that session is live (admin-auth.ts, WS TICKET STORE).
             const ticket = parsedUrl.searchParams.get('ticket');
-            const authorized = !!ticket && isValidWsTicket(ticket);
+            const redeemed = ticket ? redeemWsTicket(ticket) : null;
 
-            if (!authorized) {
+            if (!redeemed) {
                 refuseUpgrade(socket, 401);
                 return;
             }
@@ -967,6 +993,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
+                // The session it was opened under (or the password and 2FA, with none), closed with it (closeEndedLogSockets).
+                ws._adminSession = redeemed.binding;
 
                 addLogClient(ws);
                 trackConnection(ws, 'admin', req);
@@ -978,6 +1006,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                     removeLogClient(ws);
                     untrackConnection(ws);
                 });
+                // The session may have ended while the upgrade was answered.
+                closeEndedLogSockets(logsWss);
             });
         } else {
             socket.destroy();
@@ -1899,8 +1929,15 @@ export async function startHttpsServer(port: number): Promise<number> {
             });
         }, 60000);
 
+        // A log socket lives no longer than the session that opened it.
+        const stopLogSessionWatch = onAdminSessionsEnded(() => closeEndedLogSockets(logsWss));
+        const logSessionSweep = setInterval(() => { if (logsWss.clients.size) closeEndedLogSockets(logsWss); }, LOG_SESSION_SWEEP_MS);
+        logSessionSweep.unref?.();
+
         server.on('close', () => {
             clearInterval(heartbeatInterval);
+            clearInterval(logSessionSweep);
+            stopLogSessionWatch();
         });
 
         server.listen(port, () => {

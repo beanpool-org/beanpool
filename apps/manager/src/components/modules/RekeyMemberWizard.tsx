@@ -1,12 +1,26 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     issueRekeyCodeApi,
+    cancelRekeyCodeApi,
     completeRekeyApi,
     fetchRekeyStatusApi,
     type RekeyStatusResponse,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+
+/** What the operator types to make a new code for a member who already moved to a new key. */
+export const MOVE_AGAIN_WORDS = 'NEW CODE';
+
+/** A pending code's time left, in words: "5 h 12 min left", "12 min left", or "Expired". */
+export function rekeyTimeLeft(expiresAt: string, now: number = Date.now()): string {
+    const ms = new Date(expiresAt).getTime() - now;
+    if (!Number.isFinite(ms) || ms <= 0) return 'Expired';
+    const totalMin = Math.max(1, Math.floor(ms / 60000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h > 0 ? `${h} h ${m} min left` : `${m} min left`;
+}
 
 export interface RekeyMemberWizardProps {
     member: {
@@ -54,7 +68,28 @@ export function RekeyMemberWizard({
     const [codeNeedsStepUp, setCodeNeedsStepUp] = useState(false);
     const [rereading, setRereading] = useState(false);
 
+    // Opening the wizard only reads the member's re-key status; a code is made only by the "Make a re-key code" press,
+    // and not before that read has answered, so the wizard knows whether the member already moved. A failed read leaves
+    // it unknown, so the button stays off until a retry answers: they may have moved (review 4176252099).
+    const [statusChecked, setStatusChecked] = useState(false);
+    const [statusReadFailed, setStatusReadFailed] = useState(false);
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const [cancelling, setCancelling] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [now, setNow] = useState(() => Date.now());
+
     const isChecklistComplete = checkPhysical && checkLost && checkInvalidateNotice;
+    /** The member's latest finished re-key, newest first from the node: they already moved to a new key. */
+    const lastMove = rekeyStatus?.history?.[0] ?? null;
+    const typedConfirmOk = !lastMove || typedConfirm.trim().toUpperCase() === MOVE_AGAIN_WORDS;
+    const mayMakeCode = isChecklistComplete && statusChecked && typedConfirmOk && !loading;
+
+    const resetChecklist = () => {
+        setCheckPhysical(false);
+        setCheckLost(false);
+        setCheckInvalidateNotice(false);
+        setTypedConfirm('');
+    };
 
     /** Reads the member's re-key status and shows a pending code, or asks for Manage again when it is held back. */
     const applyStatus = useCallback((status: RekeyStatusResponse) => {
@@ -69,21 +104,33 @@ export function RekeyMemberWizard({
         setCodeNeedsStepUp(!!pending.codeNeedsStepUp);
     }, []);
 
+    /** The read opening does, and its retry: only an answer lets a code be made. */
+    const checkExisting = useCallback(async (isMounted: () => boolean = () => true) => {
+        setStatusReadFailed(false);
+        try {
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            if (!isMounted()) return;
+            if (status) applyStatus(status);
+            setStatusChecked(true);
+        } catch {
+            if (isMounted()) setStatusReadFailed(true);
+        }
+    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+
     useEffect(() => {
         let mounted = true;
-        const checkExisting = async () => {
-            try {
-                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
-                if (mounted && status) applyStatus(status);
-            } catch {
-                // Not blocking
-            }
-        };
-        checkExisting();
+        checkExisting(() => mounted);
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
+    }, [checkExisting]);
+
+    // The time left on a pending code, kept current while it shows.
+    useEffect(() => {
+        if (step !== 2) return;
+        const id = setInterval(() => setNow(Date.now()), 30000);
+        return () => clearInterval(id);
+    }, [step]);
 
     /** After Manage again: read the status once more, which now carries the code. */
     const handleReread = async () => {
@@ -103,9 +150,10 @@ export function RekeyMemberWizard({
     };
 
     const handleIssueCode = async () => {
-        if (!isChecklistComplete) return;
+        if (!mayMakeCode) return;
         setLoading(true);
         setError(null);
+        setNotice(null);
         try {
             const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
             setIssuedCode(res.code);
@@ -116,6 +164,27 @@ export function RekeyMemberWizard({
             setError(err?.message || 'Failed to issue re-enrolment code');
         } finally {
             setLoading(false);
+        }
+    };
+
+    /** Undoes the pending code on the node: the member's key works again and their status is put back. */
+    const handleCancelCode = async () => {
+        setCancelling(true);
+        setError(null);
+        try {
+            const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            setIssuedCode(null);
+            setCodeNeedsStepUp(false);
+            setExpiresAt(null);
+            setNewPubkey('');
+            resetChecklist();
+            setRekeyStatus((s) => (s ? { ...s, pendingRequest: null, isInvalidated: false, invalidatedInfo: null } : s));
+            setNotice(`Code cancelled. @${member.callsign}'s key works again; their status is ${res.status}.${res.note ? ` ${res.note}` : ''}`);
+            setStep(1);
+        } catch (err: any) {
+            setError(err?.message || 'Failed to cancel the re-key code');
+        } finally {
+            setCancelling(false);
         }
     };
 
@@ -201,9 +270,27 @@ export function RekeyMemberWizard({
                     </div>
                 )}
 
+                {notice && (
+                    <div data-testid="rekey-notice" className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-2xl text-xs text-emerald-200 break-words">
+                        ✓ {notice}
+                    </div>
+                )}
+
                 {/* Step 1: Verification Checklist */}
                 {step === 1 && (
                     <div className="space-y-4 text-xs">
+                        {lastMove && (
+                            <div data-testid="rekey-already-moved" className="p-3 bg-sky-950/40 border border-sky-800/60 rounded-2xl text-sky-100 space-y-1 break-words">
+                                <span className="font-bold block">
+                                    Already moved to {lastMove.new_pubkey.slice(0, 10)}… on {new Date(lastMove.completed_at || lastMove.performed_at).toLocaleDateString()}
+                                </span>
+                                <p className="text-[11px] leading-relaxed m-0">
+                                    {lastMove.new_pubkey === member.publicKey.toLowerCase()
+                                        ? `This is the key @${member.callsign} moved to. A new code stops it straight away and signs them out, so make one only if this phone is lost too.`
+                                        : `@${member.callsign} already moved to a new key.`}
+                                </p>
+                            </div>
+                        )}
                         <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-2xl text-amber-200 space-y-1">
                             <span className="font-bold block">🛡️ Operator-Assisted Identity Verification</span>
                             <p className="text-[11px] leading-relaxed text-amber-300/90 m-0">
@@ -249,25 +336,63 @@ export function RekeyMemberWizard({
                             </label>
                         </div>
 
-                        <div className="flex items-center justify-end gap-2 pt-2">
+                        {lastMove && (
+                            <label className="block space-y-1.5">
+                                <span className="block text-nature-200 break-words">
+                                    To make a new code anyway, type <strong className="font-mono text-amber-300">{MOVE_AGAIN_WORDS}</strong>:
+                                </span>
+                                <input
+                                    type="text"
+                                    value={typedConfirm}
+                                    onChange={(e) => setTypedConfirm(e.target.value)}
+                                    aria-label={`Type ${MOVE_AGAIN_WORDS} to make a new code`}
+                                    autoCapitalize="characters"
+                                    autoComplete="off"
+                                    className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white font-mono placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
+                                />
+                            </label>
+                        )}
+
+                        {statusReadFailed ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-[11px] text-amber-300 m-0 break-words flex-1 min-w-0">
+                                    Couldn’t read this member’s re-key status, so a code can’t be made yet: they may already have moved to a new key.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => checkExisting()}
+                                    className="shrink-0 px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                >
+                                    Try again
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-nature-400 m-0 break-words">
+                                {statusChecked
+                                    ? 'Nothing changes until you press Make a re-key code. You can cancel a code until it is used.'
+                                    : 'Checking this member’s re-key status…'}
+                            </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
                             <button
                                 type="button"
                                 onClick={onClose}
                                 className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
                             >
-                                Cancel
+                                Close
                             </button>
                             <button
                                 type="button"
-                                disabled={!isChecklistComplete || loading}
+                                disabled={!mayMakeCode}
                                 onClick={handleIssueCode}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
-                                    isChecklistComplete && !loading
+                                    mayMakeCode
                                         ? 'bg-amber-600 hover:bg-amber-500 text-white'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                 }`}
                             >
-                                {loading ? 'Issuing...' : 'Invalidate Old Key & Issue Code →'}
+                                {loading ? 'Making the code…' : 'Make a re-key code →'}
                             </button>
                         </div>
                     </div>
@@ -277,7 +402,7 @@ export function RekeyMemberWizard({
                 {step === 2 && (
                     <div className="space-y-4 text-xs">
                         <div className="p-3 bg-red-950/30 border border-red-800/50 rounded-2xl text-red-300">
-                            🔒 Old key has been invalidated and cannot perform transactions.
+                            🔒 Old key has been invalidated and cannot perform transactions. Made by mistake? Cancel this code: the key works again.
                         </div>
 
                         {/* Display Code */}
@@ -319,11 +444,11 @@ export function RekeyMemberWizard({
                             )}
                             {expiresAt && (
                                 <p className={`text-[10px] m-0 ${
-                                    new Date(expiresAt).getTime() < Date.now() ? 'text-amber-400 font-bold' : 'text-nature-400'
+                                    new Date(expiresAt).getTime() < now ? 'text-amber-400 font-bold' : 'text-nature-400'
                                 }`}>
-                                    {new Date(expiresAt).getTime() < Date.now()
+                                    {new Date(expiresAt).getTime() < now
                                         ? '⚠️ Code has expired'
-                                        : `Expires in 24 hours (${new Date(expiresAt).toLocaleTimeString()})`}
+                                        : `${rekeyTimeLeft(expiresAt, now)} (until ${new Date(expiresAt).toLocaleString()})`}
                                 </p>
                             )}
                         </div>
@@ -356,18 +481,29 @@ export function RekeyMemberWizard({
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIssuedCode(null);
-                                    setCodeNeedsStepUp(false);
-                                    setExpiresAt(null);
-                                    setStep(1);
-                                }}
-                                className="px-3 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-nature-300 text-xs font-semibold"
-                            >
-                                ← Issue New Code
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleCancelCode}
+                                    disabled={cancelling || completing}
+                                    className="px-3 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-semibold border border-red-800"
+                                >
+                                    {cancelling ? 'Cancelling…' : 'Cancel this code'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIssuedCode(null);
+                                        setCodeNeedsStepUp(false);
+                                        setExpiresAt(null);
+                                        resetChecklist();
+                                        setStep(1);
+                                    }}
+                                    className="px-3 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-nature-300 text-xs font-semibold"
+                                >
+                                    ← Issue New Code
+                                </button>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"

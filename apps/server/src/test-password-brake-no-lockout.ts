@@ -34,6 +34,7 @@ import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateGatewayConfig, updateLocalConfig, hashPassword, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, hashBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
@@ -259,7 +260,11 @@ async function part3Http() {
         assert(/another network/.test(aRight.json?.error || ''), `and is told another network, or a key, still works ("${aRight.json?.error}")`);
         const b = await verify(PW, '198.51.100.7');
         assert(b.status === 200, `the right password from B gets in (got ${b.status}; #937 answered 429)`);
-        const bAdmin = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': PW, ...viaTunnel('198.51.100.8') } });
+        // Step 7c: with 2FA off the password alone opens no admin route, so the admin-route check from B sends it with 2FA
+        // on and a code; 2FA goes off again after (the sign-in route above and below takes the password alone).
+        const twoFa = turnOn2faForTests(PW);
+        const bAdmin = await req('/api/local/admin/diagnostics', { headers: { ...twoFa.headers(), ...viaTunnel('198.51.100.8') } });
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
         assert(bAdmin.status === 200, `and so does password auth on admin routes (checkAdminAuth) from another address (got ${bAdmin.status})`);
     }
 
@@ -270,9 +275,17 @@ async function part3Http() {
         const n401 = all.filter(r => r.status === 401).length, n429 = all.filter(r => r.status === 429).length;
         assert(n401 === SOURCE_FREE_FAILURES + 1 && n429 === 30 - n401,
             `30 wrong passwords at once from one address: only ${SOURCE_FREE_FAILURES + 1} are checked (401: ${n401}, 429: ${n429})`);
+        // Step 7c: with 2FA off the right password alone is refused on admin routes (it was admitted). A burst of them is
+        // refused for that reason only, never braked: none waits, and the address still gets in with the password and a
+        // code afterwards. (A code opens one request, so a burst of password requests is no longer a dashboard's.)
         const burst = await Promise.all(Array.from({ length: 20 }, () =>
             req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': PW, ...viaTunnel('203.0.113.68') } })));
-        assert(burst.every(r => r.status === 200), `20 right passwords at once from one address (a dashboard's burst) are all admitted (${[...new Set(burst.map(r => r.status))].join(',')})`);
+        assert(burst.every(r => r.status === 403 && r.json?.code === 'password_needs_2fa' && !r.json?.passwordBackoff),
+            `20 right passwords at once from one address (a dashboard's burst): with 2FA off each is refused as password_needs_2fa, none braked (${[...new Set(burst.map(r => `${r.status} ${r.json?.code}`))].join(',')})`);
+        const twoFa = turnOn2faForTests(PW);
+        const after = await req('/api/local/admin/diagnostics', { headers: { ...twoFa.headers(), ...viaTunnel('203.0.113.68') } });
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
+        assert(after.status === 200, `…and that address is admitted after the burst, with the password and a code (got ${after.status})`);
     }
 
     console.log('\n— HTTP: a flood from many sources is capped node-wide —');

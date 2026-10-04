@@ -493,6 +493,7 @@ export function approvePostRequest(
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
             amount: row.credits,
             postId: post.id,
+            transactionId: row.id,
             actorPubkey: authorPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey
@@ -764,6 +765,7 @@ export function acceptPost(
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
             amount: finalCredits,
             postId: post.id,
+            transactionId: tx.id,
             actorPubkey: buyerPublicKey,
             buyerPubkey: buyerPublicKey,
             sellerPubkey: post.authorPublicKey
@@ -1022,6 +1024,7 @@ export function completePostTransaction(
             grossAmount: releaseCredits,
             fee: releaseResult?.taxFee ?? 0,
             postId: row.post_id,
+            transactionId: row.id,
             actorPubkey: confirmerPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,
@@ -1096,6 +1099,7 @@ export function cancelPostTransaction(
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
             amount: row.credits,
             postId: row.post_id,
+            transactionId: row.id,
             actorPubkey: cancellerPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey

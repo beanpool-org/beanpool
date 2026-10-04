@@ -38,6 +38,7 @@
  *   themselves after the same 7 days.
  */
 
+import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
 import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
@@ -45,6 +46,7 @@ import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
@@ -107,7 +109,9 @@ export type DecisionEffect =
     // Pool money
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit';
+    | 'write_off_deficit'
+    // A departed member's debt (engine/names-debts.ts), written off: no Beans move (the Commons took it when they left)
+    | 'forgive_debt';
 
 /**
  * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
@@ -268,7 +272,7 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
  * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
  * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
- * Admin routes (/api/local/admin/*) serve the full Decision.
+ * Admin routes (/api/local/admin/*) serve decisionForAdmin.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
@@ -295,6 +299,21 @@ export function decisionForReader(decision: Decision, reader: string | null | un
 }
 
 /**
+ * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the key of the admin's key session: the full
+ * Decision, except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them:
+ * to an admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them.
+ * The route passes no reader for a password session or an automation token (a token's actor is its maker's key, but a
+ * token is not a voter), so neither ever does. balanceHidden says they were left off.
+ */
+export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
+    if (!carriesMemberBalance(decision.params)) return decision;
+    if (reader && (reader === decision.subject || checkVoterEligibility(reader, decision).ok)) return decision;
+    const params: Record<string, unknown> = { ...decision.params };
+    for (const k of MEMBER_BALANCE_PARAMS) delete params[k];
+    return { ...decision, params, balanceHidden: true };
+}
+
+/**
  * Maps what a decision touches to its mandatory franchise (§3.6):
  * - pool -> quadratic on earned trade
  * - member -> 1m1v
@@ -308,6 +327,7 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     grant_enterprise: 'pool',
     grant_hardship: 'pool',
     write_off_deficit: 'pool',
+    forgive_debt: 'pool',
     suspend_member: 'member',
     unsuspend_member: 'member',
     freeze_credit: 'member',
@@ -781,6 +801,12 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
         throw new Error(NODE_OPERATOR_VOTE_REFUSAL);
     }
 
+    // A debt is forgiven only while it is open (design §4.2 (c)); its subject is the record's id, never a name.
+    if (opts.effect === 'forgive_debt') {
+        const debt = typeof opts.subject === 'string' ? debtRecord(opts.subject) : undefined;
+        if (!debt || debt.status !== 'open') throw new Error('Name an open debt record to forgive.');
+    }
+
     // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
     if (GRANT_EFFECTS.has(opts.effect)) assertGrantWithinCap(opts.params);
 
@@ -1099,6 +1125,12 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
+    if (decision.effect === 'forgive_debt') {
+        const debt = decision.subject ? debtRecord(decision.subject) : undefined;
+        if (!debt) return { status: 'void', reason: 'The debt record is gone' };
+        if (debt.status !== 'open') return { status: 'void', reason: `The debt is ${debt.status} already` };
+    }
+
     if (decision.effect === 'write_off_deficit') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing enterprise subject' };
         const enterprise = getMember(decision.subject);
@@ -1379,6 +1411,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
                     persistDecayEvents();
                     persistCommonsBalance();
+                    break;
+                }
+                case 'forgive_debt': {
+                    forgiveDebt(authSigner, decision.subject!, { ref: decision.id });
                     break;
                 }
                 case 'write_off_deficit': {
@@ -1736,6 +1772,9 @@ export interface EmergencySuspendResult {
  * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
  * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
  * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
+ *
+ * A member whom only a re-key code holds suspended is not suspended by anyone (member-wizards.ts
+ * suspendedOnlyByRekeyCode): they can be suspended, and its 'disabled' outlasts the code's cancel or completion.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     assertPlainTablesWritable();
@@ -1750,7 +1789,9 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
     if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
-    if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
+        return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    }
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
@@ -1810,13 +1851,31 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 /**
  * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
  * decide, so it closes as halted, with the lift recorded as the reason.
+ *
+ * It lifts a report's 'suspended' as well as an admin's or a Decision's 'disabled': a cancelled re-key code leaves a
+ * member a report may have suspended 'suspended', and tells the admin to lift it here (member-wizards.ts
+ * cancelRekeyCode). Not while a re-key code holds their key: its cancel decides their status, and a lift under it would
+ * be undone by the code (the code is cancelled first).
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
     assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.status !== 'disabled') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status !== 'disabled' && member.status !== 'suspended') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status === 'suspended'
+        && db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(subjectPubkey)) {
+        // An expired code can't be cancelled (member-wizards.ts cancelRekeyCode): a new code over its hold can.
+        const latest = db.prepare('SELECT status, expires_at FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1')
+            .get(subjectPubkey) as { status: string; expires_at: string } | undefined;
+        const ranOut = latest?.status === 'expired' || (latest?.status === 'pending' && new Date(latest.expires_at).getTime() < Date.now());
+        return {
+            success: false, status: 409,
+            error: ranOut
+                ? 'Their key is held for a re-key code that has run out: make a new code on Re-Key and cancel it, then lift the suspension if they are still suspended'
+                : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
+        };
+    }
     const pendingRemoval = db.prepare(
         "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
     ).get(subjectPubkey);

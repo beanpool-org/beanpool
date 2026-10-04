@@ -16,6 +16,16 @@
  *   POST   /api/names/confirmations/:id/revoke      → { id, status }
  *   GET    /api/names/log?limit&offset              → { log, total, limit, offset }
  *   POST   /api/names/settings                      { twoAdminsToConfirm?, namesShownToMembers? } (an owner)
+ *   GET    /api/names/health                        → the Community health panel: the totals, the two lines, the consent text
+ *   GET    /api/names/health/exceptions             → known mode only: confirmed, consented members past a line, by key and
+ *                                                     entry id (never a name), and the open debts of members who left (logged)
+ *   GET    /api/names/health/log?limit              → who opened the exceptions, and when
+ *   POST   /api/names/health/settings               { debtLinePct?, quietDays? } (an owner; each change in the known floor's log)
+ *   GET    /api/names/consent                       → a member's own: the terms, and whether they consented (any member)
+ *   POST   /api/names/consent                       { version } → the member's consent to the terms they were shown;
+ *                                                   { withdraw: true } → withdraws it (GDPR Art. 7(3)), at once
+ *   DELETE /api/names/consent                       → withdraws it too
+ *   GET    /api/community/consent-terms             → the join screen's text, before joining (anyone)
  *   GET    /api/names/copy                          → { header, signature, box } of the signer's own locked copy (logged:
  *                                                     copy_restored) | 404 no_copy
  *   PUT    /api/names/copy                          { header, signature, box } → { seq } | { seq, code: exists }; 400 bad_copy |
@@ -28,14 +38,19 @@
  * writes the access log, which is the main server's. Every admin's request first marks holders of the current key who
  * are no admin now (reconcileHolders).
  */
+import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
+import { HealthError, healthSummary, openExceptions, readHealthAccessLog, setHealthSettings, consentTerms, myConsent, recordConsent, withdrawConsent } from '../engine/community-health.js';
+import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
-import { getMember, isVisitorKey } from '../state-engine.js';
+import { getMember, isVisitorKey, generateInvite } from '../state-engine.js';
+import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
 import { getNodeProfile } from '../config/node-profile.js';
 import { getNodeRole, STANDBY_CODE } from '../config/node-role.js';
 import {
     NamesListError, assertNamesAdmin, reconcileHolders, namesState, readEntries, addEntry, editEntry, deleteEntry,
-    addGeneration, addShare, confirmMember, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
-    readNamesCopyOf, saveNamesCopy,
+    addGeneration, addShare, confirmMember, confirmToWorkOff, secondConfirmation, revokeConfirmation, readNamesLog, setNamesSettings,
+    readNamesCopyOf, saveNamesCopy, readBoundInvites,
 } from '../engine/names-list.js';
 import type { RouteDeps } from './types.js';
 
@@ -83,6 +98,7 @@ function admin(ctx: any): string | null {
 }
 
 function respond(ctx: any, e: unknown): void {
+    if (e instanceof DebtError || e instanceof HealthError) return answer(ctx, e.status, e.message, e.code);
     if (e instanceof NamesListError) {
         answer(ctx, e.status, e.message, e.code);
         if (e.extra) ctx.body = { ...e.extra, ...ctx.body };
@@ -102,6 +118,20 @@ async function asAdmin(ctx: any, fn: (actor: string, body: Record<string, unknow
         ctx.status = status;
         const out = fn(actor, body);
         ctx.body = out;
+    } catch (e) {
+        respond(ctx, e);
+    }
+}
+
+/** Runs `fn` for the signing member (any active member, for their own consent). */
+async function asMember(ctx: any, fn: (actor: string, body: Record<string, unknown>) => unknown): Promise<void> {
+    ctx.set('Cache-Control', 'no-store');
+    if (getNodeProfile() === 'global') return answer(ctx, 404, GLOBAL_NAMES, 'feature_off');
+    const actor = (ctx.state?.actor as string | undefined)?.toLowerCase();
+    if (!actor) return answer(ctx, 401, 'Sign this request with your member key.', 'unsigned');
+    const body = ((ctx as any).requestBody && typeof (ctx as any).requestBody === 'object' ? (ctx as any).requestBody : {}) as Record<string, unknown>;
+    try {
+        ctx.body = fn(actor, body);
     } catch (e) {
         respond(ctx, e);
     }
@@ -131,6 +161,28 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }, 201));
     router.post('/api/names/shares', (ctx) => asAdmin(ctx, (actor, body) => addShare(actor, body)));
 
+    // Debts and a second chance (engine/names-debts.ts): every entry's debt history, and paying one back.
+    router.get('/api/names/debts', (ctx) => asAdmin(ctx, () => ({ debts: listDebts() })));
+    router.post('/api/names/debts/:id/work-off', (ctx) => asAdmin(ctx, (actor, body) => confirmToWorkOff(actor, ctx.params.id, body), 201));
+    router.post('/api/names/debts/:id/settle', (ctx) => asAdmin(ctx, (actor, body) => settleByPayment(actor, ctx.params.id, body)));
+
+    // An invite bound to an entry (community modes slice 3): redeeming it confirms the joiner against the entry, by the
+    // admin who made it. The same limits as any invite (W-main) and the door's rule; the entry's rule is confirmMember's.
+    router.post('/api/names/entries/:id/invite', async (ctx) => {
+        const actor = admin(ctx);
+        if (!actor) return;
+        try {
+            const invite = generateInvite(actor, undefined, () => assertMayMakeInvite(actor), String(ctx.params.id));
+            if (!invite) return answer(ctx, 403, 'Only registered members can generate invites', 'not_member');
+            ctx.status = 201;
+            ctx.body = { success: true, invite };
+        } catch (e) {
+            if (respondProfileRefusal(ctx, e)) return;
+            respond(ctx, e);
+        }
+    });
+    router.get('/api/names/invites', (ctx) => asAdmin(ctx, () => ({ invites: readBoundInvites() })));
+
     router.post('/api/names/confirmations', (ctx) => asAdmin(ctx, (actor, body) => confirmMember(actor, body), 201));
     router.post('/api/names/confirmations/:id/second', (ctx) => asAdmin(ctx, (actor) => secondConfirmation(actor, ctx.params.id)));
     router.post('/api/names/confirmations/:id/revoke', (ctx) => asAdmin(ctx, (actor) => revokeConfirmation(actor, ctx.params.id)));
@@ -144,6 +196,30 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     }));
 
     router.post('/api/names/settings', (ctx) => asAdmin(ctx, (actor, body) => setNamesSettings(actor, body)));
+
+    // The Community health panel (engine/community-health.ts): totals for every owner and admin; the exceptions only in a
+    // known community, each opening logged first; no export of balances.
+    router.get('/api/names/health', (ctx) => asAdmin(ctx, () => healthSummary()));
+    router.get('/api/names/health/exceptions', (ctx) => asAdmin(ctx, (actor) => openExceptions(actor)));
+    router.get('/api/names/health/log', (ctx) => asAdmin(ctx, () => {
+        const limit = wholeQuery(ctx.query.limit, 100, 500);
+        if (limit === null || limit < 1) throw new NamesListError(400, 'bad_request', 'limit must be a whole number from 1 to 500.');
+        return { log: readHealthAccessLog(limit, 'balance'), tradeLog: readHealthAccessLog(limit, 'trades') };
+    }));
+    router.post('/api/names/health/settings', (ctx) => asAdmin(ctx, (actor, body) => {
+        if (!isNodeOwner(actor)) throw new NamesListError(403, 'owner_only', 'Only an owner of this community can change what the admins see.');
+        return setHealthSettings(actor, body);
+    }));
+
+    // The consent at joining: a member's own, signed with their key; the terms themselves are public (the join screen).
+    router.get('/api/community/consent-terms', (ctx) => {
+        ctx.set('Cache-Control', 'no-store');
+        const { known, debtLinePct, quietDays, version, text } = consentTerms();
+        ctx.body = { known, debtLinePct, quietDays, version, text };
+    });
+    router.get('/api/names/consent', (ctx) => asMember(ctx, (actor) => myConsent(actor)));
+    router.post('/api/names/consent', (ctx) => asMember(ctx, (actor, body) => body.withdraw === true ? withdrawConsent(actor) : recordConsent(actor, body)));
+    router.delete('/api/names/consent', (ctx) => asMember(ctx, (actor) => withdrawConsent(actor)));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.
     router.get('/api/names/copy', (ctx) => asAdmin(ctx, (actor) => readNamesCopyOf(actor)));

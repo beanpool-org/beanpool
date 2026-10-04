@@ -105,14 +105,16 @@ export async function signPairing(
  * builds before it made.
  */
 export async function makeOfflineTicket(
-    nodeUrl: string, inviter: string, privateKeyHex: string, opts: { intendedFor?: string | null; timestamp?: number } = {},
+    nodeUrl: string, inviter: string, privateKeyHex: string, opts: { intendedFor?: string | null; timestamp?: number; namesEntryId?: string | null } = {},
 ): Promise<string> {
     assertPlainNodeAddress(nodeUrl);
     const timestamp = opts.timestamp ?? Date.now();
     const sign = memberSigner(privateKeyHex);
     if (await requestSigningFormatFor(nodeUrl) === 2) {
-        return `BP-${await buildInviteTicket(nodeUrl, inviter, sign, { timestamp, intendedFor: opts.intendedFor || null })}`;
+        return `BP-${await buildInviteTicket(nodeUrl, inviter, sign, { timestamp, intendedFor: opts.intendedFor || null, namesEntryId: opts.namesEntryId || null })}`;
     }
+    // A ticket bound to a names-list entry (community modes slice 3) is format 2 only: the old form has no place for it.
+    if (opts.namesEntryId) throw new Error('This community’s server is too old for a ticket bound to a name. Invite them once you have signal.');
     const payload = JSON.stringify({ i: inviter, t: timestamp, f: opts.intendedFor || undefined });
     const s = await oldFormSignature(payload, sign);
     return `BP-${toBase64(utf8Bytes(JSON.stringify({ p: toBase64(utf8Bytes(payload)), s })))}`;

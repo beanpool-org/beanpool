@@ -30,6 +30,7 @@ import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { getMemberPhoto, setMemberPhoto } from '@beanpool/engine';
 import { loadConnectors } from './connector-manager.js';
@@ -42,6 +43,9 @@ import { bridgeAccountId } from './federation-bridge.js';
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const PW = 'TestAdmin123!';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
+// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
 
 const PEER_ID = '12D3KooWEastGippyLinkTestPeer00000000000000';
 const ADDRESS = `/ip4/172.18.0.4/tcp/4001/p2p/${PEER_ID}`;
@@ -56,9 +60,10 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; json: any }> {
+async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
+    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -181,6 +186,16 @@ async function main() {
     assert(onDisk?.name === 'ondisk Link',
         `0c. named from the on-disk callsign (got "${onDisk?.name}") — an already-configured node needs no operator action to get its enterprise`);
     assert(reconcileFederationLinks(createTreasury) === 0, '0d. and a second boot creates nothing');
+
+    const alone = await post('/api/local/connectors', {
+        password: PW, address: ADDRESS, trustLevel: 'peer', callsign: 'eastgippy', enabled: true,
+    });
+    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
+        `1-. 2FA off: the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
+    tfa = turnOn2faForTests(PW);
+    // The refusal above is one more admin call than this suite made before 7c; the limits start the minute afresh (as at 12).
+    resetAdminRateLimit();
+    pruneAuthAttempts(Date.now() + 61_000);
 
     // ── 1. A capless peer has no link. Adding a connector is not the deliberate act; setting a cap is. ────
     const added = await post('/api/local/connectors', {
@@ -333,7 +348,7 @@ async function main() {
 
     // ── 9. Clearing a cap must not delete a link. ────────────────────────────────────────────────────────
     const clearing = await setCap({ password: PW, address: ADDRESS_2, cap: null });
-    assert(clearing.status === 200, '9a. the cap clears');
+    assert(clearing.status === 200, `9a. the cap clears (got ${clearing.status} ${clearing.json?.error ?? ""})`);
     assert(getFederationLink(PEER_ID_2) !== null,
         '9b. but the LINK SURVIVES — its treasury can hold beans and its bridge can hold a tab, so dropping it would orphan both. Withdrawing a cap stops new settlement, which is what it is for');
 

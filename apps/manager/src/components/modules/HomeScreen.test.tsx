@@ -37,9 +37,10 @@ describe('HomeScreen Component', () => {
                 { publicKey: 'pk-corp2', name: 'Tool Library', isTreasury: true },
             ],
             memberStats: {
-                'pk-user1': { posts: 1, messages: 2, deals: 3, volume: 50.4, cancelled: 0 },
-                'pk-corp1': { posts: 4, messages: 0, deals: 3, volume: 50.4, cancelled: 0 },
+                'pk-user1': { posts: 1, messages: 2 },
+                'pk-corp1': { posts: 4, messages: 0 },
             },
+            tradeTotals: { deals: 3, volume: 50.4, cancelled: 0 },
         };
 
         render(<HomeScreen {...defaultProps} nodeData={mockNodeData} />);
@@ -48,7 +49,7 @@ describe('HomeScreen Component', () => {
         const enterpriseCard = screen.getByRole('button', { name: /Shared Enterprises/i });
         expect(enterpriseCard).toHaveTextContent('2');
 
-        // Total completed volume is 50.4 (100.8 / 2)
+        // The community's completed volume, from its trade totals (member stats carry no trades)
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
         expect(circulationCard).toHaveTextContent('50.4 beans');
     });
@@ -173,6 +174,22 @@ describe('HomeScreen Component', () => {
         expect(screen.queryByTestId('standby-health-banner')).toBeNull();
         rerender(<HomeScreen {...defaultProps} diag={{ standbyHealth: null } as any} />);
         expect(screen.queryByTestId('standby-health-banner')).toBeNull();
+    });
+
+    it("shows the owners' banner when the standby's address redirects", () => {
+        const standbyHealth = {
+            incident: {
+                id: 'inc2', startedAt: Date.now(), pushed: true,
+                lines: ["The standby's address redirects to other.example: point it at the server itself."],
+                whatToDo: ["Open the standby's own Settings, under Live Backup Server, for what it says; a force-resync there copies this server afresh."],
+            },
+            standbys: [
+                { id: 'a'.repeat(32), label: 'The standby', lastPullAt: 1, lastCopyAt: 1, lastExactAt: 1, healthy: false },
+            ],
+        };
+        render(<HomeScreen {...defaultProps} diag={{ standbyHealth } as any} />);
+        const banner = screen.getByTestId('standby-health-banner');
+        expect(banner).toHaveTextContent("The standby's address redirects to other.example: point it at the server itself.");
     });
 
     it("shows the owners' banner while backups off the server need them, and opens the Backups tab", async () => {

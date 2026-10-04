@@ -202,7 +202,6 @@ async function main(): Promise<void> {
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
     const env = (pw: string, role: string) => ({ ADMIN_PASSWORD: pw, NODE_ROLE: role, BACKUP_RECONCILE_EVERY_MS: '86400000' });
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
 
     try {
         const main = await spawnNode(SCRIPT, dirs.main, env(PW_MAIN, 'primary'));
@@ -276,9 +275,15 @@ async function main(): Promise<void> {
         const mainBlocked: string[] = await main.send('blocked');
         await main.kill('SIGKILL');
 
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
+
+        // standby makes (takeover-test-harness.ts owner-session).
+
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.preview?.peerId === mainPeerId, `the recovery code opens the keys (${opened.status})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `the take-over is confirmed (${confirmed.status})`);
         require_((await standby.exited) === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dirs.standby, env(PW_STANDBY, 'backup'));

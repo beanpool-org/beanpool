@@ -22,13 +22,13 @@ const everything = (w) => Object.fromEntries(
         .map(({ name }) => [name, w.sqlite.prepare(`SELECT * FROM "${name}"`).all().map((r) => ({ ...r }))]));
 
 // A request signed by `key` over (method, signedPath, ts, text), sent to `sentPath` with `text` as its body.
-async function signedRaw(key, { method = 'POST', signedPath = '/api/registrar/holder', sentPath = signedPath, text, ts = nowS(), pubHex = key.pubHex }) {
-    const message = `beanpool-registrar-request/v1\n${method}\n${signedPath}\n${ts}\n${text}`;
-    const signature = toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey, new TextEncoder().encode(message)));
-    return new Request(`https://beanpool.org${sentPath}`, {
-        method, body: text || undefined,
-        headers: { 'content-type': 'application/json', 'x-bp-pubkey': pubHex, 'x-bp-timestamp': String(ts), 'x-bp-signature': signature },
-    });
+// `signedSearch`: a query signed in x-bp-signature-query (a node from after #1576's review); none: no such header.
+async function signedRaw(key, { method = 'POST', signedPath = '/api/registrar/holder', sentPath = signedPath, text, ts = nowS(), pubHex = key.pubHex, signedSearch }) {
+    const sign = async (p) => toHex(await crypto.subtle.sign('Ed25519', key.keyPair.privateKey,
+        new TextEncoder().encode(`beanpool-registrar-request/v1\n${method}\n${p}\n${ts}\n${text}`)));
+    const headers = { 'content-type': 'application/json', 'x-bp-pubkey': pubHex, 'x-bp-timestamp': String(ts), 'x-bp-signature': await sign(signedPath) };
+    if (signedSearch) headers['x-bp-signature-query'] = await sign(`${signedPath}${signedSearch}`);
+    return new Request(`https://beanpool.org${sentPath}`, { method, body: text || undefined, headers });
 }
 const send = async (w, req) => { const res = await worker.fetch(req, w.env); return { status: res.status, body: await res.json() }; };
 
@@ -708,5 +708,60 @@ test('the names page says what a blocked name\'s release does: held from every k
             { url: `${base}blockedname/release`, body: { free_now: false } },
             { url: `${base}oldrow/release`, body: { free_now: false } },
         ]);
+    } finally { w.restore(); }
+});
+
+// ── /status?name= ────────────────────────────────────────────────────────────────────────────────────────────────
+
+test('status?name=: a key holding two names hears about the one it asks for; another key\'s name or none asked: its first', async () => {
+    const w = await world();
+    try {
+        const [key, other] = await Promise.all([makeKey(), makeKey()]);
+        await liveName(w, 'first-one', key);
+        await liveName(w, 'second-one', key);
+        await liveName(w, 'not-yours', other);
+        const ask = async (q) => send(w, await signedRaw(key, { method: 'GET', signedPath: '/api/registrar/status', sentPath: `/api/registrar/status${q}`, text: '', signedSearch: q }));
+        const plain = await ask('');
+        assert.equal(plain.status, 200);
+        assert.ok(['first-one', 'second-one'].includes(plain.body.name), JSON.stringify(plain.body));
+        for (const name of ['first-one', 'second-one']) {
+            const r = await ask(`?name=${name}`);
+            assert.equal(r.status, 200);
+            assert.equal(r.body.name, name);
+            assert.equal(r.body.status, 'live');
+        }
+        const theirs = await ask('?name=not-yours');
+        assert.equal(theirs.status, 200);
+        assert.equal(theirs.body.name, plain.body.name, 'another key\'s name is never answered about');
+        assert.equal((await ask('?name=NOT%20A%20NAME')).body.name, plain.body.name);
+    } finally { w.restore(); }
+});
+
+test('status?name=: the name counts only when the request signs it, so a replayed /status can\'t pick which row (and token) it gets', async () => {
+    const w = await world();
+    try {
+        const key = await makeKey();
+        await liveName(w, 'first-one', key);
+        await liveName(w, 'second-one', key);
+        const status = '/api/registrar/status';
+        const plain = await send(w, await signedRaw(key, { method: 'GET', signedPath: status, text: '' }));
+        assert.equal(plain.status, 200);
+        const other = plain.body.name === 'first-one' ? 'second-one' : 'first-one';
+        // A node from before (or #1576's): ?name= with no x-bp-signature-query. Verifies; answered as if no name was asked.
+        const unsigned = await send(w, await signedRaw(key, { method: 'GET', signedPath: status, sentPath: `${status}?name=${other}`, text: '' }));
+        assert.equal(unsigned.status, 200);
+        assert.equal(unsigned.body.name, plain.body.name, 'an unsigned ?name= picks nothing');
+        // A captured request (signed for one name, or for none) resent inside the clock window with another ?name=.
+        for (const signedSearch of [`?name=${plain.body.name}`, undefined]) {
+            const ts = nowS();
+            const replay = await send(w, await signedRaw(key, { method: 'GET', signedPath: status, sentPath: `${status}?name=${other}`, text: '', ts, signedSearch }));
+            assert.equal(replay.status, 200);
+            assert.equal(replay.body.name, plain.body.name, `a replay re-pointed at ?name=${other} gets the first row, not the one it names (${signedSearch})`);
+            assert.equal(replay.body.tunnelToken, plain.body.tunnelToken);
+        }
+        // Signed: answered about the name it asks for, token included.
+        const signed = await send(w, await signedRaw(key, { method: 'GET', signedPath: status, sentPath: `${status}?name=${other}`, text: '', signedSearch: `?name=${other}` }));
+        assert.equal(signed.body.name, other);
+        assert.equal(signed.body.status, 'live');
     } finally { w.restore(); }
 });

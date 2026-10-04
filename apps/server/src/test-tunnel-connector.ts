@@ -47,7 +47,10 @@ import {
     initTunnelConnector, syncTunnel, restartTunnel, startTunnelForTakeover, persistAddress, getTunnelStatus, dockerSocketMounted,
     setTunnelConnectorForTests, tunnelConnectorForTests, resetTunnelConnectorForTests, LOOPBACK_ORIGIN,
 } from './services/tunnel-connector.js';
-import { reconcile } from './services/public-address-agent.js';
+import { reconcile, checkAddressRequest } from './services/public-address-agent.js';
+import { getLocalConfig, updateLocalConfig } from './config/local-config.js';
+import { noteTurnedAway } from './config/turned-away-names.js';
+import { writeAddressRequestFile } from './address-request.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
 import { useFakeCloudflared, type FakeTunnel } from './tunnel-test-fake.js';
 import type { RouteDeps } from './routes/types.js';
@@ -107,15 +110,18 @@ function refuseEdge(): void {
 
 // ── The mock registrar ───────────────────────────────────────────────────────────────────────
 
-interface Call { method: string; path: string; body: any }
+interface Call { method: string; path: string; body: any; name?: string | null }
 const reg = {
     calls: [] as Call[],
-    status: (): any => ({ status: 'none' }),
+    /** `name`: the name the node asked about (/status?name=); an older registrar never reads it. */
+    status: (_name?: string | null): any => ({ status: 'none' }),
     claim: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-claim-${b.name}` }),
-    offline: (): any => ({ status: 'released' }),
+    /** As ours answers since #1116: the name it released, when the node named one. */
+    offline: (b?: any): any => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) }),
+    holder: (b: any): any => ({ name: b?.name, held: 'free' }),
     heal: (b: any): any => ({ status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', changed: [] }),
     /** [HTTP status, body]: the registrar refuses a rotate with a 403, 404 or 409. */
-    rotate: (b: any): [number, any] => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
+    rotate: (b: any): [number, any] | Promise<[number, any]> => [200, { status: 'live', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel', tunnelToken: `T-rotate-${b.name}`, rotated: true }],
 };
 const claims = () => reg.calls.filter((c) => c.path === '/api/registrar/claim');
 const statuses = () => reg.calls.filter((c) => c.path === '/api/registrar/status');
@@ -129,14 +135,23 @@ async function startRegistrar(): Promise<http.Server> {
         req.on('end', () => {
             const send = (code: number, body: unknown) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
             if (!req.headers['x-bp-pubkey'] || !req.headers['x-bp-signature']) return send(401, { error: 'unsigned' });
-            const p = new URL(req.url || '/', 'http://registrar').pathname;
+            const u = new URL(req.url || '/', 'http://registrar');
+            const p = u.pathname;
             const body = text ? JSON.parse(text) : null;
-            reg.calls.push({ method: req.method || '', path: p, body });
-            if (p === '/api/registrar/status') return send(200, reg.status());
-            if (p === '/api/registrar/claim') return send(200, reg.claim(body));
-            if (p === '/api/registrar/offline') return send(200, reg.offline());
+            reg.calls.push({ method: req.method || '', path: p, body, name: u.searchParams.get('name') });
+            // An answer, [HTTP status, body] for one that refuses, { html: [status, page] } for a page from something in front
+            // of the registrar, or a promise of one (an answer held back).
+            const answer = (out: any): void => void Promise.resolve(out).then((o) => {
+                if (o?.html) { res.writeHead(o.html[0], { 'Content-Type': 'text/html' }); return void res.end(o.html[1]); }
+                if (Array.isArray(o)) send(o[0], o[1]);
+                else send(200, o);
+            });
+            if (p === '/api/registrar/status') return answer(reg.status(u.searchParams.get('name')));
+            if (p === '/api/registrar/claim') return answer(reg.claim(body));
+            if (p === '/api/registrar/offline') return answer(reg.offline(body));
             if (p === '/api/registrar/heal') return send(200, reg.heal(body));
-            if (p === '/api/registrar/rotate') { const [code, answer] = reg.rotate(body); return send(code, answer); }
+            if (p === '/api/registrar/holder') return answer(reg.holder(body));
+            if (p === '/api/registrar/rotate') return answer(reg.rotate(body));
             send(404, { error: 'not found' });
         });
     });
@@ -172,6 +187,8 @@ async function main(): Promise<void> {
     });
     const T1 = 'eyJhIjoiYWxwaGEtMSJ9.token-one-4f1c9a2e';
     const servers: { app: http.Server | null } = { app: null };
+    let settingsPost: ((p: string, body?: unknown) => Promise<{ status: number; body: any }>) | null = null;
+    let settingsGet: ((p: string) => Promise<{ status: number; body: any }>) | null = null;
 
     try {
         await section('1, 8. at boot: no address, no child; a leftover token file is deleted and never run', async () => {
@@ -344,6 +361,7 @@ async function main(): Promise<void> {
 
         await section('5. a child that keeps crashing: growing, capped backoff; never two at once', async () => {
             const n0 = fake.runs().length;
+            const log0 = tunnelLogs().length;
             fake.crash(true);
             let most = 0;
             const sampler = setInterval(() => { most = Math.max(most, fakes().length); }, 10);
@@ -353,7 +371,13 @@ async function main(): Promise<void> {
             const starts = fake.runs().slice(n0).map((r) => r.at);
             const gaps = starts.slice(1).map((t, i) => t - starts[i]);
             assert(starts.length >= 6, `restarted after each crash (${starts.length} starts)`);
-            assert(gaps[0] >= 80 && gaps[1] > gaps[0] && gaps[2] > gaps[1], `the wait grows (${gaps.join(', ')} ms)`);
+            const scheduled = tunnelLogs().slice(log0)
+                .map((l) => l.message.match(/starting it again in (\d+)\s*ms/))
+                .filter((m): m is RegExpMatchArray => m !== null)
+                .map((m) => Number(m[1]));
+            assert(scheduled.length >= 3 && scheduled[0] < scheduled[1] && scheduled[1] < scheduled[2]
+                && gaps[0] >= 80 && gaps[2] > gaps[0],
+                `the wait grows (schedule: ${scheduled.slice(0, 3).join(', ')} ms; measured: ${gaps.join(', ')} ms)`);
             assert(gaps.every((g) => g < 400 + 600) && gaps[3] >= 350 && gaps[4] >= 350, `and is capped (${gaps.join(', ')} ms; cap 400)`);
             assert(most <= 1, `never two children at once (at most ${most})`);
             // waitForRuns resolves the moment the 6th child has STARTED; its exit (and so the retrying reason) lands slightly after.
@@ -488,6 +512,11 @@ async function main(): Promise<void> {
                 const res = await fetch(base + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                 return { status: res.status, body: await res.json().catch(() => null) as any };
             };
+            settingsPost = post;
+            settingsGet = async (p: string) => {
+                const res = await fetch(base + p);
+                return { status: res.status, body: await res.json().catch(() => null) as any };
+            };
 
             reg.claim = (b) => live(b.name, 'eyJ.token-beta');
             const claimed = await post('/api/local/admin/public-address/claim', { name: 'beta', mode: 'tunnel' });
@@ -549,6 +578,503 @@ async function main(): Promise<void> {
             assert(noKey.status === 409 && /no live tunnel address/i.test(noKey.body?.error || ''), `New tunnel key with no address says so (${noKey.status})`);
             const old = await post('/api/local/admin/public-address/restart-sidecar');
             assert(old.status === 404 || old.status === 405, `the sidecar route is gone (${old.status})`);
+        });
+
+        await section('13. a request from beanpool claim ends once this server holds any address, however it got it', async () => {
+            const post = settingsPost!;
+            const request = (name: string) => updateLocalConfig({ addressRequest: { name, mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            // The log line says what ended the request.
+            const said: string[] = [];
+            const log = console.log;
+            console.log = (...a: unknown[]) => { said.push(a.map(String).join(' ')); log(...a); };
+            const ended = () => said.filter((l) => l.includes("beanpool claim's request for \"install-name\" ends")).at(-1) || '';
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            // The registrar did not answer during the install, so the request stood; the owner then set a name in Settings.
+            request('install-name');
+            const set = await post('/api/local/admin/public-address/claim', { name: 'gamma', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'gamma', `Settings claimed gamma (${set.status})`);
+            assert(getLocalConfig().addressRequest == null, `the Settings claim ends the request (${JSON.stringify(getLocalConfig().addressRequest)})`);
+            assert(/the owner claimed "gamma" in Settings/.test(ended()), `and says so (${ended()})`);
+            // An address saved any other way (this agent, a take-over): the 2 s tick ends it.
+            request('install-name');
+            await checkAddressRequest(Date.now());
+            assert(getLocalConfig().addressRequest == null, 'the 2 s tick ends a request while any address is held');
+            assert(/this server holds "gamma" now/.test(ended()) && !/Settings/.test(ended()), `and says what is held, not "Settings" (${ended()})`);
+            request('install-name');
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `Take offline released gamma (${off.status})`);
+            assert(getLocalConfig().addressRequest == null, 'Take offline ends a standing request too');
+            assert(/the owner took the address offline in Settings/.test(ended()), `and says so (${ended()})`);
+            console.log = log;
+            const before = claims().length;
+            await checkAddressRequest(Date.now() + 60_000);
+            await reconcile();
+            assert(!claims().slice(before).some((c) => c.body?.name === 'install-name') && pa() === null, 'after the release, the install name is never claimed');
+        });
+
+        await section('14. a standing request backs off while the registrar does not answer; only its word that the name can\'t be had ends it', async () => {
+            let down = true;
+            reg.status = () => down ? [503, { error: 'down' }] : { status: 'none' };
+            const before = statuses().length;
+            const asks = () => statuses().length - before;
+            const t0 = Date.now() + 10 * 60_000;
+            writeAddressRequestFile(DATA!, { name: 'outage-name', contact: null, at: t0 });
+            await checkAddressRequest(t0);
+            assert(asks() === 1, `a fresh request is asked for at once (${asks()})`);
+            const seen: string[] = [];
+            for (const s of [5, 11, 25, 41, 100, 162, 400, 1000, 3000]) { await checkAddressRequest(t0 + s * 1000); seen.push(`${s}s:${asks()}`); }
+            assert(seen.join(' ') === '5s:1 11s:2 25s:2 41s:3 100s:3 162s:4 400s:4 1000s:4 3000s:4',
+                `during the outage: 10 s, 30 s, 2 min, then only the 5-min tick (${seen.join(' ')})`);
+            assert(getLocalConfig().addressRequest?.name === 'outage-name' && !getLocalConfig().addressRequest?.refused, 'the request still stands');
+
+            down = false;
+            const t1 = t0 + 10_000_000;
+            const refused = () => getLocalConfig().addressRequest?.refused;
+            reg.claim = () => [429, { error: 'slow down' }];
+            writeAddressRequestFile(DATA!, { name: 'busy-name', contact: null, at: t1 });
+            await checkAddressRequest(t1);
+            assert(getLocalConfig().addressRequest?.name === 'busy-name' && !refused(), `a 429 is no refusal: the request stands (${refused()})`);
+            reg.claim = () => [401, { error: 'bad signature' }];
+            await checkAddressRequest(t1 + 11_000);
+            assert(!refused(), `nor a 401 (a clock out of step) (${refused()})`);
+            reg.claim = () => [408, { error: 'timeout' }];
+            await checkAddressRequest(t1 + 42_000);
+            assert(!refused(), `nor a 408 (${refused()})`);
+            reg.claim = () => [409, { error: 'name taken', owner: 'other' }];
+            const n = claims().length;
+            await checkAddressRequest(t1 + 163_000);
+            assert(claims().length === n + 1 && /name taken/.test(refused() || ''), `the registrar's 409 is its word: refused, with its reason (${refused()})`);
+            await checkAddressRequest(t1 + 1_000_000);
+            await reconcile();
+            assert(claims().length === n + 1, 'and never asked for again');
+            updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('15. the agent\'s claim answered after the owner set a name in Settings: the owner\'s name stays', async () => {
+            const post = settingsPost!;
+            reg.status = () => ({ status: 'none' });
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
+            // The registrar holds back its answer to the install's name until the owner has claimed theirs.
+            let answerAgent: () => void = () => {};
+            reg.claim = (b) => b.name !== 'install-race' ? live(b.name, `eyJ.token-${b.name}`)
+                : new Promise((r) => { answerAgent = () => r(live(b.name, 'eyJ.token-install-race')); });
+            const t2 = Date.now() + 20_000_000;
+            const off0 = offlines();
+            writeAddressRequestFile(DATA!, { name: 'install-race', contact: null, at: t2 });
+            const agent = checkAddressRequest(t2);
+            assert(await until(() => claims().some((c) => c.body?.name === 'install-race')), 'the agent asked for the install\'s name');
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick', `Settings claimed owner-pick while the agent waited (${set.status})`);
+            answerAgent();
+            await agent;
+            assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick',
+                `the agent's late answer does not move the community off the owner's name (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick', 'the tunnel still runs the owner\'s name');
+            assert(getLocalConfig().addressRequest == null, 'the request stays ended');
+            assert(offlines() === off0, 'nothing is released: the owner\'s name is never touched');
+            // The 5-min tick's own claim (not under the 2 s check) is held to the same rule.
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            updateLocalConfig({ addressRequest: { name: 'install-race', mode: 'tunnel', contact: null, requestedAt: t2, refused: null } });
+            const n = claims().length;
+            const tick = reconcile();
+            assert(await until(() => claims().length > n), 'the tick asked for the install\'s name');
+            const set2 = await post('/api/local/admin/public-address/claim', { name: 'owner-two', mode: 'tunnel' });
+            assert(set2.status === 200 && pa()?.name === 'owner-two', `Settings claimed owner-two while the tick waited (${set2.status})`);
+            answerAgent();
+            await tick;
+            assert(pa()?.name === 'owner-two', `nor does the tick's late answer (${pa()?.name})`);
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it for the next section (${off.status})`);
+        });
+
+        await section('16. a 400 or 403 page from something in front of the registrar is no refusal: the request stands', async () => {
+            reg.status = () => ({ status: 'none' });
+            const refused = () => getLocalConfig().addressRequest?.refused;
+            const t3 = Date.now() + 30_000_000;
+            const page = (code: number, title: string) => ({ html: [code, `<!DOCTYPE html><html><head><title>${title}</title></head><body>no</body></html>`] });
+            reg.claim = () => page(403, 'Attention Required! | Cloudflare');
+            writeAddressRequestFile(DATA!, { name: 'behind-proxy', contact: null, at: t3 });
+            await checkAddressRequest(t3);
+            assert(getLocalConfig().addressRequest?.name === 'behind-proxy' && !refused(), `a firewall's 403 page: the request stands (${refused()})`);
+            reg.claim = () => page(400, '400 Bad Request');
+            await checkAddressRequest(t3 + 11_000);
+            assert(!refused(), `nor a proxy's 400 page (${refused()})`);
+            const n = claims().length;
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+            await checkAddressRequest(t3 + 42_000);
+            assert(claims().length === n + 1 && pa()?.name === 'behind-proxy' && getLocalConfig().addressRequest == null,
+                `asked again on the back-off, and claimed once the registrar answers (${pa()?.name})`);
+            const off = await settingsPost!('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() === null, `and Take offline clears it (${off.status})`);
+            // The registrar's own JSON 403 (a reserved name) still ends a request.
+            reg.claim = () => [403, { error: 'name reserved' }];
+            writeAddressRequestFile(DATA!, { name: 'reserved-one', contact: null, at: t3 + 1_000_000 });
+            await checkAddressRequest(t3 + 1_000_000);
+            assert(/name reserved/.test(refused() || ''), `the registrar's own JSON 403 is its word: refused (${refused()})`);
+            updateLocalConfig({ addressRequest: null });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('17. the key holds a second name (the install\'s, claimed late): no answer moves the community onto it', async () => {
+            const post = settingsPost!;
+            // The owner's pick waits for approval; the install's late claim is live for the same key. An older registrar
+            // answers /status about the key's first name (live outranks pending) whatever was asked.
+            reg.claim = (b) => b.name === 'owner-pick' ? { status: 'pending', name: b.name, hostname: `${b.name}.beanpool.org`, mode: 'tunnel' } : live(b.name, `eyJ.token-${b.name}`);
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick' && pa()?.status === 'pending', `the owner's pick is stored, pending (${set.status} ${pa()?.status})`);
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            const n = statuses().length;
+            await reconcile();
+            assert(statuses().length === n + 1 && statuses()[n].name === 'owner-pick', `the tick asks about the stored name (${statuses()[n]?.name})`);
+            assert(pa()?.name === 'owner-pick' && pa()?.status === 'pending', `an answer about the other name is not stored by the tick (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken !== 'eyJ.token-install-race', 'the tunnel never runs the other name\'s token');
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa()?.name === 'owner-pick', `nor by Settings' status read (${pa()?.name})`);
+            assert(tunnelLogs().filter((l) => /answered about "install-race" when asked about "owner-pick"/.test(l.message)).length === 1, 'said once');
+            // The owner's pick is approved: a registrar that reads the name answers about it, and that is stored.
+            reg.status = (name) => name === 'owner-pick' ? live('owner-pick', 'eyJ.token-owner-pick') : live('install-race', 'eyJ.token-install-race');
+            await reconcile();
+            assert(pa()?.name === 'owner-pick' && pa()?.status === 'live' && pa()?.tunnelToken === 'eyJ.token-owner-pick', `the same name's state is stored (${pa()?.status})`);
+            // Paused by the sweep: the older registrar names the live install name, never the owner's paused one.
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            await reconcile();
+            assert(pa()?.name === 'owner-pick' && pa()?.tunnelToken === 'eyJ.token-owner-pick', `still the owner's name (${pa()?.name})`);
+            // New tunnel key answered after the owner claimed another name in another tab: that claim stands.
+            let answerRotate: () => void = () => {};
+            reg.rotate = (b) => new Promise((r) => { answerRotate = () => r([200, { ...live(b.name, 'eyJ.token-rotated-late'), rotated: true }]); });
+            const r0 = rotates().length;
+            const rotating = post('/api/local/admin/public-address/rotate');
+            assert(await until(() => rotates().length > r0), 'the rotate was asked');
+            const next = await post('/api/local/admin/public-address/claim', { name: 'owner-next', mode: 'tunnel' });
+            assert(next.status === 200 && pa()?.name === 'owner-next', `the owner claimed owner-next meanwhile (${next.status})`);
+            answerRotate();
+            const rot = await rotating;
+            assert(rot.status === 409 && pa()?.name === 'owner-next' && pa()?.tunnelToken === 'eyJ.token-owner-next',
+                `the rotate's late answer is not stored over it (${rot.status} ${pa()?.name} ${pa()?.tunnelToken})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-owner-next', 'the tunnel runs the newer claim\'s token');
+            // Any write meanwhile answers so, the agent's own re-store of the same name too: never "a claim elsewhere".
+            assert(/the address was written meanwhile/.test(rot.body?.error || '') && /open Settings again/.test(rot.body?.error || '') && !/elsewhere/.test(rot.body?.error || ''),
+                `and says the address was written meanwhile (${rot.body?.error})`);
+            reg.rotate = (b) => [200, { ...live(b.name, `T-rotate-${b.name}`), rotated: true }];
+            // Take offline names the name it releases.
+            const offs = reg.calls.filter((c) => c.path === '/api/registrar/offline').length;
+            const off = await post('/api/local/admin/public-address/offline');
+            const sent = reg.calls.filter((c) => c.path === '/api/registrar/offline')[offs];
+            assert(off.status === 200 && sent?.body?.name === 'owner-next', `Take offline releases the stored name by name (${JSON.stringify(sent?.body)})`);
+            // A claim that gets no answer here in time but completes at the registrar: said, so the owner sees the key holds it.
+            let finish: () => void = () => {};
+            reg.claim = (b) => new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow')); });
+            reg.holder = (b) => ({ name: b?.name, held: 'you', state: 'live' });
+            const slow = await post('/api/local/admin/public-address/claim', { name: 'slow-one', mode: 'tunnel' });
+            assert(slow.status === 400 && /timed out/.test(slow.body?.error || '') && pa() === null, `the claim timed out here (${slow.status} ${slow.body?.error})`);
+            assert(await until(() => tunnelLogs().some((l) => /claim of "slow-one" got no answer in time, but the address service gives it to this server's key/.test(l.message))),
+                'the log says the key holds the name the timed-out claim asked for');
+            finish();
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('18. after Take offline, no status answer brings the community back on a name nobody chose', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            // beanpool claim asked for install-race; the owner picked owner-pick3 in Settings before the registrar answered
+            // the install's claim, which then completed: both are live for the same key.
+            updateLocalConfig({ addressRequest: { name: 'install-race', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick3', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick3' && getLocalConfig().addressRequest == null, `the owner's pick is stored, the request ends (${set.status})`);
+            reg.status = (name) => name === 'owner-pick3' ? live('owner-pick3', 'eyJ.token-owner-pick3') : live('install-race', 'eyJ.token-install-race');
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() == null, `Take offline: nothing stored (${off.status})`);
+            await reconcile();
+            assert(pa() == null, `the tick stores nothing (${pa()?.name})`);
+            // Settings opens: its status read asks with no name, and every registrar answers the key's live late name.
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa() == null, `Settings' status read stores nothing (${shown.status} ${pa()?.name}/${pa()?.status})`);
+            assert(shown.body?.name !== 'install-race' && shown.body?.status !== 'live', `and shows no live address (${shown.body?.name}/${shown.body?.status})`);
+            assert(!tunnelConnectorForTests().runningToken, `no tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            // An older registrar that kept the released name live (it ignored the release's name): not brought back either.
+            reg.status = () => live('owner-pick3', 'eyJ.token-owner-pick3');
+            await settingsGet!('/api/local/admin/public-address/status');
+            assert(pa() == null && !tunnelConnectorForTests().runningToken, `nor on the name the owner took offline (${pa()?.name})`);
+            // A request from beanpool claim that still stands: another name's live answer is not stored, the requested name
+            // is claimed; and the requested name's own live answer (its claim completed unanswered) is stored, as before.
+            updateLocalConfig({ addressRequest: { name: 'asked-name', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.status = () => live('install-race', 'eyJ.token-install-race');
+            const n = claims().length;
+            await reconcile();
+            assert(pa()?.name === 'asked-name' && claims().length === n + 1 && claims()[n].body?.name === 'asked-name',
+                `while it stands, another name's answer is not stored: the requested name is claimed (${pa()?.name})`);
+            assert(tunnelConnectorForTests().runningToken === 'eyJ.token-asked-name', `and its tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            await post('/api/local/admin/public-address/offline');
+            updateLocalConfig({ addressRequest: { name: 'asked-name', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.status = () => live('asked-name', 'eyJ.token-asked-name-2');
+            const m = claims().length;
+            await reconcile();
+            assert(pa()?.name === 'asked-name' && pa()?.tunnelToken === 'eyJ.token-asked-name-2' && claims().length === m,
+                `the requested name's own live answer is stored, with no claim (${pa()?.name} ${claims().length - m})`);
+            await post('/api/local/admin/public-address/offline');
+            updateLocalConfig({ addressRequest: null });
+            // A fresh server learns a name made for its key elsewhere (a name it never left): stored, as before.
+            reg.status = () => live('made-elsewhere', 'eyJ.token-made-elsewhere');
+            await settingsGet!('/api/local/admin/public-address/status');
+            assert(pa()?.name === 'made-elsewhere', `a name this server never left is stored (${pa()?.name})`);
+            await post('/api/local/admin/public-address/offline');
+            reg.status = () => ({ status: 'none' });
+        });
+
+        await section('19. a Settings claim that timed out, then another pick and Take offline: never revived', async () => {
+            const post = settingsPost!;
+            updateNodeConfig({ publicAddress: null } as any);
+            await syncTunnel();
+            // The registrar completes the claim after the node gave up (5 s): the key holds slow-pick live, nothing records it.
+            let finish: () => void = () => {};
+            reg.claim = (b) => b.name === 'slow-pick' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick')); }) : live(b.name, `eyJ.token-${b.name}`);
+            reg.holder = (b) => ({ name: b?.name, held: 'you', state: 'live' });
+            const slow = await post('/api/local/admin/public-address/claim', { name: 'slow-pick', mode: 'tunnel' });
+            assert(slow.status === 400 && /timed out/.test(slow.body?.error || '') && pa() == null, `the claim timed out here (${slow.status})`);
+            finish();
+            // Nothing else chosen yet: the timed-out claim is the owner's latest choice, and its live answer is stored.
+            reg.status = () => live('slow-pick', 'eyJ.token-slow-pick');
+            const first = await settingsGet!('/api/local/admin/public-address/status');
+            assert(first.status === 200 && pa()?.name === 'slow-pick', `alone, the timed-out pick's live answer is stored (${pa()?.name})`);
+            await post('/api/local/admin/public-address/offline');
+            // Again, then the owner picks another name and takes it offline: the registrar's newest live row is slow-pick2.
+            reg.claim = (b) => b.name === 'slow-pick2' ? new Promise((r) => { finish = () => r(live(b.name, 'eyJ.token-slow-pick2')); }) : live(b.name, `eyJ.token-${b.name}`);
+            const slow2 = await post('/api/local/admin/public-address/claim', { name: 'slow-pick2', mode: 'tunnel' });
+            assert(slow2.status === 400 && pa() == null, `the second claim timed out too (${slow2.status})`);
+            finish();
+            const pick = await post('/api/local/admin/public-address/claim', { name: 'owner-pick4', mode: 'tunnel' });
+            assert(pick.status === 200 && pa()?.name === 'owner-pick4', `the owner picks owner-pick4 (${pick.status})`);
+            const off = await post('/api/local/admin/public-address/offline');
+            assert(off.status === 200 && pa() == null, `Take offline (${off.status})`);
+            reg.status = () => live('slow-pick2', 'eyJ.token-slow-pick2');
+            await reconcile();
+            assert(pa() == null, `the tick does not revive the timed-out pick (${pa()?.name})`);
+            const shown = await settingsGet!('/api/local/admin/public-address/status');
+            assert(shown.status === 200 && pa() == null && shown.body?.status !== 'live', `nor does Settings' status read (${pa()?.name}/${shown.body?.status})`);
+            assert(!tunnelConnectorForTests().runningToken, `no tunnel runs (${tunnelConnectorForTests().runningToken})`);
+            // A request from beanpool claim replaced by another one: the replaced name is turned away too.
+            updateLocalConfig({ addressRequest: { name: 'first-ask', mode: 'tunnel', contact: null, requestedAt: Date.now(), refused: null } });
+            reg.claim = () => [503, { error: 'busy' }];
+            await reconcile();
+            writeAddressRequestFile(DATA!, { name: 'second-ask', contact: null, at: Date.now() });
+            await checkAddressRequest();
+            assert(getLocalConfig().addressRequest?.name === 'second-ask', `the second request replaces the first (${getLocalConfig().addressRequest?.name})`);
+            reg.status = () => live('first-ask', 'eyJ.token-first-ask');
+            const m = claims().length;
+            await reconcile();
+            assert(pa()?.name !== 'first-ask' && claims()[m]?.body?.name === 'second-ask', `the replaced request's late name is not stored; the new one is claimed (${pa()?.name} ${claims()[m]?.body?.name})`);
+            updateLocalConfig({ addressRequest: null });
+            await post('/api/local/admin/public-address/offline');
+            // A node from before the list: its one ended request is still turned away; the list keeps the latest 8.
+            updateLocalConfig({ turnedAwayNames: null, endedAddressRequest: { name: 'old-ended', at: 1 } } as any);
+            reg.status = () => live('old-ended', 'eyJ.token-old-ended');
+            await reconcile();
+            assert(pa() == null, `an older node's ended request is still turned away (${pa()?.name})`);
+            for (let i = 0; i < 9; i++) noteTurnedAway(`gone-${i}`, 'taken-offline');
+            const kept = (getLocalConfig() as any).turnedAwayNames as { name: string }[];
+            assert(kept.length === 8 && kept[kept.length - 1].name === 'gone-8' && !kept.some((e) => e.name === 'gone-0' || e.name === 'old-ended')
+                && getLocalConfig().endedAddressRequest == null, `the list keeps the latest 8, the old field moved into it (${kept.map((e) => e.name).join(',')})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            reg.status = () => ({ status: 'none' });
+            reg.claim = (b) => live(b.name, `eyJ.token-${b.name}`);
+        });
+
+        await section('20. the key holds a name it does not use: Settings shows it, and releases it by name, never the stored one', async () => {
+            const post = settingsPost!;
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });   // §5 left it answering "beta"
+            const set = await post('/api/local/admin/public-address/claim', { name: 'owner-pick5', mode: 'tunnel' });
+            assert(set.status === 200 && pa()?.name === 'owner-pick5', `the owner's pick is stored (${set.status})`);
+            assert(await upOn('eyJ.token-owner-pick5'), 'its tunnel runs');
+            noteTurnedAway('late-one', 'late-claim');
+            const holds = new Set(['late-one', 'owner-pick5']);
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const extra = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(extra.status === 200 && JSON.stringify(extra.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-one",true]]',
+                `Settings lists the unused name, releasable, and not the stored one (${extra.status} ${JSON.stringify(extra.body?.names)})`);
+            const o0 = offlines().length;
+            const mine = await post('/api/local/admin/public-address/release-name', { name: 'owner-pick5' });
+            assert(mine.status === 409 && offlines().length === o0 && pa()?.name === 'owner-pick5', `the stored name is never released here (${mine.status} ${offlines().length - o0})`);
+            const rel = await post('/api/local/admin/public-address/release-name', { name: 'late-one' });
+            assert(rel.status === 200 && offlines().length === o0 + 1 && offlines()[o0].body?.name === 'late-one',
+                `the unused name is released by name (${rel.status} ${JSON.stringify(offlines()[o0]?.body)})`);
+            assert(pa()?.name === 'owner-pick5' && pa()?.status === 'live' && tunnelConnectorForTests().runningToken === 'eyJ.token-owner-pick5',
+                `the stored address and its tunnel are untouched (${pa()?.name} ${tunnelConnectorForTests().runningToken})`);
+            holds.delete('late-one');
+            const after = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(after.status === 200 && after.body?.names?.length === 0, `once released, nothing is listed (${JSON.stringify(after.body?.names)})`);
+            // A name this key does not hold: refused, nothing asked of the release.
+            const free = await post('/api/local/admin/public-address/release-name', { name: 'gone-3' });
+            assert(free.status === 409 && offlines().length === o0 + 1, `a name the registrar does not give this key is not released (${free.status})`);
+            // An older registrar (no /holder) can't say what it would release: the agent's late claim is shown, never released.
+            noteTurnedAway('late-two', 'late-claim');
+            reg.holder = () => [404, { error: 'not found' }];
+            const old = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(old.status === 200 && JSON.stringify(old.body?.names?.map((n: any) => [n.name, n.releasable])) === '[["late-two",false]]',
+                `an older registrar: the late claim is shown, with no release (${JSON.stringify(old.body?.names)})`);
+            const oldRel = await post('/api/local/admin/public-address/release-name', { name: 'late-two' });
+            assert(oldRel.status === 409 && offlines().length === o0 + 1 && pa()?.name === 'owner-pick5',
+                `and a release by name is refused, so an older release never lets go of the stored name (${oldRel.status})`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
+
+        await section('21. release-name never releases the stored address: races, the pending pick, case, an answer about another name', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const holders = () => reg.calls.filter((c) => c.path === '/api/registrar/holder');
+            const holds = new Set<string>();
+            let holderDelayMs = 0;
+            reg.holder = (b) => new Promise((r) => setTimeout(() => r(holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' }), holderDelayMs));
+            assert((await post('/api/local/admin/public-address/claim', { name: 'race-stored', mode: 'tunnel' })).status === 200 && pa()?.name === 'race-stored', 'race-stored is stored');
+
+            // D1 (r4176051800): a Settings claim stores the name while /holder is pending.
+            noteTurnedAway('race-late', 'late-claim');
+            holds.add('race-late');
+            holderDelayMs = 1_500;
+            const o0 = offlines().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'race-late' });
+            await sleep(300);
+            const claim = await post('/api/local/admin/public-address/claim', { name: 'race-late', mode: 'tunnel' });
+            const rel = await releasing;
+            assert(claim.status === 200 && rel.status === 409 && !offlines().slice(o0).some((c) => c.body?.name === 'race-late') && pa()?.name === 'race-late' && pa()?.status === 'live',
+                `D1: a claim during /holder stores the name, and the release is refused, nothing sent (claim ${claim.status} release ${rel.status} ${JSON.stringify(rel.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} stored ${pa()?.name})`);
+            assert(await upOn('eyJ.token-race-late'), 'and the claimed name\'s tunnel runs');
+
+            // D2b: nothing stored; Settings' status read stores the owner's pending pick while /holder is pending.
+            await post('/api/local/admin/public-address/offline');
+            noteTurnedAway('pend-two', 'late-claim');
+            holds.add('pend-two');
+            const o1 = offlines().length;
+            const releasing2 = post('/api/local/admin/public-address/release-name', { name: 'pend-two' });
+            await sleep(300);
+            noteTurnedAway('pend-two', 'unanswered');   // as a Settings claim of it that timed out would
+            reg.status = () => live('pend-two', 'eyJ.token-pend-two');
+            const st = await settingsGet!('/api/local/admin/public-address/status');
+            const rel2 = await releasing2;
+            assert(rel2.status === 409 && offlines().length === o1 && pa()?.name === 'pend-two',
+                `D2b: the status read stores the pending pick, and the release is refused, nothing sent (status ${st.status} release ${rel2.status} ${JSON.stringify(rel2.body)} sent ${offlines().length - o1} stored ${pa()?.name})`);
+            holderDelayMs = 0;
+            reg.status = () => ({ status: 'none' });
+
+            // r4176051848: the owner's pending pick (unanswered) is never listed, and release-name refuses it.
+            await post('/api/local/admin/public-address/offline');
+            noteTurnedAway('pend-pick', 'unanswered');
+            holds.add('pend-pick');
+            const ex = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(ex.status === 200 && !ex.body?.names?.some((n: any) => n.name === 'pend-pick'), `the pending pick is not offered for release (${JSON.stringify(ex.body?.names)})`);
+            const o2 = offlines().length;
+            const pick = await post('/api/local/admin/public-address/release-name', { name: 'pend-pick' });
+            assert(pick.status === 409 && /chose last/.test(pick.body?.error || '') && offlines().length === o2, `release-name refuses the pending pick (${pick.status} ${JSON.stringify(pick.body)})`);
+            noteTurnedAway('pend-pick', 'claim-replaced');
+
+            // r4176051940: a stored name in another case is still the stored name.
+            assert((await post('/api/local/admin/public-address/claim', { name: 'kelp-pick', mode: 'tunnel' })).status === 200, 'kelp-pick is stored');
+            updateNodeConfig({ publicAddress: { ...pa(), name: 'Kelp-Pick' } } as any);
+            holds.add('kelp-pick');
+            noteTurnedAway('kelp-pick', 'late-claim');
+            const ex2 = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(!ex2.body?.names?.some((n: any) => n.name === 'kelp-pick'), `a mixed-case stored name is not listed (${JSON.stringify(ex2.body?.names)})`);
+            const o3 = offlines().length;
+            const kelp = await post('/api/local/admin/public-address/release-name', { name: 'kelp-pick' });
+            assert(kelp.status === 409 && offlines().length === o3, `release-name refuses a mixed-case stored name (${kelp.status} ${JSON.stringify(kelp.body)})`);
+            updateNodeConfig({ publicAddress: { ...pa(), name: 'kelp-pick' } } as any);
+
+            // r4176051981: /holder about another name says nothing; /offline about another name, or "none", is not a release.
+            noteTurnedAway('third-late', 'late-claim');
+            reg.holder = () => ({ name: 'kelp-pick', held: 'you', state: 'live' });
+            const o4 = offlines().length;
+            const other = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(other.status === 409 && offlines().length === o4, `a /holder answer about another name releases nothing (${other.status})`);
+            holds.add('third-late');
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            reg.offline = () => ({ status: 'released', name: 'kelp-pick' });   // a registrar that ignores the name
+            const c0 = claims().length;
+            const wrong = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(wrong.status === 502 && !wrong.body?.success && /kelp-pick/.test(wrong.body?.error || '') && /claimed back/.test(wrong.body?.error || ''),
+                `an answer about the stored name is a failure, and says so (${wrong.status} ${JSON.stringify(wrong.body)})`);
+            assert(claims()[c0]?.body?.name === 'kelp-pick' && pa()?.name === 'kelp-pick' && pa()?.status === 'live',
+                `and the stored name is claimed back at once (${JSON.stringify(claims()[c0]?.body)} ${pa()?.name}/${pa()?.status})`);
+            reg.offline = () => ({ status: 'none' });
+            const none = await post('/api/local/admin/public-address/release-name', { name: 'third-late' });
+            assert(none.status === 502 && !none.body?.success && /^Not released: .*did not release third-late/.test(none.body?.error || ''), `{status:"none"} is not a release (${none.status} ${JSON.stringify(none.body)})`);
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+
+            // r4176052022: Settings asks /holder in parallel, waits briefly, and reuses the answers for a minute.
+            for (let i = 0; i < 8; i++) noteTurnedAway(`slow-${i}`, 'taken-offline');
+            reg.holder = (b) => new Promise((r) => setTimeout(() => r({ name: b?.name, held: 'free' }), 5_000));
+            const h0 = holders().length;
+            const t0 = Date.now();
+            const slow = await settingsGet!('/api/local/admin/public-address/extra-names');
+            const ms = Date.now() - t0;
+            assert(slow.status === 200 && holders().length - h0 === 8 && ms < 4_500, `8 names, a registrar that doesn't answer: Settings waits ${ms} ms, not 8 × 5 s (${holders().length - h0} asked)`);
+            const h1 = holders().length;
+            const t1 = Date.now();
+            const again = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(again.status === 200 && holders().length === h1 && Date.now() - t1 < 500, `opened again within a minute: no /holder asked (${holders().length - h1}, ${Date.now() - t1} ms)`);
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
+
+        await section('22. release-name never releases the name the record of names calls current, even with the stored address cleared', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            assert((await post('/api/local/admin/public-address/claim', { name: 'cf-cur', mode: 'tunnel' })).status === 200 && pa()?.name === 'cf-cur', 'cf-cur is stored');
+            // r4176138202: the record still calls cf-cur current; the stored address is cleared by hand.
+            updateNodeConfig({ publicAddress: null } as any);
+            reg.holder = (b) => b?.name === 'cf-cur' ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            reg.offline = (b) => new Promise((r) => setTimeout(() => r({ status: 'released', ...(b?.name ? { name: b.name } : {}) }), 1_500));
+            const ex = await settingsGet!('/api/local/admin/public-address/extra-names');
+            assert(ex.status === 200 && !ex.body?.names?.some((n: any) => n.name === 'cf-cur'), `the record's current name is not offered for release (${JSON.stringify(ex.body?.names)})`);
+            const o0 = offlines().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'cf-cur' });
+            await sleep(300);
+            reg.status = () => live('cf-cur', 'eyJ.token-cf-cur');
+            const st = await settingsGet!('/api/local/admin/public-address/status');
+            const rel = await releasing;
+            assert(rel.status === 409 && !offlines().slice(o0).some((c) => c.body?.name === 'cf-cur') && pa()?.name === 'cf-cur' && pa()?.status === 'live',
+                `the release is refused and nothing sent; the status read stores it (status ${st.status} release ${rel.status} ${JSON.stringify(rel.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} stored ${pa()?.name}/${pa()?.status})`);
+            reg.status = () => ({ status: 'none' });
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
+        });
+
+        await section('23. a claim and a release of the same name never run together, whatever its case or trailing dot', async () => {
+            const post = settingsPost!;
+            const offlines = () => reg.calls.filter((c) => c.path === '/api/registrar/offline');
+            const holds = new Set(['cf-dot', 'cf-dov']);
+            reg.holder = (b) => holds.has(b?.name) ? { name: b.name, held: 'you', state: 'live', since: 1 } : { name: b?.name, held: 'free' };
+            // r4176138168: a claim of "CF-Dot." while a release of cf-dot is in flight waits.
+            reg.offline = (b) => new Promise((r) => setTimeout(() => r({ status: 'released', ...(b?.name ? { name: b.name } : {}) }), 1_500));
+            const c0 = claims().length;
+            const releasing = post('/api/local/admin/public-address/release-name', { name: 'cf-dot' });
+            await sleep(400);
+            const claim = await post('/api/local/admin/public-address/claim', { name: 'CF-Dot.', mode: 'tunnel' });
+            const rel = await releasing;
+            assert(claim.status === 409 && claims().length === c0 && rel.status === 200 && !pa()?.name,
+                `the claim waits for the release, nothing claimed or stored (claim ${claim.status} ${JSON.stringify(claim.body)} release ${rel.status} claims sent ${claims().length - c0} stored ${pa()?.name})`);
+            reg.offline = (b) => ({ status: 'released', ...(b?.name ? { name: b.name } : {}) });
+            // And a release of cf-dov while a claim of "cf-dov." is in flight is refused, nothing sent.
+            const claimNow = reg.claim;
+            reg.claim = (b) => new Promise((r) => setTimeout(() => r(claimNow(b)), 1_500));
+            const o0 = offlines().length;
+            const claiming = post('/api/local/admin/public-address/claim', { name: 'cf-dov.', mode: 'tunnel' });
+            await sleep(400);
+            const rel2 = await post('/api/local/admin/public-address/release-name', { name: 'cf-dov' });
+            const claim2 = await claiming;
+            assert(rel2.status === 409 && offlines().length === o0 && claim2.status === 200,
+                `the release is refused while the claim runs, nothing sent (release ${rel2.status} ${JSON.stringify(rel2.body)} sent ${JSON.stringify(offlines().slice(o0).map((c) => c.body))} claim ${claim2.status})`);
+            reg.claim = claimNow;
+            reg.holder = (b) => ({ name: b?.name, held: 'free' });
+            await post('/api/local/admin/public-address/offline');
         });
     } catch (e: any) {
         assert(false, `the suite ran to the end (${e?.stack || e})`);

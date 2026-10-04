@@ -957,6 +957,13 @@ function applyTombstoneLocally(tableName: string, rowKey: string, deletedAt: str
         // below: a later copy must not keep the older ones, so each row is judged by itself.
         case 'recovery_shares':
             return deleteTombstonedCopies(rowKey, deletedAt) > 0;
+        // A re-key code its main server cancelled (engine/member-wizards.ts cancelRekeyCode): only that hold, never a
+        // completed re-key's 'rekeyed' row, and none made after the cancel (the lookup below skips a newer one).
+        case 'invalidated_keys': {
+            const r = db.prepare(`DELETE FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL AND invalidated_at <= ?`)
+                .run(rowKey, deletedAt);
+            return r.changes > 0;
+        }
         default: {
             // A plain table's row the main server deleted (engine/plain-tables.ts): a role a Decision held aside, a recovery
             // release gone with its member.
@@ -1018,6 +1025,10 @@ function lookupLocalUpdatedAt(tableName: string, rowKey: string): string | null 
             const [postId, memberPubkey] = rowKey.split('|');
             if (!postId || !memberPubkey) return null;
             const r = db.prepare(`SELECT updated_at AS ts FROM event_rsvps WHERE post_id=? AND member_pubkey=?`).get(postId, memberPubkey) as { ts: string } | undefined;
+            return r?.ts ?? null;
+        }
+        case 'invalidated_keys': {
+            const r = db.prepare(`SELECT invalidated_at AS ts FROM invalidated_keys WHERE public_key=?`).get(rowKey) as { ts: string } | undefined;
             return r?.ts ?? null;
         }
         case 'messages': {
@@ -1344,7 +1355,8 @@ function importMemberPhoto(publicKey: string, stored: unknown): boolean {
     const row = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(publicKey) as { updated_at: string | null } | undefined;
     if (!row) return false;
     if (!setMemberPhoto(db, publicKey, stored)) return false;
-    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(row.updated_at, publicKey);
+    // Only when the photo's write moved it (an update that changes nothing makes the touch trigger stamp afresh).
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ? AND updated_at IS NOT ?').run(row.updated_at, publicKey, row.updated_at);
     return true;
 }
 

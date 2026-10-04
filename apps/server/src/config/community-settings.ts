@@ -50,7 +50,7 @@ export const COMMUNITY_LOCAL_CONFIG_FIELDS = [
 /** node_config rows that are the community's. */
 export const COMMUNITY_NODE_CONFIG_KEYS = [
     'ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door',
-    'names_two_admins',
+    'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days',
 ] as const;
 
 /** Fields of the `node_config` row's object that are the community's. */
@@ -129,6 +129,8 @@ const text = (max: number): Check<string> => (v) => (typeof v === 'string' ? v.s
 const label = (max: number): Check<string> => (v) => (typeof v === 'string' ? (cleanLabel(v, max) ?? '') : BAD);
 const oneOf = <T extends string>(...allowed: T[]): Check<T> => (v) => (allowed.includes(v as T) ? v as T : BAD);
 const bool: Check<boolean> = (v) => (typeof v === 'boolean' ? v : BAD);
+/** A whole number of Beans written as text, at most 6 digits (a node_config value). */
+const wholeBeans: Check<string> = (v) => (typeof v === 'string' && /^\d{1,6}$/.test(v) ? v : BAD);
 
 const place: Check<{ lat: number; lng: number }> = (v) =>
     isObject(v) && finite(v.lat) && finite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180 ? { lat: v.lat, lng: v.lng } : BAD;
@@ -210,6 +212,13 @@ const NODE_CONFIG_CHECKS: Record<(typeof COMMUNITY_NODE_CONFIG_KEYS)[number], Ch
     door: orNull(oneOf('members', 'admins')),
     // Only `true` is stored: one admin confirms, the default, is no row (engine/names-list.ts).
     names_two_admins: orNull(oneOf('true')),
+    // The known floor (config/known-floor.ts): only `on` is stored for the dial; the two numbers are whole Beans.
+    confirmation: orNull(oneOf('on')),
+    known_floor: orNull(wholeBeans),
+    credit_cap: orNull(wholeBeans),
+    // The Community health panel's two lines (engine/community-health.ts): whole numbers as text.
+    health_debt_line_pct: orNull(wholeBeans),
+    health_quiet_days: orNull(wholeBeans),
 };
 
 /**

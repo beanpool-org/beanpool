@@ -29,6 +29,7 @@ delete process.env.NODE_PROFILE;
 delete process.env.EXPO_ACCESS_TOKEN;
 const ADMIN_PW = 'PushNoticesAdmin123!';
 process.env.ADMIN_PASSWORD = ADMIN_PW; // the announcement route is the operator's
+let ADMIN: Record<string, string> = {};
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -86,7 +87,8 @@ async function call(method: 'GET' | 'POST', id: Id | null, route: string, body?:
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (route.startsWith('/api/local/admin/')) headers['X-Admin-Password'] = ADMIN_PW;
+    // Step 7c: the password alone opens no admin route with 2FA off; the operator's calls carry an owner's automation token.
+    if (route.startsWith('/api/local/admin/')) Object.assign(headers, ADMIN);
     const res = await fetch(`${BASE}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
     let parsed: any = text;
@@ -113,6 +115,7 @@ async function main() {
     initAdminPassword();
     await initTls();
     se.initStateEngine();
+    ADMIN = (await import('./admin-auth-test-harness.js')).ownerTokenHeaders('admin');
     // The node key (data/libp2p_key): what signs the notices.
     const p2p = await startP2P(0, 0);
     const port = await startHttpsServer(0);

@@ -344,8 +344,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -356,7 +359,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -577,7 +580,7 @@ async function main(): Promise<void> {
         assert(qOwner.status === 200 && kinds(qOwner.body).includes('standby') && qAdmin.status === 200 && !kinds(qAdmin.body).includes('standby')
             && qMod.status === 200 && !kinds(qMod.body).includes('standby'),
             `the app's queue route, signed by each: the owner sees it, the admin and the moderator don't (${brief([kinds(qOwner.body), kinds(qAdmin.body), kinds(qMod.body)])})`);
-        const diag = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
+        const diag = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: await main.send('owner-session') });
         const banner = diag.body?.standbyHealth;
         assert(banner?.incident?.lines?.length === 1 && /has not made a copy of this server since/.test(banner.incident.lines[0]) && banner.incident.pushed === true
             && banner.incident.whatToDo.some((w: string) => /running and can reach this one/.test(w)),
@@ -608,7 +611,7 @@ async function main(): Promise<void> {
         queue = await main.send('queue');
         assert(back.ok && health?.state.incident === null && health.state.lastIncident?.id === incident1?.id && !kinds(queue.owner).includes('standby'),
             `S pulls again: the incident is over, and gone from the queue (${brief(health?.state.lastIncident)})`);
-        const diag2 = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
+        const diag2 = await api(m, 'POST', '/api/local/admin/diagnostics', { admin: await main.send('owner-session') });
         assert(diag2.body?.standbyHealth?.incident === null && diag2.body.standbyHealth.standbys.length === 1 && diag2.body.standbyHealth.standbys[0].healthy === true,
             'and from the banner');
 
@@ -821,7 +824,7 @@ async function main(): Promise<void> {
         health = await main.send('health');
         pushes = await pushesSoFar();
         assert(health?.state.incident?.id === incident3?.id && pushes.length === 4, `the incident stays open, and nothing is pushed again (${pushes.length})`);
-        const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN })).body?.standbyHealth;
+        const bannerNow = (await api(m, 'POST', '/api/local/admin/diagnostics', { admin: await main.send('owner-session') })).body?.standbyHealth;
         assert(bannerNow?.incident?.lines.some((l: string) => /did not match it: listings differed\. Last exact copy: \d{4}-/.test(l))
             && bannerNow.incident.whatToDo.some((w: string) => /copies this server afresh by itself, at most every six hours, and its copy still did not match/.test(w)),
             `the banner says what didn't match: ${brief(bannerNow?.incident?.lines)}`);
@@ -868,13 +871,15 @@ async function main(): Promise<void> {
             ['an id that is not one', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good('__proto__') }],
             ['a count out of range', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"fails":0', '"fails":-1') }],
             ['a table that is not copied', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"differs":[]', '"differs":["sqlite_master"]') }],
-            ['free text for a reason', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"why":null', '"why":"call +61 555 0100"') }],
             ['a "mending" that is not a yes or no', { 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(newIdHex()).replace('"healing":false', '"healing":"yes"') }],
             ['the admin password, not the token', { 'X-Admin-Password': PW_MAIN, 'X-Standby-Report': good(newIdHex()) }],
         ];
         // A main server takes the admin password for a pull only with token-only off (its default is on): off, so that
         // pull is served and only its report is left unheard.
-        const tokenOnlyOff = await post(main.base, '/api/local/admin/replication-token/mode', { tokenOnly: false }, { 'X-Admin-Password': PW_MAIN });
+        // Step 7c: the password alone opens no admin route with 2FA off: the owner's Settings calls go under an owner's key
+        // session the node makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const tokenOnlyOff = await post(main.base, '/api/local/admin/replication-token/mode', { tokenOnly: false }, mOwner);
         require_(tokenOnlyOff.status === 200 && tokenOnlyOff.body?.tokenOnly === false, `M takes the admin password for pulls, for this step (${brief(tokenOnlyOff.body)})`);
         const statuses: string[] = [];
         for (const [what, headers] of forged) {
@@ -888,10 +893,26 @@ async function main(): Promise<void> {
         const second = newIdHex();
         const kept = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(second) });
         assert(kept.status === 200 && (await standbysNow()).includes(second), 'a well-formed report with the token, from a second standby, is kept');
-        const forgot = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: PW_MAIN, body: { id: second } });
-        const forgotAgain = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: PW_MAIN, body: { id: second } });
+        const forgot = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: mOwner, body: { id: second } });
+        const forgotAgain = await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: mOwner, body: { id: second } });
         assert(forgot.status === 200 && !(await standbysNow()).includes(second) && forgotAgain.status === 404,
             `the owner stops watching it from Settings (${forgot.status}; again ${forgotAgain.status})`);
+        // A reason M doesn't know (free text, or a newer standby's code) is none: the report is kept, the words never are.
+        const freeText = newIdHex();
+        const freeTextPull = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': good(freeText).replace('"why":null', '"why":"call +61 555 0100"') });
+        const freeTextState = await main.send('health');
+        const freeTextSeen = freeTextState?.state.standbys?.find((x: any) => x.id === freeText);
+        assert(freeTextPull.status === 200 && freeTextSeen && freeTextSeen.lastWhy === null && !JSON.stringify(freeTextState).includes('555 0100'),
+            `a report with free text for a reason is kept with no reason, and the text is kept nowhere (${brief(freeTextSeen)})`);
+        // A newer standby's refused redirect: `why` says network, for main servers older than the code; `whyDetail` has it.
+        const newer = newIdHex();
+        const newerReport = good(newer).replace('"last":"ok","why":null', '"last":"refused","why":"network","whyDetail":"redirect:other.example"');
+        const newerPull = await deltaWith({ 'X-Replication-Token': replicationToken, 'X-Standby-Report': newerReport });
+        const newerSeen = (await main.send('health'))?.state.standbys?.find((x: any) => x.id === newer);
+        assert(newerReport.includes('whyDetail') && newerPull.status === 200 && newerSeen?.lastWhy === 'redirect:other.example' && newerSeen?.lastOutcome === 'refused',
+            `a newer standby's redirect, in whyDetail, is read with its host (${brief(newerSeen)})`);
+        for (const id of [freeText, newer]) await api(m, 'POST', '/api/local/admin/standby-health/forget', { admin: mOwner, body: { id } });
+        assert(JSON.stringify(await standbysNow()) === JSON.stringify(known), `and the owner stops watching both (${brief(await standbysNow())})`);
 
         // ── 6. A take-over from a copy that didn't match ──
         console.log('\n— 6. the main server dies; a take-over from the copy that did not match —');
@@ -899,7 +920,8 @@ async function main(): Promise<void> {
         require_(rec?.lastWhole?.exact === false, 'S\'s last whole copy is the one that did not match');
         await standby.send('checkpoint');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         const pv = opened.body?.preview;
         assert(opened.status === 200 && pv?.copy?.warning === true
             && pv.copy.lines.some((l: string) => /did not match it: listings differed/.test(l))
@@ -908,7 +930,7 @@ async function main(): Promise<void> {
             `the preview says, in plain words, what didn't match and when the last exact copy was (${brief(pv?.copy?.lines)})`);
         assert(typeof pv?.mainServer?.lastCopyAt === 'number' && pv.mainServer.lastCopyAt === rec?.lastOkAt,
             `and when S last copied M (${pv?.mainServer?.lastCopyAt})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv?.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv?.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `the confirm goes ahead: never blocked by the copy (${confirmed.status} ${brief(confirmed.body)})`);
         if (confirmed.status === 200) {
             const exit = await standby.exited;
@@ -926,8 +948,9 @@ async function main(): Promise<void> {
         const heldThere = await demoted.send('health');
         require_(heldThere?.state.incident, `M still holds the incident it had open as the main server (${brief(heldThere?.state.incident?.problems)})`);
         const demotedQueue = await demoted.send('queue');
-        const demotedDiag = await api(d, 'POST', '/api/local/admin/diagnostics', { admin: PW_MAIN });
-        const demotedBanner = await api(d, 'POST', '/api/local/admin/standby-health', { admin: PW_MAIN });
+        const demotedOwner: Record<string, string> = await demoted.send('owner-session');
+        const demotedDiag = await api(d, 'POST', '/api/local/admin/diagnostics', { admin: demotedOwner });
+        const demotedBanner = await api(d, 'POST', '/api/local/admin/standby-health', { admin: demotedOwner });
         assert(!kinds(demotedQueue.owner).includes('standby') && demotedDiag.status === 200 && demotedDiag.body?.standbyHealth === null
             && demotedBanner.status === 200 && demotedBanner.body?.incident === null && demotedBanner.body.standbys.length === 0,
             `a standby now, it tells its owner of none: nothing in the admin queue, no Settings banner (${brief([kinds(demotedQueue.owner), demotedDiag.body?.standbyHealth, demotedBanner.body])})`);

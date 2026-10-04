@@ -58,6 +58,7 @@ async function child(): Promise<void> {
     const { forgetOwnAddresses } = await import('./engine/own-addresses.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
 
     initAdminPassword();
     await initTls();
@@ -76,6 +77,9 @@ async function child(): Promise<void> {
             }
             return true;
         },
+        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' report is read with an
+        // automation token made from the seeded owner's key.
+        adminToken: (a: { owner: string }) => ownerTokenHeaders('admin', a.owner),
         resetLimits: () => {
             resetGatewayRateLimit();
             resetAdminAuthTarpit();
@@ -224,9 +228,11 @@ async function main(): Promise<void> {
         return call(node, 'GET', core.signedPathOf(url), headers);
     }
     const info = async (node: Node) => (await call(node, 'GET', '/api/community/info')).body;
+    const tokens = new Map<Node, Record<string, string>>(); // each node's owner token, made once it is seeded
     const report = async (node: Node) => {
         await node.send('resetLimits');
-        return (await call(node, 'GET', '/api/local/admin/app-addresses', { 'X-Admin-Password': PW })).body;
+        if (!tokens.has(node)) tokens.set(node, await node.send('adminToken', { owner: owner.pk }));
+        return (await call(node, 'GET', '/api/local/admin/app-addresses', tokens.get(node))).body;
     };
     const iso = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString();
     const entry = (address: string, role: 'current' | 'former', status: string, over: Record<string, unknown> = {}) => ({

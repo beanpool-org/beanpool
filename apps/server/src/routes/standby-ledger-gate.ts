@@ -69,7 +69,7 @@ export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
     /^\/api\/groups\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
     // An admin's emergency suspension and its lift (a Decision, and the role it holds aside), and a replacement phone's code.
     /^\/api\/local\/admin\/users\/[^/]+\/(suspend|status)\/?$/,
-    /^\/api\/local\/admin\/members\/[^/]+\/rekey\/issue-code\/?$/,
+    /^\/api\/local\/admin\/members\/[^/]+\/rekey\/(issue-code|cancel)\/?$/,
     // A recovery fragment released: the log of which fragments left the community.
     /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
     // A link's commissioning ceiling.

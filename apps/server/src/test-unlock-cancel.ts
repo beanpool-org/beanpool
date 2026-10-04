@@ -21,11 +21,11 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { startRestoreUnlock, followUnlock, describeUnlock } from './services/owner-unlock.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const CANCEL_PATH = '/api/local/admin/unlock/cancel';
-const ADMIN_PW = 'TestAdminPassword123!';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -104,8 +104,10 @@ async function main() {
     const descBefore = await describeUnlock(sessionId);
     assert(descBefore.status === 200, `describeUnlock returns 200 before cancel (got ${descBefore.status})`);
 
-    // 3. Authenticated POST to cancel session
-    const cancelRes = await postJson(CANCEL_PATH, { 'x-admin-password': ADMIN_PW }, { sessionId });
+    // 3. Authenticated POST to cancel session (step 7c: the password alone opens no admin route with 2FA off; an owner's
+    // key session does)
+    const ownerAuth = ownerSessionHeaders();
+    const cancelRes = await postJson(CANCEL_PATH, ownerAuth, { sessionId });
     assert(cancelRes.status === 200 && cancelRes.body?.success === true, `authenticated cancel returns 200 success (got ${cancelRes.status})`);
 
     // 4. Verify temporary restore file was deleted from disk
@@ -119,7 +121,7 @@ async function main() {
     assert(descAfter.status === 404, `describeUnlock returns 404 unknown-session after cancel (got ${descAfter.status})`);
 
     // 6. Canceling an unknown / already cancelled session with valid admin auth succeeds safely
-    const cancelAgain = await postJson(CANCEL_PATH, { 'x-admin-password': ADMIN_PW }, { sessionId });
+    const cancelAgain = await postJson(CANCEL_PATH, ownerAuth, { sessionId });
     assert(cancelAgain.status === 200 && cancelAgain.body?.success === true, `canceling an unknown sessionId returns 200 success (got ${cancelAgain.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);

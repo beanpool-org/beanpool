@@ -45,6 +45,8 @@ export const REQUEST_TAG = 'beanpool-request/2';
 export const ADMIN_SIGNIN_TAG = 'beanpool-admin-signin/2';
 export const SETTINGS_SIGNIN_TAG = 'beanpool-settings-signin/2';
 export const INVITE_TICKET_TAG = 'beanpool-invite-ticket/2';
+/** An offline ticket bound to a names-list entry (community modes slice 3): format 2 with the entry's id after the date. */
+export const NAMED_INVITE_TICKET_TAG = 'beanpool-invite-ticket-named/1';
 export const RE_ENROLL_TAG = 'beanpool-re-enroll/2';
 export const PUSH_LEAVE_TAG = 'beanpool-push-leave/2';
 export const CLAIM_TAG = 'beanpool-claim/2';
@@ -227,8 +229,17 @@ export function settingsSigninText(host: string, action: 'approve' | 'decline', 
     return `${SETTINGS_SIGNIN_TAG}\n${host}\n${action}\n${pairingId}\n${shortCode}`;
 }
 
-/** An offline invite ticket's payload. `host` is the inviter's community; the ticket joins only there. */
-export function inviteTicketText(host: string, inviter: string, timestamp: number, intendedFor?: string | null): string {
+/**
+ * An offline invite ticket's payload. `host` is the inviter's community; the ticket joins only there. With
+ * `namesEntryId` (a names-list entry's id, 32 hex: never the name), redeeming it confirms the joiner against that entry,
+ * by the inviter, where the inviter is still an admin who can open it (the server's rule). A node from before it reads
+ * such a ticket as broken and joins nobody with it, so a binding is never dropped on the way.
+ */
+export function inviteTicketText(host: string, inviter: string, timestamp: number, intendedFor?: string | null, namesEntryId?: string | null): string {
+    if (namesEntryId) {
+        if (!/^[0-9a-f]{32}$/.test(namesEntryId)) throw new Error('A names-list entry id is 32 hexadecimal characters');
+        return `${NAMED_INVITE_TICKET_TAG}\n${host}\n${inviter}\n${timestamp}\n${namesEntryId}\n${intendedFor ?? ''}`;
+    }
     return `${INVITE_TICKET_TAG}\n${host}\n${inviter}\n${timestamp}\n${intendedFor ?? ''}`;
 }
 
@@ -237,6 +248,7 @@ export interface ParsedInviteTicketText {
     inviter: string;
     timestamp: number;
     intendedFor?: string;
+    namesEntryId?: string;
 }
 
 /**
@@ -244,6 +256,12 @@ export interface ParsedInviteTicketText {
  * the inviter typed or pasted, line breaks included, so it is the rest of the text (as a request's BODY is).
  */
 export function parseInviteTicketText(text: string): ParsedInviteTicketText | null {
+    if (typeof text === 'string' && text.startsWith(`${NAMED_INVITE_TICKET_TAG}\n`)) {
+        const named = text.split('\n');
+        if (named.length < 6 || !/^[0-9a-f]{32}$/.test(named[4])) return null;
+        const rest = parseInviteTicketText([INVITE_TICKET_TAG, named[1], named[2], named[3], ...named.slice(5)].join('\n'));
+        return rest && { ...rest, namesEntryId: named[4] };
+    }
     if (typeof text !== 'string' || !text.startsWith(`${INVITE_TICKET_TAG}\n`)) return null;
     const lines = text.split('\n');
     if (lines.length < 5) return null;
@@ -394,11 +412,11 @@ export async function signSettingsSignin(
 
 /** An offline invite ticket for the community at `nodeUrl`, as the `BP-` code carries it (base64 of `{p, s}`). */
 export async function buildInviteTicket(
-    nodeUrl: string, inviter: string, sign: Signer, opts: { timestamp?: number; intendedFor?: string | null } = {},
+    nodeUrl: string, inviter: string, sign: Signer, opts: { timestamp?: number; intendedFor?: string | null; namesEntryId?: string | null } = {},
 ): Promise<string> {
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot make a ticket: the node address names no host');
-    const p = inviteTicketText(host, inviter, opts.timestamp ?? Date.now(), opts.intendedFor);
+    const p = inviteTicketText(host, inviter, opts.timestamp ?? Date.now(), opts.intendedFor, opts.namesEntryId);
     const s = toBase64(await sign(signedRequestBytes(p)));
     return toBase64(utf8Bytes(JSON.stringify({ p, s })));
 }

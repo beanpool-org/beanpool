@@ -14,6 +14,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recordRequestSigning } from './nodes';
+import { trackInfoRead } from './request-signing-version';
 
 /** The worldwide community's one address. `earth.beanpool.org` redirects here at Cloudflare. */
 export const GLOBAL_NODE_URL = 'https://global.beanpool.org';
@@ -144,6 +145,12 @@ export async function fetchNodeProfile(
     url: string, fetchImpl: typeof fetch = fetch, timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<NodeProfile | null> {
     const base = url.trim().replace(/\/+$/, '');
+    // Noted as in flight until its answer is recorded, so a request signed for this node meanwhile waits for this
+    // answer rather than asking again (request-signing-version.ts learnRequestSigning).
+    return trackInfoRead(base, readProfile(base, fetchImpl, timeoutMs));
+}
+
+async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<NodeProfile | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {

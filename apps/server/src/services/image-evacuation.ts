@@ -152,8 +152,9 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
            SET photo_data = NULL, storage_key = ?, sha256 = ?, bytes = ?, mime = ?
          WHERE post_id = ? AND order_num = ? AND storage_key IS NULL
     `);
+    // Only when the photo's move moved it (an update that changes nothing makes the touch trigger stamp afresh).
     const restoreWatermark = db.prepare(`
-        UPDATE post_photos SET updated_at = ? WHERE post_id = ? AND order_num = ?
+        UPDATE post_photos SET updated_at = ? WHERE post_id = ? AND order_num = ? AND updated_at IS NOT ?
     `);
 
     /**
@@ -167,12 +168,12 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
      * already has — for a change that alters not one byte anybody can see.
      *
      * So the value is put back in the same transaction. The restoring UPDATE does NOT re-fire the trigger:
-     * it sets `updated_at` to something other than what the row now holds, so `NEW.updated_at IS
-     * OLD.updated_at` is false. Both statements commit together, so no reader ever sees the bumped value.
+     * only when the move moved it does it run (an update that changes nothing makes the touch trigger stamp
+     * afresh). Both statements commit together, so no reader ever sees the bumped value.
      */
     const moveRow = db.transaction((postId: string, orderNum: number, key: string, sha: string, size: number, mime: string, watermark: string | null) => {
         const res = update.run(key, sha, size, mime, postId, orderNum);
-        if (res.changes > 0) restoreWatermark.run(watermark, postId, orderNum);
+        if (res.changes > 0) restoreWatermark.run(watermark, postId, orderNum, watermark);
         return res.changes;
     });
 

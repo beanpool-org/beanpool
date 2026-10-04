@@ -85,7 +85,8 @@ import {
     type SealedEnvelopeHeader, type SealedEnvelopeKey, type CodeStanza,
 } from '@beanpool/core';
 import Database from 'better-sqlite3';
-import { getLocalConfig, redactLocalConfig, type LocalConfig } from '../config/local-config.js';
+import { getLocalConfig, redactLocalConfig, readLocalConfigFileIn, writeLocalConfigFileIn, type LocalConfig } from '../config/local-config.js';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
 import { forgetAddressesInStoredCopy } from './address-retention.js';
@@ -94,7 +95,7 @@ import {
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
-    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
+    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, bundledLocalConfigUpdates,
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
@@ -896,9 +897,7 @@ export function checkBundle(bundle: TakeoverBundle, header: SealedEnvelopeHeader
 }
 
 function writeAtomic(file: string, data: Buffer, mode: number): void {
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, { mode });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, data, { mode });
 }
 
 /**
@@ -930,15 +929,15 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
     // server signs owners in with the community's password and keeps locking to the same paper. Everything else
     // in this server's config (its own replication token, callsign, gateway) stays.
-    const configPath = path.join(dir, 'local-config.json');
-    let config: Record<string, unknown> = {};
-    try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch { config = {}; }
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) config[f] = (bundle.localConfig as any)[f] ?? null;
+    // A broken file is read from its last good copy, never as empty: that would drop this server's address and settings.
+    const config = readLocalConfigFileIn(dir);
+    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
+    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
     if (bundle.recoveryCode) {
         config.recoveryCode = bundle.recoveryCode;
         config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
     }
-    writeAtomic(configPath, Buffer.from(JSON.stringify(config, null, 2)), 0o600);
+    writeLocalConfigFileIn(dir, config, 0o600);
     written.push('local-config.json (admin, 2FA, recovery code record)');
     return written;
 }

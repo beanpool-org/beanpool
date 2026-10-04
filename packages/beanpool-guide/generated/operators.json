@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 97,
-  "hash": "e5cca9a0a648293fd52a94407d7ebb70cb0bdb90ef7f43be57c859f10cf7fd20",
+  "version": 105,
+  "hash": "bcb8472dc8d8b4e16be6df83cd218fc2697a5af37d39e09f64d27d4a0139f82a",
   "sections": [
     {
       "id": "setup",
@@ -78,7 +78,7 @@
     {
       "slug": "first-time-setup",
       "title": "First-time setup",
-      "summary": "The first start of your server, the admin password, the first owner, and what the setup wizard does and does not do.",
+      "summary": "The first start of your server, claiming it with your phone, the first owner, and what the setup wizard does and does not do.",
       "section": "setup",
       "related": [
         "signing-in",
@@ -98,19 +98,19 @@
         },
         {
           "type": "p",
-          "text": "Put an admin password in the .env file as **ADMIN_PASSWORD** before you start the server for the first time. It needs at least 8 characters, with an upper-case letter, a lower-case letter, a digit and a symbol. If the password is weaker than that, the server will not start. It restarts over and over until you fix it."
+          "text": "A new server has no admin password, and you do not put one in the .env file. If ADMIN_PASSWORD is there, a new server ignores it, and its log says so once. The community's first owner claims it with a one-time claim code instead: see Claim your community: the address, then your phone, below."
         },
         {
           "type": "p",
-          "text": "If you leave ADMIN_PASSWORD empty, the server makes up a 20-character password. It never prints it in the log, because the log is kept for as long as the server runs and gets copied into support requests. It puts the password in a file, data/first-admin-password.txt, that only the server can read, and the log says where it is. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt"
+          "text": "On its first start the server makes the claim code and puts it in a file, data/claim-code.txt, that only the server can read. It never prints the code in the log, because the log is kept for as long as the server runs and gets copied into support requests. beanpool claim shows it to you. You can also read it with: docker compose exec beanpool-node cat /data/claim-code.txt"
+        },
+        {
+          "type": "h3",
+          "text": "Servers that still have a password"
         },
         {
           "type": "p",
-          "text": "Sign in with it, then change the password in Access & Security. The file is deleted the moment you do, and the log says so. Until then, every start of the server reminds you in the log that the file is still there, without printing the password. If the server cannot write the file, it does not start, and the log says why."
-        },
-        {
-          "type": "p",
-          "text": "The server reads ADMIN_PASSWORD only on its first start. After that it keeps a scrambled copy in data/local-config.json and ignores the variable. To change the password later, use Settings."
+          "text": "A server set up before the claim code keeps its admin password exactly as it was. Its first password was the ADMIN_PASSWORD in .env, or one the server made up and put in data/first-admin-password.txt. Read that file with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Until you change the password in Access & Security, every start reminds you in the log that the file is still there, without printing the password. The file is deleted the moment you change it. The server reads ADMIN_PASSWORD only on its first start, so to change the password, use Settings."
         },
         {
           "type": "h2",
@@ -121,9 +121,34 @@
           "items": [
             "**data/genesis.json** and **data/community.key**: your community's own key. This key is not a person and is not the owner. Once you make a recovery code, a backup from Settings carries both, locked. Until then only a copy of the data folder does: see Backups and replicas.",
             "**data/state.db**: the database, with every member, post, deal and vote.",
-            "**data/local-config.json**: the admin password, two-factor settings, gateway settings, and the replication token if this server is a backup or has one.",
-            "**data/first-admin-password.txt**: only when ADMIN_PASSWORD was empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere."
+            "**data/local-config.json**: two-factor settings, gateway settings, the replication token if this server is a backup or has one, and the claim code's scrambled copy until it is used. On a server that still has an admin password, that password's scrambled copy too.",
+            "**data/claim-code.txt**: the one-time claim code, in plain text, until a phone claims the community with it. Then it is deleted. A backup from Settings never carries it.",
+            "**data/first-admin-password.txt**: only on a server set up before the claim code with ADMIN_PASSWORD empty. The password the server made up, in plain text, until you change it. A backup from Settings never carries it, but a copy of the whole data folder does: change the password before you copy the folder anywhere."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Claim your community: the address, then your phone"
+        },
+        {
+          "type": "p",
+          "text": "The last step of an install, on the server:"
+        },
+        {
+          "type": "p",
+          "text": "docker compose exec beanpool-node beanpool claim"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "It asks for a name for your community's address, ending in **.beanpool.org** (or give it with --name cairns). It waits up to three minutes for the name to go live and reach your server. A name that waits for approval by the BeanPool project moves over by itself once approved. A name that is taken: it says why and asks for another. Press Enter to skip; use --address https://your.domain for your own address, or --no-name to set one later in Settings. Nothing here needs the BeanPool project: if its address service is down, the claim still works.",
+            "Without a live name, the phone needs your server's own address: give it with --direct http://IP:PORT, or the phone asks for it.",
+            "It shows the one-time claim code and a QR code. Open BeanPool on your phone, then **Claim a community**, or scan the QR code. That phone becomes the owner, and the code is used up."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "If the community already has an owner, it says so: use beanpool recover instead. To make an owner without a phone claim, give the key the phone shows in Settings: beanpool claim --key KEY --callsign NAME. It prints that owner's break-glass code once, and the community is told."
         },
         {
           "type": "h2",
@@ -131,7 +156,27 @@
         },
         {
           "type": "p",
-          "text": "Go to your server's address followed by **/settings**, for example https://example.org/settings, and sign in with the admin password."
+          "text": "Go to your server's address followed by **/settings**, for example https://example.org/settings. While your community has no owner yet, the page shows how to claim it: see A community with no owner yet, below. Once it has one, owners and admins sign in from the BeanPool app: see Signing in to Settings. On a server that still has an admin password, you can also sign in with it. The first time, Settings opens on one card: set up two-factor sign-in with an authenticator app on your phone, and write down the eight backup codes it shows. Settings does not open on the password alone: nothing else opens until the server accepts a code from the authenticator. Do it straight away, because until then the password still works on its own for tools that send it with every request. Then Settings, and the setup wizard, open."
+        },
+        {
+          "type": "h2",
+          "text": "A community with no owner yet"
+        },
+        {
+          "type": "p",
+          "text": "On a new server, the sign-in page at /settings first says **This community has no owner yet.** and shows how to claim it: see Claim your community: the address, then your phone above."
+        },
+        {
+          "type": "p",
+          "text": "The page's QR code carries only your server's address, as it is in the browser's address bar, and a short number that names the waiting code. It never carries the code itself: anyone can open this page, so the code is only ever read on the server. The address is written out under the QR code too, so you can check it. Open the page at the address the app will use (for example https://yourtown.beanpool.org/settings), not the server's home-network address. When opened at an unlisted address, the page shows **Open this page at … to scan** instead of the QR code, because the node answers only at its listed names."
+        },
+        {
+          "type": "p",
+          "text": "The page checks every few seconds, and the moment the community has an owner it turns into the normal sign-in by itself. It stops checking while the tab is in the background, and checks again when you come back to it. Only when the first check fails does the page show the normal sign-in (a later failure keeps the card), so a server that still has a password can always be signed in to with it."
+        },
+        {
+          "type": "p",
+          "text": "Below the claim, **This server also has an admin password** opens the password sign-in, only on a server that still has one. A new server has no admin password, so it does not show it."
         },
         {
           "type": "h2",
@@ -154,8 +199,9 @@
           "type": "ul",
           "items": [
             "**Step 1** saves your community's name and checks that your server answers at its address. If either fails, it says which, and what to check, with **Retry** and **Continue anyway**. If you continue, the step is marked ⚠ instead of ✓. If two-factor sign-in is already on and you have not typed a code this session, it asks for one with **Enter 2FA code**, then saves.",
-            "**Step 2** turns on two-factor sign-in, if you want it now. Tap **Set up 2FA**, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. Save them before you leave the step: the server keeps only a scrambled copy, so they cannot be shown again. If two-factor was already on, the wizard says so and has no codes to show. While it is asking the server, it says **Checking whether 2FA is on**; if it could not find out, it says so, with **Retry**. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA; if the server refuses, the wizard shows why, and you can finish it later in Access & Security.",
-            "**Step 2** also explains how your phone becomes an owner. See The first owner below.",
+            "**Step 2** depends on how you signed in. **Signed in with your phone's key as an owner** (Manage in the app, or a computer that scanned the code from your phone), it says **You are the owner.** and asks you to add a second owner soon: if this phone is lost, a second owner can still manage the community. Once they have joined, open People & Safety → Owners & admins and add them as an owner. Keys do not need the 2FA code, so this version sets up no two-factor sign-in and has no codes or kit to show; the step is marked ✓.",
+            "**Step 2, signed in with the admin password or an admin's key**, is two-factor sign-in. If you signed in with the password, you set it up on the card before the wizard, so the wizard says it is already on. Otherwise it offers **Set up 2FA**: tap it, scan the code with an authenticator app, and type the 6-digit code it shows. Two-factor is on only once the server accepts that code; then the wizard shows your backup codes and a recovery kit to download. Save them before you leave the step: the server keeps only a scrambled copy, so they cannot be shown again. If two-factor was already on, the wizard says so and has no codes to show. While it is asking the server, it says **Checking whether 2FA is on**; if it could not find out, it says so, with **Retry**. The kit holds your server's address and those backup codes, nothing else. It never holds the admin password. Only an owner can set up 2FA, so with an admin's key the server refuses; the wizard shows why, and an owner can finish it later in Access & Security.",
+            "This version of **Step 2** also explains how your phone becomes an owner. See The first owner below.",
             "**Step 3** can create your first enterprise and post its first offer. If a member is already an owner, it makes them the enterprise's first keeper. On a new server nobody is, so it says no keeper will be set; add one later under Shared Projects & Economy. If any part fails, it shows the server's reason, with **Retry** (which repeats only the parts that failed) and **Continue anyway**.",
             "**Step 4** explains how the commons fills. A new community's commons starts at 0 beans. Nothing, not even this wizard, can put beans into it by hand.",
             "**Step 5** makes three founding invites, with QR codes you can print. If the server refuses or cannot be reached, it stops and shows the reason, with no code. Try again, or make invites later under People & Safety. On the global community it always refuses, because invites are off there: skip it."
@@ -208,7 +254,7 @@
     {
       "slug": "signing-in",
       "title": "Signing in to Settings",
-      "summary": "The three ways in: the admin password, the app's Manage (or Moderate) button, or a computer signed in by scanning a code with the app. How long a sign-in lasts.",
+      "summary": "The two ways in: the app's Manage (or Moderate) button, or a computer signed in by scanning a code with the app. The admin password, on servers that still have one. How long a sign-in lasts.",
       "section": "setup",
       "related": [
         "access-and-security",
@@ -219,19 +265,35 @@
       "blocks": [
         {
           "type": "p",
-          "text": "There are three ways into Settings. The password is one shared secret for the whole server. The app's Manage button, and a computer you sign in by scanning a code with the app, sign in a named person with their own key."
+          "text": "There are two ways into Settings: the app's Manage button, and a computer you sign in by scanning a code with the app. Both sign in a named person with their own key. A new server has no admin password. A server set up before the claim code may still have one: see Servers that still have a password, below."
         },
         {
           "type": "h2",
-          "text": "With the admin password"
+          "text": "Before the community has an owner"
         },
         {
           "type": "p",
-          "text": "Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app."
+          "text": "On a new server nobody can sign in with a key yet, so the sign-in page says **This community has no owner yet.** and shows how to claim it instead: on the server, run docker compose exec beanpool-node beanpool claim, then on your phone open BeanPool and choose **Claim a community**, or scan the QR code on the page. The QR code carries the server's address and the waiting code's short name, never the code. The page turns into the normal sign-in by itself a few seconds after the community has an owner, and shows the normal sign-in only when the first check fails (a later failure keeps the card). A server with an admin password keeps it below the claim, under **This server also has an admin password**. See First-time setup."
+        },
+        {
+          "type": "h2",
+          "text": "Servers that still have a password"
         },
         {
           "type": "p",
-          "text": "The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup."
+          "text": "A new server has no admin password, so this section is only for a server set up before the claim code that still has one."
+        },
+        {
+          "type": "p",
+          "text": "Only servers that still have one. An owner can retire it for good (Access and security, **Retire the admin password**); after that the sign-in page shows no password field, every password is refused with \"This community's admin password was retired\", and you sign in with your phone as below. A server set up with a claim code may have one too, until an owner retires it."
+        },
+        {
+          "type": "p",
+          "text": "Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Tools that send the password with every request are refused too until then: give them an automation token instead (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor."
+        },
+        {
+          "type": "p",
+          "text": "Its first password was the ADMIN_PASSWORD in .env on its first start. If that was empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup."
         },
         {
           "type": "ul",
@@ -239,7 +301,7 @@
             "The password counts as an **owner**. Whoever has it can do everything an owner can.",
             "Anything done with the password is recorded as done by the password, not by a person. Other admins cannot tell who it was.",
             "Your browser keeps no copy of the password. The server checks it once and gives this browser a sign-in that only the server can read. It ends when you press **Log Out**, after **2 hours** without use, after **12 hours** at most, and when the server restarts. Changing the password, or turning two-factor sign-in on or off, ends every other password sign-in; the browser that made the change stays signed in. Then you type the password again.",
-            "Some things can only be done with the password, even by an owner signed in from the app: changing the password, resetting the server, making invites from the setup wizard, the community's name and address, peer links and the money thresholds."
+            "Everything in Settings works the same whether you came in with the password or with an owner's key. The one difference: changing the password always asks for the current password, even when you are signed in from the app. From the phone's Manage button, a change only an owner may make (resetting the server, the community's address, making or removing an owner) asks you to press Manage again if you unlocked the phone more than 5 minutes ago."
           ]
         },
         {
@@ -259,9 +321,14 @@
           "type": "ul",
           "items": [
             "asks for the phone's own unlock (fingerprint, face or PIN). If the phone has no screen lock, the button refuses to open Settings;",
-            "asks for the 6-digit code if your server has two-factor sign-in on;",
-            "opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings."
+            "opens Settings in the browser, signed in as you, on the screen the app sent you to (for example a stuck deal under Escrow Disputes). On a phone, the **☰** menu at the top has every other screen: see Finding your way around Settings.",
+            "The link the app hands the browser lasts 60 seconds and works once. If Settings can't use it, it says so above the password form: press Manage again. On Android, Manage closes a Settings tab you left open earlier before it opens the new one. With an older app that old tab could come back instead, signed out: close it and press Manage again.",
+            "If the link can't be used but this browser is still signed in from earlier, Settings carries on only when that earlier sign-in is the same account, and says so at the top. If it is someone else, or the admin password, it says who is still signed in and offers Sign out: sign out, then press Manage again."
           ]
+        },
+        {
+          "type": "p",
+          "text": "Settings opened this way can make a change that only an owner may make for **5 minutes** after your phone's unlock. That covers making, removing or demoting an owner; making or removing an admin; suspending an owner, or an owner or admin through a report; removing, offboarding or re-keying an owner or admin, your own re-key included; lifting a suspension, or halting a vote, that gives an owner or admin their role back; ending the waiting time early when an owner or admin is being removed; signing someone else out everywhere; break-glass mode; two-factor sign-in; the password; backups, including downloading a backup, a snapshot or an off-box backup; and every other owner-only setting. After that it says **Confirm it's you first**: press Manage in the app again, which asks for your phone's lock, and make the change there. Reading Settings is not asked, the off-box backups card included, with one exception: the RK- code of an owner's or admin's re-key that is still waiting to be used. It finishes that re-key, so after the 5 minutes the Re-Key window asks you to press Manage again, then **Show the code**. Nor is anything an admin may do asked, such as appointing a moderator or suspending a member, or signing yourself out everywhere. A computer signed in by scanning a code is not asked."
         },
         {
           "type": "p",
@@ -280,8 +347,9 @@
           "items": [
             "First, on the computer, go to your server's address followed by /settings and choose **Sign in with your phone**. It shows a QR code, a 6-character code and a countdown. Use the same address the app uses (for example https://yourtown.beanpool.org/settings), not the server's address on your home network such as 192.168.1.20: the QR code carries whatever address is in the browser's address bar, and the phone refuses an address it does not know as a different community.",
             "Then, in the phone app, open **Settings** and tap **Manage this community from a computer**, next to Manage. A moderator's says **Moderate this community from a computer**, next to Moderate. Older apps say **Sign in on a computer**. Owners, admins and moderators only. Point the camera at the QR code.",
-            "The phone shows the 6-character code, your community and which browser asked (for example \"Firefox on Windows\"). Check the code matches the one on the computer. If it doesn't, or it isn't your computer, tap **No, that's not my computer**.",
-            "Tap **Sign in**. The phone asks for its own unlock, and the 6-digit code if your server has two-factor sign-in on. The computer opens Settings, signed in as you."
+            "The phone asks **Did you just open Settings on a computer?** and says: if someone sent you this code, tap No. Below that it shows the 6-character code, your community, which browser asked (for example \"Firefox on Windows\"), how long ago it asked, the internet address the server saw it ask from, and how long the code has left. The server gives that address only to the app of an owner, admin or moderator, so someone who sees the QR code doesn't learn it. When the server sees the phone and the computer at the same internet address, it says **same network as this phone**. It never says so when it can't tell them apart: behind a reverse proxy that is not in TRUSTED_PROXIES, or when both reach the server from your local network. Check the code matches the one on the computer. If it doesn't, if the address is a stranger's, or if you did not just open Settings yourself, tap **No, that's not my computer**.",
+            "Tap **Sign in**. The phone asks for its own unlock. The server's 6-digit code is not asked for: your phone's lock is your second factor.",
+            "The phone then shows **two digits**: \"On the computer, type 47\". The computer asks for them. Type them there and press **Confirm**. Only then does the computer open Settings, signed in as you. Someone who sent you a QR code from their own computer never sees your phone, so even if you were talked into tapping Sign in, they would have to guess the two digits: three tries out of a hundred, then the code is used up. Never read the digits out or send them to anyone."
           ]
         },
         {
@@ -294,8 +362,10 @@
             "A code lasts **2 minutes** and works once. The computer shows a new one by itself when it runs out, a few times, then waits for you to press **New code**.",
             "The code only signs in the browser that showed it. A photo of the QR code is no use on another computer.",
             "The app only accepts a code from its own community. A code from another server is refused, and the phone says which one it was.",
-            "Five refused tries on one code (wrong key, no role in this community, wrong 6-digit code) use it up.",
-            "Each approval is written to the server's log, with who approved it and which browser signed in.",
+            "Five refused tries on one code (wrong key, no role in this community) use it up.",
+            "The two digits last **30 seconds**. Three wrong tries on the computer, or too late, and nobody is signed in: get a new code.",
+            "A phone with an older app shows no digits. It signs the computer in straight after the unlock, as before. Update the app to get the digits.",
+            "Each approval is written to the server's log, with who approved it and which browser signed in. So is a code used up by wrong digits.",
             "Your key stays on the phone. This is not **Use your account on another device** (older apps: **Link Another Device**), which copies your own account to a browser to use BeanPool there as you."
           ]
         },
@@ -322,8 +392,9 @@
         {
           "type": "ul",
           "items": [
-            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords. It is slowed down by wrong two-factor codes: after 5 for your key, each try waits a little longer, up to an hour. The message says how long. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
-            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer, but nobody can change the password without knowing the old one. The fix is on the server itself, and it loses everything in data/local-config.json. Besides the password, that file holds the community's name and contact details, two-factor sign-in, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby it also holds the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. Knowing that, stop the server, delete data/local-config.json and start it again with a new ADMIN_PASSWORD (or with it empty, and read the one it makes up from data/first-admin-password.txt), then set those things again. Members, posts and beans are not touched: they are in data/state.db."
+            "Too many wrong passwords from one internet address make that address wait before it can try again. The right password from another network (mobile data, another wifi) works at once. The Manage button is not slowed down by wrong passwords, and asks for no two-factor code. A phone approving a computer's sign-in is counted with the passwords, though: it shares the limit of 15 sign-in attempts a minute from one internet address, so from the same wifi it may have to wait a minute too. See Rate limits.",
+            "No owner can sign in any more (every owner's phone and 12 words are gone, and no second owner is left): first try the 12 words on a new phone, a second owner, or your break-glass code. If none of those is left, the fix is on the server: the person who should be owner must be a member (they join first if not), then run this in the server folder: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). It makes that member an owner and prints their break-glass code once; give it only to them. It changes nothing else: the community's name, the gateway settings, the money thresholds, two-factor sign-in, break-glass mode, the backup settings and the replication token all stay as they are. It is never silent: every member gets a critical notice that an owner was added from the server, and the log keeps a SECURITY line. Anyone who can run commands on the server can already read all of its data, so this gives nobody anything new. Running it again for the same person gives them a new break-glass code and the old one stops working.",
+            "Forgot the password: owners and admins can still sign in from the app, on the phone or on a computer (if no owner can, use beanpool recover, above). Nobody can change the password without knowing the old one, and there is no way to a new one: deleting data/local-config.json does not give you one, because the server then starts as a new install, which has no admin password and ignores ADMIN_PASSWORD (and that file holds two-factor sign-in, the gateway and backup settings and more besides). Use beanpool recover, above, instead. Members, posts and beans are in data/state.db."
           ]
         }
       ]
@@ -600,7 +671,7 @@
     {
       "slug": "access-and-security",
       "title": "Access and security",
-      "summary": "Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance & Data, then Access & Security.",
+      "summary": "Changing or retiring the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.",
       "section": "setup",
       "related": [
         "signing-in",
@@ -628,7 +699,40 @@
         },
         {
           "type": "p",
-          "text": "If the server made up the first password (ADMIN_PASSWORD was empty), changing it deletes data/first-admin-password.txt at once. The log says so."
+          "text": "If an older version of the server made up the first password (ADMIN_PASSWORD was empty; a new install makes none), changing it deletes data/first-admin-password.txt at once. The log says so."
+        },
+        {
+          "type": "p",
+          "text": "On a server whose password is retired (below) there is nothing to change: this card is refused."
+        },
+        {
+          "type": "h2",
+          "text": "Retire the admin password"
+        },
+        {
+          "type": "p",
+          "text": "The admin password is one shared secret that makes whoever knows it an owner, from anywhere on the internet. Once every owner signs in with their phone, you can remove it for good. Only an owner signed in with their phone (Manage, or **Sign in with your phone** on a computer) can do it, under Access & Security, **Retire the admin password**. Signed in with the password itself, or with an automation token, you can't."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**First, make your break-glass code** (below) and keep it safe. Settings asks for it before it lets you retire the password: once the password is gone, it is how you get back in if your phone is lost.",
+            "**Keep two owners.** With only one, Settings asks you to tick **I accept one owner**, and the server's log records that you did.",
+            "**Move your scripts first.** Anything that sends the password (the fleet manager, backup scripts) stops working. Give each one an automation token (below). They then say \"This node's password is retired: use a token\".",
+            "Type **RETIRE** and press **Retire the admin password**."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "What happens: the password and the two-factor sign-in that guarded it are deleted; every sign-in made with the password ends at once, live log views included; every member sees a notice that the password was retired, and by whom; the server's log records it. The card then says **Retired on** the date **by** the owner."
+        },
+        {
+          "type": "p",
+          "text": "What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more, and the old settings page points to the phone."
+        },
+        {
+          "type": "p",
+          "text": "It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so once; take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in)."
         },
         {
           "type": "h2",
@@ -636,14 +740,37 @@
         },
         {
           "type": "p",
-          "text": "Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. It is off until you switch it on."
+          "text": "Two-factor sign-in asks for a 6-digit code from an authenticator app as well as the password. Settings asks for it with the password. On a server where it is off, signing in with the password opens one card only, which says \"Set up two-factor sign-in to open Settings: the admin password alone is not enough.\" Nothing else in Settings opens until the server accepts a code from your new authenticator; then Settings opens at once, without signing in again. Meanwhile the server keeps running and serving members, the card always opens for the password, and **Log Out** is on it. If two-factor sign-in is switched off later, the next thing the password does brings that card back. It is for the password only: signing in from the app (Manage, Moderate, or a computer signed in by scanning a code) never asks for it, because the phone's own lock is that person's second factor. See Signing in."
+        },
+        {
+          "type": "p",
+          "text": "**Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with \"Turn on two-factor sign-in in Settings, or use an automation token made from your phone\". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before."
+        },
+        {
+          "type": "p",
+          "text": "**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says \"Turn on two-factor sign-in in Settings (the new page), then come back\". Turn it on in Settings, then sign in there with the password and a code."
+        },
+        {
+          "type": "p",
+          "text": "Two things still take the password alone while two-factor sign-in is off:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "A standby that still copies with the password keeps copying, until you make copying take the replication token only (Live Backup Server). It cannot swap its password for a replication token on its own any more: its log says to make one on this server from the owner's phone (Replication Access) and paste it into the standby.",
+            "A break-glass code still adds an admin key (below): the code is itself the thing you hold."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**Before you update a server whose two-factor sign-in is off:** turn two-factor sign-in on, or move every tool that sends the password onto an automation token, and give each standby that copies with the password a replication token. Otherwise those tools stop working once the server is updated."
         },
         {
           "type": "ul",
           "items": [
             "Press **Setup 2FA Authenticator** and scan the QR code with an authenticator app, or type the secret it shows.",
             "Type the 6-digit code the app shows, and press **Verify & Enable**. Until you do, nothing changes.",
-            "There is one code for the whole server, not one per person. Everyone who signs in needs it: with the password, and from the app's Manage button.",
+            "There is one code for the whole server, not one per person. Everyone who signs in with the password needs it. Owners, admins and moderators who sign in from the app don't.",
             "Once you have typed a code, the browser does not ask again for **4 hours** of use.",
             "Each code works once. A code the server has already taken, from anyone, is refused with \"That 2FA code was already used. Wait for the next one from your authenticator app.\" The next code comes within 30 seconds. So someone who saw a code over your shoulder can't use it after you, and two people signing in together need a code each.",
             "Only an owner can switch it on or off."
@@ -660,10 +787,9 @@
             "Switching it off needs an owner and a code the authenticator shows **right now** (or a backup code). Being signed in already is not enough, whether from the app or with the password and a code typed earlier.",
             "Moving to a new authenticator needs a current code from the old one, or a backup code, too. In Settings: switch two-factor sign-in off with a current code, then set it up again on the new phone.",
             "Wrong codes there count like wrong passwords, and back off the same way: see Rate limits.",
-            "Wrong codes at the app's Manage button, or when approving a computer's sign-in from the phone, are counted too, for that person's key and for the internet address they come from. After 5 wrong codes, each further try waits: 2 seconds, then 4, 8 and so on, up to an hour. A right code clears it. If this happens and it wasn't you, someone else has that person's key: remove their role, or sign them out everywhere, and add their new key.",
             "There is one code for everyone. Anyone who has the password and the authenticator (or its secret) can do everything an owner can, so guard both.",
-            "The server makes eight single-use backup codes when you set it up, but Settings does not show them. Store the authenticator secret somewhere safe instead; it is how you get back in if you lose the phone.",
-            "If you lose the authenticator and the secret, the way back is to delete data/local-config.json on the server. That loses every setting in it, including a backup's replication token, so read what it holds in Signing in first."
+            "The server makes eight single-use backup codes when you set it up. The card the password opens, and the setup wizard, show them once: write them down or save them then, because the server keeps only a scrambled copy. To see a new set later, an owner types the 6-digit code the authenticator shows now under **New backup codes** in the two-factor card (a backup code does not work there). Settings shows the eight new codes once; the old ones stop working at that moment. Keep them apart from the phone. Admins and moderators do not see this. Each backup code works once in place of a code. Keep the authenticator secret somewhere safe too.",
+            "If you lose the authenticator: sign in with a backup code in place of the code. If none is left, owners still get in from the app's Manage button, which never asks for the code, but the password stays locked behind the lost authenticator. If no owner can sign in from the app either, beanpool recover (Signing in) makes a member an owner from the server, and that owner then signs in from the app. Deleting data/local-config.json is not needed, and it loses every setting in it."
           ]
         },
         {
@@ -672,14 +798,18 @@
         },
         {
           "type": "p",
-          "text": "A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. Settings cannot make one yet: the break-glass card under Access & Security describes a plan and its button does nothing. Codes are only issued through the server's API, to owners, when their key is added."
+          "text": "A break-glass code belongs to one owner. It starts with **bg-** and does one thing: it lets you add a new admin key, for example when you have lost the phone your key was on. Anywhere else in Settings it is refused, as a wrong password is, and counts as one. An owner makes one under Access & Security, **Make a break-glass code**. Signed in with your key, the code is for your own key. Signed in with the admin password, paste the member key of the owner it is for. Settings shows it once; making a new one stops the old one working. Admins and moderators have none. In the app, an owner finds **Break-glass code** under Community admin in Settings: it asks for the phone's unlock and shows a new code once. The app keeps no copy, since the code is for when that phone is lost: write it down."
         },
         {
           "type": "ul",
           "items": [
+            "The server's log records that a code was made and for whom, never the code itself.",
             "Using it shows every member a notice: \"Break-glass recovery used to authorise a new admin key for @callsign\". The server's log records whose code it was.",
             "The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.",
-            "If two-factor sign-in is on, it still asks for the code."
+            "If two-factor sign-in is on, it still asks for the code. If it is off, the code alone is enough: the admin password alone does not add a key.",
+            "When an owner signs out everywhere (see Signing out everywhere, below), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out leaves their code alone.",
+            "Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.",
+            "In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one."
           ]
         },
         {
@@ -688,11 +818,104 @@
         },
         {
           "type": "h2",
+          "text": "Signing out everywhere"
+        },
+        {
+          "type": "p",
+          "text": "Lost a phone, or signed in to Settings on a computer that isn't yours? **Sign out everywhere** ends every Settings sign-in of yours at once, on every computer and phone."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "In Settings, signed in with your key: **People & Safety**, then **Owners & admins**, at the bottom. It asks first, then shows the sign-in screen, since this computer is signed out too.",
+            "In the app: **Settings**, under Community admin, **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.",
+            "An owner's break-glass code stops working too. Make a new one afterwards.",
+            "Your key stays on your phone: press **Manage** in the app to sign in again.",
+            "It ends only your own sign-ins. Settings opened with the admin password has no sign-ins of anyone's to end, so it doesn't show the button, and the server refuses an automation token here.",
+            "Automation tokens are not sign-ins: tokens made earlier keep working afterwards. If someone else may have signed in as you, an owner should open **Automation tokens** (below) and revoke any token nobody recognises. Only owners see that card."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "Automation tokens"
+        },
+        {
+          "type": "p",
+          "text": "An automation token lets a script, or a tool like a fleet manager, use this node's Settings without the admin password. An owner makes one under Access & Security, **Automation tokens**: give it a name that says what will use it, pick what it may do, and, if you like, when it stops working. Admins and moderators do not see this card."
+        },
+        {
+          "type": "p",
+          "text": "You make a token with your owner key, never with the admin password: open Settings from **Manage** in the app, or sign in on a computer by scanning a code with the app. Signed in with the password, the card lists the tokens and lets you revoke them, but has no form for making one. That way every token belongs to an owner."
+        },
+        {
+          "type": "p",
+          "text": "What a token may do is its scope:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Read**: look, change nothing. Dashboards and checks.",
+            "**Backups**: take a backup or snapshot, list them, send one off the box and download one. Nothing else: not restoring, not deleting, not changing where backups go.",
+            "**Admin**: what an admin can do in Settings."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "No token, whatever its scope, makes an owner-only change. It cannot change who is an owner or admin, the admin password or two-factor sign-in, break-glass codes or mode, the public address, the replication token, or other tokens, and it cannot restore a backup, reset the node or sign anyone in to Settings. Do those signed in as an owner."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Settings shows the token once, when you make it. Copy it then: the server keeps only a scrambled copy and cannot show it again. If you lose it, revoke it and make a new one.",
+            "The script sends it in the Authorization header, as Bearer followed by the token (it starts with bp_). It needs no two-factor code: it was made with an owner's key. Keep it as you would the password.",
+            "What a script does with a token counts as done by the owner who made it, and the server's log records each use with the token's id, never the token itself. The list shows when and where each token was last used.",
+            "Any owner can revoke any token, signed in with their key or with the password, and it stops working at once. A token also stops working when the owner who made it is no longer an owner: removed, made an admin, or suspended.",
+            "Tokens stay on this server: they are not in backups, standby copies or a take-over."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "Scripts and the harvester"
+        },
+        {
+          "type": "p",
+          "text": "The scripts that come with BeanPool take a token in the environment variable **BEANPOOL_TOKEN**, never on the command line: anyone else on that computer can see a command line. With a token set they send the token alone and never the password. They still read the admin password from the environment variable **ADMIN_PASSWORD** (setup-backup also from --admin-pw, with a warning that anyone on the computer can see it; ADMIN_PASSWORD wins when both are set), but on a current server **the password alone opens nothing**: with two-factor sign-in off the server refuses it, and with it on the server asks for a code the scripts never send. setup-backup then stops, writes nothing and says to use a token. The password works only on a server from before this change. Use a token. What each needs:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**scripts/grant-operator.mjs** (let a member run an enterprise) and **scripts/bootstrap-community-eggs.mjs**: an **Admin** token.",
+            "**scripts/setup-backup.mjs** (set up a standby): a **Read** token, to fetch the community's identity. No token can make the replication token, because that is an owner's change: an owner makes it under **Replication Access**, signed in from the app, and you give it to the script in the environment variable **BACKUP_REPLICATION_TOKEN**: that token reads the whole ledger, so it stays off the command line too. (--token still works, with a warning that anyone on the computer can see it.) Without one the script stops and says so before it changes anything.",
+            "**scripts/federation/fed.mjs**: an **Admin** token for each server, in BEANPOOL_TOKEN_ followed by the server's name in capitals (for example BEANPOOL_TOKEN_GIPPSLAND).",
+            "**The harvester** (the fleet's backup puller): a **Backups** token, as \"automationToken\" in that server's entry in manager-nodes.json. It then takes the server's backups with the token alone and sends no password. It asks for the server's member and post counts with no password at all, because anyone may see those. A Backups token can take a full copy of the community, so keep manager-nodes.json readable by the fleet manager's user only (chmod 600 manager-nodes.json). When the fleet manager saves the file itself, it makes it that way."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "The fleet manager"
+        },
+        {
+          "type": "p",
+          "text": "The fleet manager signs in to a node with an automation token instead of the admin password. Make the token on your phone as above (an **Admin** token for everyday work, or **Read** or **Backups** for less), then in the fleet manager edit the node (⚙️) and paste it under **Automation token**. **Where do I get one?** under the field says the same."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "The fleet manager holds the token in that page only, as it does the password: a reload asks for it again, and it is never saved on the computer or in the browser.",
+            "With a token, the fleet manager sends the token and nothing else: never the password, and no two-factor code. The password field stays for a node that runs a BeanPool older than tokens; it says it is not sent while a token is set.",
+            "What a token cannot do, the fleet manager does not try. For an owner-only change (owners and admins, the public address, a take-over, the recovery code, where backups go, two-factor sign-in) it sends nothing and says \"This needs an owner's phone: sign in with your phone (scan the code)\", with **Sign in with your phone**. That opens the node's own Settings, where you scan the code with the app as an owner and make the change there.",
+            "If a node refuses the token all the same (a Read token asked to change something, or a change that is owner-only only sometimes, such as making someone an owner or changing the backup schedule), the fleet manager says the same words. Reading who can take over, the owners' words checks, the backup schedule and the copy timing works with an Admin token.",
+            "If a node no longer takes the token (it was revoked, has expired, or was copied wrong), the fleet manager shows what the node said and \"Make a new token from your phone (Settings → Automation tokens)\", with **Fix token** to paste the new one. It never asks for the password instead.",
+            "A token, or a password, goes only to its own node: never to the server the fleet manager's page comes from."
+          ]
+        },
+        {
+          "type": "h2",
           "text": "Factory reset"
         },
         {
           "type": "p",
-          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server takes ADMIN_PASSWORD from .env again, or makes up a new one and puts it in a new data/first-admin-password.txt, as on the first start. It never prints it in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt"
+          "text": "Only an owner can use **Wipe & Reset Node**: with the admin password, plus the two-factor code if that is on, or signed in from the app as an owner. It empties data/local-config.json: the admin password, two-factor sign-in, the community's name and contact details, the gateway settings, the money thresholds, break-glass mode and the backup settings. On a standby that includes the replication token it shows its primary, and on a primary the token's scrambled copy and the token-only switch, so live backup stops until you set up a new token on both ends. It does **not** delete members, posts, deals or beans, and it keeps the community's own key. It also deletes data/first-admin-password.txt if it is still there, since the password in it no longer works. After a restart the server has no admin password, whether it had one before or not: it starts as a new install does, ignores ADMIN_PASSWORD in .env, and makes up no password. Owners and admins still sign in with the BeanPool app. If the community has no owner left, the server makes a one-time claim code: run beanpool claim on the server to see it. To add an owner when nobody can sign in, run beanpool recover on the server."
         },
         {
           "type": "p",
@@ -729,14 +952,20 @@
           "items": [
             "give or take away the owner and admin roles (admins can give and take away the moderator role too);",
             "remove or offboard an owner or an admin;",
-            "suspend an owner;",
+            "re-key an owner or an admin, moving their role to a new phone's key (anyone may still re-key their own account);",
+            "suspend an owner, or suspend an owner or an admin through a report;",
             "lift a suspension, or give back a role that a suspension took away;",
             "end the waiting time early when an owner or admin is being removed;",
             "sign other people out of Settings;",
             "switch break-glass mode on or off, and be issued a break-glass code;",
             "restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;",
-            "make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from."
+            "make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;",
+            "claim, rename or take offline the community's public address, and see its tunnel token."
           ]
+        },
+        {
+          "type": "p",
+          "text": "From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in."
         },
         {
           "type": "p",
@@ -748,7 +977,7 @@
         },
         {
           "type": "p",
-          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner."
+          "text": "Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key their own account, and re-key or suspend a member or a moderator."
         },
         {
           "type": "h2",
@@ -778,7 +1007,7 @@
         },
         {
           "type": "p",
-          "text": "If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role."
+          "text": "A moderator never needs the server's 6-digit code, and nor does an admin or an owner signing in from the app. Their phone's own lock (fingerprint, face or PIN) is their second factor: the app asks for it every time, and a phone with no screen lock can't manage or moderate at all. When someone is given a role, the app turns App Lock on for them once and says why; they can turn it off again in the app's Settings."
         },
         {
           "type": "h2",
@@ -793,7 +1022,8 @@
           "items": [
             "Owners, signed in with their key or with the admin password, see the list and can add and remove people.",
             "Admins, signed in with their key, see the list and can add and remove **moderators**. Owners and admins are added and removed by an owner.",
-            "Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all."
+            "Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.",
+            "At the bottom, anyone signed in with their key finds **Sign out everywhere**: it ends all of their own Settings sign-ins at once. See Access and security."
           ]
         },
         {
@@ -848,6 +1078,8 @@
             "\"Only an owner may grant the admin role\" (or \"revoke\"): you are signed in as an admin. Admins can add and remove moderators, but only an owner can make another admin or owner.",
             "\"Only an owner may change the role of an existing admin\" (or \"owner\"): you are an admin, and that person already holds a role. Giving someone a role replaces the one they have, so an admin may only appoint someone who holds no role, or who is already a moderator. Ask an owner.",
             "\"Only an owner may grant the owner role\": once a community has an owner, only an owner can add another.",
+            "\"Only an owner can re-key an owner or admin\": you are an admin, and that person holds an owner or admin role, or held one before a suspension. A re-key moves their role to the new key, so ask an owner. Re-keying yourself is not refused.",
+            "\"Only an owner can suspend an owner or admin\": you actioned a report with suspend on someone who holds an owner or admin role. Nothing was changed, the report included. Action it without suspending, or ask an owner.",
             "\"Cannot remove the last owner\": add another owner first, then remove this one.",
             "\"Only active accounts can hold a node role\": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.",
             "\"Member not found\": the pasted key is not a member of this community.",
@@ -887,6 +1119,14 @@
             "Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.",
             "Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm."
           ]
+        },
+        {
+          "type": "h2",
+          "text": "Every owner locked out"
+        },
+        {
+          "type": "p",
+          "text": "If the community has owners but none of them can sign in any more (phones and 12 words lost, no second owner, no break-glass code), whoever runs the server can make a member owner from the server's command line: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). The member must have joined first. It adds an owner and removes nobody, changes no setting, prints the new owner's break-glass code once, and tells every member in a critical notice that an owner was added from the server. See Signing in."
         },
         {
           "type": "h2",
@@ -1104,7 +1344,7 @@
             "**Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation.",
             "**Promote** and **Demote**: whether they can vouch for others.",
             "**Grant Operator**: lets them act for enterprises they are a keeper of.",
-            "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key.",
+            "**Re-Key**: for someone who lost their phone and their 12 words. You get a code starting RK-, valid for **24 hours**. Their old key stops working the moment you make the code, and they are suspended until the code is used on their new phone. Their balance, role and keeper places move to the new key. See Re-Key below.",
             "**Offboard**: the careful way out. It refuses while they have beans held in a deal or open requests. Money they are owed goes to the commons or to a member you choose (choosing a member needs a sign-in from the app, not the password). A debt is written off against the commons. Then they are removed.",
             "**Prune Account**: removes them at once. Their balance goes to the commons, and the commons pays any debt. Their posts come down, and their role and Pulse items go. It does not check for deals in progress, so prefer Offboard. Their record stays in the database, and so do the words, photos and places of their posts.",
             "**Prune Branch**: removes them and everyone they invited, and everyone those people invited. You type their name to confirm."
@@ -1148,13 +1388,33 @@
         },
         {
           "type": "h2",
+          "text": "Re-Key"
+        },
+        {
+          "type": "p",
+          "text": "Use Re-Key when someone has lost their phone and their 12 words, and you have checked in person that they are who they say. Someone who still has their 12 words doesn't need it: they restore them on the new phone."
+        },
+        {
+          "type": "p",
+          "text": "Opening Re-Key changes nothing. It shows the checklist, or the code that is already waiting. Only **Make a re-key code** does something: from that moment their old key stops working, they are signed out everywhere, and they are suspended until the code is used on their new phone. The code starts RK- and lasts **24 hours**; the window shows how long it has left."
+        },
+        {
+          "type": "p",
+          "text": "If they already moved to a new key, the window opens on **Already moved to** that key and the date. A new code would stop the phone they use now, so you type NEW CODE first. Do that only if the new phone is lost too."
+        },
+        {
+          "type": "p",
+          "text": "**Cancel this code** undoes a code nobody has used: their key works again and they can sign in again, and they are back to what they were before the code (active, or still suspended if they were suspended already). If a report suspended them, before or while the code waited, they stay suspended and the window says why; **Lift suspension** on their page lifts it if that's no longer right. A report dealt with without suspending them changes nothing. An admin can suspend them while the code waits, and that suspension stays after a cancel. Whoever may make the code may cancel it; for an owner or an admin, that is an owner. A code that was used or has run out can't be cancelled. A code made before this server kept the earlier status puts them back to active, unless a report may have suspended them (one dealt with before this server noted which reports did): then they stay suspended, the window says so, and **Lift suspension** lifts it. Completing the code doesn't lift a report's suspension either: their new key stays suspended until it is lifted."
+        },
+        {
+          "type": "h2",
           "text": "Things to know"
         },
         {
           "type": "ul",
           "items": [
             "A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as \"Deleted post\".",
-            "A Re-Key code that is never used leaves the person suspended in a way the Lift button cannot undo. Make a new Re-Key code instead.",
+            "A Re-Key code that runs out unused leaves the person suspended in a way neither the Lift button nor Cancel this code undoes. Make a new Re-Key code, then cancel it if they don't need it: they are back to what they were before the first code.",
             "The trust score shown on a member's page is not calculated yet. Do not act on it.",
             "Suspended members can still make invites from their app, where any member invites.",
             "While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.",
@@ -1166,7 +1426,7 @@
     {
       "slug": "running-a-known-community",
       "title": "Running a known community",
-      "summary": "The names list: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.",
+      "summary": "The names list and the known floor: your admins' list of who your members are by real name, sealed on admins' phones. Who can read it, what whoever runs your server can and can't do, its keys, confirming a member, the PDF copy, the access log, and what happens when an admin leaves or loses a phone.",
       "section": "people",
       "related": [
         "members-and-invites",
@@ -1185,7 +1445,7 @@
         },
         {
           "type": "p",
-          "text": "A confirmation is a fact about a member, not a trust badge, and for now it changes nothing else: no credit, no limits. Later versions will build on it."
+          "text": "A confirmation is a fact about a member, not a trust badge. On its own it changes nothing. If your owner turns on **the known floor** (below), it also gives that member a credit line."
         },
         {
           "type": "p",
@@ -1302,6 +1562,127 @@
         {
           "type": "p",
           "text": "When a member is removed, or deletes their account, their confirmation ends by itself. Their entry stays on the list until an admin deletes it."
+        },
+        {
+          "type": "h2",
+          "text": "Inviting a named person"
+        },
+        {
+          "type": "p",
+          "text": "In a known community you can invite someone by name, so they are confirmed the moment they join."
+        },
+        {
+          "type": "p",
+          "text": "Add their name to the list, or open their entry, and tap **Invite this person**. The app shows a QR code, an invite code and **Share**. Give it to them yourself: show the QR code, or send it to them. When they join with it, they are confirmed against that entry, by you."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Only an admin who could confirm someone against the entry can make it: an owner or admin whose phone holds the list's key.",
+            "With no signal (a hall, say), the app makes an offline ticket instead, with the entry in it. It confirms them the same way when they join, once your server sees it. A server older than this version can't read such a ticket: invite them once you have signal.",
+            "When you answer a request to join, you can add their name and invite them in one step.",
+            "One person, one entry: an entry with a member confirmed against it takes no new invite. If someone else is confirmed against the entry before your invite is used, the person who uses it still joins, but isn't confirmed; the entry says why, and you can confirm them by hand.",
+            "Your server sees only which entry the invite is for, never the name."
+          ]
+        },
+        {
+          "type": "h2",
+          "text": "The known floor"
+        },
+        {
+          "type": "p",
+          "text": "In a LETS, a member the committee knows can go into debt by an agreed amount from day one. The **known floor** is that amount here. Your owner sets it in the manager: **People & Safety → Invites & QR → The known floor**."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**The switch.** \"Confirmed members get the known floor\" is off in every community until an owner turns it on. While it is off, nobody's limit changes.",
+            "**The known floor.** 1,000 Beans to start: about 25 hours of work the community is trusting each confirmed member for. 40 Beans is an hour.",
+            "**The cap.** The most anyone here may owe, from every source together: the known floor, a vouch, and the trust they earn by trading. 2,000 Beans to start; an owner can raise it to 5,000. The known floor can't be more than the cap.",
+            "**One offer.** A confirmed member can use their whole known floor while they keep at least one offer listed. With none, they can't go below zero on it. Trust they earn by trading still opens up in steps as they list more offers, as it does for everyone.",
+            "**Who it applies to.** Only members with a confirmation from an admin. A confirmation waiting for a second admin doesn't count yet; one taken back stops counting at once.",
+            "**Enterprises.** An enterprise counts half of each confirmed keeper's known floor towards its own."
+          ]
+        },
+        {
+          "type": "h3",
+          "text": "One member's known floor"
+        },
+        {
+          "type": "p",
+          "text": "An owner or admin can set one member's known floor: lower it (a smaller limit while someone is new), freeze it, or raise it, but never above the cap. Nobody sets their own."
+        },
+        {
+          "type": "p",
+          "text": "It is in the manager: **People & Safety → Members**, tap the member, then **Known floor**. It shows their line now: the community default, lowered or raised to an amount, or frozen. Type a whole number of Beans, from 0 to the cap, and tap **Set**; or tap **Freeze** (their known floor counts as 0), or **Restore the default**. Each asks you to confirm first. An amount above the community's known floor is a raise: the manager says so before you confirm, and the log shows it as a raise. If the server refuses, the manager shows its reason as it gave it. The members list marks everyone whose known floor an admin changed. The panel shows only when the switch is on, and only to an owner or admin. It shows the member's credit line, never their balance."
+        },
+        {
+          "type": "p",
+          "text": "A change needs an owner or admin signed in with their own key, so the log can say who made it: the node password names nobody, and the server refuses a change made with it. The older built-in settings page signs in only with the password, so it has no known floor controls."
+        },
+        {
+          "type": "p",
+          "text": "**Lowering never takes Beans back.** A member already below their new limit keeps their balance. They can still receive and sell, and can spend again once they are back above it. The same happens to everyone in debt on the known floor if your owner turns the switch off."
+        },
+        {
+          "type": "h3",
+          "text": "Everyone sees the changes"
+        },
+        {
+          "type": "p",
+          "text": "Every change to the switch, the known floor, the cap and any member's known floor is a line in the known floor's log: who made it, for whom, and from what to what. Every owner and admin can read it. A raise above the community's known floor is its own line, so other admins notice."
+        },
+        {
+          "type": "h2",
+          "text": "Debts and a second chance"
+        },
+        {
+          "type": "p",
+          "text": "When a confirmed member leaves owing Beans, because the community removed them or they deleted their account, the Commons takes on their debt, as it always has. Your server also writes a **debt record** on their entry in the names list: how much, when they left, and whether it is open, settled or forgiven. The record names the entry, never the person: the name stays sealed on the admins' phones."
+        },
+        {
+          "type": "p",
+          "text": "While a record is open, nobody can be confirmed against that entry. If the person comes back, a second chance is an admin's decision, made with the history in front of them. There are three ways to settle a debt, as in a LETS:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Paid back.** The person, on their new account, pays the amount to the Commons for that debt. An admin then checks that payment against the record, and it is settled. A payment made for another debt, or for none, settles nothing, and no payment settles two debts.",
+            "**Worked off.** An admin confirms them with a known floor of 0 and a repayment flag. Once the confirmation counts (with a second admin's too, where your community asks for one), every Bean they receive above 0 goes to the Commons until the debt is cleared; then the flag lifts and the record is settled. The admin can raise their known floor after that. If an admin takes the confirmation back, the flag and the floor of 0 end with it: from then on they keep what they receive, and what they already repaid stays repaid.",
+            "**Forgiven.** The community votes on a Decision to forgive it. The record stays, marked forgiven, and an admin can confirm them again."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "**The rule binds the entry, not the person.** Your server can't read the names, so it can't tell when an admin adds a new entry for the same person and confirms them against that one instead. That rests on your admins' honesty; the access log shows who added and who confirmed each entry. The app doesn't yet warn an admin when a new entry's name matches one with an open debt."
+        },
+        {
+          "type": "p",
+          "text": "Nothing already spent is ever taken back from anyone. A debt record is deleted 3 years after the member left, whatever its status."
+        },
+        {
+          "type": "h2",
+          "text": "Community health"
+        },
+        {
+          "type": "p",
+          "text": "**Settings → People & Safety → Community health** shows the whole community's totals: Beans in circulation, the credit held and the debt owed, how many members are in debit, the Commons pot and this month's trades. Every owner and admin sees them; they are the community's, not any one member's."
+        },
+        {
+          "type": "p",
+          "text": "In a known community, an admin's phone also shows the **exceptions**: confirmed members who agreed to it when they joined, and whose balance is past the debt line (50% of their credit line unless you choose another) or who have been in debit with no sale for 60 days (unless you choose another). Each shows with their name from the names list, their balance and their credit line, so an admin who knows them can have a word, the way a LETS committee always has. The phone also lists the open debts of members who left. The exceptions show nothing of anyone's trades. What every admin can see of trades, in any community, is: a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud alert that names two members who buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; a fraud alert that names a member and the members they invited when those members send them Beans past a limit within a set number of days, with the Beans in total and how many of the members they invited have traded with no one but them; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with how much of the group's trading is with each other but no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name a member is logged the first time each admin opens them, and again at that admin's first look after 24 hours, and the looks in between add no line. Both go in Community health, as a list of its own beside the one where the owner and the admins see who opened the exceptions and who looked at a balance; a background check of the alerts, which shows no names, isn't a look and isn't logged. The member stats show how many posts each member has up and messages they have sent, and of trades only the whole community's totals, never one member's. Every member, admins included, sees each member's trust profile: how many of their trades were finished and how many were cancelled, and the share finished, how many Bean payments they have sent to or received from members plus the trades they have finished, with how many different members they have paid, been paid by or traded with, how many payments and trades they have done with the member looking, and their Trust Points. It isn't logged, because every member can see it. The join screen tells every member exactly that. There is no export of balances: if you truly need every balance, you run the server and have the database, and so does that responsibility."
+        },
+        {
+          "type": "p",
+          "text": "Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again; until a member agrees to the new ones, they show only within the lines they agreed to (a tighter line never reaches them without their say)."
+        },
+        {
+          "type": "p",
+          "text": "Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health."
+        },
+        {
+          "type": "p",
+          "text": "In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged."
         },
         {
           "type": "h2",
@@ -2342,6 +2723,8 @@
           "items": [
             "A server with no recovery code sends a backup that is not locked. The fleet manager keeps it as before: the latest database, and one copy a day for 30 days, and shows the server as \"Partial: database, no keys\". The same goes for a server that runs a BeanPool older than locked backups.",
             "A server with a recovery code sends a locked backup. The fleet manager keeps it as it came: the newest, and one a day for 30 days. It cannot open these files and does not need to.",
+            "It collects with a **Backups** automation token when that server's entry in manager-nodes.json has one (\"automationToken\"), and then sends no password. Without one it sends the admin password, as before. The token can take a full copy of the community: keep manager-nodes.json readable by the fleet manager's user only (chmod 600). See Automation tokens in Access & Security.",
+            "It never follows a redirect. If the server, or a proxy in front of it, answers with one, the collection fails and says where the redirect pointed: nothing is sent there and nothing from there is kept. Put the address the server answers on itself in manager-nodes.json. A standby does the same with BACKUP_PRIMARY_URL, for its copies, its replication token and the take-over keys.",
             "When a collection fails, it waits 5 minutes before asking that server again, then 10, doubling up to 6 hours.",
             "The copies are files in its data folder, under backups/(server name). A community server no longer lists, collects or hands out these copies itself: the old fleet manager pages (/api/manager/backups) were removed in October 2026."
           ]
@@ -2414,7 +2797,7 @@
             "On the standby, set NODE_ROLE=backup and BACKUP_PRIMARY_URL, and give it the token under **Live Backup Server** (or as BACKUP_REPLICATION_TOKEN in its .env). Saving it there is an owner's too, on the standby. A standby only takes a token. It never takes your admin password, so its disk and its backups never hold it.",
             "The token copies the whole database and fetches the locked take-over keys, and does nothing else: it cannot download a backup, and the server refuses it everywhere but the standby's own copying. It never gets your server's keys unlocked: nothing on the server hands them out in the clear any more. The copy of the database on the standby is not locked, though: that is what a standby is. Guard the standby's disk like a backup. Members' sign-in recovery copies in it stay locked with the main server's recovery-seal.key, which reaches a standby only inside the locked take-over keys. So does the global community's open-join.key: the standby copies the scrambled references to who joined with which sign-in account, and which key made them, never the key. When a member disconnects a sign-in or deletes their account, the standby deletes its copy too, at its next copy. When a member deletes their account, the standby wipes the words, photos and places of their posts at its next copy too.",
             "**Token-only** refuses the admin password for copying. A new server starts with it on. A server set up before this change has it off, so an older standby keeps working; Replication Access says so, and tells you when a standby last copied with the admin password. Tick **Require token** once every standby has the token.",
-            "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying.",
+            "An older standby that still holds your admin password swaps it for a token by itself when it starts, if your server has no token yet: it uses the password once, keeps the token and deletes the password. If it cannot, it keeps the password, warns in its log at every start, and shows a red notice under **Live Backup Server** saying why and whether it is still copying. While the reason may pass (your server unreachable, or its two-factor sign-in off), it tries again every hour, and each try writes the warning again: about 24 lines a day until you give it a token.",
             "That standby is **not copying** if your server has two-factor sign-in on, has token-only on, or no longer takes that password. It still copies with the password only if your server already has a token and token-only is off.",
             "To fix it either way: if you saved your server's token, paste it under **Live Backup Server** on the standby and save. If not, make a new one under **Replication Access** and paste it into every standby. The standby then deletes the password. If the password came from BACKUP_ADMIN_PASSWORD in the standby's .env, delete that line too.",
             "Copying goes one way only. Your main server never takes data from the standby.",
@@ -2962,7 +3345,11 @@
           "type": "ul",
           "items": [
             "You can claim a name ending in **.beanpool.org** here. Some names, such as big cities, wait for approval by the BeanPool project.",
+            "You can also give the name at install, before anyone signs in: docker compose exec beanpool-node beanpool claim --name NAME (see First-time setup). Your server claims it with its own key. Once your server has an address, it changes only here, by an owner.",
             "The usual way in is a tunnel: your server runs Cloudflare's tunnel program, cloudflared, inside its own container and dials out to Cloudflare, so it needs no open ports and its own address stays hidden. Nothing extra to install or start: it comes up as soon as the name is live. The other way points the name straight at your server, which needs a public IP address and port 443 open.",
+            "Claiming the name, changing the community's name or contact on it, and **Take offline** are an owner's: an owner signed in with their key, or the admin password, which counts as one. An admin sees the address and the tunnel, and can press **Restart tunnel** and **New tunnel key**; asked for the rest, the server answers \"Only an owner of this node can change its public address\".",
+            "Your server's key can hold a second name it doesn't use: the name asked for at install, if the address service gave it only after an owner had picked another one here. Your community stays on the name it has; it is never moved onto the other one. An owner sees one line about it: \"This community also holds NAME.beanpool.org from the install; it is not used. Release it?\" **Release** asks first (\"Release NAME.beanpool.org? Your community's address stays …\"), then lets go of that name only, never your community's address. If the address service answers about any other name, Settings says it was not released, and if that other name is your community's address, your server claims it straight back. If the address service can't release a single name by name (an older one), the line has no button.",
+            "Only an owner sees the tunnel's key (the **Tunnel Token**). Anyone holding it could answer at your address and see some of your visitors' traffic, owners' sign-ins included, so an admin sees \"Only an owner can see the tunnel token\" instead.",
             "The panel shows the tunnel as it is: connected, retrying and why, or not running. **Restart tunnel** restarts it; visitors' connections drop for a few seconds. If the BeanPool project re-makes your tunnel, your server picks up the new key by itself within a few minutes.",
             "Every few minutes the BeanPool address service checks that the name still answers with your server's key. If something else answers there instead, it **pauses** the name. That might be another BeanPool server, or, for about an hour, something that isn't a BeanPool server at all, such as a stranger's website. While the name is paused, visitors can't reach your community at that address. But the name stays yours, and nobody else can claim it. The panel says **Paused** and why.",
             "You don't need to do anything about a pause. Your server asks for the name back by itself within a few minutes. It gets it back as soon as it shows its own key, on a new tunnel that only your server is given, so whoever was answering there is cut off. The one exception is a pause by the BeanPool project itself: only the project can lift it.",
@@ -3408,7 +3795,7 @@
           "type": "ul",
           "items": [
             "The logs, with passwords, keys, 12-word phrases and internet addresses removed before they are written. The log keeps its newest 2,500 lines, and none older than 30 days.",
-            "The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected.",
+            "The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected. Its live traffic shows each message's kind, size, direction and time, never what it says: not who paid whom, an amount or a note.",
             "Reports, and the people they are about.",
             "On the global community, which accounts joined from the same internet connection within a day of each other (above). Moderators see this too."
           ]

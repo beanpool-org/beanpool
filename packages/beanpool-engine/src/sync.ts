@@ -474,6 +474,11 @@ export interface SyncCommunitySettings {
         door?: string | null;
         /** `true` where a confirmation against the names list needs two admins, or null for one (apps/server engine/names-list.ts). */
         names_two_admins?: string | null;
+        confirmation?: string | null;
+        known_floor?: string | null;
+        credit_cap?: string | null;
+        health_debt_line_pct?: string | null;
+        health_quiet_days?: string | null;
     };
     /** Fields of the `node_config` row's object: the service area and the directory's switches. */
     directory: {

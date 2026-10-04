@@ -76,11 +76,13 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 status: 'pending',
             },
         ],
+        // Each member's posts and messages; of trades, only the community's totals (queue item 29).
         memberStats: {
-            pk_alice_genesis_0000000000: { posts: 5, messages: 12, deals: 3, volume: 150, cancelled: 0 },
-            pk_bob_level1_000000000000: { posts: 2, messages: 4, deals: 1, volume: 50, cancelled: 0 },
-            pk_charlie_level2_0000000000: { posts: 1, messages: 1, deals: 0, volume: 0, cancelled: 1 },
+            pk_alice_genesis_0000000000: { posts: 5, messages: 12 },
+            pk_bob_level1_000000000000: { posts: 2, messages: 4 },
+            pk_charlie_level2_0000000000: { posts: 1, messages: 1 },
         },
+        tradeTotals: { deals: 4, volume: 200, cancelled: 1 },
         accounts: [
             { publicKey: 'pk_alice_genesis_0000000000', balance: 100 },
             { publicKey: 'pk_bob_level1_000000000000', balance: 50 },
@@ -129,8 +131,18 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
         expect(statsButtons[1]).toHaveAttribute('aria-expanded', 'true');
         expect(statsButtons[1]).toHaveAttribute('aria-label', 'Hide activity stats for Bob');
 
-        // Verify Branch stats card opened
+        // Verify Branch stats card opened: posts and messages, no member's or branch's trades
         expect(screen.getByText(/Branch \(2 members\)/i)).toBeInTheDocument();
+        const bobStats = document.getElementById('stats-pk_bob_level')!;
+        expect(bobStats).toHaveTextContent('Posts: 2');
+        expect(bobStats).toHaveTextContent('5 msgs');
+        expect(bobStats).not.toHaveTextContent(/deals|volume|cancelled/i);
+
+        // The community's trade totals, once
+        const totals = document.getElementById('community-trade-totals')!;
+        expect(totals).toHaveTextContent('Deals: 4');
+        expect(totals).toHaveTextContent('Volume: 200 Beans');
+        expect(totals).toHaveTextContent('Cancelled: 1');
 
         // Test Filter: 🤝 Vouchers
         const voucherFilterBtn = screen.getByRole('button', { name: /🤝 Vouchers/i });
@@ -318,9 +330,9 @@ describe('AncestryTreePanel Component (Bucket 2 Item 7)', () => {
                 ],
             },
             memberStats: {
-                pk_cycle_1: { posts: 10, volume: 100 },
-                pk_cycle_2: { posts: 5, volume: 50 },
-                pk_self_ref: { posts: 1, volume: 10 },
+                pk_cycle_1: { posts: 10, messages: 1 },
+                pk_cycle_2: { posts: 5, messages: 2 },
+                pk_self_ref: { posts: 1, messages: 3 },
             },
         };
 

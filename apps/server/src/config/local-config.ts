@@ -2,15 +2,19 @@
  * Local Configuration — Node Identity & Admin Auth
  *
  * First boot:
- *   - Reads ADMIN_PASSWORD env var → hashes with scrypt → saves to data/local-config.json
- *   - If no env var, auto-generates a random password and writes it to data/first-admin-password.txt (0600).
- *     Never printed: the log says only where the file is. Changing the password deletes the file.
+ *   - A new install makes no admin password (initAdminPassword): its first owner claims it with the claim code.
+ *   - An existing node keeps the password it has (scrypt hash in data/local-config.json). An older install's
+ *     data/first-admin-password.txt is never printed: the log says only where it is. Changing the password deletes it.
  *
  * Subsequent boots:
  *   - Loads existing config from disk (env var ignored)
  *
  * Password reset:
- *   - SSH in, delete data/local-config.json, restart container
+ *   - Change it in Settings (Access & Security). Locked out: `beanpool recover` on the server adds an owner, who signs in
+ *     with the app. Deleting data/local-config.json (or Wipe & Reset) leaves no admin password at all, old or from .env:
+ *     the server starts as a new install, with a claim code only if the community has no owner.
+ *   - scripts/rotate-node-env.sh ADMIN_PASSWORD=<new> on a node that has one: the next boot takes the new one
+ *     (initAdminPassword, joinedAt).
  */
 
 import { scryptSync, randomBytes, timingSafeEqual, randomInt, scrypt, createHash } from 'node:crypto';
@@ -19,10 +23,14 @@ import path from 'node:path';
 import { type GatewayConfig, DEFAULT_GATEWAY_CONFIG } from './gateway.js';
 import type { RecoveryCodeRecord } from '@beanpool/core';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { writeFileAtomic, fsyncDir } from '../write-file-atomic.js';
 export { type GatewayConfig, DEFAULT_GATEWAY_CONFIG };
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'local-config.json');
+// The last good copy: every save writes it after local-config.json, both atomically, so one of the two always parses.
+// It holds the same secrets as local-config.json and keeps its mode.
+export const CONFIG_BACKUP_PATH = `${CONFIG_PATH}.bak`;
 
 export interface LocalConfig {
     isLocked: boolean;
@@ -67,6 +75,14 @@ export interface LocalConfig {
     // public-address agent claims <name>.beanpool.org with the node's own key, as it does for PUBLIC_ADDRESS_NAME (the env
     // wins when both are set). Cleared once the registrar holds the name; `refused` keeps the registrar's reason.
     addressRequest?: { name: string; mode: 'tunnel'; contact?: string | null; requestedAt: number; refused?: string | null } | null;
+    // The name of the latest such request that ended without the registrar giving it here (the owner's claim or Take
+    // offline, another address held): a late answer about it never brings the community onto it (tunnel-connector.ts
+    // answersAboutAnotherName).
+    // Superseded by turnedAwayNames (config/turned-away-names.ts reads it into the list, and clears it at the next write).
+    endedAddressRequest?: { name: string; at: number } | null;
+    // The latest names this server turned away (config/turned-away-names.ts): never stored from a registrar answer while
+    // nothing is stored here.
+    turnedAwayNames?: { name: string; at: number; why: 'install-request-ended' | 'request-replaced' | 'claim-replaced' | 'late-claim' | 'taken-offline' | 'unanswered' }[] | null;
     replicationTokenHash?: string | null;
     replicationTokenSalt?: string | null;
     replicationTokenCreatedAt?: number | null;
@@ -95,6 +111,11 @@ export interface LocalConfig {
     // All normal admin routes require a cryptographic key session.
     // Default false during migration rollout.
     breakGlassMode?: boolean;
+    // --- The admin password, retired for good (node sign-in design step 10, POST /api/local/admin/auth/retire-password) ---
+    // Set once by an owner's key; never cleared by any route, Wipe & Reset or a restart. While set, adminHash and salt stay
+    // null, every password path answers 403 password_retired, and ADMIN_PASSWORD in .env is ignored (initAdminPassword).
+    // `by` is the owner's member key; `acceptedOneOwner` when they retired it as the only owner.
+    passwordRetired?: { at: number; by: string; byCallsign: string | null; acceptedOneOwner?: boolean } | null;
     // --- Sealed keys (scratch/overnight/design/sealed-keys.md §2.6) ---
     // The PUBLIC record of the printed recovery code: codeId, the X25519 public key scrypt(code) derives, the
     // salt and cost. It seals, it never opens. The code itself is shown once and never stored anywhere.
@@ -190,26 +211,96 @@ export interface AutomationTokenRecord {
     hash: string;
 }
 
-export function getLocalConfig(): LocalConfig {
+/**
+ * local-config.json is there but does not parse, and neither does the last good copy: the server stops rather than
+ * start as a new install. Defaults would forget the community's address, name, owners' settings, role and retired
+ * password, and the next save would write them over the file for good.
+ */
+export class LocalConfigUnreadableError extends Error {}
+
+/** What the last start found, when local-config.json was broken and the last good copy took its place. */
+let restoredFromBackup: { at: string; why: string; brokenCopy: string | null } | null = null;
+export function localConfigRestoredNotice(): typeof restoredFromBackup { return restoredFromBackup; }
+
+/** The file's config, or why it isn't one (an empty or cut-off file, JSON that isn't an object). */
+function parseConfigFile(file: string): { config: LocalConfig } | { error: string } {
     try {
-        if (fs.existsSync(CONFIG_PATH)) {
-            const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8')) as LocalConfig;
-            
-            // Backward compatibility for demurrage -> circulation renaming
-            if (raw.thresholds) {
-                if (raw.thresholds.demurrageRate !== undefined && raw.thresholds.circulationRate === undefined) {
-                    raw.thresholds.circulationRate = raw.thresholds.demurrageRate;
-                }
-                if (raw.thresholds.demurrageEpochDays !== undefined && raw.thresholds.circulationEpochDays === undefined) {
-                    raw.thresholds.circulationEpochDays = raw.thresholds.demurrageEpochDays;
-                }
-            }
-            return raw;
-        }
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { error: 'not a JSON object' };
+        return { config: parsed as LocalConfig };
     } catch (e) {
-        console.warn('[Config] Failed to read local config:', e);
+        return { error: (e as Error).message };
     }
-    return { ...DEFAULT_CONFIG };
+}
+
+/**
+ * local-config.json is there and broken: take the last good copy, put it back in place (the broken file is kept
+ * beside it for a look), and say so loudly. Neither parses: fail closed.
+ */
+function restoreFromBackup(why: string): LocalConfig {
+    const backup = fs.existsSync(CONFIG_BACKUP_PATH) ? parseConfigFile(CONFIG_BACKUP_PATH) : { error: 'there is none' };
+    if (!('config' in backup)) {
+        const msg = `${CONFIG_PATH} is unreadable (${why}) and its last good copy ${CONFIG_BACKUP_PATH} is too (${backup.error}). `
+            + 'This server will not start as a new install over it: that would forget its address and settings. '
+            + 'Put back a good local-config.json (from a backup) and restart.';
+        console.error(`🛑 [Config] ${msg}`);
+        throw new LocalConfigUnreadableError(msg);
+    }
+    let brokenCopy: string | null = `${CONFIG_PATH}.broken-${Date.now()}`;
+    try { fs.copyFileSync(CONFIG_PATH, brokenCopy); } catch { brokenCopy = null; }
+    try {
+        writeFileAtomic(CONFIG_PATH, JSON.stringify(backup.config, null, 2));
+    } catch (e) {
+        console.error('[Config] Could not put the last good copy back in place (this start uses it anyway):', e);
+    }
+    restoredFromBackup = { at: new Date().toISOString(), why, brokenCopy };
+    console.error(`🛑 [Config] ${CONFIG_PATH} was unreadable (${why}). This server started from its last good copy, `
+        + `${CONFIG_BACKUP_PATH}: the community's address and settings are as they were at the last save.`
+        + (brokenCopy ? ` The broken file is kept as ${brokenCopy}.` : ''));
+    return backup.config;
+}
+
+export function getLocalConfig(): LocalConfig {
+    // No file: a new install (or one wiped on purpose). A file that is there always parses, since every save replaces it
+    // whole (writeFileAtomic); one that doesn't was broken some other way, and never reads as a new install.
+    if (!fs.existsSync(CONFIG_PATH)) return { ...DEFAULT_CONFIG };
+    const read = parseConfigFile(CONFIG_PATH);
+    const raw = 'config' in read ? read.config : restoreFromBackup(read.error);
+
+    // Backward compatibility for demurrage -> circulation renaming
+    if (raw.thresholds) {
+        if (raw.thresholds.demurrageRate !== undefined && raw.thresholds.circulationRate === undefined) {
+            raw.thresholds.circulationRate = raw.thresholds.demurrageRate;
+        }
+        if (raw.thresholds.demurrageEpochDays !== undefined && raw.thresholds.circulationEpochDays === undefined) {
+            raw.thresholds.circulationEpochDays = raw.thresholds.demurrageEpochDays;
+        }
+    }
+    return raw;
+}
+
+/**
+ * The local-config.json in another data dir (a restore writing into one), or its last good copy when it is broken; {}
+ * when there is neither. One there that doesn't parse, with no good copy beside it, throws: never read as empty.
+ */
+export function readLocalConfigFileIn(dir: string): Record<string, unknown> {
+    const file = path.join(dir, 'local-config.json');
+    if (!fs.existsSync(file)) return {};
+    const read = parseConfigFile(file);
+    if ('config' in read) return read.config as unknown as Record<string, unknown>;
+    const backup = parseConfigFile(`${file}.bak`);
+    if ('config' in backup) {
+        console.error(`🛑 [Config] ${file} was unreadable (${read.error}): its last good copy is used instead.`);
+        return backup.config as unknown as Record<string, unknown>;
+    }
+    throw new LocalConfigUnreadableError(`${file} is unreadable (${read.error}), and so is its last good copy (${backup.error})`);
+}
+
+/** Write another data dir's local-config.json and its last good copy, as saveLocalConfig does this server's. */
+export function writeLocalConfigFileIn(dir: string, config: Record<string, unknown>, mode: number): void {
+    const json = JSON.stringify(config, null, 2);
+    writeFileAtomic(path.join(dir, 'local-config.json'), json, { mode });
+    writeFileAtomic(path.join(dir, 'local-config.json.bak'), json, { mode });
 }
 
 export function saveLocalConfig(config: LocalConfig): void {
@@ -221,7 +312,12 @@ export function saveLocalConfig(config: LocalConfig): void {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+        // Atomic, so no reader and no crash sees half a file; then the last good copy, the same way.
+        const json = JSON.stringify(config, null, 2);
+        writeFileAtomic(CONFIG_PATH, json);
+        let mode: number | undefined;
+        try { mode = fs.statSync(CONFIG_PATH).mode & 0o777; } catch { /* just written */ }
+        writeFileAtomic(CONFIG_BACKUP_PATH, json, { mode });
     } catch (e) {
         console.error('[Config] Failed to save local config:', e);
     }
@@ -340,10 +436,10 @@ export function generateStrongPassword(): string {
 }
 
 // ===================== FIRST ADMIN PASSWORD =====================
-// The password a first boot makes up when .env has no ADMIN_PASSWORD. It is never printed: in Docker stdout IS the
-// container log, which outlives the password (docker logs, log shippers, support bundles, screenshots), and the
-// admin password counts as an owner. It goes in this file, readable by the server's user only, until the password
-// is changed. Backups never carry it: they take named files only.
+// The password an older version's first boot made up when .env had no ADMIN_PASSWORD (a new install makes none now:
+// initAdminPassword). It was never printed: in Docker stdout IS the container log. It went in this file, readable by the
+// server's user only, until the password is changed; an install that still has it is reminded at boot. Backups never
+// carry it: they take named files only.
 
 export const FIRST_PASSWORD_FILE = 'first-admin-password.txt';
 
@@ -354,43 +450,6 @@ export function firstPasswordPath(): string {
 /** The command that reads the file. The image keeps its data in /data (Dockerfile, docker-compose.yml). */
 function firstPasswordReadCommand(file: string): string {
     return DATA_DIR === '/data' ? `docker compose exec beanpool-node cat ${file}` : `cat ${file}`;
-}
-
-/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
-function fsyncDir(dir: string): void {
-    let fd: number | null = null;
-    try {
-        fd = fs.openSync(dir, 'r');
-        fs.fsyncSync(fd);
-    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
-        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
-    }
-}
-
-/**
- * Write the file whole or not at all: a fresh 0600 temp file beside it, renamed over it. A file left from an earlier
- * password is replaced. Throws when it cannot be written; the error names the file, never the password.
- */
-function writeFirstPasswordFile(password: string): void {
-    const target = firstPasswordPath();
-    const tmp = `${target}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        const fd = fs.openSync(tmp, 'wx', 0o600);
-        try {
-            fs.writeSync(fd, password + '\n');
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-        fs.chmodSync(tmp, 0o600);
-        fs.renameSync(tmp, target);
-    } catch (e) {
-        try { fs.rmSync(tmp, { force: true }); } catch { /* never made */ }
-        throw new Error(`[Config] Could not write the first admin password to ${target} (${(e as NodeJS.ErrnoException).code || 'error'}). ` +
-            'Nothing was saved, so the next start makes one again. Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
-    }
-    fsyncDir(DATA_DIR);
 }
 
 /**
@@ -436,33 +495,86 @@ function checkFirstPasswordFile(config: LocalConfig): void {
 }
 
 /**
- * Initialize admin password on first boot.
- * - If config already locked → skip (password already set), but look at the first-password file if it is there
- * - If ADMIN_PASSWORD env var set → hash and save
- * - If no env var → auto-generate, write it to the first-password file, and log only where it is
+ * Whether this server has an admin password: its hash, never isLocked alone. A take-over's admin-settings step
+ * (services/takeover.ts) and a sealed restore (services/sealed-backup.ts) write the hash without isLocked, so onto a new
+ * install (never locked) it arrives unlocked; the next boot locks it (initAdminPassword).
+ */
+export function hasAdminPassword(config: LocalConfig): boolean {
+    return !!(config.adminHash && config.salt);
+}
+
+/**
+ * The admin password at boot (node sign-in step 8: no password on new installs).
+ * - passwordRetired (an owner retired it, routes/admin.ts retire-password) → none, for good, before every rule below:
+ *   ADMIN_PASSWORD in .env is ignored, any hash left is cleared, the first-password file deleted
+ * - Config locked, or a hash in it (hasAdminPassword) → an existing node: its password stays exactly as it is, and the
+ *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here. A lock
+ *   with no hash (an older locked server that took over a community with no password) stays, and no password is made:
+ *   only the hash ever counts as having one (hasAdminPassword)
+ * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
+ *   Reset clears it) → an existing node whose password is being rotated: scripts/rotate-node-env.sh unlocks the config
+ *   and drops the hash, then restarts it with the new ADMIN_PASSWORD, which is taken as before. Never read as a new
+ *   install (deciding review r4176337954). With no ADMIN_PASSWORD it has none until one is set and it restarts.
+ * - Otherwise → a new install (no local-config.json, or one never locked, or a Wipe & Reset): no password is made and
+ *   ADMIN_PASSWORD in .env is ignored. The claim code (claim-code.ts) is the only way to the first owner. Such a node is
+ *   never locked here, so a claimed node rebooted with ADMIN_PASSWORD set still has none.
+ * - The server suites' fresh data dirs still take ADMIN_PASSWORD when BEANPOOL_SUITE_ENV_PASSWORD=1
+ *   (scripts/server-suites.mjs DEFAULT_ENV): the old first boot, kept for the suites that sign in with a password
  */
 export function initAdminPassword(): void {
     const config = getLocalConfig();
 
-    if (config.isLocked) {
-        console.log('🔒 Node is locked — admin password already configured.');
+    // Retired for good: no password is made, read from .env or kept. A redeploy with ADMIN_PASSWORD still in .env must
+    // never bring it back. Before every other rule: a retired node is neither an existing node nor a new install here.
+    if (config.passwordRetired) {
+        console.log(process.env.ADMIN_PASSWORD
+            ? '🔒 The admin password was retired: ADMIN_PASSWORD in .env is ignored. Sign in with a phone; remove it from .env.'
+            : '🔒 The admin password was retired: sign in with a phone.');
+        if (config.adminHash || config.salt) updateLocalConfig({ adminHash: null, salt: null });
+        removeFirstPasswordFile('The admin password was retired');
+        return;
+    }
+
+    if (config.isLocked || hasAdminPassword(config)) {
+        if (!config.isLocked) {
+            updateLocalConfig({ isLocked: true });
+            console.log('🔒 This server holds an admin password a take-over or a restore brought, so it is locked now.');
+        }
+        if (hasAdminPassword(config)) {
+            console.log('🔒 Node is locked — admin password already configured.');
+        } else {
+            // Locked with no hash behind it: an older server, locked with its own password, that took over a community with
+            // none (isLocked is per-server; the take-over brings the community's hash, here none). No password signs in.
+            console.log('🔒 This server is locked but holds no admin password: its community has none, so no password signs in, ADMIN_PASSWORD from .env included. Owners sign in with the BeanPool app.');
+        }
         checkFirstPasswordFile(config);
         return;
     }
 
-    let password = process.env.ADMIN_PASSWORD;
-    const generated = !password;
+    // A password was set on this server once: its rotation (above), never a new install.
+    const rotating = config.joinedAt != null;
+    if (rotating && !process.env.ADMIN_PASSWORD) {
+        console.warn('⚠️  This server had an admin password, and its lock was cleared for a new one (scripts/rotate-node-env.sh), but .env has no ADMIN_PASSWORD.');
+        console.warn('   It has no admin password until you set ADMIN_PASSWORD in .env and restart. Owners still sign in with the BeanPool app; `beanpool recover` adds an owner.');
+        return;
+    }
 
-    if (password) {
-        const validation = validatePasswordStrength(password);
-        if (!validation.valid) {
-            throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);
+    if (!rotating && (!process.env.ADMIN_PASSWORD || process.env.BEANPOOL_SUITE_ENV_PASSWORD !== '1')) {
+        if (process.env.ADMIN_PASSWORD) {
+            console.log('🔑 ADMIN_PASSWORD in .env is ignored: a new install has no admin password. Claim this community with its one-time claim code: run `beanpool claim` on this server.');
         }
-    } else {
-        password = generateStrongPassword();
-        // Before the config is locked: if the file cannot be written this throws with nothing saved, and the
-        // next start tries again. Never a fall back to printing it.
-        writeFirstPasswordFile(password);
+        // First boot of a new install: standbys copy with a replication token only, never the admin password.
+        if (config.replicationTokenOnly === undefined) updateLocalConfig({ replicationTokenOnly: true });
+        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
+        checkFirstPasswordFile(config);
+        return;
+    }
+
+    // A rotation, or the suites' seam: the old first boot with the password from .env.
+    const password = process.env.ADMIN_PASSWORD!;
+    const validation = validatePasswordStrength(password);
+    if (!validation.valid) {
+        throw new Error(`[Config] ADMIN_PASSWORD environment variable is invalid: ${validation.error}`);
     }
 
     const { hash, salt } = hashPassword(password);
@@ -473,36 +585,12 @@ export function initAdminPassword(): void {
         adminHash: hash,
         salt: salt,
         joinedAt: Date.now(),
-        // First boot of a new install: standbys copy with a replication token only, never
-        // the admin password. Existing installs never reach this line (isLocked above), so
-        // their setting is left as it is.
         replicationTokenOnly: config.replicationTokenOnly ?? true,
     };
     saveLocalConfig(saved);
 
-    if (generated && getLocalConfig().adminHash !== hash) {
-        // saveLocalConfig logs a failed write and carries on. Unsaved, the file would hold a password that does not
-        // work, and the next start makes another: take it away and stop here, as when the file cannot be written.
-        fs.rmSync(firstPasswordPath(), { force: true });
-        throw new Error(`[Config] Could not save the admin password to ${CONFIG_PATH}, so none was made. ` +
-            'Check the data folder is writable and has free space, or set ADMIN_PASSWORD in .env.');
-    }
-
     console.log('🔒 Admin password configured and saved.');
-
-    if (generated) {
-        const file = firstPasswordPath();
-        console.log('');
-        console.log('🔑 No ADMIN_PASSWORD was set, so this server made up an admin password. It is not in this log.');
-        console.log(`   It is in ${file}, which only the server's own user can read.`);
-        console.log(`   Read it with: ${firstPasswordReadCommand(file)}`);
-        console.log('   Sign in at /settings with it, then change it in Settings → Appliance & Data → Access & Security.');
-        console.log('   The file is deleted when you do.');
-        console.log('');
-    } else {
-        // A file left by an earlier install whose config was deleted: it holds a password this one does not use.
-        checkFirstPasswordFile(saved);
-    }
+    checkFirstPasswordFile(saved);
 }
 
 // ===================== REPLICATION TOKEN =====================
@@ -565,7 +653,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */
@@ -761,6 +849,11 @@ export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayCon
     saveLocalConfig(config);
     console.log('⚙️ Gateway configuration updated:', merged);
     return merged;
+}
+
+/** Whether an owner retired the admin password for good (passwordRetired). */
+export function isPasswordRetired(): boolean {
+    return !!getLocalConfig().passwordRetired;
 }
 
 export function isBreakGlassMode(): boolean {

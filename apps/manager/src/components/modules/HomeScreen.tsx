@@ -70,13 +70,9 @@ export function HomeScreen({
         if (typeof nodeData?.circulation === 'number') {
             return nodeData.circulation.toFixed(1);
         }
-        if (nodeData?.memberStats && typeof nodeData.memberStats === 'object') {
-            const stats = Object.values(nodeData.memberStats as Record<string, { volume?: number }>);
-            const totalVol = stats.reduce(
-                (sum, s) => sum + (s && typeof s.volume === 'number' ? s.volume : 0),
-                0
-            );
-            return (totalVol / 2).toFixed(1);
+        // The community's completed trade volume, each trade once: member stats carry no member's trades (queue item 29).
+        if (typeof nodeData?.tradeTotals?.volume === 'number') {
+            return nodeData.tradeTotals.volume.toFixed(1);
         }
         return '0.0';
     })();

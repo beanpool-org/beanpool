@@ -91,7 +91,7 @@ export interface RegistrarNameLost {
  *  - `status`: it doesn't store it. Written on the entry it names, or on the current one when it names none (`none`);
  *    never adds a name.
  *  - `released`: Settings → Take offline answered. The name released (the answer's, else the current one) becomes
- *    former, with when and until when it is held.
+ *    former, with when and until when it is held; the current one becomes former too.
  */
 export type RegistrarAnswerUse = 'stored' | 'claim' | 'status' | 'released';
 
@@ -99,7 +99,7 @@ export const MAX_REGISTRAR_NAMES = 50;
 /** The registrar statuses of this key's own row in which the row holds the name for this key. */
 export const HOLDING_STATUSES: ReadonlySet<string> = new Set(['live', 'pending', 'paused', 'blocked']);
 /** The registrar's hold on a name its owner released (RELEASE_COOLOFF_S), when its answer doesn't say. */
-const REGISTRAR_ZONE = 'beanpool.org';
+export const REGISTRAR_ZONE = 'beanpool.org';
 
 let version = 0;
 /** Moves on every write, so a cached list of this community's names (own-addresses.ts) is read again at once. */
@@ -276,6 +276,10 @@ export function recordRegistrarAnswer(answer: unknown, use: RegistrarAnswerUse, 
         }
     } else {
         const entry = find(host) ?? current();
+        // Nothing is stored after a release, so nothing stays current: also when the answer names another name than the
+        // stored one (a registrar older than #1116 releases the key's first name, whichever was asked).
+        const cur = current();
+        if (cur && cur !== entry) makeFormer(cur);
         if (entry) {
             makeFormer(entry);
             entry.status = status;

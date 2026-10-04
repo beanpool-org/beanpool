@@ -38,12 +38,14 @@ import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { completeRekey } from '../engine/member-wizards.js';
 import { pushKeyHex } from '../engine/push-notices.js';
+import { boundInviteCodesOf } from '../engine/names-list.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
+    isPasswordRetired,
 } from '../config/local-config.js';
 import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
@@ -78,7 +80,7 @@ import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
 import { doorRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
-import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
+import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
@@ -121,9 +123,14 @@ router.get('/api/local/status', async (ctx) => {
     ctx.set('Access-Control-Allow-Origin', '*');
     
     ctx.body = {
-        isLocked: config.isLocked,
+        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
+        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
+        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
         location: config.location || null,
+        // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
+        // manager knows to use a token. Absent on a node from before.
+        passwordRetired: !!config.passwordRetired,
     };
 });
 
@@ -131,6 +138,7 @@ router.get('/api/local/status', async (ctx) => {
 
 router.post('/api/local/verify-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     const body = (ctx as any).requestBody || {};
     const password = body.password;
     const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
@@ -365,6 +373,8 @@ router.post('/api/funnel-event', async (ctx) => {
 
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    // Retired for good: no route sets a password again, a key session's included.
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
     // written (below).
     const replacing = getLocalConfig();
@@ -439,24 +449,36 @@ router.post('/api/local/change-password', async (ctx) => {
 
 // ===================== DASHBOARD API =====================
 
+// The identity is public, as /api/local/status and libp2p already make it. The peer links are for this node's admins
+// only (GET /api/local/connectors, below). A caller that sends no admin credential gets the identity; one that sends a
+// credential has it checked as any admin route does, and is refused if it doesn't open one.
 router.get('/api/local/dashboard', async (ctx) => {
     const config = getLocalConfig();
     const node = getP2PNode();
-
-    ctx.body = {
-        identity: {
-            peerId: node?.peerId?.toString() || 'unknown',
-            callsign: config.callsign,
-            location: config.location,
-            joinedAt: config.joinedAt,
-        },
-        connectors: getConnectors(),
+    const identity = {
+        peerId: node?.peerId?.toString() || 'unknown',
+        callsign: config.callsign,
+        location: config.location,
+        joinedAt: config.joinedAt,
     };
+
+    if (!(await checkAdminAuth(ctx as any))) {
+        if (!(ctx.body as any)?.notSignedIn) return;
+        ctx.status = 200;
+        ctx.body = { identity };
+        return;
+    }
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
+    ctx.body = { identity, connectors: getConnectors() };
 });
 
 // ===================== CONNECTOR API =====================
 
+// Which peers are blocked, with their addresses, the credit extended to each, the trust levels and the links' errors:
+// the community's federation posture, so admin only, as the routes that change it are (#1564 review NB3).
 router.get('/api/local/connectors', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
     ctx.body = getConnectors();
 });
 
@@ -766,9 +788,11 @@ router.post('/api/local/reset', async (ctx) => {
         communityName: null,
         contactEmail: null,
         contactPhone: null,
+        // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
+        ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
     });
-    // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
-    // .env, or makes up a new one in a new file.
+    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
+    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
     if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
 
     ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };
@@ -1241,7 +1265,10 @@ router.get('/api/invite/mine/:publicKey', async (ctx) => {
         ctx.body = { error: 'You may only read your own invites' };
         return;
     }
-    const invites = getInvitesByMember(publicKey);
+    // An invite bound to a names-list entry goes to its maker alone, whatever ENFORCE_READ_AUTH says: redeemed by anyone
+    // else's key, it would confirm that key against the entry, by the maker (engine/names-list.ts readBoundInvites).
+    const bound = ctx.state.actor === publicKey ? null : boundInviteCodesOf(publicKey);
+    const invites = getInvitesByMember(publicKey).filter((i) => !bound?.has(i.code));
     ctx.body = { invites };
 });
 

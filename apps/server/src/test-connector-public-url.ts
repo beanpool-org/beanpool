@@ -31,10 +31,14 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
 const PW = 'TestAdmin123!';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
+// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || '.';
 const CONNECTORS_PATH = path.join(DATA_DIR, 'connectors.json');
 
@@ -47,7 +51,7 @@ function assert(cond: boolean, msg: string): void {
 async function addConnectorOverHttp(body: Record<string, unknown>): Promise<{ status: number; json: any }> {
     const res = await fetch(`${BASE}/api/local/connectors`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: PW, trustLevel: 'peer', ...body }),
+        body: JSON.stringify({ password: PW, ...(tfa ? { totpCode: tfa.code() } : {}), trustLevel: 'peer', ...body }),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -92,6 +96,10 @@ async function main() {
     // ── 2. Derivation from each address shape an operator can actually type. ─────────────────────────────
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
+    const alone = await addConnectorOverHttp({ address: '/ip4/10.9.9.9/tcp/4001/p2p/12D3KooWPasswordAlone', callsign: 'z' });
+    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa' && !cm.getConnectorByAddress('/ip4/10.9.9.9/tcp/4001/p2p/12D3KooWPasswordAlone'),
+        `2-. 2FA off: the password alone → 403 password_needs_2fa, no connector added (got ${alone.status} ${alone.json?.code})`);
+    tfa = turnOn2faForTests(PW);
 
     const ip4 = await addConnectorOverHttp({ address: '/ip4/10.1.2.3/tcp/4001/p2p/12D3KooWDerivIp4', callsign: 'a' });
     assert(ip4.json?.connector?.publicUrl === 'https://10.1.2.3',

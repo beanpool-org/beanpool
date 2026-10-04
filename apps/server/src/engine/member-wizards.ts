@@ -22,7 +22,7 @@
  */
 
 import crypto from 'node:crypto';
-import { db, deletePlainRows } from '../db/db.js';
+import { db, deletePlainRows, writeTombstone } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
@@ -65,6 +65,8 @@ export interface RekeyRequestRow {
     created_at: string;
     expires_at: string;
     completed_at: string | null;
+    /** The member's status before the code suspended them (cancelRekeyCode); null on a code made before it was kept. */
+    prior_status?: string | null;
 }
 
 export interface RekeyAuditLogRow {
@@ -220,6 +222,18 @@ export function issueRekeyCode(
 
     // Atomic issuance & invalidation
     db.transaction(() => {
+        // The status a cancel puts back (cancelRekeyCode). A code made while an earlier one still holds the member
+        // suspended (pending, or expired with its key still 'rekey_pending') keeps that earlier code's: the 'suspended'
+        // the earlier code wrote is not the member's own.
+        const stillHeld = getInvalidatedKeyInfo(cleanOld)?.reason === 'rekey_pending';
+        const earlier = stillHeld
+            ? (db.prepare(`
+                SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+                ORDER BY created_at DESC, id DESC LIMIT 1
+            `).get(cleanOld) as { prior_status: string | null } | undefined)
+            : undefined;
+        const priorStatus = earlier ? earlier.prior_status : (member.status || 'active');
+
         // Cancel any existing pending requests for this member
         db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE old_pubkey = ? AND status = 'pending'").run(cleanOld);
 
@@ -237,9 +251,9 @@ export function issueRekeyCode(
 
         // Insert new pending rekey request
         db.prepare(`
-            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at)
-            VALUES (?, ?, ?, 'pending', ?, ?)
-        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso);
+            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at, prior_status)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso, priorStatus);
 
         // Write system log: that a code was made, for whom and when, never the code (FABLE-sec-errors M1). It binds any
         // new key to this member for a day; the operator who made it has it in the answer, and a log is read by other
@@ -334,6 +348,9 @@ export function completeRekey(
         throw new Error('Old member record not found');
     }
 
+    // A suspension the code didn't make (a report's, before or while it waited) stays on the new key. The key move
+    // makes the new key 'active' unless 'disabled', which is right only for the code's own 'suspended'.
+    const keepSuspended = member.status === 'suspended' && !suspendedOnlyByRekeyCode(cleanOld);
     const nowIso = new Date().toISOString();
     /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
     let blockListsMoved: string[] = [];
@@ -353,6 +370,7 @@ export function completeRekey(
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
         // follows with too), each row stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
+        if (keepSuspended) db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanNew);
 
         // What the main server moves by rules of its own, each stamped so the move replicates.
         // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.
@@ -433,6 +451,145 @@ export function completeRekey(
         newPubkey: cleanNew,
         callsign: member.callsign,
     };
+}
+
+/**
+ * For a code made before codes kept the member's earlier status: whether a report may have suspended this member. A
+ * report's action records whether it suspended them (abuse_reports.suspended_member, state-engine.ts actionReport): one
+ * that did counts, one that didn't doesn't, and one actioned before that was kept isn't known, so it counts. Its member
+ * is read as actionReport's reportSubjectOf reads it, more widely: the reported key, a reported post's author or a
+ * reported Pulse item's owner.
+ */
+function reportMaySuspend(publicKey: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM abuse_reports r
+        WHERE r.status = 'actioned' AND (r.suspended_member IS NULL OR r.suspended_member = 1)
+          AND (r.target_pubkey = ?
+               OR r.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)
+               OR r.target_pulse_item_id IN (SELECT id FROM pulse_items WHERE owner_pubkey = ?))
+        LIMIT 1
+    `).get(publicKey, publicKey, publicKey);
+}
+
+/**
+ * Whether a member's 'suspended' is a re-key code's alone: their key is held for the re-key (a code waiting, or expired
+ * with the hold left), and the status the code recorded from before it isn't a report's 'suspended' (for a code made
+ * before that was kept, no report may have suspended them, reportMaySuspend). An admin's emergency suspension may be made
+ * over it (decisions-engine.ts adminEmergencySuspend): its 'disabled' replaces the code's 'suspended', and a cancel
+ * leaves it alone.
+ */
+export function suspendedOnlyByRekeyCode(publicKey: string): boolean {
+    const cleanPub = publicKey.trim().toLowerCase();
+    const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanPub) as { status: string } | undefined;
+    if (member?.status !== 'suspended') return false;
+    if (!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(cleanPub)) return false;
+    const req = db.prepare(`
+        SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+        ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanPub) as { prior_status: string | null } | undefined;
+    if (!req) return false;
+    return req.prior_status === null ? !reportMaySuspend(cleanPub) : req.prior_status !== 'suspended';
+}
+
+/** A refusal with the HTTP status its route answers. */
+function refusal(status: number, message: string): Error {
+    const err: any = new Error(message);
+    err.status = status;
+    return err;
+}
+
+/**
+ * Undoes issueRekeyCode for a code nobody has used: the code is cancelled, the member's key is no longer stopped
+ * ('rekey_pending' row gone), and the member's status is what it was before the code (rekey_requests.prior_status).
+ * Who may make the code may cancel it (assertMayRekey: an owner for an owner's or admin's). A code made before the
+ * prior status was kept puts the member back to 'active' only if the code is what suspended them ('suspended' with the
+ * key held for the re-key) and no report on them may have (reportMaySuspend), and the answer says so. A member a report
+ * suspended, before or while the code waited, stays suspended (the answer says why), and Lift suspension on their page
+ * lifts it (decisions-engine.ts adminLiftSuspension). The sessions issue ended stay ended; the key signs in again.
+ *
+ * One transaction, and each write must touch exactly the rows it expects, or nothing is changed. A used ('completed')
+ * or expired code is refused: there is nothing waiting to cancel.
+ */
+export function cancelRekeyCode(
+    oldPublicKey: string,
+    operatorPubkey: string,
+): { cancelled: true; oldPubkey: string; callsign: string; status: string; note?: string } {
+    assertPlainTablesWritable();
+    assertNotMisspeltRow(oldPublicKey);
+    const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
+    const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
+    const req = db.prepare(`
+        SELECT * FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanOld) as RekeyRequestRow | undefined;
+    // Asked before the member: a used code moved the member’s row to the new key.
+    if (req?.status === 'completed') {
+        throw refusal(409, 'This code was already used: the member has moved to their new key, so it can’t be cancelled.');
+    }
+    const member = getMember(cleanOld);
+    if (!member) throw refusal(404, 'Member not found');
+    assertMayRekey(cleanOld, cleanOperator);
+    if (!req) throw refusal(404, 'There is no re-key code for this member to cancel.');
+    if (req.status === 'pending' && new Date(req.expires_at).getTime() < Date.now()) {
+        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(req.id);
+        req.status = 'expired';
+    }
+    // An expired code's hold stays until a new code replaces it (which inherits the status recorded before it), so the
+    // way out is that new code's cancel (review 4176372949).
+    if (req.status === 'expired') {
+        throw refusal(409, 'This code has expired, so it can’t be cancelled, and their key is still held for it. Make a new code on Re-Key, then cancel it: that frees their key and puts back their status from before the first code.');
+    }
+    if (req.status !== 'pending') throw refusal(409, 'This code was already cancelled.');
+
+    const nowIso = new Date().toISOString();
+    let restored = member.status || 'active';
+    let note: string | undefined;
+    db.transaction(() => {
+        const exactly = (changed: number, what: string) => {
+            if (changed !== 1) throw refusal(409, `Nothing was changed: ${what}. Open the member again and check.`);
+        };
+        exactly(db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(req.id).changes,
+            'the code is no longer waiting');
+        exactly(db.prepare("DELETE FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").run(cleanOld).changes,
+            'the member’s key isn’t held for this re-key');
+        // A standby only adds replaced keys, so the hold's delete reaches it as a tombstone (engine/sync.ts
+        // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
+        writeTombstone('invalidated_keys', cleanOld);
+        // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back. A report's
+        // suspension writes the same 'suspended' (state-engine.ts actionReport), and records it on a waiting code's
+        // prior_status, so the recorded status is the answer: a report's action that suspended nobody changes nothing.
+        // Any other suspension (an admin's, a Decision's, an offboarding) writes another status, which is left alone. A
+        // code made before prior_status was kept has only the reports to go on (reportMaySuspend), and on doubt the
+        // member stays suspended, which Lift suspension lifts.
+        const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
+        let target: string | null = req.prior_status ?? null;
+        if (now === 'suspended' && target === 'suspended') {
+            target = null;
+            note = 'They stay suspended: a report suspended them, before or while the code waited. Lift the suspension on their page if that’s no longer right.';
+        } else if (now === 'suspended' && target === null && reportMaySuspend(cleanOld)) {
+            note = 'They stay suspended: this code was made before the node kept the member’s earlier status, and a report actioned on them may have suspended them. Lift the suspension on their page if that’s no longer right.';
+        } else if (target === null && now === 'suspended') {
+            target = 'active';
+            note = 'This code was made before the node kept the member’s earlier status, so they are back to active.';
+        }
+        if (now === 'suspended' && target && target !== 'suspended') {
+            exactly(db.prepare('UPDATE members SET status = ?, updated_at = ? WHERE public_key = ? AND status = \'suspended\'').run(target, nowIso, cleanOld).changes,
+                'the member’s status changed meanwhile');
+            restored = target;
+        }
+        exactly(db.prepare(`
+            INSERT INTO system_logs (timestamp, level, category, message, metadata)
+            VALUES (?, 'INFO', 'AUTH', ?, ?)
+        `).run(
+            nowIso,
+            sanitizeMessage(`Re-enrolment code cancelled for member ${member.callsign} (${shortKey(cleanOld)}) by operator ${shortKey(cleanOperator)}; status ${restored}`),
+            sanitizeMessage(JSON.stringify({ member: shortKey(cleanOld), operator: shortKey(cleanOperator), cancelledAt: nowIso, status: restored })),
+        ).changes, 'the log line wasn’t written');
+    })();
+
+    noteTakeoverInputsChanged('member re-key cancelled');
+    broadcast({ type: 'profile_updated', publicKey: cleanOld });
+    logger.info('AUTH', `[Rekey] Re-enrolment code cancelled for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}`);
+    return { cancelled: true, oldPubkey: cleanOld, callsign: member.callsign, status: restored, ...(note ? { note } : {}) };
 }
 
 /**
@@ -744,7 +901,9 @@ export function executeOffboard(
             VALUES (?, 'INFO', 'ADMIN', ?, ?)
         `).run(
             nowIso,
-            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' (settled balance: ${balance}) by operator ${cleanOperator}`,
+            // No balance in the message: every admin reads this log (routes/admin.ts /logs, which answers without the
+            // metadata's balanceSettled too). It stays in the metadata for the idempotent retry (getPreviousOffboardResult).
+            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' by operator ${cleanOperator}`,
             JSON.stringify({
                 memberPubkey: cleanPub,
                 callsign: member.callsign,

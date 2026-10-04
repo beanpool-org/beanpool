@@ -79,6 +79,7 @@ import * as knockEngine from './engine/knocks.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
@@ -126,8 +127,11 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
     return { status: res.status, body: parsed, text };
 }
+// Step 7c: with 2FA off the password alone opens no admin route. main() turns 2FA on (no member is seeded, so no count
+// below moves) and the operator's calls send the password with a fresh code.
+let adminHeaders: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
 const admin = (method: 'GET' | 'POST', path: string, body?: unknown) =>
-    call(null, method, path, body, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    call(null, method, path, body, { headers: adminHeaders() });
 
 const knock = (id: Id, extra: Record<string, unknown> = {}, opts: { upperKey?: boolean } = {}) =>
     call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}, I live nearby.`, fromNode: 'https://global.beanpool.org/', ...extra }, opts);
@@ -181,6 +185,7 @@ async function main(): Promise<void> {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
+    adminHeaders = turnOn2faForTests(ADMIN_PW).headers;
     PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a

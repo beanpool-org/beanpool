@@ -430,6 +430,17 @@ async function run() {
         const oldNode = await node.signRequest('GET', '/api/registrar/status', '', 'v1');
         const oldAnswers = [await send(oldNode), await send(oldNode)];
         assert(oldAnswers.every((r) => r.status === 200), 'today\'s v1 node (no nonce) still verifies, as before — a repeat too, until nodes send v2');
+        // /status?name=: the node signs the query (x-bp-signature-query) and the Worker reads the name only then.
+        await node.claimAddress('contract-two', 'tunnel', 'http://beanpool-node:8080');
+        const named = [await node.addressStatus('contract-v2'), await node.addressStatus('contract-two')];
+        assert(named[0]?.name === 'contract-v2' && named[1]?.name === 'contract-two',
+            'a key holding two names hears about the one its signed ?name= asks for, under v1', named.map((a) => a?.name));
+        const withQuery = await node.signRequest('GET', '/api/registrar/status', '', 'v1', '?name=contract-two');
+        const repointed = await registrar.index.default.fetch(new Request('https://beanpool.org/api/registrar/status?name=contract-v2', { headers: withQuery }), world.env);
+        const repointedBody = await repointed.json();
+        const plainBody = await (await send(await node.signRequest('GET', '/api/registrar/status', '', 'v1'))).json();
+        assert(repointed.status === 200 && repointedBody.name === plainBody.name,
+            'a captured /status?name= resent with another name gets the key\'s first row, as with no name asked', { repointed: repointedBody.name, plain: plainBody.name });
 
         // A Worker deployed without migration 0006 (no request_nonces): /health leaves v2 out, and a node sending v2 gets a
         // 401 naming v1 (not a 500), signs the same call again under v1 and works. PR #1410 note 2.

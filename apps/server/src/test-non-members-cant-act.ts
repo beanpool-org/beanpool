@@ -77,6 +77,7 @@ import { issueRekeyCode } from './engine/member-wizards.js';
 import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { setMemberPhoto } from '@beanpool/engine';
 import { putPushTokenRow } from './services/push-token-seal.js';
@@ -126,6 +127,14 @@ async function signedFetch(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', 
     const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
+}
+
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The owner's password goes with a fresh
+// code, 2FA on from its first use (the refusal is asserted just before that).
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+function ownerPassword(): { password: string; totpCode: string } {
+    tfa ??= turnOn2faForTests(PW);
+    return { password: PW, totpCode: tfa.code() };
 }
 
 async function unsigned(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}) {
@@ -486,7 +495,10 @@ async function main(): Promise<void> {
             { code: aliceCode.body?.invite?.code, publicKey: viaAlice.pubKeyHex, callsign: viaAlice.callsign });
         assert(aliceRedeem.status === 200 && isMemberRow(viaAlice.pubKeyHex), `a live member's invite still redeems (got ${aliceRedeem.status})`);
 
-        const seed = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        const alone = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.success,
+            `2FA off: the admin password alone → 403 password_needs_2fa, no invite (got ${alone.status} ${alone.body?.code})`);
+        const seed = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
         const viaAdmin = keypair('ViaAdminNM');
         const adminRedeem = await signedFetch('POST', '/api/invite/redeem', viaAdmin,
             { code: seed.body?.code, publicKey: viaAdmin.pubKeyHex, callsign: viaAdmin.callsign });
@@ -495,7 +507,7 @@ async function main(): Promise<void> {
 
         // The admin's invite hangs off the genesis member. Pruned, the node picks a live member instead.
         adminPruneUser(founder.pubKeyHex, 'owner:password');
-        const seed2 = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        const seed2 = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
         const viaAdmin2 = keypair('ViaAdminTwoNM');
         const adminRedeem2 = await signedFetch('POST', '/api/invite/redeem', viaAdmin2,
             { code: seed2.body?.code, publicKey: viaAdmin2.pubKeyHex, callsign: viaAdmin2.callsign });
@@ -837,7 +849,7 @@ async function main(): Promise<void> {
 
         // A listing the prune cancelled under a deal in escrow stays down when an admin refunds the buyer.
         const carolHeld = getBalance(carol.pubKeyHex).balance;
-        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { password: PW, action: 'refund_to_buyer' });
+        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { ...ownerPassword(), action: 'refund_to_buyer' });
         assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance > carolHeld,
             `an admin refunds Carol the deal in escrow with the removed member (got ${refund.status} ${JSON.stringify(refund.body)}, ${tradeStatus(escrowTx.id)})`);
         assert(postStatus(escrowed.id) === 'cancelled', `and the listing the prune cancelled stays down (got ${postStatus(escrowed.id)})`);

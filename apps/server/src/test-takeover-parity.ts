@@ -287,7 +287,7 @@ interface Answer { status: number; body: any }
  * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
-async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -299,7 +299,7 @@ async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', ro
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -340,7 +340,10 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (path_: string, body: unknown) => api(m, 'POST', path_, { admin: PW_MAIN, body });
+        // Step 7c: the password alone opens no admin route with 2FA off: the admin calls go under Gwen's key session (the
+        // genesis owner), which the main server makes (takeover-test-harness.ts owner-session).
+        const mainOwner: Record<string, string> = await main.send('owner-session');
+        const A = (path_: string, body: unknown) => api(m, 'POST', path_, { admin: mainOwner, body });
         const S_ = (who: Id, path_: string, body: unknown = {}) => api(m, 'POST', path_, { as: who, body });
 
         const join = async (who: Id) => {
@@ -534,10 +537,11 @@ async function main(): Promise<void> {
 
         // ── 7. The take-over ──
         console.log('\n— 7. the standby takes over with the recovery code —');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session'); // step 7c, as above
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const fetchesS0 = await standby.send('fetches'); // what it refused while it copied, before it restarts itself
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dirs.standby, env(PW_STANDBY, 'backup'));

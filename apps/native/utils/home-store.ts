@@ -116,6 +116,8 @@ export type HomeRead =
     | { kind: 'answer'; stored: StoredHome; confirmed: boolean; since: InterestsTurn }
     /** 401 or 403: this key is no member here (a guest, or an account the community removed). */
     | { kind: 'members_only' }
+    /** 404: route missing; this community's server is older than GET /api/home and needs an update. */
+    | { kind: 'needs_update' }
     /** No answer, a server error, or a body that isn't one: Home keeps what it had. */
     | { kind: 'failed' }
     /** The account it was asked for left the phone while it was out: nothing kept, nothing to draw. */
@@ -150,6 +152,7 @@ export async function readHomeFromNode(
             return { kind: 'answer', stored, confirmed: true, since };
         }
         if (res.status === 401 || res.status === 403) return { kind: 'members_only' };
+        if (res.status === 404) return { kind: 'needs_update' };
         if (!res.ok) return { kind: 'failed' };
         const answer = readHomeAnswer(await res.json().catch(() => null));
         if (!answer) return { kind: 'failed' };

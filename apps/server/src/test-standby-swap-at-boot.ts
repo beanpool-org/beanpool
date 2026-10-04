@@ -47,7 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
 import { runPagedCopyChild } from './paged-copies-test-harness.js';
 import {
-    PW_STANDBY, assert, require_, step, sleep, until, snapDiff, first,
+    assert, require_, step, sleep, until, snapDiff, first,
     newPair, startMain, startStandby, pairHelpers, closeLeftCopy, closePair, auditCommand,
 } from './standby-pair-test-harness.js';
 
@@ -147,7 +147,8 @@ async function main(): Promise<void> {
             // A balance M never had: the take-over's audit finds the ledger isn't the main server's.
             await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] });
             await standby.send('takeover-restart-off');
-            const pw = { 'X-Admin-Password': PW_STANDBY };
+            // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+            const pw: Record<string, string> = await standby.send('owner-session');
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: code19 }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status} ${JSON.stringify(confirmT.body).slice(0, 160)})`);
@@ -257,7 +258,8 @@ async function main(): Promise<void> {
             require_(await standby.send('envelope') === 'stored', 'S8 holds M\'s take-over envelope');
             await standby.send('sql', { sql: 'UPDATE accounts SET balance = balance + 7 WHERE public_key = ?', args: [ann.pk] }); // the audit finds trouble
             await standby.send('takeover-restart-off');
-            const pw = { 'X-Admin-Password': PW_STANDBY };
+            // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+            const pw: Record<string, string> = await standby.send('owner-session');
             const openT = await post(standby.base, '/api/local/admin/takeover/open', { code: code22 }, pw);
             const confirmT = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: openT.body?.preview?.sessionId, confirm: true }, pw);
             require_(confirmT.status === 200, `the take-over is confirmed (${confirmT.status})`);

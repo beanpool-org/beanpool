@@ -309,7 +309,6 @@ async function main(): Promise<void> {
     const dirs = { main: path.join(root, 'main'), a: path.join(root, 'standby-a'), b: path.join(root, 'standby-b') };
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
 
     const anna = member('Anna');
     const [gia, hugo, ines, jo, kai, lea, mia, ned] = ['Gia', 'Hugo', 'Ines', 'Jo', 'Kai', 'Lea', 'Mia', 'Ned'].map(member);
@@ -516,9 +515,12 @@ async function main(): Promise<void> {
         const bBefore = await b.send('state');
         require_(bBefore.copies.filter((c: any) => c.ref === 'github').length === 5 && bBefore.releases.length === 3 && bBefore.joins.length === 1,
             `it holds the five GitHub copies and the released ones, as copied before the main server's start (${bBefore.copies.filter((c: any) => c.ref === 'github').length})`);
-        const opened = await post(b.base, '/api/local/admin/takeover/open', { code }, pw(PW_STANDBY));
+        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; the take-over (owner only) goes
+        // under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const asOwner: Record<string, string> = await b.send('owner-session');
+        const opened = await post(b.base, '/api/local/admin/takeover/open', { code }, asOwner);
         require_(opened.status === 200, `the recovery code opens the keys (${opened.status} ${opened.body?.error ?? ''})`);
-        const confirmed = await post(b.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(b.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, asOwner);
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await b.exited;
         assert(exit === 0, `standby B restarts itself (exit ${exit})`);

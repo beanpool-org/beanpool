@@ -80,6 +80,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
@@ -94,7 +95,7 @@ import {
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMirror, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import {
-    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
+    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
@@ -146,9 +147,7 @@ function dataPath(name: string): string {
 }
 
 function writeAtomic(file: string, data: string | Buffer, mode: number): void {
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, { mode });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, data, { mode });
 }
 
 // ── What a take-over will not have (§5.5; the standby's list, #958) ─────────────────────────
@@ -849,9 +848,9 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 }
             }
             const pa = (getNodeConfig() as any).publicAddress ?? null;
-            fs.writeFileSync(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
+            writeFileAtomic(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
             // And what the steps change in the database, so a take-over that stops can put it all back (rollBackTakeover).
-            fs.writeFileSync(path.join(dir, UNDO_STATE_FILE), JSON.stringify(readStandbyState()), { mode: 0o600 });
+            writeFileAtomic(path.join(dir, UNDO_STATE_FILE), JSON.stringify(readStandbyState()), { mode: 0o600 });
             return `data/${j.undoDir}: ${copied.join(', ') || 'no files'}; the roles, web address and settings in the database`;
         }
         case 'identity-files': {
@@ -870,9 +869,10 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities; ${installSealKey(bundle)}`;
         }
         case 'admin-settings': {
-            const updates: Record<string, unknown> = {};
-            for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = (bundle.localConfig as any)[f] ?? null;
             const config = getLocalConfig();
+            // The password's retirement is sticky (bundledLocalConfigUpdates): an envelope sealed before it never brings
+            // the password back.
+            const updates = bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config as any);
             if (bundle.recoveryCode) {
                 updates.recoveryCode = bundle.recoveryCode;
                 updates.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);

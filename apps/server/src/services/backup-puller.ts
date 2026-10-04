@@ -71,7 +71,7 @@ import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull, clearCopiesDroppedBeforeSeal, noteWholeCopyThisProcess } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
 import { compareTableHashes, readTableHashes, tableContentHashes } from '../engine/replica-hashes.js';
-import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
+import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER, standbyReportHeader } from './standby-report.js';
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
     notePastRetention, noteUncomparedCheck, noteWholeCopyCheck, noteWholeCopyTaken, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
@@ -79,6 +79,7 @@ import {
 import { errorMessage } from '../error-message.js';
 import { EXPORT_CATEGORIES, STATE_HASH_TABLES } from '@beanpool/engine';
 import { keepMainServerCommunitySettings } from '../config/community-settings.js';
+import { RedirectRefusedError, redirectRefusal } from './credential-redirect.js';
 
 // Said once per value, not on every 60 s pull.
 let lastProfileNote: string | null = null;
@@ -403,7 +404,13 @@ class CopyRequests {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
-            const res = await fetch(this.base + route, { method, headers: this.headers, signal: controller.signal });
+            // Never followed: a redirect would carry the token or password elsewhere, and read that answer as the copy.
+            const res = await fetch(this.base + route, { method, headers: this.headers, redirect: 'manual', signal: controller.signal });
+            const refused = redirectRefusal(res, this.base + route);
+            if (refused) {
+                await res.body?.cancel().catch(() => {});
+                throw refused;
+            }
             // The body is read under the same timer: a copy's page that stops arriving is abandoned like one that never came.
             if (res.status === 200 && body === 'page') (res as Response & { text_?: string }).text_ = (await readUpTo(res, pageMaxBytes())).toString('utf-8');
             // An object is no bigger than any store keeps (MAX_OBJECT_BYTES): one that is, is refused unread past that.
@@ -793,7 +800,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     // How this standby's copies have gone, for its main server to tell the community's owners when it needs them
     // (services/standby-health.ts). Only on the replication-token channel: the main server reads it nowhere else.
     if (replicationToken) {
-        try { authHeader[STANDBY_REPORT_HEADER] = JSON.stringify(standbyReport()); } catch { /* a pull never waits on its report */ }
+        try { authHeader[STANDBY_REPORT_HEADER] = standbyReportHeader(standbyReport()); } catch { /* a pull never waits on its report */ }
     }
 
     const fresh = mode === 'resync';
@@ -1091,7 +1098,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
         const oversized = e instanceof OversizedCopyError ? e.tables : [];
         // An object the main server answered 404 for: that answer, as the report says a copy's own 404.
         const whyCode = e instanceof StagedCopyRefused ? e.why : e instanceof PhotoObjectGone ? 'http-404' : e instanceof PhotoObjectNotItsPhoto ? 'http-410' : whyOf(stage, e);
-        recordQuietly(() => noteCopyFailed(stage === 'import' ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
+        recordQuietly(() => noteCopyFailed(stage === 'import' || e instanceof RedirectRefusedError ? 'refused' : 'fetch-failed', whyCode, Date.now(), oversized, !isDelta));
         // N2: a whole copy that came and was refused is not asked for again on the next tick: the same rows would be
         // refused, and each one costs the main server a whole copy built, signed and sent. A delta is: it costs little, and
         // its cursor stays where the last copy that landed put it. Nor is one whose pages all came and whose listing photos'
@@ -1670,11 +1677,15 @@ class SwapError extends Error {
 async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<string, string>, body: Record<string, unknown>): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), MIGRATE_TIMEOUT_MS);
+    const url = primaryUrl.replace(/\/$/, '') + apiPath;
+    let res: Response;
     try {
-        return await fetch(primaryUrl.replace(/\/$/, '') + apiPath, {
+        // Never followed: a redirect would carry the password or token elsewhere (credential-redirect.ts).
+        res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(body),
+            redirect: 'manual',
             signal: controller.signal,
         });
     } catch (e: any) {
@@ -1682,6 +1693,12 @@ async function primaryPost(primaryUrl: string, apiPath: string, headers: Record<
     } finally {
         clearTimeout(timer);
     }
+    const refused = redirectRefusal(res, url);
+    if (refused) {
+        await res.body?.cancel().catch(() => {});
+        throw new SwapError(`the main server at ${refused.message}`, true, null);
+    }
+    return res;
 }
 
 /** True when the main server accepts this token for replication. */
@@ -1702,6 +1719,13 @@ async function mintTokenWithPassword(primaryUrl: string, password: string): Prom
     if (!statusRes.ok) {
         const body = await statusRes.json().catch(() => ({} as any));
         if (body?.totpRequired) throw new SwapError('the main server has two-factor sign-in on, so it refuses the password alone', false, false);
+        // Step 7c: with the main server's 2FA off its admin routes refuse the password alone, these two included. This
+        // standby has no code to send, so it says what to do. Its copy routes still take the password unless the main
+        // server is token-only, which this answer does not say: whether it is copying is not known here.
+        if (body?.code === 'password_needs_2fa') {
+            throw new SwapError("the main server's two-factor sign-in is off, so it no longer makes a replication token for the admin password alone: " +
+                "make one there from the owner's phone (Settings, Replication Access)", true, null);
+        }
         if (statusRes.status === 401 || statusRes.status === 403) throw new SwapError(`the main server refused the stored password (HTTP ${statusRes.status}); it may have been changed`, false, false);
         if (statusRes.status === 404) throw new SwapError('the main server is too old to make replication tokens', false, true);
         throw new SwapError(`the main server answered HTTP ${statusRes.status}`, statusRes.status >= 500, null);

@@ -86,10 +86,10 @@ async function partA(world: World, root: string): Promise<void> {
         assert(s.connectorsInMemory.includes('mirror') && !s.connectorsInMemory.includes('peer'),
             `[A] in memory too, it pins its main server again, and holds no link of the community's (${s.connectorsInMemory})`);
 
-        const again = await post(node.base, '/api/local/admin/takeover/open', { code: world.code }, { 'X-Admin-Password': PW_STANDBY });
+        const again = await post(node.base, '/api/local/admin/takeover/open', { code: world.code }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         assert(again.status === 200 && again.body.preview?.sessionId,
             `[A] a new take-over opens: nothing is "already under way" (${again.status} ${JSON.stringify(again.body).slice(0, 160)})`);
-        await post(node.base, '/api/local/admin/takeover/cancel', {}, { 'X-Admin-Password': PW_STANDBY });
+        await post(node.base, '/api/local/admin/takeover/cancel', {}, await node.send('owner-session')); // step 7c: an owner's key session the node makes
 
         const resync = await node.send('resync');
         assert(resync.ok && resync.restarting === true, `[A] a force-resync builds a whole copy and restarts to swap it in (${JSON.stringify(resync)})`);

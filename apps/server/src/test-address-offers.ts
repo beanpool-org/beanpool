@@ -90,6 +90,7 @@ async function child(): Promise<void> {
     const { normaliseRegistryRow, writeDirectoryRows } = await import('./engine/directory-cache.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
 
     initAdminPassword();
     await initTls();
@@ -133,6 +134,9 @@ async function child(): Promise<void> {
         },
         // What a client can make the node store: the counts rows and the owner/admin sightings.
         unconfirmedRows: () => (db.prepare("SELECT COUNT(*) AS n FROM signature_audiences WHERE kind = 'unconfirmed'").get() as { n: number }).n,
+        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' report and its
+        // confirm/remove are sent with an automation token made from the seeded owner's key.
+        adminToken: (a: { owner: string }) => ownerTokenHeaders('admin', a.owner),
         staffRow: () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(STAFF_ROW) as { value: string } | undefined)?.value ?? null,
     };
 
@@ -278,7 +282,7 @@ async function main(): Promise<void> {
     const members = Array.from({ length: 20 }, (_, i) => id(`M${i + 1}`));
     const [m1, m2, m3, m4, m5, m6, m7] = members;
 
-    const adminPw = { 'X-Admin-Password': PW };
+    let adminPw: Record<string, string> = {}; // the owner's automation token on U, once U is seeded
     /** A member's read as a current app sends it: signed for `host`, sent to the node at localhost. */
     async function readAs(node: Node, who: Id, host: string, reqPath = '/api/community/me'): Promise<Reply> {
         const url = `https://${host}${reqPath}`;
@@ -336,6 +340,7 @@ async function main(): Promise<void> {
                 ...members.map((m) => ({ pk: m.pk, callsign: m.callsign })),
             ],
         });
+        adminPw = await U.send('adminToken', { owner: owner.pk });
         const cutoff = await U.send('switchCutoff');
         if (typeof cutoff !== 'number') throw new Error('U refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
         SWITCH = cutoff;
@@ -624,10 +629,11 @@ async function main(): Promise<void> {
             const solo = id('Solo');
             const S = await startNode('s', {});
             await S.send('seed', { owner: { pk: solo.pk, callsign: solo.callsign }, members: [] });
+            const sAdmin: Record<string, string> = await S.send('adminToken', { owner: solo.pk });
             await beforeSwitch(S);
             await S.send('resetLimits');
             const soloReport = async (host?: string) => {
-                const r = await call(S, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, adminPw);
+                const r = await call(S, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, sAdmin);
                 if (r.status !== 200) throw new Error(`S's Settings report: ${show(r)}`);
                 return r.body as { unconfirmed: Offer[]; heldBack?: Held[]; named?: boolean };
             };
@@ -655,7 +661,7 @@ async function main(): Promise<void> {
             const refused = await readAs(S, solo, 'solo.example');
             const late = offered(await soloReport('solo.example'), 'solo.example');
             assert(refused.status === 421 && late?.busiestDay === 1, `after the switch the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
-            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', adminPw, j({ address: 'solo.example' }));
+            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', sAdmin, j({ address: 'solo.example' }));
             const now = await readAs(S, solo, 'solo.example');
             assert(confirmed.status === 200 && confirmed.body?.named === true && confirmed.body?.addresses?.some((a: any) => a.address === 'solo.example' && a.source === 'owner')
                 && confirmed.body?.unconfirmed?.length === 0 && now.status === 200,

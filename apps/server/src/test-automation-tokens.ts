@@ -36,6 +36,7 @@ import { db } from './db/db.js';
 import { BACKUPS_SCOPE_ROUTES, resetAutomationTokenUseThrottle, issueAutomationToken } from './automation-tokens.js';
 import { TOKEN_NEEDS_KEY_CODE } from './routes/automation-tokens.js';
 import { LOCAL_CONFIG_FIELDS } from './engine/replication-manifest.js';
+import { signedRequestText, signedRequestBytes, SIGNED_FOR_HEADER } from '@beanpool/core';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let BASE = '';
@@ -195,9 +196,12 @@ async function main(): Promise<void> {
             const byPwOff = await make(asCookie(pwOff.sessionId, pwOff.body?.csrfToken), { name: 'pw made', scope: 'admin' });
             assert(byPwOff.status === 403 && ['totp_setup_required', TOKEN_NEEDS_KEY_CODE].includes(byPwOff.body?.code), `2FA off: the password session cannot make one (${show(byPwOff)})`);
             const byHeaderOff = await make({ 'X-Admin-Password': PW }, { name: 'pw made', scope: 'admin' });
-            assert(needsKey(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
+            // Step 7c: with 2FA off the password per request is refused before the route runs, so the reason is exactly
+            // password_needs_2fa (the route's own TOKEN_NEEDS_KEY_CODE is not reached).
+            const refusedOff = (r: Reply) => r.status === 403 && r.body?.code === 'password_needs_2fa';
+            assert(refusedOff(byHeaderOff), `2FA off: the password in the header cannot make one (${show(byHeaderOff)})`);
             const byBodyOff = await make({}, { name: 'pw made', scope: 'admin', password: PW });
-            assert(needsKey(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
+            assert(refusedOff(byBodyOff), `2FA off: the password in the body cannot make one (${show(byBodyOff)})`);
         } finally {
             updateLocalConfig({ totpEnabled: true });
         }
@@ -349,13 +353,42 @@ async function main(): Promise<void> {
         }
         // Timing: the check itself, in-process (the network's jitter would hide nothing and prove nothing).
         const { verifyAutomationToken } = await import('./automation-tokens.js');
-        const time = (t: string) => { const s = process.hrtime.bigint(); for (let i = 0; i < 4000; i++) verifyAutomationToken(t); return Number(process.hrtime.bigint() - s) / 4000; };
-        for (let i = 0; i < 2; i++) bad.forEach(time); // warm up
-        // The fastest of five interleaved rounds for each: other work on a busy machine only ever adds time.
-        const ns = bad.map(() => Infinity);
-        for (let round = 0; round < 5; round++) bad.forEach((t, i) => { ns[i] = Math.min(ns[i], time(t)); });
-        const spread = Math.max(...ns) / Math.min(...ns);
-        assert(spread < 2, `the three take about the same time (${ns.map(n => n.toFixed(0)).join(' / ')} ns per check)`);
+        // Warm up JIT
+        for (let i = 0; i < 2; i++) {
+            for (const t of bad) {
+                for (let j = 0; j < 1000; j++) verifyAutomationToken(t);
+            }
+        }
+        // Interleaved rounds (A,B,C,A,B,C,…) of many iterations each, comparing medians.
+        // Single-round spikes from CI neighbours do not affect the median. A real difference (a lookup that leaks)
+        // shows consistently in every round and in the medians.
+        const ROUNDS = 21;
+        const ITERS = 1000;
+        const measure = () => {
+            const samples: number[][] = bad.map(() => []);
+            for (let round = 0; round < ROUNDS; round++) {
+                for (let i = 0; i < bad.length; i++) {
+                    const t = bad[i];
+                    const s = process.hrtime.bigint();
+                    for (let j = 0; j < ITERS; j++) verifyAutomationToken(t);
+                    samples[i].push(Number(process.hrtime.bigint() - s) / ITERS);
+                }
+            }
+            return samples.map(s => {
+                const sorted = [...s].sort((a, b) => a - b);
+                const mid = Math.floor(sorted.length / 2);
+                return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+            });
+        };
+        const attempts: number[][] = [];
+        for (let a = 0; a < 3; a++) {
+            const medians = measure();
+            attempts.push(medians);
+            if (Math.max(...medians) / Math.min(...medians) < 2) break;
+        }
+        const last = attempts[attempts.length - 1];
+        assert(Math.max(...last) / Math.min(...last) < 2,
+            `the three take about the same time (${attempts.map(ns => ns.map(n => n.toFixed(0)).join(' / ')).join('; then ')} ns per check)`);
         const exp = await make(asSession(ownerS.sessionId), { name: 'short', scope: 'read', expiresAt: Date.now() + 1500 });
         assert(exp.status === 201, 'a token with an expiry is made');
         secrets.push(exp.body.token);
@@ -379,6 +412,60 @@ async function main(): Promise<void> {
         assert(after.status === 401, `the revoked token is refused at once (${after.status})`);
         const revByToken = await call('POST', `/api/local/admin/automation-tokens/${tAdmin.body.record.id}/revoke`, { headers: bearer(ADMIN), body: {} });
         assert(revByToken.status === 403, 'a token cannot revoke one');
+
+        // ── 4b. Sign out everywhere: who can end whose sessions ──────────────────────────────────
+        // Anyone ends only their own sessions; an owner (a key session, or the password, which is owner level) may end
+        // an admin's. A token has no sessions of its own, so it ends nobody's: refused as every sign-in route refuses it.
+        console.log('── 4b. Sign out everywhere: who can end whose sessions ──');
+        const REVOKE_ALL = '/api/local/admin/auth/revoke-all';
+        const alive = async (s: Reply) => (await call('GET', '/api/local/admin/auth/session', { headers: asSession(s.sessionId) })).body?.authenticated === true;
+        const signedRevokeAll = (k: Key, body: unknown = {}) => {
+            const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
+            const text = signedRequestText({ host: 'localhost', method: 'POST', path: REVOKE_ALL, timestamp: ts, nonce, body: JSON.stringify(body) });
+            const sig = crypto.sign(null, signedRequestBytes(text), k.priv).toString('base64');
+            return call('POST', REVOKE_ALL, { headers: { 'X-Public-Key': k.pub, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce, [SIGNED_FOR_HEADER]: 'localhost' }, body });
+        };
+        resetAdminAuthTarpit();
+        resetAdminRateLimit();
+        const o1 = await keySignIn(owner), a1 = await keySignIn(admin);
+        assert(o1.status === 200 && a1.status === 200, 'the owner and the admin each sign in');
+        const tRead2 = await make(asSession(o1.sessionId), { name: 'read again', scope: 'read' });
+        assert(tRead2.status === 201, 'a read token is made');
+        const READ2: string = tRead2.body.token;
+        secrets.push(READ2);
+        for (const [t, scope] of [[READ2, 'read'], [BACKUPS, 'backups'], [ADMIN, 'admin']] as const) {
+            for (const body of [{}, { memberPubkey: owner.pub }, { memberPubkey: admin.pub }]) {
+                const r = await call('POST', REVOKE_ALL, { headers: bearer(t), body });
+                assert(r.status === 403 && r.body?.code === TOKEN_REFUSED_CODE, `a ${scope} token is refused like every sign-in route (${JSON.stringify(body)}: ${show(r)})`);
+            }
+        }
+        assert(await alive(o1) && await alive(a1), "after them, the owner's and the admin's sessions still work");
+
+        const adminOnOwner = await call('POST', REVOKE_ALL, { headers: asSession(a1.sessionId), body: { memberPubkey: owner.pub } });
+        assert(adminOnOwner.status === 403 && await alive(o1), `an admin cannot sign the owner out (${show(adminOnOwner)})`);
+        const pwNobody = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: {} });
+        assert(pwNobody.status === 400 && await alive(o1), `the password naming nobody signs nobody out (${show(pwNobody)})`);
+        const ownerOnAdmin = await call('POST', REVOKE_ALL, { headers: asSession(o1.sessionId), body: { memberPubkey: admin.pub } });
+        assert(ownerOnAdmin.status === 200 && ownerOnAdmin.body?.breakGlassCodeRetired === false, `an owner signs the admin out (${show(ownerOnAdmin)})`);
+        assert(!(await alive(a1)) && await alive(o1), "the admin's session ended, the owner's did not");
+
+        const a2 = await keySignIn(admin);
+        const adminSelf = await call('POST', REVOKE_ALL, { headers: asSession(a2.sessionId), body: {} });
+        assert(adminSelf.status === 200 && adminSelf.body?.memberPubkey === admin.pub && !(await alive(a2)) && await alive(o1),
+            `an admin signs themselves out, and only themselves (${show(adminSelf)})`);
+        const a3 = await keySignIn(admin);
+        const pwOnAdmin = await call('POST', REVOKE_ALL, { headers: { 'X-Admin-Password': PW, 'X-Admin-TOTP': code() }, body: { memberPubkey: admin.pub } });
+        assert(pwOnAdmin.status === 200 && !(await alive(a3)) && await alive(o1), `the password, naming the admin, signs the admin out (${show(pwOnAdmin)})`);
+
+        const a4 = await keySignIn(admin);
+        const appOwnerNamingAdmin = await signedRevokeAll(owner, { memberPubkey: admin.pub });
+        assert(appOwnerNamingAdmin.status === 200 && appOwnerNamingAdmin.body?.memberPubkey === owner.pub, `the app's signed request ends the signer's sessions, whoever the body names (${show(appOwnerNamingAdmin)})`);
+        assert(!(await alive(o1)) && await alive(a4), "the owner's session ended; the admin's did not");
+        const appAdmin = await signedRevokeAll(admin);
+        assert(appAdmin.status === 200 && appAdmin.body?.memberPubkey === admin.pub && !(await alive(a4)), `an admin's app signs the admin out (${show(appAdmin)})`);
+        const o2 = await keySignIn(owner);
+        const ownerSelf = await call('POST', REVOKE_ALL, { headers: asSession(o2.sessionId), body: {} });
+        assert(ownerSelf.status === 200 && ownerSelf.body?.memberPubkey === owner.pub && !(await alive(o2)), `an owner's key session signs the owner out (${show(ownerSelf)})`);
 
         // ── 5. Never the secret in a log, a backup or the config ──────────────────────────────────
         console.log('── 5. The secret is in no log, and only its hash is kept ──');

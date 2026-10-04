@@ -74,6 +74,7 @@ async function main() {
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const svc = await import('./services/takeover-envelope.js');
     const core = await import('@beanpool/core');
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
 
     initStateEngine();
     await ensureGenesis();
@@ -107,7 +108,11 @@ async function main() {
         await layer.stack[layer.stack.length - 1](ctx, async () => {});
         return { status: ctx.status, body: ctx.body, headers: out };
     }
-    const admin = { 'x-admin-password': adminPass };
+    // Sign-in step 7c: with 2FA off the password alone opens no admin route, so the suite runs with 2FA on and sends the
+    // password with a fresh code (lower-case names: call() reads them so). Not an owner credential: section 1 has no owner.
+    const tfa = turnOn2faForTests(adminPass);
+    const admin = (): Record<string, string> => ({ 'x-admin-password': adminPass, 'x-admin-totp': tfa.code() });
+    const passwordOnly = { 'x-admin-password': adminPass };
 
     const stored = () => {
         const p = path.join(dataDir!, svc.TAKEOVER_ENVELOPE_FILE);
@@ -133,7 +138,7 @@ async function main() {
     assert(boot.state === 'no-recipients', `1. boot with no owner and no code reports no-recipients (got ${boot.state})`);
     assert(/no owner and no recovery code/.test(boot.message), `1. …and says why in words: "${boot.message}"`);
     assert(stored() === null, '1. no envelope file on disk');
-    const st1 = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
+    const st1 = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
     assert(st1.status === 200 && st1.body.state === 'no-recipients' && st1.body.envelopeId === null, '1. the status route says the same');
     const tok1 = await call('GET', '/api/local/admin/takeover-envelope', { headers: { 'x-replication-token': repToken } });
     assert(tok1.status === 404 && tok1.body.state === 'no-recipients' && /nobody to lock/.test(tok1.body.error), `1. the token gets 404 with the reason (got ${tok1.status})`);
@@ -239,7 +244,7 @@ async function main() {
     (process.stderr as any).write = (c: any, ...r: any[]) => { captured.push(String(c)); return true; };
     let made: any;
     try {
-        made = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin });
+        made = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin() });
     } finally {
         Object.assign(console, { log: orig.log, warn: orig.warn, error: orig.error, info: orig.info });
         (process.stdout as any).write = orig.write; (process.stderr as any).write = orig.ewrite;
@@ -280,9 +285,9 @@ async function main() {
     assert(!needles.some((n) => logText.includes(n)), '6. the system log does not hold it');
     assert(captured.length > 0 && !needles.some((n) => captured.join('\n').includes(n)), `6. nothing written to the console while making it holds it (${captured.length} lines captured)`);
 
-    const dup = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin });
+    const dup = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin() });
     assert(dup.status === 409 && dup.body.needsReplace === true && !('code' in dup.body), '6. making another without replace: true is refused, 409');
-    const rotated = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin, body: { replace: true } });
+    const rotated = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin(), body: { replace: true } });
     assert(rotated.status === 200 && rotated.body.codeId === 2 && rotated.body.replacedCodeId === 1, '6. replace: true makes code #2');
     const code2: string = rotated.body.code;
     assert(!!(await opens(envelopeBytes(), { type: 'code', code: code2 })), '6. code #2 opens the new envelope');
@@ -301,17 +306,17 @@ async function main() {
     };
     console.log('\n— 7. check-code —');
     resetPasswordBrake();
-    const c1 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin, body: { code: code2 } });
+    const c1 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: code2 } });
     assert(c1.status === 200 && c1.body.matches === true && c1.body.codeId === 2, '7. the current code → true');
-    const c2 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin, body: { code: code1 } });
+    const c2 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: code1 } });
     assert(c2.status === 200 && c2.body.matches === false, '7. the replaced code → false');
     const other = (await core.createRecoveryCode(2)).code; // right number, different code: runs scrypt
-    const c3 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin, body: { code: other } });
+    const c3 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: other } });
     assert(c3.status === 200 && c3.body.matches === false, '7. a well-formed wrong code → false');
     const chars = code2.split('');
     const i = chars.length - 3;
     chars[i] = chars[i] === 'A' ? 'B' : 'A';
-    const c4 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin, body: { code: chars.join('') } });
+    const c4 = await call('POST', '/api/local/admin/takeover/recovery-code/check', { headers: admin(), body: { code: chars.join('') } });
     assert(c4.status === 400 && c4.body.typo === true, '7. a typo is a 400 with typo: true');
     // The brake: SOURCE_FREE_FAILURES (5) wrong guesses are free, the next closes this source for a while. Under an
     // owner's key session (under the password, each right password clears the source's record, as it always has).
@@ -358,7 +363,7 @@ async function main() {
     assert(tBad.status === 401, '8. a wrong token → 401');
     const tNone = await call('GET', '/api/local/admin/takeover-envelope');
     assert(tNone.status === 401, '8. no credentials → 401');
-    const tAdmin = await call('GET', '/api/local/admin/takeover-envelope', { headers: admin });
+    const tAdmin = await call('GET', '/api/local/admin/takeover-envelope', { headers: admin() });
     assert(tAdmin.status === 200 && Buffer.isBuffer(tAdmin.body), '8. the admin password gets it too');
     for (const [m, p, b] of [
         ['POST', '/api/local/admin/takeover/status', {}],
@@ -389,16 +394,22 @@ async function main() {
     updateLocalConfig({ totpEnabled: true, totpSecret });
     await svc.flushTakeoverChecks(); // the 2FA secret is in the bundle: this re-seals
     for (const p of ['/api/local/admin/takeover/status', '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check']) {
-        const r = await call('POST', p, { headers: admin, body: { replace: true, code: 'x' } });
+        const r = await call('POST', p, { headers: passwordOnly, body: { replace: true, code: 'x' } });
         assert(r.status === 401 && r.body?.totpRequired === true, `9. 2FA on: the password alone is refused on ${p}`);
     }
-    const with2fa = await call('POST', '/api/local/admin/takeover/status', { headers: { ...admin, 'x-admin-totp': generateTotpCode(totpSecret) } });
+    const with2fa = await call('POST', '/api/local/admin/takeover/status', { headers: { ...passwordOnly, 'x-admin-totp': generateTotpCode(totpSecret) } });
     assert(with2fa.status === 200 && with2fa.body.state === 'sealed', '9. 2FA on: password + code reads the status');
     const opened2fa = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
     assert(opened2fa.localConfig.totpEnabled === true && opened2fa.localConfig.totpSecret === totpSecret, '9. turning 2FA on re-sealed with the 2FA secret inside');
     const tok2fa = await call('GET', '/api/local/admin/takeover-envelope', { headers: { 'x-replication-token': repToken } });
     assert(tok2fa.status === 200 && !Buffer.from(tok2fa.body).toString('latin1').includes(totpSecret), '9. 2FA on: the token still gets the envelope, and not the 2FA secret');
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
+    // Sign-in step 7c: with 2FA off the password alone is refused too (403 password_needs_2fa).
+    for (const p of ['/api/local/admin/takeover/status', '/api/local/admin/takeover/recovery-code', '/api/local/admin/takeover/recovery-code/check']) {
+        const r = await call('POST', p, { headers: passwordOnly, body: { replace: true, code: 'x' } });
+        assert(r.status === 403 && r.body?.code === 'password_needs_2fa', `9. 2FA off: the password alone is refused on ${p} (got ${r.status})`);
+    }
+    updateLocalConfig({ totpEnabled: true, totpSecret: tfa.secret }); // the suite's 2FA again, for the password calls below
 
     // ── 10. The owner header route, over real HTTPS ──
     console.log('\n— 10. owner header fetch (real HTTPS) —');
@@ -466,7 +477,7 @@ async function main() {
     console.log('\n— 13. standby —');
     const recordBefore = JSON.stringify((getLocalConfig() as any).recoveryCode);
     await svc.startTakeoverEnvelopeService({ standby: true, checkIntervalMs: 3_600_000 });
-    const onStandby = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin, body: { replace: true } });
+    const onStandby = await call('POST', '/api/local/admin/takeover/recovery-code', { headers: admin(), body: { replace: true } });
     assert(onStandby.status === 409 && onStandby.body.standby === true && !onStandby.body.code, `13. making a code on a standby → 409, no code (got ${onStandby.status})`);
     assert(/main server/.test(onStandby.body.error || ''), `13. …and says where to make it: "${onStandby.body.error}"`);
     assert(JSON.stringify((getLocalConfig() as any).recoveryCode) === recordBefore, '13. …and the stored record is unchanged');
@@ -476,7 +487,7 @@ async function main() {
     console.log('\n— 14. the recovery-seal key —');
     const keyNeedles = [sealKeyBytes.toString('base64'), sealKeyBytes.toString('hex'), sealKeyBytes.toString('base64url')];
     const noKeyIn = (text: string) => !keyNeedles.some((n) => text.includes(n));
-    const st14 = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
+    const st14 = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
     assert(st14.status === 200 && st14.body.recoverySealKey?.carried === true
         && st14.body.recoverySealKey.message === "The locked keys carry the key that opens members' sign-in recovery copies, so a server that takes over opens them.",
         `14. the status says the envelope carries the key, in words (${JSON.stringify(st14.body.recoverySealKey)})`);
@@ -488,7 +499,7 @@ async function main() {
     const openedGone = JSON.parse(Buffer.from((await opens(envelopeBytes(), { type: 'owner', privateKey: anna.seed }))!).toString('utf-8'));
     assert(gone.state === 'sealed' && stored().envelopeId !== withKey && openedGone.files['recovery-seal.key'] === null && stored().carriesRecoverySealKey === false,
         '14. the key file gone: the envelope is re-sealed without it');
-    const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: admin });
+    const stGone = await call('POST', '/api/local/admin/takeover/status', { headers: admin() });
     assert(stGone.body.recoverySealKey?.carried === false && /do not carry the key .*this server.s data\/recovery-seal\.key is missing or is not a key\./.test(stGone.body.recoverySealKey.message)
         && /12 words still work/.test(stGone.body.recoverySealKey.message),
         `14. …and the status says so, and what it means (${stGone.body.recoverySealKey?.message})`);

@@ -3,7 +3,7 @@
  *
  * Boots the independent local gateway:
  * 1. Genesis check (first-run community_id + genesis block)
- * 2. Admin password init (from ADMIN_PASSWORD env or auto-generate)
+ * 2. Admin password init (an existing node keeps its own; a new install has none and is claimed with its claim code)
  * 3. TLS certificates (Let's Encrypt or self-signed)
  * 4. DNS shim for beanpool.local resolution
  * 5. Trust Bootstrap (HTTP :80 — redirect or CA cert)
@@ -54,7 +54,7 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword } from './config/local-config.js';
+import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
 import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
@@ -110,7 +110,7 @@ async function main() {
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
 
-    // Step 2: Admin password (first boot: env var or auto-generate)
+    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
     initAdminPassword();
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
@@ -132,6 +132,12 @@ async function main() {
 
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
+    // local-config.json was broken and this start took its last good copy (config/local-config.ts): into the security log
+    // the owner reads in Settings, not only the container log.
+    const restored = localConfigRestoredNotice();
+    if (restored) {
+        logger.security('SYS', `local-config.json was unreadable (${restored.why}): this server started from its last good copy, local-config.json.bak. Check the address and settings.` + (restored.brokenCopy ? ` The broken file is kept as ${restored.brokenCopy}.` : ''));
+    }
     migrateAdminConversations();
 
     // Step 2.51: `beanpool recover`, run in this container, leaves a notice in the data dir for each owner it adds: the

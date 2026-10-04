@@ -31,6 +31,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 // The one definition of what an app signs. Not a workspace dependency of the repo root, so by path to its build.
 import { buildBoundRequestHeaders, ed25519Signer } from '../../packages/beanpool-core/dist/index.js';
+import { automationTokenProblem, headerValueProblem, fetchNoRedirect } from '../automation-token.mjs';
 
 // fileURLToPath, not `.pathname` (review finding): `.pathname` yields "/C:/..." on Windows and leaves %20 in
 // any path containing a space, so it silently reads and writes the wrong file rather than failing.
@@ -41,8 +42,10 @@ export const NODES = {
     eastgippy: { port: 18450, callsign: 'East Gippsland Beanp', containerIp: '172.18.0.4', publicUrl: 'https://eastgippy.beanpool.org:8450' },
 };
 
+// Per node, an owner's automation token with the admin scope (BEANPOOL_TOKEN_GIPPSLAND, BEANPOOL_TOKEN_EASTGIPPY; made in
+// that node's Settings → Automation tokens), from the environment only. A node without one gets ADMIN_PASSWORD, as before.
+// The routes this harness's admin calls reach: /api/admin/seed-invite and /api/local/admin/treasury/:id/operators.
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (!ADMIN_PASSWORD) throw new Error('ADMIN_PASSWORD must be set in the environment');
 
 export function loadState() {
     try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf-8')); } catch { return {}; }
@@ -68,9 +71,12 @@ export function newIdentity(callsign) {
     };
 }
 
-/** Plain request — for the /api/local/ paths, which bypass the signature middleware. (An invite redeem is signed.) */
+/**
+ * Plain request — for the /api/local/ paths, which bypass the signature middleware. (An invite redeem is signed.) It
+ * carries the admin headers (admin()), so it never follows a redirect: a 3xx throws (automation-token.mjs).
+ */
 export async function plain(node, method, path, body, headers = {}) {
-    const res = await fetch(`${base(node)}${path}`, {
+    const res = await fetchNoRedirect(`${base(node)}${path}`, {
         method,
         headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
         body: body ? JSON.stringify(body) : undefined,
@@ -94,8 +100,20 @@ function rememberTfaSession(node, res) {
     if (issued) tfaSessions[node] = issued;
 }
 
-/** The admin headers for `node`: the password, and the node's 2FA session (or a code to get one) when there is one. */
+/**
+ * The admin headers for `node`: its automation token alone (a token asks for no 2FA code), or else the password, and the
+ * node's 2FA session (or a code to get one) when there is one. Never both.
+ */
 export function adminHeaders(node) {
+    const token = envFor('BEANPOOL_TOKEN', node);
+    if (token) {
+        const problem = automationTokenProblem(`BEANPOOL_TOKEN_${node.toUpperCase()}`, token);
+        if (problem) throw new Error(problem);
+        return { Authorization: `Bearer ${token}` };
+    }
+    if (!ADMIN_PASSWORD) throw new Error(`Set BEANPOOL_TOKEN_${node.toUpperCase()} (an owner's automation token, admin scope) or ADMIN_PASSWORD in the environment`);
+    const pwProblem = headerValueProblem('ADMIN_PASSWORD', ADMIN_PASSWORD);
+    if (pwProblem) throw new Error(pwProblem);
     const h = { 'X-Admin-Password': ADMIN_PASSWORD };
     const session = tfaSessions[node] || envFor('ADMIN_2FA_SESSION', node);
     if (session) h['X-Admin-2FA-Session'] = session;

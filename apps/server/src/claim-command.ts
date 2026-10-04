@@ -23,6 +23,7 @@ import QRCode from 'qrcode';
 import { CLAIM_SCRYPT } from '@beanpool/core';
 import { dataDir } from './recover-command.js';
 import { ADDRESS_REQUEST_FILE, isAddressLabel, writeAddressRequestFile } from './address-request.js';
+import { cleanLabel, REGISTRAR_CONTACT_MAX } from './config/clean-label.js';
 
 const CODE_SHAPE = /^claim-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}$/;
 const NAME_WAIT_MS = 3 * 60_000;
@@ -205,7 +206,7 @@ export async function runClaim(args: string[], io: ClaimIo = terminalIo(), dir =
     const ownAddress = flag(args, '--address');
     const noName = args.includes('--no-name');
     const directRaw = flag(args, '--direct');
-    const contact = flag(args, '--contact') ?? null;
+    const contact = cleanLabel(flag(args, '--contact'), REGISTRAR_CONTACT_MAX) ?? null;
     if ([name !== undefined, ownAddress !== undefined, noName].filter(Boolean).length > 1) { io.err(CLAIM_USAGE); return 2; }
     if (args.includes('--key') !== args.includes('--callsign')) { io.err(CLAIM_USAGE); return 2; }
     if (name !== undefined && !isAddressLabel(name)) { io.err(`"${name}" can't be a name: 3–32 letters, digits or -, not starting or ending with -.`); return 2; }

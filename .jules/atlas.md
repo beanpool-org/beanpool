@@ -160,3 +160,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `onCancel` callback ("Skip to Dashboard") and `window.print` trigger ("Print Founding Cards") in `ColdStartWizard` (`apps/manager/src/components/modules/ColdStartWizard.tsx`) were untested.
 **Learning:** Testing `ColdStartWizard` `onCancel` and print actions required spying on `window.print` and verifying step 5 card generation flow prior to calling print.
 **Action:** Identify remaining edge cases in module components for complete test coverage.
+
+## 2026-10-03 - [manager tests] node-claim unit tests
+**Gap:** `fetchClaimState` and `buildClaimQr` in `apps/manager/src/lib/node-claim.ts` were untested directly.
+**Learning:** Testing `fetchClaimState` requires mocking `globalThis.fetch` for various HTTP states (network errors, non-object JSON bodies, timeout via fake timers, and external AbortController signals) to verify `ClaimState` outputs.
+**Action:** Identify any remaining untested utility functions or UI components in `apps/manager/`.

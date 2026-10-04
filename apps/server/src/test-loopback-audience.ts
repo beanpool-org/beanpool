@@ -123,6 +123,13 @@ async function child(): Promise<void> {
             resetAdminAuthTarpit();
             return true;
         },
+        // Step 7c: the password alone opens no admin route with 2FA off. Settings' reads use an owner's automation token,
+        // made here in the node from its owner's key (seeded if the node has none yet), as the owner's phone makes one.
+        adminToken: async () => {
+            const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+            const owner = (db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY member_pubkey LIMIT 1").get() as { member_pubkey: string } | undefined)?.member_pubkey;
+            return ownerTokenHeaders('admin', owner);
+        },
         // A name from node_config: an owner-confirmed address (3), or the registrar's (1 and 4), as each is stored.
         nodeConfig: (a: Record<string, unknown>) => {
             se.updateNodeConfig(a as any);
@@ -294,7 +301,7 @@ async function main(): Promise<void> {
         const sig = Buffer.from(ed25519.sign(core.utf8Bytes(`WS\n/ws\n${ts}\n${nonce}\n`), who.seed)).toString('base64');
         return `pubkey=${who.pk}&ts=${ts}&nonce=${nonce}&sig=${encodeURIComponent(sig)}`;
     };
-    const adminPw = { 'X-Admin-Password': PW };
+    const adminOf = async (n: Node) => (await n.send('adminToken')) as Record<string, string>;
     const challenge = async (node: Node) => (await call(node, 'POST', '/api/local/admin/auth/challenge', {}, '{}')).body;
     const verifySignin = (node: Node, body: Record<string, unknown>) =>
         call(node, 'POST', '/api/local/admin/auth/verify-challenge', {}, JSON.stringify(body));
@@ -434,7 +441,7 @@ async function main(): Promise<void> {
             // Settings open at community.example.org asks (?host=).
             const ownersApp = await sendTo(U, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
             assert(ownersApp.status === 200, `the owner's app reaches U at community.example.org too (${show(ownersApp)})`);
-            const listed = await call(U, 'GET', '/api/local/admin/app-addresses?host=community.example.org', adminPw);
+            const listed = await call(U, 'GET', '/api/local/admin/app-addresses?host=community.example.org', await adminOf(U));
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && unconfirmed.includes('community.example.org')
                 && !unconfirmed.some((a) => a === '127.0.0.2' || LOOPBACK.includes(a)),
@@ -454,7 +461,7 @@ async function main(): Promise<void> {
             await refusedThenOwn(L, '127.0.0.2', 'localhost');
             const info = await call(L, 'GET', '/api/community/info');
             assert(JSON.stringify(info.body?.addresses) === JSON.stringify(['optin.test']), `/api/community/info lists optin.test only, no loopback name (${JSON.stringify(info.body?.addresses)})`);
-            const listed = await call(L, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const listed = await call(L, 'GET', '/api/local/admin/app-addresses', await adminOf(L));
             const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
             assert(listed.status === 200 && JSON.stringify(bySource) === JSON.stringify(['optin.test:public-address', 'localhost:env', '127.0.0.1:env', '[::1]:env']),
                 `Settings lists each, the loopback names as set on the server (${JSON.stringify(bySource)})`);
@@ -475,7 +482,7 @@ async function main(): Promise<void> {
             // Settings open at community.example.org asks (?host=).
             const ownersApp = await sendTo(Z, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
             assert(ownersApp.status === 200, `the owner's app reaches Z at community.example.org too (${show(ownersApp)})`);
-            const listed = await call(Z, 'GET', '/api/local/admin/app-addresses?host=community.example.org', adminPw);
+            const listed = await call(Z, 'GET', '/api/local/admin/app-addresses?host=community.example.org', await adminOf(Z));
             const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
             const unconfirmed: string[] = (listed.body?.unconfirmed ?? []).map((a: any) => a.address);
             assert(listed.status === 200 && listed.body?.named === false, `Settings says the community has no name set up (named: ${JSON.stringify(listed.body?.named)})`);
@@ -506,7 +513,7 @@ async function main(): Promise<void> {
                 assert(r.status === 200 && r.body?.publicKey === mia.pk, `a read signed for ${host} is accepted (${show(r)})`);
             }
             for (const host of ['community.example.org', '192.168.1.20', '127.0.0.1']) await refusedThenOwn(T, host, 'tunnel.test');
-            const listed = await call(T, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const listed = await call(T, 'GET', '/api/local/admin/app-addresses', await adminOf(T));
             const bySource = (listed.body?.addresses ?? []).map((a: any) => `${a.address}:${a.source}`);
             assert(listed.status === 200 && listed.body?.named === true && listed.body?.unconfirmed?.length === 0
                 && JSON.stringify(bySource) === JSON.stringify(['tunnel.test:public-address', 'localhost:env']),

@@ -252,6 +252,18 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('names_entries', 'updated_by');
     move('names_access_log', 'actor_pubkey');
     move('names_access_log', 'subject_pubkey');
+    move('known_floor_exceptions', 'member_pubkey');
+    move('known_floor_exceptions', 'set_by');
+    move('names_debts', 'repaying_pubkey');
+    move('health_access_log', 'actor_pubkey');
+    move('health_access_log', 'subject_pubkey');
+    move('known_consents', 'member_pubkey');
+    move('known_consent_log', 'member_pubkey');
+    move('names_debts', 'settled_by');
+    move('names_debt_payments', 'payer_pubkey');
+    move('money_requests', 'payer_pubkey');
+    move('known_floor_log', 'actor_pubkey');
+    move('known_floor_log', 'member_pubkey');
     // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one
     // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
     if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);

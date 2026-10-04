@@ -24,6 +24,8 @@ import {
     getCommunityInfo, isRouteMissing, signedFetchWithKey, type CommunityInfo,
 } from '../lib/api';
 import { WebJoin, type JoinedResult } from '../components/WebJoin';
+import { fetchConsentTerms, type ConsentTerms } from '../lib/known-consent';
+import { ConsentText } from '../components/ConsentText';
 import { LookAroundGlobal } from '../components/MembersOnlyListings';
 import { WebRestore } from '../components/WebRestore';
 import { RecoveryKitButton } from '../components/RecoveryKitButton';
@@ -732,6 +734,17 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
     }, []);
 
 
+    // A known community's consent text, shown on the join step before joining (community modes slice 6), and the
+    // version of it the member ticked. Never required: unticked, the join goes on and the admins never see the balance.
+    const [joinTerms, setJoinTerms] = useState<ConsentTerms | null>(null);
+    const [joinTickedVersion, setJoinTickedVersion] = useState<string | null>(null);
+    const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
+    useEffect(() => {
+        let cancelled = false;
+        void fetchConsentTerms().then((t) => { if (!cancelled) setJoinTerms(t); });
+        return () => { cancelled = true; };
+    }, []);
+
     async function handleCreate() {
         const trimmedCallsign = callsign.trim();
         const trimmedCode = normaliseInviteCode(inviteCode);
@@ -851,6 +864,12 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
             // goes in the same transaction.
             await completeInviteSent(joined, sentJoinGuard());
             setSentInvite('none');
+            // The consent ticked on this step, recorded now the key is a member, signed by it. Never in the way: a refusal
+            // (the lines changed meanwhile) or no answer leaves Settings to offer it.
+            if (joinTerms && joinConsentTicked) {
+                await signedFetchWithKey('POST', '/api/names/consent', { version: joinTerms.version }, joined.privateKey, joined.publicKey)
+                    .catch(() => null);
+            }
             setPendingInviteCode(trimmedCode);
             enterAsInvited(joined, trimmedCallsign, joinedEarlier);
             setLoading(false);
@@ -2520,6 +2539,32 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
                                 style={inputStyle}
                             />
+
+                            {joinTerms && (
+                                <div data-testid="join-consent" style={{ textAlign: 'left', marginBottom: '1rem', overflowWrap: 'anywhere' }}>
+                                    <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 0.35rem' }}>
+                                        What this community's admins can see
+                                    </p>
+                                    <ConsentText text={joinTerms.text} fontSize="0.85rem" />
+                                    <label htmlFor="joinConsent" style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem', minHeight: 48,
+                                        fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer',
+                                    }}>
+                                        <input
+                                            id="joinConsent"
+                                            type="checkbox"
+                                            checked={joinConsentTicked}
+                                            onChange={(e) => setJoinTickedVersion(e.target.checked ? joinTerms.version : null)}
+                                            disabled={loading}
+                                            style={{ accentColor: '#2563eb', width: 20, height: 20 }}
+                                        />
+                                        I agree
+                                    </label>
+                                    <p style={{ fontSize: '0.8rem', lineHeight: 1.4, color: 'var(--text-muted)', margin: 0 }}>
+                                        Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.
+                                    </p>
+                                </div>
+                            )}
 
                             {error && (
                                 <p style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem' }}>

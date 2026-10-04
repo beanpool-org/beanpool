@@ -59,6 +59,7 @@ export const SUITES = [
     'test-activity-feed',
     'test-member-purge',
     'test-purge-during-rekey',
+    'test-rekey-cancel',
     'test-removed-member-delete',
     'test-keeper-deposit',
     'test-keeper-routes',

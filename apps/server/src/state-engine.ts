@@ -3307,7 +3307,8 @@ function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
     const { balance } = getBalance(keeperPubkey);
     const floor = usableFloor(keeperPubkey);
     if (balance < floor) {
-        throw new Error(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+        // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
+        throw new KeeperChangeRefused(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
     }
 }
 

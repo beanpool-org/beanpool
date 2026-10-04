@@ -45,7 +45,7 @@ import {
     type BreakGlassMadeBy,
 } from './engine/node-roles.js';
 import { getLocalConfig, isBreakGlassMode } from './config/local-config.js';
-import { issueCsrfToken, revokeCsrfTokensBoundTo } from './admin-auth.js';
+import { issueCsrfToken, revokeCsrfTokensBoundTo, restamp2faSessions } from './admin-auth.js';
 import { adminBroadcastAnnouncement } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
@@ -660,10 +660,10 @@ export function revokeAdminSession(sessionId: string): void {
 export const MAX_PASSWORD_SESSIONS = 32;
 
 /**
- * Which password and second factor are in force now: a password session opened under any other ends
- * (validateAdminSession). Never leaves the process.
+ * Which password and second factor are in force now: a password session or 2FA session opened under any other ends
+ * (validateAdminSession, isValid2faSession). Never leaves the process.
  */
-function passwordCredentialStamp(): string {
+export function passwordCredentialStamp(): string {
     const c = getLocalConfig();
     const second = c.totpEnabled && c.totpSecret ? c.totpSecret : '';
     return crypto.createHash('sha256').update(`${c.adminHash || ''}|${c.salt || ''}|${second}`).digest('hex');
@@ -699,14 +699,15 @@ export function createPasswordSession(now = Date.now()): { sessionId: string; cs
 }
 
 /**
- * After a route changed the admin password or the 2FA in force: the caller's own password session (if it is one)
- * carries on under the new ones, every other password session ends on its next request. Call it only once the
- * change is on disk.
+ * After a route changed the admin password or the 2FA in force: the caller's own password session (if it is one) and
+ * 2FA session (restamp2faSessions) carry on under the new ones, every other password or 2FA session ends on its next
+ * request. Call it only once the change is on disk.
  */
 export function restampPasswordSession(ctx: any): void {
     const id = ctx?.state?.adminSessionId;
     const session = typeof id === 'string' ? adminSessions.get(id) : undefined;
     if (session?.kind === 'password') session.credentialStamp = passwordCredentialStamp();
+    restamp2faSessions(ctx);
 }
 
 export const ADMIN_SESSION_COOKIE = 'admin_session';

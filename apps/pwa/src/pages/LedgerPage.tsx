@@ -14,6 +14,7 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
+import { RepaymentCard } from '../components/RepaymentCard';
 import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
@@ -350,6 +351,9 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     )}
                 </div>
             )}
+
+            {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
+            {viewerIsMember && <RepaymentCard onPaid={refresh} />}
 
             {/* Tab Bar */}
             <div className="flex bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 rounded-t-2xl shadow-sm overflow-hidden">

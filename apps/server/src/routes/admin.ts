@@ -110,7 +110,13 @@ export function createAdminRoutes(deps: RouteDeps): Router {
 // admin passwords in URL query strings (which browser console & proxy logs capture).
 router.post('/api/local/admin/ws-ticket', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const ticket = issueWsTicket();
+    // Bound to the session this request rides (none for the password itself): the log socket ends with it.
+    const ticket = issueWsTicket((ctx.state as any)?.adminSessionId);
+    if (!ticket) {
+        ctx.status = 401;
+        ctx.body = { error: 'Your sign-in has ended' };
+        return;
+    }
     ctx.body = { ticket };
 });
 

@@ -41,10 +41,11 @@ import {
 import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
+import { checkAdminAuth, redeemWsTicket } from './admin-auth.js';
+import { adminSessionBindingLive, onAdminSessionsEnded } from './admin-key-auth.js';
 import os from 'node:os';
 import { logger, addLogClient, removeLogClient, logClients, startSystemLogRetention } from './logger.js';
 import {
@@ -877,6 +878,24 @@ function claimsWsSignature(params: URLSearchParams): boolean {
     return params.has('pubkey') || params.has('sig') || params.has('ts') || params.has('nonce');
 }
 
+/** The close code a log socket gets when the sign-in it was opened under ends (signed out, signed out everywhere, role taken away). */
+export const LOG_SOCKET_SIGNIN_ENDED = 4401;
+
+/**
+ * Closes every /ws/logs socket whose session has ended: logged out, signed out everywhere (session_epoch bumped), timed
+ * out, its member no longer an admin, or (a password session) the password or its 2FA changed. Run when a session ends
+ * (onAdminSessionsEnded) and every LOG_SESSION_SWEEP_MS for the ends nothing announces (a role taken away, a password
+ * changed). At most maxLogSockets sockets, so the sweep is a handful of reads.
+ */
+function closeEndedLogSockets(logsWss: WebSocketServer): void {
+    logsWss.clients.forEach((ws: any) => {
+        if (ws._adminSession && ws.readyState === WebSocket.OPEN && !adminSessionBindingLive(ws._adminSession)) {
+            ws.close(LOG_SOCKET_SIGNIN_ENDED, 'Your sign-in ended');
+        }
+    });
+}
+const LOG_SESSION_SWEEP_MS = 1000;
+
 function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
     return async (req, socket, head) => {
         const reqUrl = req.url || '';
@@ -954,10 +973,11 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             // A single-use ticket from POST /api/local/admin/ws-ticket (checkAdminAuth), and nothing else. The admin
             // password in the query string (`?auth=`) is no longer taken: a URL lands in the tunnel's, proxies' and
             // browsers' logs and history, and no client has sent one since the tickets (Fable's web review, L5).
+            // A ticket a session asked for is spent only while that session is live (admin-auth.ts, WS TICKET STORE).
             const ticket = parsedUrl.searchParams.get('ticket');
-            const authorized = !!ticket && isValidWsTicket(ticket);
+            const redeemed = ticket ? redeemWsTicket(ticket) : null;
 
-            if (!authorized) {
+            if (!redeemed) {
                 refuseUpgrade(socket, 401);
                 return;
             }
@@ -967,6 +987,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
+                // The session it was opened under, closed with it (closeEndedLogSockets); null for the password itself.
+                ws._adminSession = redeemed.binding;
 
                 addLogClient(ws);
                 trackConnection(ws, 'admin', req);
@@ -978,6 +1000,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                     removeLogClient(ws);
                     untrackConnection(ws);
                 });
+                // The session may have ended while the upgrade was answered.
+                closeEndedLogSockets(logsWss);
             });
         } else {
             socket.destroy();
@@ -1899,8 +1923,15 @@ export async function startHttpsServer(port: number): Promise<number> {
             });
         }, 60000);
 
+        // A log socket lives no longer than the session that opened it.
+        const stopLogSessionWatch = onAdminSessionsEnded(() => closeEndedLogSockets(logsWss));
+        const logSessionSweep = setInterval(() => { if (logsWss.clients.size) closeEndedLogSockets(logsWss); }, LOG_SESSION_SWEEP_MS);
+        logSessionSweep.unref?.();
+
         server.on('close', () => {
             clearInterval(heartbeatInterval);
+            clearInterval(logSessionSweep);
+            stopLogSessionWatch();
         });
 
         server.listen(port, () => {

@@ -88,7 +88,7 @@ function openLogs(ticket: string): Promise<LogSocket | number> {
         const closed = new Promise<{ code: number; reason: string; at: number }>(r =>
             ws.on('close', (code, reason) => r({ code, reason: reason.toString(), at: Date.now() })));
         ws.on('open', () => resolve({ ws, lines, closed }));
-        ws.on('unexpected-response', (_req, res) => resolve(res.statusCode ?? 0));
+        ws.on('unexpected-response', (req, res) => { resolve(res.statusCode ?? 0); req.destroy(); });
         ws.on('error', reject);
         setTimeout(() => reject(new Error('timeout')), 3000);
     });
@@ -104,7 +104,7 @@ async function closesWithin(s: LogSocket, ms: number): Promise<{ code: number; r
 }
 /** Whether a log line written now reaches `s`. */
 async function streams(s: LogSocket): Promise<boolean> {
-    const marker = 'wslogs-marker-' + crypto.randomBytes(4).toString('hex');
+    const marker = 'wslogsmarker' + Array.from(crypto.randomBytes(8), b => String.fromCharCode(97 + (b % 26))).join('');
     logger.info('SYS', marker);
     for (let i = 0; i < 20; i++) {
         if (s.lines.some(l => l.includes(marker))) return true;

@@ -107,6 +107,11 @@ export interface LocalConfig {
     // All normal admin routes require a cryptographic key session.
     // Default false during migration rollout.
     breakGlassMode?: boolean;
+    // --- The admin password, retired for good (node sign-in design step 10, POST /api/local/admin/auth/retire-password) ---
+    // Set once by an owner's key; never cleared by any route, Wipe & Reset or a restart. While set, adminHash and salt stay
+    // null, every password path answers 403 password_retired, and ADMIN_PASSWORD in .env is ignored (initAdminPassword).
+    // `by` is the owner's member key; `acceptedOneOwner` when they retired it as the only owner.
+    passwordRetired?: { at: number; by: string; byCallsign: string | null; acceptedOneOwner?: boolean } | null;
     // --- Sealed keys (scratch/overnight/design/sealed-keys.md §2.6) ---
     // The PUBLIC record of the printed recovery code: codeId, the X25519 public key scrypt(code) derives, the
     // salt and cost. It seals, it never opens. The code itself is shown once and never stored anywhere.
@@ -432,6 +437,8 @@ export function hasAdminPassword(config: LocalConfig): boolean {
 
 /**
  * The admin password at boot (node sign-in step 8: no password on new installs).
+ * - passwordRetired (an owner retired it, routes/admin.ts retire-password) → none, for good, before every rule below:
+ *   ADMIN_PASSWORD in .env is ignored, any hash left is cleared, the first-password file deleted
  * - Config locked, or a hash in it (hasAdminPassword) → an existing node: its password stays exactly as it is, and the
  *   first-password file is looked at. A hash a take-over or sealed restore wrote without isLocked is locked here
  * - Not locked, but joinedAt set (when this server's password was set; only a boot that sets one writes it, and Wipe &
@@ -446,6 +453,17 @@ export function hasAdminPassword(config: LocalConfig): boolean {
  */
 export function initAdminPassword(): void {
     const config = getLocalConfig();
+
+    // Retired for good: no password is made, read from .env or kept. A redeploy with ADMIN_PASSWORD still in .env must
+    // never bring it back. Before every other rule: a retired node is neither an existing node nor a new install here.
+    if (config.passwordRetired) {
+        console.log(process.env.ADMIN_PASSWORD
+            ? '🔒 The admin password was retired: ADMIN_PASSWORD in .env is ignored. Sign in with a phone; remove it from .env.'
+            : '🔒 The admin password was retired: sign in with a phone.');
+        if (config.adminHash || config.salt) updateLocalConfig({ adminHash: null, salt: null });
+        removeFirstPasswordFile('The admin password was retired');
+        return;
+    }
 
     if (config.isLocked || hasAdminPassword(config)) {
         if (!config.isLocked) {
@@ -755,6 +773,11 @@ export function updateGatewayConfig(updates: Partial<GatewayConfig>): GatewayCon
     saveLocalConfig(config);
     console.log('⚙️ Gateway configuration updated:', merged);
     return merged;
+}
+
+/** Whether an owner retired the admin password for good (passwordRetired). */
+export function isPasswordRetired(): boolean {
+    return !!getLocalConfig().passwordRetired;
 }
 
 export function isBreakGlassMode(): boolean {

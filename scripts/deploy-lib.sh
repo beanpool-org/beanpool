@@ -112,8 +112,15 @@ remove_fleet_tunnel_token() {
 # (address first, then the code and a QR code). This says how, never the code. A server that has or had a password says
 # nothing, as initAdminPassword decides it: locked, or a hash (a take-over or a sealed restore writes one without isLocked),
 # or joinedAt (when its password was set: rotate-node-env.sh drops the hash and keeps it; Wipe & Reset clears it).
+# A server whose admin password an owner retired (passwordRetired) makes none, locked or not (after Wipe & Reset it is not):
+# it says so instead, before either of the others, as initAdminPassword checks it first.
 first_password_notice() {
   local data_dir=$1 target=$2
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"passwordRetired"[[:space:]]*:[[:space:]]*\{' "$data_dir/local-config.json"; then
+    echo "🔒 This server's admin password is retired: it makes none, and ADMIN_PASSWORD is ignored. Owners sign in with their phone."
+    return 0
+  fi
   if sudo test -f "$data_dir/local-config.json" \
     && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true|"adminHash"[[:space:]]*:[[:space:]]*"[^"]|"joinedAt"[[:space:]]*:[[:space:]]*[0-9]' "$data_dir/local-config.json"; then
     return 0

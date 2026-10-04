@@ -65,10 +65,28 @@
             el.replaceChildren(`${words}${/[.!?]$/.test(words) ? '' : '.'} Open `, link, ' (the new page) to turn it on, then come back.');
             el.className = 'status-msg show error';
         }
+        // Sign-in step 10: an owner retired this node's admin password. This page signs in only with the password, so it
+        // draws no password form and points to the phone.
+        function showPasswordRetired() {
+            logout();
+            ['login-password', 'login-totp'].forEach(id => {
+                const field = document.getElementById(id)?.closest('.field');
+                if (field) field.classList.add('hidden');
+            });
+            document.getElementById('login-btn')?.classList.add('hidden');
+            const el = document.getElementById('login-status');
+            const link = document.createElement('a');
+            link.href = '/settings';
+            link.textContent = 'Settings';
+            el.replaceChildren('This server has no admin password: an owner retired it. Open ', link,
+                ' (the new page) and choose "Sign in with your phone", with the BeanPool app.');
+            el.className = 'status-msg show error';
+        }
         /** True, with the message shown, when an admin call was refused because the password needs two-factor sign-in. */
         async function refusedForNeeds2fa(res) {
             if (res.status !== 403) return false;
             const body = await res.clone().json().catch(() => null);
+            if (body && body.code === 'password_retired') { showPasswordRetired(); return true; }
             if (!body || body.code !== 'password_needs_2fa') return false;
             showPasswordNeeds2fa(body.error);
             return true;
@@ -4321,7 +4339,10 @@
             try {
                 const res = await fetch(`${API}/status`);
                 const data = await res.json();
-                if (data.isLocked) {
+                if (data.passwordRetired === true) {
+                    showView('login');
+                    showPasswordRetired();
+                } else if (data.isLocked) {
                     showView('login');
                 } else {
                     // No admin password (status counts the hash too: routes/community.ts): a new install (config/local-config.ts initAdminPassword).

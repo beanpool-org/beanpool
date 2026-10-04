@@ -212,6 +212,11 @@ printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "joinedAt": 17000000000
 assert "a password being rotated (joinedAt, no hash yet): not a new install, says nothing" "$(first_password_notice "$DATA" x)" ""
 printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "joinedAt": null\n}\n' > "$DATA/local-config.json"
 assert "a null hash and joinedAt (Wipe & Reset): a new install, says so" "$(first_password_notice "$DATA" x | grep -c 'beanpool claim')" "1"
+printf '{\n  "isLocked": false,\n  "adminHash": null,\n  "passwordRetired": {\n    "at": 1,\n    "by": "ab"\n  }\n}\n' > "$DATA/local-config.json"
+out=$(first_password_notice "$DATA" x)
+assert "a retired password, unlocked after Wipe & Reset, promises no made-up one" "$(echo "$out" | grep -c 'first-admin-password')" "0"
+assert "and says the password is retired" "$(echo "$out" | grep -c 'admin password is retired')" "1"
+assert "and is not told to claim it as a new install (retired is checked first)" "$(echo "$out" | grep -c 'beanpool claim')" "0"
 LC="$ROOT/apps/server/src/config/local-config.ts"
 assert "the file name is the server's own (FIRST_PASSWORD_FILE)" \
        "$(grep -c "FIRST_PASSWORD_FILE = 'first-admin-password.txt'" "$LC")" "1"

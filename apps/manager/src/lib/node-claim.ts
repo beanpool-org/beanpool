@@ -27,7 +27,8 @@ export interface CommunityAddresses {
 
 export type ClaimState =
     | { kind: 'unknown' }
-    | { kind: 'claimed' }
+    /** `password: false`: the node's admin password was retired (design step 10), so no password field is drawn. */
+    | { kind: 'claimed'; password?: boolean }
     /** `password: false` once the node has no admin password (stage C); any other answer keeps the password's fold. */
     | {
         kind: 'unclaimed';
@@ -85,7 +86,7 @@ export async function fetchClaimState(url: string, signal?: AbortSignal): Promis
         const body: unknown = await res.json();
         if (!body || typeof body !== 'object') return { kind: 'unknown' };
         const b = body as Record<string, unknown>;
-        if (b.unclaimed === false) return { kind: 'claimed' };
+        if (b.unclaimed === false) return b.password === false ? { kind: 'claimed', password: false } : { kind: 'claimed' };
         if (b.unclaimed !== true) return { kind: 'unknown' };
 
         return {

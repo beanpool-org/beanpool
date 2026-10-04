@@ -51,11 +51,14 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
 
     router.get('/api/local/claim', async (ctx) => {
         ctx.set('Cache-Control', 'no-store');
+        const config = getLocalConfig();
+        // `password: false`: an owner retired the admin password (design step 10), so the sign-in screen draws no password
+        // field. Absent while there is one, as before.
+        const noPassword = config.passwordRetired ? { password: false } : {};
         if (nodeHasOwner()) {
-            ctx.body = { unclaimed: false };
+            ctx.body = { unclaimed: false, ...noPassword };
             return;
         }
-        const config = getLocalConfig();
         const pending = pendingClaim(config);
         // No scrypt parameters in this answer. The phone derives K with @beanpool/core's CLAIM_SCRYPT, hard-coded, and
         // must never take N, r or p from here: a phishing server writes this answer itself, and a lower N would make a
@@ -66,8 +69,9 @@ export function createNodeClaimRoutes(deps: RouteDeps): Router {
             salt: pending ? pending.salt : null,
             communityName: config.communityName || config.callsign || null,
             // Whether this server has an admin password at all: a new install has none (config/local-config.ts
-            // initAdminPassword), and the Settings sign-in then shows no password fold.
-            password: hasAdminPassword(config),
+            // initAdminPassword), and the Settings sign-in then shows no password fold. A retired one never has one,
+            // whatever the config still holds.
+            password: !config.passwordRetired && hasAdminPassword(config),
         };
     });
 

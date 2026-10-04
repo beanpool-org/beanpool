@@ -175,7 +175,13 @@ describe('a restore onto a community whose server is older than request binding'
         nodes[OLD] = 'old';
         mem.set('beanpool_anchor_url', OLD);
         expect(await post(OLD, '/api/push-tokens', { token: 'ExponentPushToken[q]', platform: 'android' })).toBe(200);
-        expect(calls.map(c => c.status)).toEqual([403, 200]);
+        // Refused in format 2; its info, read unsigned, says nothing of request signing; accepted in format 1.
+        expect(calls.map(c => [c.url, c.status, c.headers['X-Signed-For']])).toEqual([
+            [`${OLD}/api/push-tokens`, 403, 'old5.test'],
+            [`${OLD}/api/community/info`, 200, undefined],
+            [`${OLD}/api/push-tokens`, 200, undefined],
+        ]);
+        expect(calls[1].headers['X-Signature']).toBeUndefined();
         calls = [];
         expect(await (await fetch(`${OLD}/api/community/me`)).status).toBe(200);
         expect(await post(OLD, '/api/profile/update', { publicKey: PUB })).toBe(200);
@@ -255,6 +261,29 @@ describe('a current community, and no downgrade', () => {
         expect(signed).toHaveLength(2);
         for (const c of signed) expect(c.headers['X-Signed-For']).toBe('new2.test');
         expect(knownRequestSigning(NEW)).toBe(2);
+    });
+
+    it('a current node not heard from yet whose handler refuses with the old server\'s words: its info is read first, the handler runs once, and it stays format 2', async () => {
+        const NEW = 'https://new4.test';
+        // A current server's route handler answers the same 403 after its middleware accepted the signature
+        // (settings-signin-pairing.ts approve/decline, member-signature.ts).
+        nodes[NEW] = 'new-refusing';
+        mem.set('beanpool_anchor_url', NEW);
+        await addSavedNode(NEW);
+        expect(await post(NEW, '/api/settings/signin/pairing/approve', { id: 'p1' })).toBe(403);
+        const handled = calls.filter(c => c.url === `${NEW}/api/settings/signin/pairing/approve`);
+        expect(handled).toHaveLength(1);
+        expect(handled[0].headers['X-Signed-For']).toBe('new4.test');
+        // Its info, read unsigned after the refusal, said 2: not marked old, here or on its saved entry.
+        expect(infoReads(NEW)).toHaveLength(1);
+        expect(infoReads(NEW)[0].headers['X-Signature']).toBeUndefined();
+        expect(knownRequestSigning(NEW)).toBe(2);
+        expect((await getSavedNodes()).find(n => n.url === NEW)?.requestSigning).toBe(2);
+        // The next request goes in format 2.
+        nodes[NEW] = 'new';
+        calls = [];
+        expect(await (await fetch(`${NEW}/api/community/me`)).status).toBe(200);
+        expect(calls.filter(c => c.headers['X-Signature']).map(c => c.headers['X-Signed-For'])).toEqual(['new4.test']);
     });
 
     it('a host never saved that answers a signed write with the old server\'s refusal gets no old-format signature', async () => {

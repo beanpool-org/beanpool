@@ -197,13 +197,18 @@ export async function requestSigningFormatFor(url: string, options: { readInfoFi
 /**
  * A node refused a format-2 signature with an old server's refusal (403 `Invalid cryptographic signature`): record
  * the old format for it, here and on its saved entry, until its info says otherwise, and say whether to sign again in
- * it (once). Never for a node that has said it reads 2 (no downgrade: request-signing-version.ts, one way only). One
- * whose info said 1 while the request was on its way (it outlasted INFO_WAIT_MS) is signed again too.
+ * it (once). Never for a node that has said it reads 2 (no downgrade: request-signing-version.ts, one way only). A
+ * current server's own route handlers answer with the same words after its check has accepted the signature
+ * (settings-signin-pairing.ts, engine/member-signature.ts), so a node not heard from yet has its info read first
+ * (`learnRequestSigning`: unsigned, at most INFO_WAIT_MS, a read in flight reused): one that says 2 keeps 2 and its
+ * refusal stands, so a handler isn't run twice. Signed again when the info says 1 or couldn't be read in time, and
+ * for one whose info said 1 while the request was on its way (it outlasted INFO_WAIT_MS).
  */
 export async function fellBackToOldFormat(url: string): Promise<boolean> {
     if (hydrating) await hydrating;
     const host = hostOf(url);
     if (!host) return false;
+    if (!known.has(host)) await learnRequestSigning(url);
     const said = known.get(host);
     if (said !== undefined && said >= REQUEST_SIGNING_VERSION) return false;
     rememberRequestSigning(url, 1);

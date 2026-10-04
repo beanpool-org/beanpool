@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { colors } from '../constants/colors';
 import { signedGet, signedRequestWithMethod } from '../utils/db';
-import { readKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
+import { readKnownConsent, saveKnownConsent, shouldOfferConsent, showsConsentCard, canWithdrawConsent, consentHeading, type KnownConsent } from '../utils/known-consent';
 
 export function KnownConsentCard() {
     const [consent, setConsent] = useState<KnownConsent | null>(null);
@@ -36,13 +36,9 @@ export function KnownConsentCard() {
         setBusy(true);
         setNote(null);
         try {
-            const res = await signedRequestWithMethod('POST', '/api/names/consent', body);
-            const answer = await (res as Response).json().catch(() => null);
-            const next = readKnownConsent(answer);
-            if ((res as Response).ok && next) { setConsent(next); setNote(done); }
-            else setNote(typeof (answer as { error?: unknown })?.error === 'string' ? (answer as { error: string }).error : 'Not saved. Try again later.');
-        } catch {
-            setNote('Not saved: the community could not be reached.');
+            const saved = await saveKnownConsent(() => signedRequestWithMethod('POST', '/api/names/consent', body));
+            if ('consent' in saved) { setConsent(saved.consent); setNote(done); }
+            else setNote(saved.error);
         } finally {
             setBusy(false);
         }

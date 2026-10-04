@@ -46,6 +46,25 @@ export function consentHeading(c: KnownConsent): string {
     return c.consentedVersion ? 'Your community changed what its admins can see' : 'What this community\'s admins can see';
 }
 
+/**
+ * Settings' Agree / Withdraw: `post` is signedRequestWithMethod, which answers the parsed JSON and throws on a non-OK
+ * answer (the node's own message) or when the node can't be reached. The card used to read that answer as a Response,
+ * so every saved answer showed "could not be reached" (rehearsal 5 Oct, d2).
+ */
+export async function saveKnownConsent(post: () => Promise<unknown>): Promise<{ consent: KnownConsent } | { error: string }> {
+    let answer: unknown;
+    try {
+        answer = await post();
+    } catch (e) {
+        // fetch throws a TypeError when the node can't be reached; signedRequestWithMethod throws an Error with the
+        // node's message for a refusal, or "Request failed: <status>" when the node gave none.
+        if (e instanceof TypeError || !(e instanceof Error) || !e.message) return { error: 'Not saved: the community could not be reached.' };
+        return { error: /^Request failed/.test(e.message) ? 'Not saved. Try again later.' : e.message };
+    }
+    const consent = readKnownConsent(answer);
+    return consent ? { consent } : { error: 'Not saved. Try again later.' };
+}
+
 /** The text a known community shows on its join screen (GET /api/community/consent-terms, public), before joining. */
 export interface ConsentTerms {
     known: boolean;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readKnownConsent, shouldOfferConsent, consentHeading, readConsentTerms, joinAsksConsent, showsConsentCard, canWithdrawConsent } from '../known-consent';
+import { readKnownConsent, saveKnownConsent, shouldOfferConsent, consentHeading, readConsentTerms, joinAsksConsent, showsConsentCard, canWithdrawConsent } from '../known-consent';
 
 const TERMS = { known: true, debtLinePct: 50, quietDays: 60, version: '1:50:60', text: 'In this community, the admins can see your balance…', confirmed: true, consentedAt: null, consentedVersion: null };
 
@@ -67,5 +67,25 @@ describe('known consent', () => {
         expect(joinAsksConsent(readConsentTerms({ known: false, version: '1:50:60', text: TERMS.text }))).toBe(false);
         expect(readConsentTerms({ error: 'Not found' })).toBeNull();
         expect(joinAsksConsent(null)).toBe(false);
+    });
+
+    // Rehearsal 5 Oct, d2: signedRequestWithMethod answers the parsed JSON, so the card's old `(res as Response).json()`
+    // threw on every saved answer and showed "could not be reached" while the node had saved it.
+    it('a saved Withdraw or I agree shows the saved state at once, with no error', async () => {
+        const agreed = { ...TERMS, consentedAt: '2026-10-05T00:00:00Z', consentedVersion: '1:50:60' };
+        const saved = await saveKnownConsent(async () => agreed);
+        expect(saved).toEqual({ consent: readKnownConsent(agreed) });
+        const withdrawn = await saveKnownConsent(async () => ({ ...TERMS, withdrawnAt: '2026-10-05T01:00:00Z' }));
+        expect('consent' in withdrawn && canWithdrawConsent(withdrawn.consent)).toBe(false);
+        expect('consent' in withdrawn && withdrawn.consent.withdrawnAt).toBe('2026-10-05T01:00:00Z');
+    });
+
+    it('a real failure still says it was not saved', async () => {
+        expect(await saveKnownConsent(async () => { throw new TypeError('Network request failed'); }))
+            .toEqual({ error: 'Not saved: the community could not be reached.' });
+        expect(await saveKnownConsent(async () => { throw new Error('The community changed what admins can see. Read it again.'); }))
+            .toEqual({ error: 'The community changed what admins can see. Read it again.' });
+        expect(await saveKnownConsent(async () => { throw new Error('Request failed: 500'); })).toEqual({ error: 'Not saved. Try again later.' });
+        expect(await saveKnownConsent(async () => ({ error: 'odd' }))).toEqual({ error: 'Not saved. Try again later.' });
     });
 });

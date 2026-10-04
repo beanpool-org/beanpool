@@ -128,7 +128,9 @@ In a known community, an admin's phone also shows the **exceptions**: confirmed 
 
 Only an owner moves the two lines, and every change shows in the known floor's log. The join screen tells every new member, in those numbers, what the admins can see, and their app records that they agreed. A member who joined before your community asked is offered it in their app; until they agree they never show. Changing the lines asks every member again; until a member agrees to the new ones, they show only within the lines they agreed to (a tighter line never reaches them without their say).
 
-Every time anyone opens the exceptions, your server writes who and when, before it answers. Every owner and admin can read that log in Community health.
+Every time anyone opens the exceptions, your server writes who and when, before it answers. Every time an admin sees a member's balance while removing them, it writes who, whose and when. Every owner and admin can read that log in Community health.
+
+In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.
 
 ## The PDF copy
 

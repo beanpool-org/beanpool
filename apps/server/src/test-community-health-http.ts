@@ -16,6 +16,8 @@
  *      lines; the exceptions are not in it (they open on an admin's phone, where the names are)
  *   6. the consent: the terms are public before joining; a member consents to the version they were shown; a stale
  *      version, a guest and an unsigned request are refused
+ *   8b. a vote on removing a member: its balance and debt reach only those who can vote in it, through the admin
+ *      Decisions list too; an admin or the owner who can't vote in it gets the Decision without them (balanceHidden)
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-community-health-http.ts
  */
@@ -29,9 +31,9 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
-import { ownerSessionHeaders } from './admin-auth-test-harness.js';
+import { ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
 import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -275,7 +277,7 @@ async function main(): Promise<void> {
     // what that text said, not today's, so he is in no exception until he agrees to today's wording.
     const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
     const [wordingNow, ...leaLines] = leaRow.version.split(':');
-    assert(wordingNow === '5', `he agreed to wording 5, so the one before is wording 4, the text that said "those looks are not logged" (${leaRow.version})`);
+    assert(wordingNow === '6', `he agreed to wording 6, so the one before is wording 5, the text that said "Every look at your balance is logged" (${leaRow.version})`);
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
     const ex5 = await exceptions(ada);
     const leaMine = await call('GET', lea, '/api/names/consent');
@@ -380,6 +382,54 @@ async function main(): Promise<void> {
     }
     assert(logRows() === before8b, 'reading the activity log is no look at a balance, so it writes no line');
 
+    // ── 8b. a vote on removing a member shows the balance to its voters only ──────────────────────────
+    // #1610's deciding review, Question 2: the admin Decisions list served every admin and the owner the balance and debt
+    // of a member up for removal, whether or not they could vote in it. The rule (Marty, 28 Sep): everyone who can vote in
+    // it sees the balance, in that vote only. Being an admin is no reason to see it.
+    console.log('── 8b. a vote on removing a member: its balance reaches its voters only ──');
+    const removal = createDecision({ authorPubkey: founder.pk, title: 'Remove Kimberly', description: 'Owes 600 and gone quiet', touches: 'member', effect: 'remove_member', subject: kim.pk });
+    const lateAdmin = makeMember('Latecomer');   // an admin who joined after the vote opened: can't vote in it
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateAdmin.pk);
+    grantNodeRole(lateAdmin.pk, 'admin', 'SYSTEM');
+    const lateSession = { 'X-Admin-Session': consumeHandshakeToken(mintHandshakeToken(lateAdmin.pk, 'admin').handshakeToken).sessionId! };
+    const before8c = logRows();
+    const adminCard = (r: Res) => (r.body?.decisions ?? []).find((d: any) => d.id === removal.id);
+    const asVoterAdmin = await call('POST', null, '/api/local/admin/decisions', {}, adaSession);
+    const voterCard = adminCard(asVoterAdmin);
+    assert(asVoterAdmin.status === 200 && voterCard?.params?.balance === -600 && voterCard?.params?.debt === 600 && !voterCard?.balanceHidden,
+        `an admin who can vote in it sees the balance and the debt in the admin Decisions list (${show(asVoterAdmin)})`);
+    const asLateAdmin = await call('POST', null, '/api/local/admin/decisions', {}, lateSession);
+    const lateCard = adminCard(asLateAdmin);
+    assert(asLateAdmin.status === 200 && !!lateCard && lateCard.balanceHidden === true && !('balance' in (lateCard.params ?? {})) && !('debt' in (lateCard.params ?? {}))
+        && lateCard.params?.memberName === 'Kimberly' && lateCard.subjectName === 'Kimberly',
+        `an admin who can't vote in it gets the vote without the balance or the debt, and is told it is hidden (${show(asLateAdmin)})`);
+    assert(!/-600|"debt":600/.test(asLateAdmin.text), 'the number is nowhere in that answer');
+    const asOwner = await call('POST', null, '/api/local/admin/decisions', {}, owner);
+    assert(asOwner.status === 200 && adminCard(asOwner)?.params?.balance === -600 && !adminCard(asOwner)?.balanceHidden,
+        `an owner who can vote in it sees it, as any voter does (${show(asOwner)})`);
+    const lateOwner = makeMember('Lateowner');   // an owner who joined after the vote opened: can't vote in it
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateOwner.pk);
+    grantNodeRole(lateOwner.pk, 'owner', 'SYSTEM');
+    const asLateOwner = await call('POST', null, '/api/local/admin/decisions', {}, ownerSessionHeaders(lateOwner.pk));
+    const ownerCard = adminCard(asLateOwner);
+    assert(asLateOwner.status === 200 && ownerCard?.balanceHidden === true && !('balance' in (ownerCard?.params ?? {})) && !('debt' in (ownerCard?.params ?? {})),
+        `being the owner is no reason either: an owner who can't vote in it gets it hidden (${show(asLateOwner)})`);
+    const asSignedLate = await call('POST', lateAdmin, '/api/local/admin/decisions', {}, lateSession);
+    assert(adminCard(asSignedLate)?.balanceHidden === true && !/-600/.test(asSignedLate.text), `signing the request as well changes nothing for an admin who can't vote (${show(asSignedLate)})`);
+    // #1613's deciding review, finding 1: a token is a script, not a voter. One made by an owner who can vote in it
+    // still gets the vote without the balance or the debt.
+    const asVoterToken = await call('POST', null, '/api/local/admin/decisions', {}, ownerTokenHeaders('admin', founder.pk));
+    const tokenCard = adminCard(asVoterToken);
+    assert(asVoterToken.status === 200 && tokenCard?.balanceHidden === true && !('balance' in (tokenCard?.params ?? {})) && !('debt' in (tokenCard?.params ?? {}))
+        && !/-600|"debt":600/.test(asVoterToken.text),
+        `an automation token gets it hidden, even one made by an owner who can vote in it (${show(asVoterToken)})`);
+    const asVoter = await call('GET', sam, `/api/commons/decisions/${removal.id}`);
+    assert(asVoter.status === 200 && asVoter.body?.decision?.params?.balance === -600 && asVoter.body?.decision?.params?.debt === 600,
+        `a plain member who can vote in it still sees the balance and the debt (${show(asVoter)})`);
+    const asLateMember = await call('GET', lateAdmin, `/api/commons/decisions/${removal.id}`);
+    assert(asLateMember.status === 200 && !('balance' in (asLateMember.body?.decision?.params ?? {})), `nor through the members' route (${show(asLateMember)})`);
+    assert(logRows() === before8c, 'a look at the balance in a vote is not a line in the access log, as the texts say (section 9)');
+
     // ── 9. the texts say what the node does ────────────────────────────────────────────────────────
     console.log('── 9. the privacy policy and the guide say what the node does ──');
     const policy = fs.readFileSync(new URL('../../website/privacy.html', import.meta.url), 'utf8');
@@ -441,8 +491,7 @@ async function main(): Promise<void> {
         && /\*\*An alert that names the members who have had no Beans move in or out\*\* for a set number of days\./.test(guide)
         && /\*\*A trade whose Beans were left stuck when a member was removed on an older server\.\*\* The trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note, so that an owner can write the stuck Beans off\./.test(guide)
         && /\*\*Every look at one of these trades is logged:\*\* who looked, when, and at which trades\. \*\*A look at the alerts that name a member is logged\*\* the first time each admin opens them, and again at that admin's first look after 24 hours; the looks in between add no line\. The owner and the admins can see that log in Community health, as a list of its own beside the list of who looked at a balance\./.test(guide)
-        && guide.includes("The member stats the admins see show how many posts each member has up and messages they have sent, and of trades only the whole community's totals: how many trades were finished or cancelled and what the finished ones came to, never one member's.\n\n" + trustProfile.replace("each member's trust profile", "each member's **trust profile**") + "\n\nNothing else of your trades.\n")
-        && !/not logged/.test(guide),
+        && guide.includes("The member stats the admins see show how many posts each member has up and messages they have sent, and of trades only the whole community's totals: how many trades were finished or cancelled and what the finished ones came to, never one member's.\n\n" + trustProfile.replace("each member's trust profile", "each member's **trust profile**") + "\n\nNothing else of your trades.\n"),
         'the members\' guide lists the same five, says every look at a trade is logged and an alerts look once in 24 hours per admin and member, the owner sees the log, member stats carry only totals, every member sees the trust profile, and nothing else');
     assert(/Every look at one of those trades is logged, and a look at the alerts that name you is logged the first time each admin opens them in 24 hours\. The owner and the admins can see that log\. The admins also see how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours; and, as every member does, your trust profile, unlogged\./.test(privacyPage)
         && privacyPage.includes("- Your trust badge, your reviews, and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.")
@@ -455,13 +504,36 @@ async function main(): Promise<void> {
         && /a fraud alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of the members you invited have traded with no one but you, if members you invited send you Beans past a limit within a set number of days, or if you are one of those members;/.test(consentText)
         && /one that names you, with how much of the group's trading is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other;/.test(consentText)
         && /an alert that names you if no Beans have moved in or out of your account for a set number of days\. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours, and the looks in between add no line\. The owner and the admins can see that log\. The member stats the admins see show how many posts you have up and messages you have sent, and of trades only the whole community's totals, not yours\. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points\. That isn't logged, because every member can see it\. Nothing else of your trades\. Whoever runs/.test(consentText)
-        && !/not logged/.test(consentText)
         && /Nothing else of your trades\. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies\.$/.test(consentText)
-        && /Every look at your balance is logged/.test(consentText),
-        `the wording a member agrees to says what any admin sees of trades, that every look is logged and the owner sees the log, that member stats carry only the community's totals, that a look at a balance is logged, and that whoever runs the server holds it all (${show(terms9)})`);
+        && /Every time an admin opens the list of members past those lines, and every time an admin looks at your balance while removing you, it is logged\. In a vote on removing you, everyone who can vote in it sees your balance and any debt, in that vote only, and those looks are not logged\. You can take this back at any time in Settings\./.test(consentText),
+        `the wording a member agrees to says what any admin sees of trades, that every look is logged and the owner sees the log, that member stats carry only the community's totals, which looks at a balance are logged and that the looks in a vote on removing them are not, and that whoever runs the server holds it all (${show(terms9)})`);
+    // Wording 4 and the texts beside it said an admin's looks at trades were not logged; since queue item 29 every one is
+    // (section 9's log lines). #1613's deciding review: the check is for those sentences, in any spelling, in all five
+    // texts, not for the words "not logged", which a true sentence about a removal vote uses (section 8b writes no line).
+    const tradesNotLogged = [
+        /any admin can see some of your trades, and those looks (are not|aren't|aren’t) logged/i,
+        /Nothing else of (your|anyone's|anyone’s) trades\. These looks (are not|aren't|aren’t) logged/i,
+        /nobody can see who looked/i,
+    ];
+    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => tradesNotLogged.some((r) => r.test(t))),
+        'no text says the looks at trades are not logged, as wording 4, the policy and the guide did: every look at a trade is');
+    // #1610's deciding review, Question 2: wording 5 said "Every look at your balance is logged", and the looks in a vote on
+    // removing a member (section 8b) write no line. Every text now names the voters, says no other admin or owner sees it
+    // there, and says those looks are not logged.
+    assert(![policy, guide, operatorPage, privacyPage, consentText].some((t) => /every look at your balance is logged/i.test(t)),
+        'no text says every look at a balance is logged: a look in a vote on removing a member is not');
+    const notThere = "An admin or an owner who can't vote in it doesn't see them there. Those looks are not logged.";
+    assert(policy.includes(`<li><strong>When the community votes on removing you:</strong> everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}</li>`)
+        && policy.includes('A look at your balance in a vote on removing you is not recorded.'),
+        'the policy says only the voters see a balance in a vote on removing you, no other admin or owner, and that it is not recorded');
+    assert(guide.includes(`- **When your community votes on removing you.** Everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}`)
+        && privacyPage.includes(`- If the community votes on removing you, everyone who can vote in it sees your balance and any debt, in that vote only. ${notThere}`)
+        && operatorPage.includes("In a vote on removing a member, everyone who can vote in it sees that member's balance and any debt, in that vote only. An owner or an admin who can't vote in it doesn't see them there. Those looks are not logged.")
+        && operatorPage.includes("Every time an admin sees a member's balance while removing them, it writes who, whose and when."),
+        'both guide pages and the operator page say the same, and the operator page says a look while removing a member is logged');
     const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
     assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
-    assert(String(terms9.body?.version ?? '').startsWith('5:'), `the wording is version 5, so a member who agreed to wording 4 ("those looks are not logged", "how many trades you have finished") is asked again (${show(terms9)})`);
+    assert(String(terms9.body?.version ?? '').startsWith('6:'), `the wording is version 6, so a member who agreed to wording 5 ("Every look at your balance is logged") is asked again (${show(terms9)})`);
     // Queue item 29 (Marty, 4 Oct: "Keep disputes, log every look, totals only in member stats").
     const lastLines = (n: number) => db.prepare('SELECT actor_pubkey, action, subject_pubkey, detail FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(n) as any[];
     const before9 = logRows();

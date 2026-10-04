@@ -25,7 +25,7 @@ import {
     adminRejectProject,
     adminHaltDecision, adminAccelerateDecision,
     adminEmergencySuspend, adminLiftSuspension,
-    getAllDecisions, tallyDecision,
+    getAllDecisions, tallyDecision, decisionForAdmin,
     getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
@@ -2034,16 +2034,20 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 });
 
 // Admin: the Decisions an admin can still act on — open votes and removals in their grace window — with
-// totals only. Like every other Decision response, never who voted how.
+// totals only. Like every other Decision response, never who voted how. A vote on removing a member carries their
+// balance and debt only to an admin who may vote in it (decisionForAdmin); every other admin gets balanceHidden.
 router.post('/api/local/admin/decisions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
     // The subject's name only: getMember read their photo too, once a Decision (#1478).
     const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    // The admin's own key, from their key session only. An automation token carries its maker's key as the actor, but a
+    // token is a script, not a voter (#1613's deciding review); a password session has no key at all.
+    const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
     ctx.body = {
         decisions: actionable.map(d => {
             const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
-            return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
+            return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
         }),
     };
 });

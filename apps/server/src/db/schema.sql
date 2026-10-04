@@ -1659,6 +1659,19 @@ CREATE TABLE IF NOT EXISTS known_consents (
     updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
+-- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
+-- easily as they agreed). Withdrawing deletes their known_consents row, so they are in no exception from that moment;
+-- this keeps that it happened, and to which text. Only the member reads their own.
+CREATE TABLE IF NOT EXISTS known_consent_log (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('agreed', 'withdrawn')),
+    version        TEXT NOT NULL,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
+
 -- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
 -- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
 -- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.

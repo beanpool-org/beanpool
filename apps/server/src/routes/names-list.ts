@@ -22,7 +22,9 @@
  *   GET    /api/names/health/log?limit              → who opened the exceptions, and when
  *   POST   /api/names/health/settings               { debtLinePct?, quietDays? } (an owner; each change in the known floor's log)
  *   GET    /api/names/consent                       → a member's own: the terms, and whether they consented (any member)
- *   POST   /api/names/consent                       { version } → the member's consent to the terms they were shown
+ *   POST   /api/names/consent                       { version } → the member's consent to the terms they were shown;
+ *                                                   { withdraw: true } → withdraws it (GDPR Art. 7(3)), at once
+ *   DELETE /api/names/consent                       → withdraws it too
  *   GET    /api/community/consent-terms             → the join screen's text, before joining (anyone)
  *   GET    /api/names/copy                          → { header, signature, box } of the signer's own locked copy (logged:
  *                                                     copy_restored) | 404 no_copy
@@ -37,7 +39,7 @@
  * are no admin now (reconcileHolders).
  */
 import { DebtError, listDebts, settleByPayment } from '../engine/names-debts.js';
-import { HealthError, healthSummary, openExceptions, readHealthAccessLog, setHealthSettings, consentTerms, myConsent, recordConsent } from '../engine/community-health.js';
+import { HealthError, healthSummary, openExceptions, readHealthAccessLog, setHealthSettings, consentTerms, myConsent, recordConsent, withdrawConsent } from '../engine/community-health.js';
 import { isNodeOwner } from '../engine/node-roles.js';
 import Router from '@koa/router';
 import { getMember, isVisitorKey } from '../state-engine.js';
@@ -196,7 +198,8 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
         ctx.body = { known, debtLinePct, quietDays, version, text };
     });
     router.get('/api/names/consent', (ctx) => asMember(ctx, (actor) => myConsent(actor)));
-    router.post('/api/names/consent', (ctx) => asMember(ctx, (actor, body) => recordConsent(actor, body)));
+    router.post('/api/names/consent', (ctx) => asMember(ctx, (actor, body) => body.withdraw === true ? withdrawConsent(actor) : recordConsent(actor, body)));
+    router.delete('/api/names/consent', (ctx) => asMember(ctx, (actor) => withdrawConsent(actor)));
 
     // The signer's own locked copy, and nobody else's: no parameter names an owner.
     router.get('/api/names/copy', (ctx) => asAdmin(ctx, (actor) => readNamesCopyOf(actor)));

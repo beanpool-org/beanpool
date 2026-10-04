@@ -281,13 +281,40 @@ async function main(): Promise<void> {
     const ex6 = await exceptions(ada);
     assert((ex6.body?.exceptions ?? []).some((e: any) => e.memberPubkey === lea.pk), 'with his consent to today\'s wording, he is listed again');
 
+    // ── 6c. withdrawing consent: as easy as giving it, and at once ─────────────────────────────────
+    console.log('── 6c. withdrawing ──');
+    const listed = async () => new Set(((await exceptions(ada)).body?.exceptions ?? []).map((e: any) => e.memberPubkey));
+    assert((await listed()).has(kim.pk), 'Kimberly, who consented, is listed before she withdraws');
+    const withdrew = await call('POST', kim, '/api/names/consent', { withdraw: true });
+    assert(withdrew.status === 200 && withdrew.body?.consentedAt === null && withdrew.body?.consentedVersion === null && typeof withdrew.body?.withdrawnAt === 'string',
+        `Kimberly withdraws her consent with one signed request (${show(withdrew)})`);
+    assert(!(await listed()).has(kim.pk), 'and from that moment she is in no exception');
+    const mineOff = await call('GET', kim, '/api/names/consent');
+    assert(mineOff.status === 200 && mineOff.body?.consentedAt === null && typeof mineOff.body?.withdrawnAt === 'string',
+        `her Settings reads that she withdrew, and when (${show(mineOff)})`);
+    const del = await call('DELETE', lea, '/api/names/consent');
+    assert(del.status === 200 && del.body?.consentedAt === null, `DELETE withdraws too (Leander) (${show(del)})`);
+    assert(!(await listed()).has(lea.pk), 'and Leander is out at once');
+    const history = db.prepare('SELECT action, version FROM known_consent_log WHERE member_pubkey = ? ORDER BY at, rowid').all(kim.pk) as any[];
+    assert(history.map(h => h.action).join() === 'agreed,withdrawn' && history[0].version === terms.body.version,
+        `the withdrawal is kept in the consent history, after the agreement (${JSON.stringify(history)})`);
+    const termsNow = await call('GET', null, '/api/community/consent-terms');
+    const again = await call('POST', kim, '/api/names/consent', { version: termsNow.body.version });
+    assert(again.status === 200 && again.body?.consentedVersion === termsNow.body.version && again.body?.withdrawnAt === null,
+        `Kimberly can consent again (${show(again)})`);
+    assert((await listed()).has(kim.pk), 'and she is listed again');
+    assert((db.prepare('SELECT COUNT(*) AS n FROM known_consent_log WHERE member_pubkey = ?').get(kim.pk) as any).n === 3,
+        'the history keeps all three: agreed, withdrawn, agreed');
+    const guestOff = await call('POST', null, '/api/names/consent', { withdraw: true });
+    assert(guestOff.status === 401, `an unsigned withdrawal is refused (${show(guestOff)})`);
+
     // ── 7. Settings (the manager) ────────────────────────────────────────────────────────────────
     console.log('── 7. Settings ──');
     const { handshakeToken } = mintHandshakeToken(ada.pk, 'admin');
     const s = consumeHandshakeToken(handshakeToken);
     const adaSession = { 'X-Admin-Session': s.sessionId! };
     const mgr = await call('GET', null, '/api/local/admin/community-health', undefined, adaSession);
-    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 7
+    assert(mgr.status === 200 && mgr.body?.totals?.membersInDebit >= 6 && mgr.body?.settings?.debtLinePct === 5 && mgr.body?.log?.length === 11
         && mgr.body?.exceptions === undefined, `an admin's Settings reads the totals, the lines and the access log, and no exceptions (${show(mgr)})`);
     const mgrO = await call('GET', null, '/api/local/admin/community-health', undefined, owner);
     assert(mgrO.status === 200 && mgrO.body?.known === true, `and the owner's (${show(mgrO)})`);

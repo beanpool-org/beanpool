@@ -193,14 +193,42 @@ export function recordConsent(pubkey: string, body: { version?: unknown }) {
     if (!terms.known) throw new HealthError(409, 'not_known', 'This community does not confirm its members, so there is nothing to agree to.');
     if (body.version !== terms.version) throw new HealthError(409, 'stale_text', 'The community changed what admins can see. Read it again.');
     assertPlainTablesWritable();
-    db.prepare(`INSERT INTO known_consents (member_pubkey, version, consented_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        ON CONFLICT(member_pubkey) DO UPDATE SET version = excluded.version, consented_at = excluded.consented_at`).run(pubkey, terms.version);
+    db.transaction(() => {
+        db.prepare(`INSERT INTO known_consents (member_pubkey, version, consented_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(member_pubkey) DO UPDATE SET version = excluded.version, consented_at = excluded.consented_at`).run(pubkey, terms.version);
+        logConsent(pubkey, 'agreed', terms.version);
+    })();
     return myConsent(pubkey);
+}
+
+/**
+ * A member withdraws their consent (GDPR Art. 7(3)): at any time, with one signed request, whatever the community's
+ * settings. Their row goes, so they are in no exception from the next opening; the consent history keeps that they
+ * withdrew. Withdrawing with nothing to withdraw changes nothing.
+ */
+export function withdrawConsent(pubkey: string) {
+    assertPlainTablesWritable();
+    db.transaction(() => {
+        const c = consentOf(pubkey);
+        if (!c) return;
+        db.prepare('DELETE FROM known_consents WHERE member_pubkey = ?').run(pubkey);
+        logConsent(pubkey, 'withdrawn', c.version);
+    })();
+    return myConsent(pubkey);
+}
+
+function logConsent(pubkey: string, action: 'agreed' | 'withdrawn', version: string): void {
+    db.prepare('INSERT INTO known_consent_log (id, member_pubkey, action, version) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), pubkey, action, version);
 }
 
 /** A member's own view: the terms, and whether (and to which version) they consented. */
 export function myConsent(pubkey: string) {
     const c = consentOf(pubkey);
     const terms = consentTerms();
-    return { ...terms, confirmed: isConfirmed(db, pubkey), consentedAt: c?.consented_at ?? null, consentedVersion: c?.version ?? null };
+    // When they last withdrew, while they have no consent now: Settings says so, and offers the text again.
+    const withdrawn = c ? undefined : db.prepare("SELECT at FROM known_consent_log WHERE member_pubkey = ? AND action = 'withdrawn' ORDER BY at DESC, rowid DESC LIMIT 1")
+        .get(pubkey) as { at: string } | undefined;
+    return { ...terms, confirmed: isConfirmed(db, pubkey), consentedAt: c?.consented_at ?? null, consentedVersion: c?.version ?? null,
+        withdrawnAt: withdrawn?.at ?? null };
 }

@@ -1,7 +1,7 @@
 ---
 slug: access-and-security
 title: Access and security
-summary: Changing the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.
+summary: Changing or retiring the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.
 related: signing-in, roles, first-time-setup, rate-limits
 ---
 
@@ -14,6 +14,23 @@ Type the current password and a new one. The new one needs at least 8 characters
 Change it whenever someone who knew it steps down. Everyone who has it is an owner.
 
 If the server made up the first password (ADMIN_PASSWORD was empty), changing it deletes data/first-admin-password.txt at once. The log says so.
+
+On a server whose password is retired (below) there is nothing to change: this card is refused.
+
+## Retire the admin password
+
+The admin password is one shared secret that makes whoever knows it an owner, from anywhere on the internet. Once every owner signs in with their phone, you can remove it for good. Only an owner signed in with their phone (Manage, or **Sign in with your phone** on a computer) can do it, under Access & Security, **Retire the admin password**. Signed in with the password itself, or with an automation token, you can't.
+
+- **First, make your break-glass code** (below) and keep it safe. Settings asks for it before it lets you retire the password: once the password is gone, it is how you get back in if your phone is lost.
+- **Keep two owners.** With only one, Settings asks you to tick **I accept one owner**, and the server's log records that you did.
+- **Move your scripts first.** Anything that sends the password (the fleet manager, backup scripts) stops working. Give each one an automation token (below). They then say "This node's password is retired: use a token".
+- Type **RETIRE** and press **Retire the admin password**.
+
+What happens: the password and the two-factor sign-in that guarded it are deleted; every sign-in made with the password ends at once, live log views included; every member sees a notice that the password was retired, and by whom; the server's log records it. The card then says **Retired on** the date **by** the owner.
+
+What stays: Manage in the app, **Sign in with your phone** on a computer, your break-glass code, automation tokens, and beanpool recover on the server. The sign-in page shows no password field any more, and the old settings page points to the phone.
+
+It is for good. No setting brings the password back, and ADMIN_PASSWORD in .env is ignored on every later start (the log says so once; take it out of .env). Factory reset keeps it retired too. A take-over, or restoring a locked backup, keeps it retired on a server that knows, even from a backup or take-over copy made before you retired it. A server that never knew, given one made before, gets the old password back with it: a standby until its next copy, or a new server you restore an older backup onto. So let each standby copy once after you retire it, and retire it again on any server you restore an older backup onto. If every owner loses their phone and 12 words: a break-glass code, a second owner, or beanpool recover on the server (Signing in).
 
 ## Two-factor sign-in
 

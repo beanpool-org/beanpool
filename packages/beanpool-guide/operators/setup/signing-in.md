@@ -13,6 +13,8 @@ On a new server nobody can sign in with a key yet, so the sign-in page says **Th
 
 ## With the admin password
 
+Only servers that still have one. An owner can retire it for good (Access and security, **Retire the admin password**); after that the sign-in page shows no password field, every password is refused with "This community's admin password was retired", and you sign in with your phone as below. A server set up with a claim code may have one too, until an owner retires it.
+
 Go to your server's address followed by /settings and type the admin password. If two-factor sign-in is on, Settings then asks for the 6-digit code from your authenticator app. If it is off, the password opens only the card that sets it up: Settings does not open on the password alone, and nothing else in it opens until an authenticator is set up. Tools that send the password with every request are refused too until then: give them an automation token instead (Access & Security). The app's Manage button and a computer signed in by scanning a code are never asked for this: the phone's own lock is their second factor.
 
 The first password is the ADMIN_PASSWORD you put in .env. If you left it empty, the server made one up and put it in a file, not in the log. Read it with: docker compose exec beanpool-node cat /data/first-admin-password.txt. Change it after you sign in; that deletes the file. See First-time setup.

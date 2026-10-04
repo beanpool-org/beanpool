@@ -35,4 +35,9 @@ describe('known consent (web)', () => {
         expect(shouldOfferConsent(readKnownConsent({ ...TERMS, known: false }))).toBe(false);
         expect(shouldOfferConsent(null)).toBe(false);
     });
+
+    it('asks again at wording 4 though the lines are the same (review r4177156495: what the two alerts with Beans fire on)', () => {
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '4:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '3:50:60' }))).toBe(true);
+        expect(shouldOfferConsent(readKnownConsent({ ...TERMS, version: '4:50:60', consentedAt: '2026-10-04T00:00:00Z', consentedVersion: '4:50:60' }))).toBe(false);
+    });
 });

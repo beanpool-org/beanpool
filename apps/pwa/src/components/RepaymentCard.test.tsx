@@ -1,5 +1,5 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 
 /**
  * The Ledger's repayment card (#1597 item 4): the banner only while the member works a debt off; Pay the Commons checks
@@ -12,7 +12,7 @@ vi.mock('../lib/debts', async (orig) => ({ ...(await orig<typeof import('../lib/
 import { RepaymentCard } from './RepaymentCard';
 
 const CODE = 'c'.repeat(32);
-let confirmSpy: ReturnType<typeof vi.spyOn>;
+let confirmSpy: MockInstance<typeof window.confirm>;
 
 beforeEach(() => {
     debts.getMyRepayment.mockReset();

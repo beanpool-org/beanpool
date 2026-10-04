@@ -7,6 +7,7 @@ import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
 import { DoorSettingPanel } from './DoorSettingPanel';
 import { KnownFloorPanel } from './KnownFloorPanel';
+import { CommunityHealthPanel } from './CommunityHealthPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
@@ -350,6 +351,9 @@ export function PeopleSafetySection({
                     </SectionErrorBoundary>
                     <SectionErrorBoundary sectionName="The known floor" resetKey={activeNode.id}>
                         <KnownFloorPanel activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary sectionName="Community health" resetKey={activeNode.id}>
+                        <CommunityHealthPanel activeNode={activeNode} viewer={rolesViewer} />
                     </SectionErrorBoundary>
                     <InvitesModule activeNode={activeNode} />
                 </div>

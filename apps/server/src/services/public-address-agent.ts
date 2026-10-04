@@ -17,9 +17,10 @@
 // The tunnel's destination is always this server's own loopback (LOOPBACK_ORIGIN): the tunnel runs inside the server.
 //
 // A name asked for at install (`beanpool claim --name`, address-request.ts) counts as PUBLIC_ADDRESS_NAME (the env wins
-// when both are set). The node takes the command's file within ~2 s and asks for the name at once, then every 10 s while
-// the request stands and no address is held; after that the 5-min tick. Taken only while this server holds no address:
-// changing a name it holds stays in Settings, owner-only.
+// when both are set). The node takes the command's file within ~2 s and asks for the name at once; while the request
+// stands and no address is held it asks again after 10 s, 30 s and 2 min (the command waits 3), then on the 5-min tick. Taken only while this server holds no address:
+// changing a name it holds stays in Settings, owner-only. The request ends once this server holds any address, however it
+// got it (Settings, this agent, a take-over), and when Settings takes the address offline: it never claims later.
 
 import { getNodeRole, getNodeConfig } from '../state-engine.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
@@ -66,11 +67,28 @@ const holdsAddress = (): boolean => {
     return !!pa && (pa.status === 'live' || pa.status === 'pending');
 };
 
+/**
+ * The registrar's word that a name can't be had (apps/registrar handleClaim): invalid 400, blocked or reserved 403, taken
+ * 409. Any other answer (a 401 from a clock out of step, 408, 429, a page in front of the registrar) is asked again.
+ */
+const REFUSED = new Set([400, 403, 409]);
+
 /** The registrar holds the requested name for this key now (live or waiting): the request is done. */
 const requestDone = (name: string): void => {
     const r = getLocalConfig().addressRequest;
     if (r && r.name === name) updateLocalConfig({ addressRequest: null });
 };
+
+/**
+ * Ends a request from `beanpool claim`: this server holds an address (or its owner released one) however it got it. Left
+ * standing, it would claim the install's name after a later release, against the owner's latest choice.
+ */
+export function dropAddressRequest(): void {
+    const r = getLocalConfig().addressRequest;
+    if (!r) return;
+    updateLocalConfig({ addressRequest: null });
+    if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: the address is set in Settings now`);
+}
 
 /** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
 export async function reconcile(): Promise<void> {
@@ -99,7 +117,10 @@ export async function reconcile(): Promise<void> {
     const name = desiredName();
     if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
     const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
-    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX);
+    // The env's contact, or the one `beanpool claim --contact` gave with the name being claimed.
+    const req = getLocalConfig().addressRequest;
+    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX)
+        || (req && req.name === name ? cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) : undefined);
     const communityName = cleanLabel(process.env.PUBLIC_ADDRESS_COMMUNITY_NAME, REGISTRAR_COMMUNITY_NAME_MAX)
         || cleanLabel(getLocalConfig().communityName, REGISTRAR_COMMUNITY_NAME_MAX);
 
@@ -112,21 +133,25 @@ export async function reconcile(): Promise<void> {
     } catch (e: any) {
         console.warn('[PublicAddr] claim failed:', e.message);
         // The registrar refused the requested name (taken, not allowed): kept with its reason, never asked for again. A
-        // registrar that did not answer leaves the request standing for the next check.
+        // registrar that did not answer, or answered anything else, leaves the request standing for the next check.
         const r = getLocalConfig().addressRequest;
         const status = Number(e?.status);
-        if (!envEnabled() && r && r.name === name && status >= 400 && status < 500) {
+        if (!envEnabled() && r && r.name === name && REFUSED.has(status)) {
             updateLocalConfig({ addressRequest: { ...r, refused: String(e?.message || `refused (${status})`).slice(0, 300) } });
         }
     }
 }
 
 let checking = false;
-let lastRequestCheck = 0;
+/** After a check that left the request standing: the next one in 10 s, 30 s, 2 min; after that only the 5-min tick. */
+const REQUEST_BACKOFF_MS = [10_000, 30_000, 120_000];
+let requestTries = 0;
+let nextRequestCheck = 0;
 
 /**
  * Every 2 s on a main server: take a file `beanpool claim` left, and while a request stands and no address is held, ask
- * the registrar every 10 s. A file is dropped while an address is held (Settings changes a held name, owner-only).
+ * the registrar at once, then backing off (REQUEST_BACKOFF_MS): a registrar that is down is not asked every 10 s by
+ * every node until it is back. A file is dropped while an address is held (Settings changes a held name, owner-only).
  */
 export async function checkAddressRequest(now = Date.now()): Promise<void> {
     if (checking || getNodeRole() !== 'primary') return;
@@ -141,12 +166,17 @@ export async function checkAddressRequest(now = Date.now()): Promise<void> {
                 updateLocalConfig({ addressRequest: { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null } });
                 console.log(`[PublicAddr] 📡 beanpool claim asked for "${req.name}"`);
                 fresh = true;
+                requestTries = 0;
             }
         }
-        if (!requestedName() || holdsAddress()) return;
-        if (!fresh && now - lastRequestCheck < 10_000) return;
-        lastRequestCheck = now;
+        if (holdsAddress()) { dropAddressRequest(); return; }
+        if (!requestedName()) return;
+        if (!fresh && now < nextRequestCheck) return;
         await reconcile();
+        if (requestedName() && !holdsAddress()) {
+            nextRequestCheck = requestTries < REQUEST_BACKOFF_MS.length ? now + REQUEST_BACKOFF_MS[requestTries] : Infinity;
+            requestTries++;
+        }
     } finally {
         checking = false;
     }

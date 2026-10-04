@@ -25,7 +25,11 @@ import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { getConnectorCreditCap, getConnectorByAddress } from './connector-manager.js';
 import { settlementCapacity, type SettlementCapacity } from './federation-bridge.js';
-import { turnOn2faForTests } from './admin-auth-test-harness.js';
+import { turnOn2faForTests, ownerSessionHeaders, ownerTokenHeaders } from './admin-auth-test-harness.js';
+import { mintHandshakeToken, consumeHandshakeToken } from './admin-key-auth.js';
+import { db } from './db/db.js';
+import { grantNodeRole } from './state-engine.js';
+import crypto from 'node:crypto';
 
 let PORT = 0; // the port startHttpsServer(0) bound
 let BASE = '';
@@ -56,6 +60,30 @@ async function post(path: string, body: Record<string, unknown>): Promise<{ stat
 }
 
 const setCap = (body: Record<string, unknown>) => post('/api/local/connectors/credit-cap', body);
+
+async function getAs(path: string, headers: Record<string, string> = {}): Promise<{ status: number; text: string; json: any }> {
+    const res = await fetch(`${BASE}${path}`, { headers });
+    const text = await res.text();
+    let json: any = null;
+    try { json = JSON.parse(text); } catch { /* no json */ }
+    return { status: res.status, text, json };
+}
+
+/** A member of this node with no node role, and the headers its app signs a request with. */
+function seedMember(callsign: string, role?: 'moderator'): { pub: string; signed: (method: string, path: string) => Record<string, string> } {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pub = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(pub, callsign);
+    db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
+    if (role) grantNodeRole(pub, role, 'SYSTEM');
+    const signed = (method: string, path: string) => {
+        const ts = String(Date.now()), nonce = crypto.randomBytes(16).toString('hex');
+        const sig = crypto.sign(null, Buffer.from(`${method}\n${path}\n${ts}\n${nonce}\n`), privateKey).toString('base64');
+        return { 'X-Public-Key': pub, 'X-Signature': sig, 'X-Timestamp': ts, 'X-Nonce': nonce };
+    };
+    return { pub, signed };
+}
 
 /**
  * The refusal reason, or null when capacity was granted.
@@ -161,6 +189,69 @@ async function main() {
     const reclosed = settlementCapacity(PEER_ID, ADDRESS, 5);
     assert(reclosed.ok === false && reasonOf(reclosed) === 'no_cap_configured',
         `6c. and settlement is fail-closed again — clearing is a working off-switch (got reason=${reasonOf(reclosed)})`);
+
+    // ── 7. Who may READ the links (#1564 review NB3). The list says which peers this community has blocked, with their
+    //      addresses, how much credit it extends to each, the trust levels and the links' error strings: the
+    //      community's federation posture, for its admins. The dashboard's identity stays public, as elsewhere.
+    const BLOCKED_ADDR = '/ip4/198.51.100.23/tcp/4001/p2p/12D3KooWBlockedTestPeerIdPlaceholder000000';
+    const blockedAdded = await post('/api/local/connectors', { password: PW, address: BLOCKED_ADDR, trustLevel: 'blocked', callsign: 'shunned' });
+    const capped = await setCap({ password: PW, address: ADDRESS, cap: 250 });
+    assert(blockedAdded.status === 200 && capped.status === 200, `7. setup: a blocked peer added and a cap of 250 set (got ${blockedAdded.status} ${capped.status})`);
+    /** Nothing of the link list in an answer: no address, no cap, no trust level. */
+    const holdsNoLinks = (text: string) => !text.includes(PEER_ID) && !text.includes('198.51.100.23') && !/creditCap|trustLevel|blocked/.test(text);
+    const LIST = '/api/local/connectors';
+    const DASH = '/api/local/dashboard';
+    const member = seedMember('plainMember');
+    const moderator = seedMember('modMember', 'moderator');
+    const { handshakeToken } = mintHandshakeToken(moderator.pub, 'moderator');
+    const modSession = consumeHandshakeToken(handshakeToken);
+    const modHeaders: Record<string, string> = modSession.ok && modSession.sessionId ? { 'X-Admin-Session': modSession.sessionId } : {};
+    const refusedCallers: Array<[string, () => Record<string, string>]> = [
+        ['no credential', () => ({})],
+        ['a member\'s signed request', () => member.signed('GET', LIST)],
+        ['a moderator\'s key session', () => modHeaders],
+        ['a wrong password', () => ({ 'X-Admin-Password': 'nope', 'X-Admin-TOTP': tfa!.code() })],
+        ['a backups-scope token', () => ownerTokenHeaders('backups')],
+    ];
+    for (const [who, headers] of refusedCallers) {
+        const r = await getAs(LIST, headers());
+        assert((r.status === 401 || r.status === 403) && holdsNoLinks(r.text),
+            `7a. GET ${LIST} with ${who} → refused, nothing of the list (got ${r.status} ${r.text.slice(0, 120)})`);
+    }
+    const adminCallers: Array<[string, () => Record<string, string>]> = [
+        ['an owner\'s key session', () => ownerSessionHeaders()],
+        ['an admin-scope token', () => ownerTokenHeaders('admin')],
+        ['a read-scope token', () => ownerTokenHeaders('read')],
+        ['the password with a 2FA code', () => tfa!.headers()],
+    ];
+    for (const [who, headers] of adminCallers) {
+        const r = await getAs(LIST, headers());
+        const list: any[] = Array.isArray(r.json) ? r.json : [];
+        const peer = list.find(c => c.address === ADDRESS);
+        const shunned = list.find(c => c.address === BLOCKED_ADDR);
+        assert(r.status === 200 && peer?.creditCap === 250 && shunned?.trustLevel === 'blocked',
+            `7b. GET ${LIST} with ${who} → the list, cap and blocked peer included (got ${r.status}, ${list.length} links)`);
+    }
+
+    const anonDash = await getAs(DASH);
+    const identityKeys = Object.keys(anonDash.json?.identity ?? {}).sort().join(',');
+    assert(anonDash.status === 200 && identityKeys === 'callsign,joinedAt,location,peerId',
+        `7c. GET ${DASH} with no credential → 200 with the public identity (got ${anonDash.status} ${identityKeys})`);
+    assert(!('connectors' in (anonDash.json ?? {})) && holdsNoLinks(anonDash.text),
+        `7d. ... and nothing of the link list (got ${anonDash.text.slice(0, 160)})`);
+    const memberDash = await getAs(DASH, member.signed('GET', DASH));
+    assert(memberDash.status === 200 && !('connectors' in (memberDash.json ?? {})) && holdsNoLinks(memberDash.text)
+        && JSON.stringify(memberDash.json?.identity) === JSON.stringify(anonDash.json?.identity),
+        `7e. GET ${DASH} as a member → the same public identity, no links (got ${memberDash.status} ${memberDash.text.slice(0, 120)})`);
+    const badDash = await getAs(DASH, { 'X-Admin-Password': 'nope', 'X-Admin-TOTP': tfa!.code() });
+    assert(badDash.status === 401 && holdsNoLinks(badDash.text),
+        `7f. GET ${DASH} with a wrong password → refused, as any admin route refuses it, no links (got ${badDash.status})`);
+    for (const [who, headers] of adminCallers) {
+        const r = await getAs(DASH, headers());
+        const peer = (r.json?.connectors ?? []).find((c: any) => c.address === ADDRESS);
+        assert(r.status === 200 && peer?.creditCap === 250 && JSON.stringify(r.json?.identity) === JSON.stringify(anonDash.json?.identity),
+            `7g. GET ${DASH} with ${who} → the same identity plus the links (got ${r.status} cap=${peer?.creditCap})`);
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

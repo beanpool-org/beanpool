@@ -652,7 +652,9 @@ async function stalledAcrossVersions(dir: string, readers: Key[], BURST: number,
                 else if (base) {
                     // Each extra body served may keep about its size again from being reused (above); 32 MB for noise: a
                     // fresh server's RSS before the readers varies that much (315 and 338 MB measured, the same case).
-                    const flat = base.grew + 24 * PER_CONNECTION_MB + Math.max(0, served - base.served) * size * 2 + 32;
+                    // A 24-reader run whose RSS SHRANK (the OS took pages back: -45 MB on CI, run 37145036026) is no
+                    // baseline below zero: it once made the bound -7 MB and failed a 48-reader run that also shrank (-4).
+                    const flat = Math.max(0, base.grew) + 24 * PER_CONNECTION_MB + Math.max(0, served - base.served) * size * 2 + 32;
                     assert(grew <= flat, `and the server's RSS no longer grows with the readers: 48 grow it +${grew.toFixed(0)} MB, 24 grew it +${base.grew.toFixed(0)} (at most ${flat.toFixed(0)})`);
                 }
                 assert(heldAfter.inFlightBytes === 0 && heldAfter.sharedBodies === 0, `and once they hang up nothing is counted or held (${heldAfter.inFlightBytes} bytes, ${heldAfter.sharedBodies} bodies)`);

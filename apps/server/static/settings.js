@@ -544,8 +544,8 @@
                 if (loginData.tfaSessionToken) {
                     tfaSessionToken = loginData.tfaSessionToken;
                 }
-                // /dashboard itself checks no admin credential, so an admin route is asked first: on a node where the
-                // password needs two-factor sign-in it is refused, and Settings never opens empty.
+                // An admin route is asked first: on a node where the password needs two-factor sign-in it is refused,
+                // and Settings never opens empty. /dashboard checks the same credential before it adds the peer links.
                 const gateRes = await fetch(`${API}/admin/2fa/status`, { headers: adminHeaders() });
                 if (await refusedForNeeds2fa(gateRes)) return;
                 const dashRes = await fetch(`${API}/dashboard`, { headers: adminHeaders() });
@@ -910,7 +910,8 @@
 
         async function refreshConnectors() {
             try {
-                const res = await fetch(`${API}/connectors`);
+                // Admin only, like the routes that change the links.
+                const res = await fetch(`${API}/connectors`, { headers: adminHeaders() });
                 if (res.ok) renderConnectors(await res.json());
             } catch (e) { /* ignore */ }
         }

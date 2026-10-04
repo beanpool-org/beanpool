@@ -54,6 +54,7 @@ A moderator never needs the server's 6-digit code, and nor does an admin or an o
 - Owners, signed in with their key or with the admin password, see the list and can add and remove people.
 - Admins, signed in with their key, see the list and can add and remove **moderators**. Owners and admins are added and removed by an owner.
 - Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
+- At the bottom, anyone signed in with their key finds **Sign out everywhere**: it ends all of their own Settings sign-ins at once. See Access and security.
 
 ![The Owners and Admins screen in Settings](images/people-roles.webp)
 

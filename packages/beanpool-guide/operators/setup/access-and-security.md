@@ -1,7 +1,7 @@
 ---
 slug: access-and-security
 title: Access and security
-summary: Changing the admin password, two-factor sign-in, break-glass codes, and the factory reset. Under Appliance & Data, then Access & Security.
+summary: Changing the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.
 related: signing-in, roles, first-time-setup, rate-limits
 ---
 
@@ -55,11 +55,22 @@ A break-glass code belongs to one owner. It starts with **bg-** and does one thi
 - Using it shows every member a notice: "Break-glass recovery used to authorise a new admin key for @callsign". The server's log records whose code it was.
 - The server keeps only a scrambled copy of it, made slow to guess, so a copy of the server's data does not give it away.
 - If two-factor sign-in is on, it still asks for the code. If it is off, the code alone is enough: the admin password alone does not add a key.
-- When an owner signs out all of their own sessions at once (from their key, or from the app), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out, or signing out with the password, leaves codes alone.
+- When an owner signs out everywhere (see Signing out everywhere, below), their code stops working too, so a code someone made from a stolen session does not outlast it. Make a new one afterwards. Signing someone else out leaves their code alone.
 - Adding the key of someone who is already an owner again keeps their code. A new owner gets a code of their own when they are added.
 - In **Owners & admins**, each owner's row says when their code was last made, and from where: a key session in Settings, their phone, the admin password, a break-glass sign-in, or beanpool recover on the server. If it was made at a time you don't recognise, make a new one.
 
 Keep it offline, like a spare key. Anyone who has it can add an admin key of their own, and the notice is then the community's only warning.
+
+## Signing out everywhere
+
+Lost a phone, or signed in to Settings on a computer that isn't yours? **Sign out everywhere** ends every Settings sign-in of yours at once, on every computer and phone.
+
+- In Settings, signed in with your key: **People & Safety**, then **Owners & admins**, at the bottom. It asks first, then shows the sign-in screen, since this computer is signed out too.
+- In the app: **Settings**, under Community admin, **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.
+- An owner's break-glass code stops working too. Make a new one afterwards.
+- Your key stays on your phone: press **Manage** in the app to sign in again.
+- It ends only your own sign-ins. Settings opened with the admin password has no sign-ins of anyone's to end, so it doesn't show the button, and the server refuses an automation token here.
+- Automation tokens are not sign-ins: tokens made earlier keep working afterwards. If someone else may have signed in as you, an owner should open **Automation tokens** (below) and revoke any token nobody recognises. Only owners see that card.
 
 ## Automation tokens
 

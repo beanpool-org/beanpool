@@ -52,7 +52,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -296,9 +296,14 @@ router.post('/api/local/admin/auth/password', async (ctx) => {
 const revocationNonces = new NonceStore(60_000);
 
 /**
- * POST /api/local/admin/auth/revoke-all
- * Revoke all web sessions for a member by bumping session_epoch in SQLite.
- * Gated by checkAdminAuth or signature header.
+ * POST /api/local/admin/auth/revoke-all — "Sign out everywhere" (Settings' Owners & admins, the app's admin rows).
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite. Who can end whose:
+ *   - a key session (owner, admin, moderator) or the app's signed request: the caller's own; the signed request always
+ *     the signer's, whatever the body names;
+ *   - an owner's key session, or the password: another member's too, named in the body (from the phone, after its
+ *     unlock again); the password naming nobody is refused (400), as it has no sessions of its own;
+ *   - an automation token: nobody's (403 token_not_allowed, as on every sign-in route).
+ * test-automation-tokens section 4b measures each over HTTP.
  */
 router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -308,6 +313,9 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
 
     // Check if called with an active admin session or password auth
     const isAuthed = await checkAdminAuth(ctx as any);
+    // An automation token has no sessions of its own, so it signs out nobody: checkAdminAuth refuses it here as on every
+    // sign-in route (403 token_not_allowed), and that answer stands rather than falling through to the app's signature.
+    if (!isAuthed && ctx.status === 403 && (ctx.body as any)?.code === TOKEN_REFUSED_CODE) return;
     if (isAuthed) {
         const callerPubkey = (ctx.state as any)?.actor;
         const callerRole = (ctx.state as any)?.adminRole;
@@ -320,7 +328,13 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
         // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
         // your own sessions is not asked.
         if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
-        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
+        // The password is nobody's own session: it signs out only the member it names, never one picked for it.
+        if (!targetPubkey && !callerPubkey) {
+            ctx.status = 400;
+            ctx.body = { error: 'Name the member to sign out everywhere (memberPubkey)' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey;
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
         // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts

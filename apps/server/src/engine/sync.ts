@@ -1344,7 +1344,8 @@ function importMemberPhoto(publicKey: string, stored: unknown): boolean {
     const row = db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(publicKey) as { updated_at: string | null } | undefined;
     if (!row) return false;
     if (!setMemberPhoto(db, publicKey, stored)) return false;
-    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(row.updated_at, publicKey);
+    // Only when the photo's write moved it (an update that changes nothing makes the touch trigger stamp afresh).
+    db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ? AND updated_at IS NOT ?').run(row.updated_at, publicKey, row.updated_at);
     return true;
 }
 

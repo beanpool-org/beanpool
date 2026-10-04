@@ -11,6 +11,7 @@ import {
     type NodeRoleRecord,
 } from '../../lib/node-client';
 import { nodeCredential } from '../../lib/profiles';
+import { SignOutEverywhere } from './SignOutEverywhere';
 
 /**
  * Owners & admins — who holds authority over this node (docs/admin-surface.md §1, the-commons.md §9.2).
@@ -34,6 +35,8 @@ interface NodeRolesPanelProps {
     viewer: RolesViewer;
     /** Called after a role changes, so the member directory's badges catch up. */
     onChanged?: () => void;
+    /** A key session only: after "Sign out everywhere" ends this browser's session too, show the sign-in screen. */
+    onSignedOutEverywhere?: () => void;
 }
 
 const ROLE_LABEL: Record<MemberNodeRole, string> = { owner: 'Owner', admin: 'Admin', moderator: 'Moderator' };
@@ -113,7 +116,8 @@ const BREAK_GLASS_MADE_BY: Record<string, string> = {
 
 /**
  * An owner's break-glass code, for their row (#1531): when it was last made and from which kind of session, so an owner
- * who signed out everywhere (which retires their code) can tell whether a code made since was theirs. Null for a role
+ * who signed out everywhere (SignOutEverywhere at the foot of this panel, or the app's row; it retires their code) can tell
+ * whether a code made since was theirs. Null for a role
  * that is not an owner, or from an older node that does not say.
  */
 export function breakGlassText(r: Pick<NodeRoleRecord, 'role' | 'has_break_glass' | 'break_glass_made_at' | 'break_glass_made_by'>): string | null {
@@ -131,7 +135,7 @@ export function breakGlassText(r: Pick<NodeRoleRecord, 'role' | 'has_break_glass
 type Target = { pubkey: string; name: string; currentRole: MemberNodeRole | null };
 type Notice = { kind: 'success' | 'error'; text: string };
 
-export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeRolesPanelProps) {
+export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSignedOutEverywhere }: NodeRolesPanelProps) {
     const [roles, setRoles] = useState<NodeRoleRecord[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -575,6 +579,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                     )}
                 </div>
             )}
+
+            {/* Your own sign-ins: only a key session has any (the password and a fleet profile are nobody's). */}
+            {viewer.kind === 'key' && onSignedOutEverywhere && <SignOutEverywhere onSignedOut={onSignedOutEverywhere} />}
         </div>
     );
 }

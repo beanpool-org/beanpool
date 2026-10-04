@@ -16,6 +16,8 @@
  *      lines; the exceptions are not in it (they open on an admin's phone, where the names are)
  *   6. the consent: the terms are public before joining; a member consents to the version they were shown; a stale
  *      version, a guest and an unsigned request are refused
+ *   8b. a vote on removing a member: its balance and debt reach only those who can vote in it, through the admin
+ *      Decisions list too; an admin or the owner who can't vote in it gets the Decision without them (balanceHidden)
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-community-health-http.ts
  */
@@ -29,7 +31,7 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage, createDecision } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -379,6 +381,47 @@ async function main(): Promise<void> {
         assert(probe.status === 200 && probe.body?.logs?.length === 0, `${who}'s search can't find the number either (${show(probe)})`);
     }
     assert(logRows() === before8b, 'reading the activity log is no look at a balance, so it writes no line');
+
+    // ── 8b. a vote on removing a member shows the balance to its voters only ──────────────────────────
+    // #1610's deciding review, Question 2: the admin Decisions list served every admin and the owner the balance and debt
+    // of a member up for removal, whether or not they could vote in it. The rule (Marty, 28 Sep): everyone who can vote in
+    // it sees the balance, in that vote only. Being an admin is no reason to see it.
+    console.log('── 8b. a vote on removing a member: its balance reaches its voters only ──');
+    const removal = createDecision({ authorPubkey: founder.pk, title: 'Remove Kimberly', description: 'Owes 600 and gone quiet', touches: 'member', effect: 'remove_member', subject: kim.pk });
+    const lateAdmin = makeMember('Latecomer');   // an admin who joined after the vote opened: can't vote in it
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateAdmin.pk);
+    grantNodeRole(lateAdmin.pk, 'admin', 'SYSTEM');
+    const lateSession = { 'X-Admin-Session': consumeHandshakeToken(mintHandshakeToken(lateAdmin.pk, 'admin').handshakeToken).sessionId! };
+    const before8c = logRows();
+    const adminCard = (r: Res) => (r.body?.decisions ?? []).find((d: any) => d.id === removal.id);
+    const asVoterAdmin = await call('POST', null, '/api/local/admin/decisions', {}, adaSession);
+    const voterCard = adminCard(asVoterAdmin);
+    assert(asVoterAdmin.status === 200 && voterCard?.params?.balance === -600 && voterCard?.params?.debt === 600 && !voterCard?.balanceHidden,
+        `an admin who can vote in it sees the balance and the debt in the admin Decisions list (${show(asVoterAdmin)})`);
+    const asLateAdmin = await call('POST', null, '/api/local/admin/decisions', {}, lateSession);
+    const lateCard = adminCard(asLateAdmin);
+    assert(asLateAdmin.status === 200 && !!lateCard && lateCard.balanceHidden === true && !('balance' in (lateCard.params ?? {})) && !('debt' in (lateCard.params ?? {}))
+        && lateCard.params?.memberName === 'Kimberly' && lateCard.subjectName === 'Kimberly',
+        `an admin who can't vote in it gets the vote without the balance or the debt, and is told it is hidden (${show(asLateAdmin)})`);
+    assert(!/-600|"debt":600/.test(asLateAdmin.text), 'the number is nowhere in that answer');
+    const asOwner = await call('POST', null, '/api/local/admin/decisions', {}, owner);
+    assert(asOwner.status === 200 && adminCard(asOwner)?.params?.balance === -600 && !adminCard(asOwner)?.balanceHidden,
+        `an owner who can vote in it sees it, as any voter does (${show(asOwner)})`);
+    const lateOwner = makeMember('Lateowner');   // an owner who joined after the vote opened: can't vote in it
+    db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(new Date(Date.now() + 1000).toISOString(), lateOwner.pk);
+    grantNodeRole(lateOwner.pk, 'owner', 'SYSTEM');
+    const asLateOwner = await call('POST', null, '/api/local/admin/decisions', {}, ownerSessionHeaders(lateOwner.pk));
+    const ownerCard = adminCard(asLateOwner);
+    assert(asLateOwner.status === 200 && ownerCard?.balanceHidden === true && !('balance' in (ownerCard?.params ?? {})) && !('debt' in (ownerCard?.params ?? {})),
+        `being the owner is no reason either: an owner who can't vote in it gets it hidden (${show(asLateOwner)})`);
+    const asSignedLate = await call('POST', lateAdmin, '/api/local/admin/decisions', {}, lateSession);
+    assert(adminCard(asSignedLate)?.balanceHidden === true && !/-600/.test(asSignedLate.text), `signing the request as well changes nothing for an admin who can't vote (${show(asSignedLate)})`);
+    const asVoter = await call('GET', sam, `/api/commons/decisions/${removal.id}`);
+    assert(asVoter.status === 200 && asVoter.body?.decision?.params?.balance === -600 && asVoter.body?.decision?.params?.debt === 600,
+        `a plain member who can vote in it still sees the balance and the debt (${show(asVoter)})`);
+    const asLateMember = await call('GET', lateAdmin, `/api/commons/decisions/${removal.id}`);
+    assert(asLateMember.status === 200 && !('balance' in (asLateMember.body?.decision?.params ?? {})), `nor through the members' route (${show(asLateMember)})`);
+    assert(logRows() === before8c, 'a look at the balance in a vote is not a line in the access log, as the texts say (section 9)');
 
     // ── 9. the texts say what the node does ────────────────────────────────────────────────────────
     console.log('── 9. the privacy policy and the guide say what the node does ──');

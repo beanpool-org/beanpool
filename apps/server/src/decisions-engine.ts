@@ -272,7 +272,7 @@ function carriesMemberBalance(params: unknown): params is Record<string, unknown
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
  * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
  * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
- * Admin routes (/api/local/admin/*) serve the full Decision.
+ * Admin routes (/api/local/admin/*) serve decisionForAdmin.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
@@ -296,6 +296,20 @@ export function decisionForReader(decision: Decision, reader: string | null | un
     const params: Record<string, unknown> = { ...(shown.params || {}) };
     for (const k of MEMBER_BALANCE_PARAMS) if (k in decision.params) params[k] = decision.params[k];
     return { ...shown, params };
+}
+
+/**
+ * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the admin's verified key: the full Decision,
+ * except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them: to an
+ * admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them, and a
+ * password session or an automation token has no key, so it never does. balanceHidden says they were left off.
+ */
+export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
+    if (!carriesMemberBalance(decision.params)) return decision;
+    if (reader && (reader === decision.subject || checkVoterEligibility(reader, decision).ok)) return decision;
+    const params: Record<string, unknown> = { ...decision.params };
+    for (const k of MEMBER_BALANCE_PARAMS) delete params[k];
+    return { ...decision, params, balanceHidden: true };
 }
 
 /**

@@ -7,7 +7,8 @@
  * The main server trusts it for one thing only: telling the community's owners that their standby needs them
  * (services/standby-health.ts). So it is read strictly: a fixed set of fields, each of a fixed shape and size, times as
  * ages (so neither server's clock matters), reasons as codes from a fixed list, tables by name from the manifest. Anything
- * else and the whole report is ignored. It never carries free text.
+ * else and the whole report is ignored, but for a reason this server doesn't know (a newer standby's): that reads as none.
+ * It never carries free text.
  */
 
 import { TABLES } from '../engine/replication-manifest.js';
@@ -121,7 +122,8 @@ export function parseStandbyReport(raw: unknown): StandbyReport | null {
     if (typeof r.id !== 'string' || !/^[0-9a-f]{32}$/.test(r.id)) return null;
     const last = r.last;
     if (last !== 'ok' && last !== 'refused' && last !== 'fetch-failed' && last !== 'none') return null;
-    if (!(r.why === null || (typeof r.why === 'string' && WHY.test(r.why)))) return null;
+    // A newer standby sends in `why` a reason older main servers know, and its own code in `whyDetail` (standbyReportHeader).
+    const why = whyCode(r.whyDetail) ?? whyCode(r.why);
     const fails = r.fails;
     if (typeof fails !== 'number' || !Number.isInteger(fails) || fails < 0 || fails > 1_000_000) return null;
     const { okAgo, wholeAgo, exactAgo, exact, differs, hashed, healing } = r;
@@ -133,9 +135,20 @@ export function parseStandbyReport(raw: unknown): StandbyReport | null {
     const oversized = tablesOf(r.oversized);
     if (!leftOut || !oversized) return null;
     return {
-        v: 1, id: r.id, last, why: r.why as WhyCode | null, fails, okAgo, wholeAgo,
+        v: 1, id: r.id, last, why, fails, okAgo, wholeAgo,
         exact, exactAgo, differs: [...new Set<string>(differs)], hashed, healing: exact === false && healing, leftOut, oversized,
     };
+}
+
+/**
+ * The report as the header carries it. A main server from before the redirect codes ignores, whole, a report whose `why`
+ * it doesn't know: a refused redirect goes to it as `network` (what it was told of one before), and the code with the
+ * host in `whyDetail`, a field it never reads. Left out rather than let the report pass STANDBY_REPORT_MAX_CHARS.
+ */
+export function standbyReportHeader(r: StandbyReport): string {
+    if (r.why !== 'redirect' && !r.why?.startsWith('redirect:')) return JSON.stringify(r);
+    const detailed = JSON.stringify({ ...r, why: 'network', whyDetail: r.why });
+    return detailed.length <= STANDBY_REPORT_MAX_CHARS ? detailed : JSON.stringify({ ...r, why: 'network' });
 }
 
 // ── Plain words, for the owners' notice and the take-over preview ─────────────────────────

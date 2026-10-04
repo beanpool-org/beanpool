@@ -71,7 +71,7 @@ import { pullTakeoverEnvelope } from './standby-envelopes.js';
 import { takeRecoverySealFullPull, clearCopiesDroppedBeforeSeal, noteWholeCopyThisProcess } from './recovery-seal-key.js';
 import { getNodeProfile, readProfileRecord, writeProfileRecord } from '../config/node-profile.js';
 import { compareTableHashes, readTableHashes, tableContentHashes } from '../engine/replica-hashes.js';
-import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER } from './standby-report.js';
+import { LEDGER_DIFFERS, STANDBY_REPORT_HEADER, standbyReportHeader } from './standby-report.js';
 import {
     HEALING_MS, lastMismatchResyncAt, noteCopyFailed, noteCopyLanded, noteMismatchResyncAsked, noteMismatchResyncTaken,
     notePastRetention, noteUncomparedCheck, noteWholeCopyCheck, noteWholeCopyTaken, pendingMismatchResync, readCopyRecord, standbyReport, whyOf,
@@ -800,7 +800,7 @@ async function pullOnce(mode: PullMode = 'delta', why: ResyncKind | null = null)
     // How this standby's copies have gone, for its main server to tell the community's owners when it needs them
     // (services/standby-health.ts). Only on the replication-token channel: the main server reads it nowhere else.
     if (replicationToken) {
-        try { authHeader[STANDBY_REPORT_HEADER] = JSON.stringify(standbyReport()); } catch { /* a pull never waits on its report */ }
+        try { authHeader[STANDBY_REPORT_HEADER] = standbyReportHeader(standbyReport()); } catch { /* a pull never waits on its report */ }
     }
 
     const fresh = mode === 'resync';

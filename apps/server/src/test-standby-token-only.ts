@@ -78,7 +78,58 @@ const { resetPasswordBrake } = await import('./password-brake.js');
 const { createBackupRoutes } = await import('./routes/backup.js');
 const { migrateStandbyPassword, requestResync, getBackupStatus } = await import('./services/backup-puller.js');
 const { readCopyRecord, standbyReport, whyOf } = await import('./services/standby-copy-record.js');
-const { whyInWords } = await import('./services/standby-report.js');
+const { whyInWords, parseStandbyReport, standbyReportHeader, LEDGER_DIFFERS, STANDBY_REPORT_MAX_CHARS, MAX_TABLES_NAMED } = await import('./services/standby-report.js');
+const { TABLES } = await import('./engine/replication-manifest.js');
+
+/**
+ * parseStandbyReport as main servers up to v1.2.27 run it (git show v1.2.27:apps/server/src/services/standby-report.ts),
+ * copied as it was: a report one of them can't read is ignored whole, and its standby looks silent.
+ */
+function parseStandbyReportV1_2_27(raw: unknown): Record<string, unknown> | null {
+    const WHY = /^(conservation|signature|oversized|import-error|timeout|network|unparseable|http-[1-5]\d\d)$/;
+    const MAX_AGE_MS = 10 * 365 * 24 * 3600_000;
+    const MAX_DIFFERS = 40;
+    const tableName = (name: unknown): name is string => {
+        if (typeof name !== 'string') return false;
+        const entry = Object.prototype.hasOwnProperty.call(TABLES, name) ? TABLES[name] : undefined;
+        return !!entry && (entry.kind === 'replicated' || entry.kind === 'replicated-except');
+    };
+    const differsName = (name: unknown): name is string => {
+        if (typeof name !== 'string') return false;
+        if ((Object.values(LEDGER_DIFFERS) as string[]).includes(name)) return true;
+        return tableName(name);
+    };
+    const tablesOf = (v: unknown): string[] | null => {
+        if (v === undefined) return [];
+        if (!Array.isArray(v) || v.length > MAX_TABLES_NAMED || !v.every(tableName)) return null;
+        return [...new Set<string>(v)];
+    };
+    const age = (v: unknown): v is number | null => v === null || (Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_AGE_MS);
+    if (typeof raw !== 'string' || raw.length === 0 || raw.length > STANDBY_REPORT_MAX_CHARS) return null;
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    const r = parsed as Record<string, unknown>;
+    if (r.v !== 1) return null;
+    if (typeof r.id !== 'string' || !/^[0-9a-f]{32}$/.test(r.id)) return null;
+    const last = r.last;
+    if (last !== 'ok' && last !== 'refused' && last !== 'fetch-failed' && last !== 'none') return null;
+    if (!(r.why === null || (typeof r.why === 'string' && WHY.test(r.why)))) return null;
+    const fails = r.fails;
+    if (typeof fails !== 'number' || !Number.isInteger(fails) || fails < 0 || fails > 1_000_000) return null;
+    const { okAgo, wholeAgo, exactAgo, exact, differs, hashed, healing } = r;
+    if (!age(okAgo) || !age(wholeAgo) || !age(exactAgo)) return null;
+    if (!(exact === null || typeof exact === 'boolean')) return null;
+    if (!Array.isArray(differs) || differs.length > MAX_DIFFERS || !differs.every(differsName)) return null;
+    if (typeof hashed !== 'boolean' || typeof healing !== 'boolean') return null;
+    const leftOut = tablesOf(r.leftOut);
+    const oversized = tablesOf(r.oversized);
+    if (!leftOut || !oversized) return null;
+    return {
+        v: 1, id: r.id, last, why: r.why, fails, okAgo, wholeAgo,
+        exact, exactAgo, differs: [...new Set<string>(differs)], hashed, healing: exact === false && healing, leftOut, oversized,
+    };
+}
 const { RedirectRefusedError } = await import('./services/credential-redirect.js');
 const { db } = await import('./db/db.js');
 const { makeRecoveryCode } = await import('./services/takeover-envelope.js');
@@ -305,6 +356,27 @@ async function main() {
                         `4b. a ${status} token standby report carries why 'redirect' with host (${standbyReport().why})`);
                 }
                 assert(elsewhereSeen.length === 0, `4b. the other origin received nothing: no password, no token, no request (got ${JSON.stringify(elsewhereSeen)})`);
+
+                // Mixed versions: the header this standby sends after a refused redirect.
+                const header = standbyReportHeader(standbyReport());
+                const oldReads = parseStandbyReportV1_2_27(header);
+                assert(oldReads !== null && oldReads.why === 'network' && oldReads.last === 'refused',
+                    `4b. a main server on v1.2.27 still reads the report, and is told 'network' as before (got ${JSON.stringify(oldReads)} from ${header})`);
+                const newReads = parseStandbyReport(header);
+                assert(newReads?.why === `redirect:${elsewhereHost}` && whyInWords(newReads.why) === `the standby's address redirects to ${elsewhereHost}: point it at the server itself`,
+                    `4b. a main server with the redirect codes reads 'redirect' and the host (got ${newReads?.why})`);
+                const unknownWhy = parseStandbyReport(JSON.stringify({ ...JSON.parse(header), why: 'a-code-from-later', whyDetail: undefined }));
+                assert(unknownWhy !== null && unknownWhy.why === null && unknownWhy.last === 'refused',
+                    `4b. a reason this server doesn't know reads as none; the report is kept (got ${JSON.stringify(unknownWhy)})`);
+                const unknownDetail = parseStandbyReport(JSON.stringify({ ...JSON.parse(header), whyDetail: 'call +61 555 0100' }));
+                assert(unknownDetail?.why === 'network', `4b. a whyDetail that is no code is passed over for why (got ${unknownDetail?.why})`);
+                const longHost = `redirect:${'h'.repeat(250)}.example`;
+                const ten = Array(10).fill('conversation_participants');
+                const crowdedReport = { ...standbyReport(), why: longHost as any, differs: Array(40).fill('conversation_participants'), leftOut: ten, oversized: ten };
+                const crowded = standbyReportHeader(crowdedReport);
+                assert(JSON.stringify({ ...crowdedReport, why: 'network', whyDetail: longHost }).length > STANDBY_REPORT_MAX_CHARS
+                    && crowded.length <= STANDBY_REPORT_MAX_CHARS && !crowded.includes('whyDetail') && JSON.parse(crowded).why === 'network',
+                    `4b. whyDetail is left out rather than push a report past the length any main server reads (${crowded.length})`);
 
                 // Connection refused: still coded as 'network', never 'redirect'.
                 const dummy = http.createServer();

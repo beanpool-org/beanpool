@@ -467,6 +467,26 @@ function reportMaySuspend(publicKey: string): boolean {
     `).get(publicKey, publicKey, publicKey);
 }
 
+/**
+ * Whether a member's 'suspended' is a re-key code's alone: their key is held for the re-key (a code waiting, or expired
+ * with the hold left), and the status the code recorded from before it isn't a report's 'suspended' (for a code made
+ * before that was kept, no report may have suspended them, reportMaySuspend). An admin's emergency suspension may be made
+ * over it (decisions-engine.ts adminEmergencySuspend): its 'disabled' replaces the code's 'suspended', and a cancel
+ * leaves it alone.
+ */
+export function suspendedOnlyByRekeyCode(publicKey: string): boolean {
+    const cleanPub = publicKey.trim().toLowerCase();
+    const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanPub) as { status: string } | undefined;
+    if (member?.status !== 'suspended') return false;
+    if (!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(cleanPub)) return false;
+    const req = db.prepare(`
+        SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+        ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanPub) as { prior_status: string | null } | undefined;
+    if (!req) return false;
+    return req.prior_status === null ? !reportMaySuspend(cleanPub) : req.prior_status !== 'suspended';
+}
+
 /** A refusal with the HTTP status its route answers. */
 function refusal(status: number, message: string): Error {
     const err: any = new Error(message);

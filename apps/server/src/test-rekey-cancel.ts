@@ -24,6 +24,8 @@
  *     and an older server's code over a report's suspension (no prior status kept): the member stays suspended, and
  *     Lift suspension lifts it (not while a code holds the key). A report that suspended nobody changes nothing: the
  *     member ends active, under a code with a prior status (Sal) or an older one (Len).
+ *  I. An admin's emergency suspension while the code alone holds the member is made, and outlasts the cancel; a
+ *     report's suspension while the code waits is still refused as one.
  *
  * Run (from apps/server): mkdir -p .th && TMPDIR=.th SERVER_SUITES_ONLY="test-rekey-cancel" node ../../scripts/run-server-suites.mjs
  */
@@ -391,6 +393,35 @@ async function runTests() {
             `H: not known: Lift suspension makes Lou active, as the answer says (${lu.status} ${JSON.stringify(lu.json)})`);
         const liftLog = db.prepare("SELECT COUNT(*) AS c FROM system_logs WHERE message LIKE ?").get(`Lifted the suspension of ${lou.pubKeyHex.slice(0, 12)}%`) as any;
         assert(liftLog.c === 1, `H: the lift is logged (${liftLog.c})`);
+    }
+
+    // ── I. An admin's emergency suspension while the code waits (review 4176287725) ────────────
+    {
+        const rep2 = makeKeypair();
+        join(rep2, 'RayReporter');
+        const suspend = (pk: string) => as(ownerSession, 'POST', `/api/local/admin/users/${pk}/suspend`, { reason: 'Threats made to another member at the market' });
+        const tia = makeKeypair();
+        join(tia, 'TiaHeld');
+        await issue(ownerSession, tia.pubKeyHex);
+        const s = await suspend(tia.pubKeyHex);
+        assert(s.status === 200 && getMember(tia.pubKeyHex)?.status === 'disabled',
+            `I: the code alone holds Tia: an admin's emergency suspension is made (${s.status} ${JSON.stringify(s.json.error ?? '')})`);
+        const r = await cancel(ownerSession, tia.pubKeyHex);
+        assert(r.status === 200 && r.json.status === 'disabled' && getMember(tia.pubKeyHex)?.status === 'disabled' && heldReason(tia.pubKeyHex) === undefined,
+            `I: the cancel frees her key and leaves the admin's suspension (${r.status} ${JSON.stringify(r.json)})`);
+        const lifted = await as(ownerSession, 'POST', `/api/local/admin/users/${tia.pubKeyHex}/status`, { status: 'active' });
+        assert(lifted.status === 200 && getMember(tia.pubKeyHex)?.status === 'active' && await acts(tia, 'lifted'),
+            `I: lifting it makes Tia active, and she acts (${lifted.status})`);
+
+        // A report's suspension while the code waits is a suspension: still refused, as before.
+        const uma = makeKeypair();
+        join(uma, 'UmaReported');
+        await issue(ownerSession, uma.pubKeyHex);
+        const report = submitReport(rep2.pubKeyHex, uma.pubKeyHex, 'Repeated harassment in the market posts');
+        await as(ownerSession, 'POST', `/api/local/admin/reports/${report!.id}/action`, { suspendUser: true });
+        const su = await suspend(uma.pubKeyHex);
+        assert(su.status === 409 && /already suspended/.test(su.json.error ?? '') && getMember(uma.pubKeyHex)?.status === 'suspended',
+            `I: a report suspended Uma while the code waits: the emergency suspension is refused as already suspended (${su.status} ${su.json.error})`);
     }
 
     console.log(`\n========================================`);

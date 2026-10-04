@@ -45,6 +45,7 @@ import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
 import { isNodeOwner } from './engine/node-roles.js';
+import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
@@ -1736,6 +1737,9 @@ export interface EmergencySuspendResult {
  * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
  * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
  * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
+ *
+ * A member whom only a re-key code holds suspended is not suspended by anyone (member-wizards.ts
+ * suspendedOnlyByRekeyCode): they can be suspended, and its 'disabled' outlasts the code's cancel or completion.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
     assertPlainTablesWritable();
@@ -1750,7 +1754,9 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
     if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
-    if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
+        return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    }
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin

@@ -94,7 +94,7 @@ import {
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
-    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
+    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, bundledLocalConfigUpdates,
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
@@ -933,7 +933,8 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const configPath = path.join(dir, 'local-config.json');
     let config: Record<string, unknown> = {};
     try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch { config = {}; }
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) config[f] = (bundle.localConfig as any)[f] ?? null;
+    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
+    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
     if (bundle.recoveryCode) {
         config.recoveryCode = bundle.recoveryCode;
         config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);

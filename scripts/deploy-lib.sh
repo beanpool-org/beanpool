@@ -109,8 +109,15 @@ remove_fleet_tunnel_token() {
 # Run just before the container starts. A server with no locked admin password (no local-config.json yet, or one that is not
 # locked) makes one up on this start, because deploy.sh no longer sends ADMIN_PASSWORD. It never prints it: it keeps it in
 # data/first-admin-password.txt (FIRST_PASSWORD_FILE in apps/server/src/config/local-config.ts). This says where, never what.
+# A server whose admin password an owner retired (passwordRetired) makes none, locked or not (after Wipe & Reset it is not):
+# it says so instead.
 first_password_notice() {
   local data_dir=$1 target=$2 file
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"passwordRetired"[[:space:]]*:[[:space:]]*\{' "$data_dir/local-config.json"; then
+    echo "🔒 This server's admin password is retired: it makes none, and ADMIN_PASSWORD is ignored. Owners sign in with their phone."
+    return 0
+  fi
   if sudo test -f "$data_dir/local-config.json" \
     && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true' "$data_dir/local-config.json"; then
     return 0

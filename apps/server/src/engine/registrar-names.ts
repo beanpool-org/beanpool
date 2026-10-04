@@ -99,7 +99,7 @@ export const MAX_REGISTRAR_NAMES = 50;
 /** The registrar statuses of this key's own row in which the row holds the name for this key. */
 export const HOLDING_STATUSES: ReadonlySet<string> = new Set(['live', 'pending', 'paused', 'blocked']);
 /** The registrar's hold on a name its owner released (RELEASE_COOLOFF_S), when its answer doesn't say. */
-const REGISTRAR_ZONE = 'beanpool.org';
+export const REGISTRAR_ZONE = 'beanpool.org';
 
 let version = 0;
 /** Moves on every write, so a cached list of this community's names (own-addresses.ts) is read again at once. */

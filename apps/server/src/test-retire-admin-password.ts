@@ -9,8 +9,9 @@
  *      demoted are refused (PR #1587 review); with the tick the password is retired, and the log says the owner
  *      accepted being the only owner.
  *   3. After it: the header, the body password, the password sign-in, verify-password, change-password (a key session's
- *      too) and ws tickets answer 403 password_retired; the live password session, its 2FA session and the log stream it
- *      opened end at once; /api/local/status says passwordRetired; the community got a critical announcement.
+ *      too) and ws tickets answer 403 password_retired; so do 2FA setup, verify and backup codes, an owner's key
+ *      included, and nothing is stored; the live password session, its 2FA session and the log stream it opened end at
+ *      once; /api/local/status and the 2FA status say passwordRetired; the community got a critical announcement.
  *   4. Still works: the owner's key, a break-glass code on the enrol route (the recovery factor).
  *   5. A start with ADMIN_PASSWORD in .env keeps it retired (the hash stays gone, the password still refused), and so
  *      does Wipe & Reset.
@@ -279,6 +280,18 @@ async function main(): Promise<void> {
         assert(retiredRefusal(change), `change-password with the password is refused (${show(change)})`);
         const changeByKey = await call('POST', '/api/local/change-password', { body: { newPassword: 'A-New-Password-99!' }, headers: asCookie(o.sessionId, o.csrf) });
         assert(retiredRefusal(changeByKey) && !getLocalConfig().adminHash, `no route sets a password again, an owner's key included (${show(changeByKey)})`);
+        // The 2FA that guarded the password went with it, and nothing turns it on again (PR #1587 review): it would
+        // guard nothing but the 2FA routes themselves.
+        for (const p of ['/api/local/admin/2fa/setup', '/api/local/admin/2fa/verify', '/api/local/admin/2fa/backup-codes']) {
+            const r = await call('POST', p, { body: { code: code() }, headers: asCookie(o.sessionId, o.csrf) });
+            assert(r.status === 403 && r.body?.code === PASSWORD_RETIRED_CODE && /no server 2FA/.test(r.body?.error ?? ''),
+                `an owner's key session: POST ${p} → 403 ${PASSWORD_RETIRED_CODE}, "no server 2FA" (${show(r)})`);
+        }
+        const noTfa = getLocalConfig();
+        assert(!noTfa.totpEnabled && !noTfa.totpSecret && !noTfa.totpPendingSecret, 'and nothing was stored: no 2FA, none pending');
+        const tfaRead = await call('GET', '/api/local/admin/2fa/status', { headers: asCookie(o.sessionId) });
+        assert(tfaRead.status === 200 && tfaRead.body?.passwordRetired === true && tfaRead.body?.totpEnabled === false,
+            `the 2FA status says the password is retired, so Settings draws no 2FA card (${show(tfaRead)})`);
         const again = await call('POST', '/api/local/admin/auth/retire-password', { body: { acceptOneOwner: true }, headers: asCookie(o.sessionId, o.csrf) });
         assert(again.status === 409 && again.body?.passwordRetired === true, `retiring twice answers 409 (${show(again)})`);
         const status = await call('GET', '/api/local/status');

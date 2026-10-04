@@ -696,12 +696,30 @@ describe('PublicAddressPanel Component', () => {
             expect(line).toHaveTextContent('This community also holds install-race.beanpool.org from the install; it is not used. Release it?');
             held = [];
             fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            // It asks first, as Take offline does, and says the address stays (#1583 review r4176052081).
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toHaveTextContent("Release install-race.beanpool.org? Your community's address stays owner-pick.beanpool.org.");
+            expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+            fireEvent.click(screen.getByRole('button', { name: 'Release it' }));
             await waitFor(() => expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument());
             const rel = calls.filter((c) => c.url.includes('/public-address/release-name'));
             expect(rel).toHaveLength(1);
             expect(rel[0].body?.name).toBe('install-race');
             expect(calls.some((c) => c.url.includes('/public-address/offline'))).toBe(false);
             expect(screen.getByText(/install-race\.beanpool\.org released\. This community's address is unchanged\./)).toBeInTheDocument();
+        });
+
+        it('Cancel releases nothing; the line\'s text keeps a readable width, the button wraps under it', async () => {
+            const calls = mockNames(() => [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: 'live', releasable: true, fromInstall: true }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line.querySelector('span')?.className).toMatch(/basis-\[12rem\]/);
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            await screen.findByRole('dialog');
+            fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+            expect(screen.getByTestId('extra-name')).toBeInTheDocument();
         });
 
         it('an older address service that cannot release by name: the line only, no button', async () => {

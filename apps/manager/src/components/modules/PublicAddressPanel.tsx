@@ -113,8 +113,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         isOpen: boolean;
         title: string;
         message: string;
-        actionType: 'restart' | 'offline' | 'rotate';
+        actionType: 'restart' | 'offline' | 'rotate' | 'release-name';
         confirmButtonText: string;
+        /** release-name: the name to release. */
+        name?: string;
     }>({
         isOpen: false,
         title: '',
@@ -396,10 +398,30 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         });
     };
 
+    // A name the key holds besides the address: released only once confirmed, like the card's other address actions.
+    const requestReleaseNameConfirmation = (n: ExtraName) => {
+        const host = n.hostname || `${n.name}.beanpool.org`;
+        const current = statusData?.hostname || (statusData?.name ? `${statusData.name}.beanpool.org` : '');
+        setConfirmModal({
+            isOpen: true,
+            title: 'Release a name this community does not use',
+            message: `Release ${host}? ${current ? `Your community's address stays ${current}.` : "Your community's address is not changed."} Another community can claim ${host} once the address service's hold ends.`,
+            actionType: 'release-name',
+            confirmButtonText: 'Release it',
+            name: n.name,
+        });
+    };
+
     // Execute confirmed destructive action
     const handleConfirmAction = async () => {
         const action = confirmModal.actionType;
+        const releaseName = confirmModal.name;
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+
+        if (action === 'release-name') {
+            if (releaseName) await releaseExtraName(releaseName);
+            return;
+        }
 
         if (action === 'restart') {
             setRestarting(true);
@@ -586,14 +608,14 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         data-testid="extra-name"
                         className="p-3 rounded-xl border bg-nature-950 border-nature-800 text-xs text-nature-300 flex flex-wrap items-center gap-2"
                     >
-                        <span className="min-w-0 break-words flex-1">
+                        <span className="min-w-0 grow basis-[12rem] break-words">
                             This community also holds <code className="font-mono text-white break-all">{n.hostname || `${n.name}.beanpool.org`}</code>
                             {n.fromInstall ? ' from the install' : ''}; it is not used.{n.releasable ? ' Release it?' : ''}
                         </span>
                         {n.releasable && (
                             <button
                                 type="button"
-                                onClick={() => releaseExtraName(n.name)}
+                                onClick={() => requestReleaseNameConfirmation(n)}
                                 disabled={releasingName !== null}
                                 className="shrink-0 px-3 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-semibold text-white disabled:opacity-50"
                             >
@@ -1018,7 +1040,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[44px] ${
                                     confirmModal.actionType === 'offline'
                                         ? 'bg-red-600 hover:bg-red-500'
-                                        : 'bg-blue-600 hover:bg-blue-500'
+                                        : confirmModal.actionType === 'release-name'
+                                            ? 'bg-terra-600 hover:bg-terra-500'
+                                            : 'bg-blue-600 hover:bg-blue-500'
                                 }`}
                             >
                                 {confirmModal.confirmButtonText}

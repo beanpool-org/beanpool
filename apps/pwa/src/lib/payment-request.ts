@@ -34,12 +34,18 @@ export interface SendResult {
     status?: number;
 }
 
-const NO_ANSWER = 0;
+/**
+ * No answer from the node: status 0 (offline, timed out), or a proxy's gateway status (502, 503, 504, Cloudflare's 52x)
+ * when a self-hoster's nginx, Caddy or tunnel gave up waiting. The node may have paid by then, so these are a lost answer.
+ */
+export const isNoAnswer = (status: number | undefined): boolean =>
+    status === 0 || status === 502 || status === 503 || status === 504 || (status !== undefined && status >= 520 && status <= 527);
 
 /**
- * Send a confirmed payment, and again with the same id while no answer comes (status 0, or the send throws), up to
+ * Send a confirmed payment, and again with the same id while no answer comes (isNoAnswer, or the send throws), up to
  * `tries` sends in all. Any answer from the node (paid, or refused in its own words) is final and returned as it is; so is
- * the last send's no-answer (thrown again when it threw).
+ * the last send's no-answer (thrown again when it threw). After that, the app keeps the same payment for a retry by hand:
+ * a new one only after the node's answer, or when the member changes it.
  */
 export async function sendConfirmedPayment<B extends object, R extends SendResult>(
     payment: ConfirmedPayment<B>,
@@ -49,7 +55,7 @@ export async function sendConfirmedPayment<B extends object, R extends SendResul
     for (let n = 1; ; n++) {
         try {
             const result = await send(payment.body);
-            if (result.status !== NO_ANSWER || n >= tries) return result;
+            if (!isNoAnswer(result.status) || n >= tries) return result;
         } catch (e) {
             if (n >= tries) throw e;
         }

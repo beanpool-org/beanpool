@@ -25,6 +25,7 @@ import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndex
 import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../components/PageTitle';
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
+import { RepaymentCard } from '../../components/RepaymentCard';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
@@ -980,6 +981,9 @@ export default function LedgerScreen() {
                     )}
                 </Pressable>
             )}
+
+            {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
+            <RepaymentCard />
 
             {/* ── Tab bar ── */}
             <View style={styles.tabBar}>

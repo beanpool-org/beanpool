@@ -61,14 +61,15 @@ router.post('/api/commons/pay', async (ctx) => {
     }
 });
 
-// A member working off a debt reads why their incoming Beans go to the Commons: what is owed and what is repaid. Their own
-// only; no entry, no name.
+// A member working off a debt reads why their incoming Beans go to the Commons: what is owed and what is repaid, and the
+// debt's id (their own pay-back code), so the apps' Pay the Commons pays it off at once rather than without the code.
+// Their own only (repaymentOf the signed actor); no entry, no name.
 router.get('/api/commons/repayment', async (ctx) => {
     const actor = ctx.state.actor as string | undefined;
     if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
     ctx.set('Cache-Control', 'no-store');
     const r = repaymentOf(actor.toLowerCase());
-    ctx.body = { repayment: r ? { amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
+    ctx.body = { repayment: r ? { debtId: r.id, amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
 });
 
 router.get('/api/commons/projects', async (ctx) => {

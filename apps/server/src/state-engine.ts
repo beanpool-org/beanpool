@@ -54,7 +54,7 @@ import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
 import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
 import { dropBlocksOf, blockersOf, hasBlocked } from './engine/member-blocks.js';
 import { dropWithheldOf } from './engine/withheld-lines.js';
-import { repaymentOf, assertPayableDebt, linkDebtPayment } from './engine/names-debts.js';
+import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
 import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
 import { dropNamesListHoldOf } from './engine/names-list.js';
 import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
@@ -5037,14 +5037,12 @@ export function sweepRepayment(memberPubkey: string): number {
         conservingTransaction(() => {
             const txn = moveToCommons(memberPubkey, amount, 'Working off a debt to the Commons', { allowMemberDebit: true });
             if (!txn) throw new Error('the Commons refused the repayment');
-            const repaid = Math.round((debt.repaid + amount) * 100) / 100;
-            const done = repaid >= debt.amount;
-            db.prepare(`UPDATE names_debts SET repaid = ?, status = CASE WHEN ? THEN 'settled' ELSE status END,
-                        settled_how = CASE WHEN ? THEN 'work_off' ELSE settled_how END,
-                        settled_by = CASE WHEN ? THEN 'node' ELSE settled_by END,
-                        settled_at = CASE WHEN ? THEN ? ELSE settled_at END, settle_ref = CASE WHEN ? THEN ? ELSE settle_ref END
-                        WHERE id = ? AND status = 'open'`)
-                .run(repaid, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, done ? 1 : 0, new Date().toISOString(), done ? 1 : 0, txn.id, debt.id);
+            // The same `repaid` a payment made for the debt adds to (engine/names-debts.ts countDebtPayment): never past the amount.
+            const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
+                .run(amount, debt.id, amount);
+            if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
+            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?
+                        WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
         });
     } catch (err) {
         console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
@@ -5057,8 +5055,8 @@ export function sweepRepayment(memberPubkey: string): number {
 
 /**
  * Paying back a debt (design §4.2 (a)): a member sends Beans they hold to the Commons. Only what is above 0: a payment to
- * the Commons never takes anyone into debt, so it skips no floor rule. An admin then links it to the debt record
- * (engine/names-debts.ts settleByPayment).
+ * the Commons never takes anyone into debt, so it skips no floor rule. With `debtId`, it pays that debt off by its amount
+ * in the same transaction (engine/names-debts.ts countDebtPayment), and the payment that clears it settles it.
  *
  * Safe to retry (engine/money-requests.ts): with a `requestId`, a repeat of the same payment gets the first answer back
  * and pays nothing; the same id for a different payment is refused (409). Without one (an older app), paid each time.
@@ -5079,15 +5077,20 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     }
     // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
     const beans = Math.round(amount * 100) / 100;
-    const { balance } = getBalance(memberPubkey);
-    if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
-    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);
+    // The same test as ledger.moveToCommons's guard inside the transaction, on the raw balance (decay leaves fractions of a
+    // cent; getBalance's is rounded): a refusal is here, in plain words, never a rollback and a ledger rebuild.
+    const raw = ledger.getAccount(memberPubkey).balance;
+    if (raw - beans < 0) {
+        const held = Math.max(0, Math.floor(raw * 100) / 100);
+        throw Object.assign(new Error(`You hold ${held} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+    }
     const answer = conservingTransaction(() => {
-        const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
+        const t = moveToCommons(memberPubkey, beans, PAID_TO_COMMONS_MEMO, { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
-        // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
-        if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
-        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount };
+        // Made for a debt: it pays that much off at once, and settles the debt when nothing is left.
+        const leftAfter = debt ? countDebtPayment(debt.id, t.id, memberPubkey, beans) : undefined;
+        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount, ...(debt ? { left: debt.left, leftAfter, settled: leftAfter === 0 } : {}) };
         if (request) recordAnswer(request, paid);
         return paid;
     });
@@ -5095,10 +5098,16 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     return answer;
 }
 
-/** POST /api/commons/pay's answer: the payment's reference (what an admin settles a debt with) and the Beans paid. */
+/**
+ * POST /api/commons/pay's answer: the payment's reference and the Beans paid; for a debt, what was left on it before the
+ * payment, what is left after it, and whether it settled the debt.
+ */
 export interface PaidToCommons {
     transactionId: string;
     amount: number;
+    left?: number;
+    leftAfter?: number;
+    settled?: boolean;
 }
 const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
 

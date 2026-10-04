@@ -1667,6 +1667,16 @@ function both(names: string[]): string {
  * Every sentence the screen says about the list's keys. The ones the design fixes (DESIGN-names-list-trust-fable.md §9)
  * are exactly its words, which are true under its proof (§6) and say its limits; the tests pin each.
  */
+/**
+ * The first sentence of a paragraph, for a screen that opens with it short (the rest behind More). The words stay the
+ * same: `rest` is everything after it, so the two together are the paragraph.
+ */
+export function firstSentence(text: string): { first: string; rest: string } {
+    const m = /^.*?[.!?](?=\s|$)/s.exec(text);
+    if (!m) return { first: text, rest: '' };
+    return { first: m[0], rest: text.slice(m[0].length).trim() };
+}
+
 export const NAMES_COPY = {
     title: 'Names list',
     // The locked copy: the design's §5 table, exact.
@@ -1696,6 +1706,9 @@ export const NAMES_COPY = {
         // Addendum 2 (§3): the removal check is Remove by hand, not a comparison.
         + 'After an admin is removed, look at this phone’s admins: if it still shows them, tap Remove @X’s old key. Whatever the '
         + 'server says, this phone then makes a key without them or writes nothing.',
+    /** The rehearsal (2026-10-05, a): `who` filled more than a screen at 320dp and 1.3× text. Its first sentence shows; More shows the rest. */
+    whoMore: 'More about who can read them',
+    whoLess: 'Less',
     // The design addendum's (e) (the fifth deciding review's BLOCKING finding): what the new key protects is this phone's writes.
     newKeyMade: (who: string[]) => `The list has a new key because ${both(who)} ${who.length > 1 ? 'are' : 'is'} no longer ${who.length > 1 ? 'admins' : 'an admin'}. `
         + `Nothing this phone writes from now on can be read with the keys ${both(who)} had.`,

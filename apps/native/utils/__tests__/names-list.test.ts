@@ -55,7 +55,7 @@ import {
     writeNamesPinTo, offersNamesList, openNamesList, checkEachOther, removeOldKey, removeOldKeyAndOpen, unkeptRemovalsOf, putHistoryBack, makeKeyOnThisPhone, followServerHistory, sendKeysAgain,
     readNamesPinFrom, namesTrustStoreKey, namesPinSecretName, openEntries, filterEntries, saveNamesEntry, fetchNamesList, fetchNamesState,
     confirmMember, deleteNamesEntry, confirmableMembers, confirmationActions, confirmationLine, logLineText, namesListHtml, myKeyCheck,
-    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
+    planWords, newEntryId, listKeyOf, startAfreshOnThisPhone, saveNamesCopiesBeforeLeaving, mergeNamesPins, namesSignOutWords, namesPinAddresses, NAMES_SIGN_OUT_REQUEST_MS, NAMES_SIGN_OUT_TOTAL_MS, COPY_REFUSED_CODES, NAMES_COPY, firstSentence, DEVICE_NAMES_STORE, setNamesRequestTimeout, NAMES_REQUEST_TIMEOUT_MS, NAMES_TIMED_OUT, followRemovesAny,
     type NamesState, type NamesListBody, type ConfirmationRow, type SealedEntryRow, type NamesPinStore, type NamesOpened, type OpenedEntry,
 } from '../names-list';
 import { NAMES_TEXT_ON, NAMES_TOUCH_TARGETS, namesListStyleSpec } from '../names-list-style';
@@ -2527,6 +2527,25 @@ describe('F. Writes, reads, words', () => {
         expect(r.ok === false && r.code).toBe('check_in_person');
         const r2 = await sendKeysAgain(COMMUNITY, owen, STORE, ada.publicKey);
         expect(r2.ok).toBe(true);
+    });
+});
+
+describe('the rehearsal (2026-10-05, a): the opening paragraph is short until More', () => {
+    it('shows its first sentence; the rest is every word of it, nothing lost', () => {
+        const { first, rest } = firstSentence(NAMES_COPY.who);
+        expect(first).toBe('Only this community’s owners and admins can read these names, on their own phones.');
+        expect(`${first} ${rest}`).toBe(NAMES_COPY.who);
+        expect(first.length).toBeLessThan(NAMES_COPY.who.length / 5);
+    });
+    it('a paragraph with no full stop stays whole', () => {
+        expect(firstSentence('No stop here')).toEqual({ first: 'No stop here', rest: '' });
+        expect(firstSentence('One. Two.')).toEqual({ first: 'One.', rest: 'Two.' });
+    });
+    it('the screen opens with the first sentence and a More button, not the whole paragraph', () => {
+        const screen = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'names-list.tsx'), 'utf8');
+        expect(screen).toContain('showWho ? COPY.who : firstSentence(COPY.who).first');
+        expect(screen).toContain('useState(false);\n    /** The opening paragraph');
+        expect(screen).not.toMatch(/<Text style=\{styles\.body\}>\{COPY\.who\}<\/Text>/);
     });
 });
 

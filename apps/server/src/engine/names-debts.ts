@@ -6,9 +6,10 @@
  *
  * The record names the entry by its id only: the list is sealed on the admins' phones, so no name is on this server.
  * While a record is `open`, no key may be confirmed against its entry (engine/names-list.ts confirmMember). It is
- * settled by paying it back (a member's own payment to the Commons, linked by an admin), worked off (confirmed with a
- * known floor of 0 and a repayment flag: every Bean above 0 they receive goes to the Commons until it is cleared), or
- * forgiven by an admin. Every record goes 3 years after the member left (Marty's answer 8), whatever its status.
+ * settled by paying it back (payments to the Commons made for it: each counts toward `repaid` as it is paid, and the one
+ * that reaches the amount settles it), worked off (confirmed with a known floor of 0 and a repayment flag: every Bean above
+ * 0 they receive goes to the Commons until it is cleared), or forgiven by an admin (what is left; what was repaid stays
+ * recorded). Every path reads and writes the same `repaid`, so no Bean is counted twice and none is taken past the amount. Every record goes 3 years after the member left (Marty's answer 8), whatever its status.
  *
  * A plain table (engine/replication-manifest.ts): a standby copies it as it is.
  */
@@ -77,17 +78,41 @@ export function sweepExpiredDebts(now = Date.now()): number {
 }
 
 /**
- * A payment to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open. Inside the
- * payment's conservingTransaction, so the link and the payment are written together or not at all.
+ * A payment of `beans` to the Commons a member is making FOR debt `debtId` (POST /api/commons/pay): the debt must be open,
+ * and the payment no more than is left on it. A pay-back link carries what was left when an admin shared it, and a
+ * work-off or another payment may have lowered it since: the node says the true amount, so nobody pays the Commons more
+ * than they owe. Once nothing is left the debt is settled, so a further payment is refused as not open. Before the
+ * payment's conservingTransaction (a refusal is no ledger rebuild); countDebtPayment checks again inside it.
  */
-export function assertPayableDebt(debtId: unknown): string {
+export function assertPayableDebt(debtId: unknown, beans: number): { id: string; left: number } {
     const row = debtRow(debtId);
     requireOpen(row);
-    return row.id;
+    const left = round2(row.amount - row.repaid);
+    if (beans > left) throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
+    return { id: row.id, left };
 }
 
-export function linkDebtPayment(debtId: string, txId: string, payer: string, amount: number): void {
+/**
+ * Counts payment `txId` (`amount` Beans from `payer` to the Commons) toward debt `debtId`, inside the payment's own
+ * transaction: the link is written, `repaid` goes up by the amount, and the payment that reaches the amount settles the
+ * debt (pay_back, its reference the settle_ref). Refused, and so the payment rolled back, when the debt is no longer open
+ * or the amount is more than is left: never counted past the amount, whatever else ran first. `settledBy` is 'node' for a
+ * member's own payment, the admin for a payment an admin names (settleByPayment). Returns what is left after it.
+ */
+export function countDebtPayment(debtId: string, txId: string, payer: string, amount: number, settledBy = 'node'): number {
     db.prepare('INSERT INTO names_debt_payments (transaction_id, debt_id, payer_pubkey, amount, paid_at) VALUES (?, ?, ?, ?, ?)').run(txId, debtId, payer, amount, nowIso());
+    const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
+        .run(amount, debtId, amount);
+    if (counted.changes !== 1) {
+        const row = debtRecord(debtId);
+        if (row && row.status !== 'open') throw new DebtError(409, 'not_open', `That debt is ${row.status} already.`);
+        const left = row ? round2(row.amount - row.repaid) : 0;
+        throw new DebtError(409, 'more_than_left', `Only ${left} Beans are left on that debt. Pay ${left} Beans to settle it.`);
+    }
+    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?
+                WHERE id = ? AND status = 'open' AND repaid >= amount`).run(settledBy, nowIso(), txId, debtId);
+    const after = debtRecord(debtId)!;
+    return round2(after.amount - after.repaid);
 }
 
 export function debtRecord(id: string): DebtRecord | undefined {
@@ -179,11 +204,16 @@ function cleanNote(v: unknown): string | null {
     return v;
 }
 
+/** The memo payToCommons writes on a member's own payment to the Commons: the only kind an admin may count (settleByPayment). */
+export const PAID_TO_COMMONS_MEMO = 'Paid to the Commons';
+
 /**
- * Pay back: a member's own payment to the Commons (`transactionId`), made for this record (names_debt_payments, written
- * with the payment), settles it, when it is at least what is left to repay and no record is settled by it already. Never
- * a payment made for another debt or for none, nor a repayment sweep's row (its Beans count as repaid toward its own
- * debt already). The admin confirms it; nothing moves here.
+ * Pay back with a payment made for no debt: a member's own payment to the Commons (`transactionId`) made without the debt's
+ * id (before they had it), which an admin counts toward this record. It counts as a payment made for the debt would have
+ * (countDebtPayment): `repaid` goes up by it, never past the amount (what is above what is left stays the Commons'), and
+ * the debt is settled once nothing is left. Only once: a payment made for a debt counted when it was paid, and one an
+ * admin has counted is linked from then on, so neither counts again. Never a repayment sweep's row (counted already) or
+ * any other move to the Commons. Nothing moves here.
  */
 export function settleByPayment(actor: string, id: unknown, body: { transactionId?: unknown; note?: unknown }): DebtRecord {
     assertPlainTablesWritable();
@@ -191,27 +221,27 @@ export function settleByPayment(actor: string, id: unknown, body: { transactionI
     requireOpen(row);
     const note = cleanNote(body.note);
     const txId = typeof body.transactionId === 'string' ? body.transactionId : '';
-    const tx = txId ? db.prepare('SELECT id, from_pubkey, to_pubkey, amount FROM transactions WHERE id = ?').get(txId) as { id: string; from_pubkey: string; to_pubkey: string; amount: number } | undefined : undefined;
-    if (!tx || tx.to_pubkey !== 'COMMONS_POOL') throw new DebtError(400, 'not_a_payment', 'Name a payment to the Commons that a member made.');
+    const tx = txId ? db.prepare('SELECT id, from_pubkey, to_pubkey, amount, memo FROM transactions WHERE id = ?').get(txId) as { id: string; from_pubkey: string; to_pubkey: string; amount: number; memo: string | null } | undefined : undefined;
+    if (!tx || tx.to_pubkey !== 'COMMONS_POOL' || tx.memo !== PAID_TO_COMMONS_MEMO) throw new DebtError(400, 'not_a_payment', 'Name a payment to the Commons that a member made.');
     const payer = getMember(db, tx.from_pubkey);
     if (!payer || payer.isTreasury || isVisitorKey(db, tx.from_pubkey) || tx.from_pubkey === 'SYSTEM') {
         throw new DebtError(400, 'not_a_payment', 'Name a payment to the Commons that a member made.');
     }
+    if (db.prepare('SELECT 1 FROM names_debt_payments WHERE transaction_id = ?').get(tx.id) || db.prepare('SELECT 1 FROM names_debts WHERE settle_ref = ?').get(tx.id)) {
+        throw new DebtError(409, 'payment_counted', 'That payment counted toward a debt already. A payment made for a debt pays it off as it is paid.');
+    }
     const left = round2(row.amount - row.repaid);
-    if (round2(tx.amount) < left) throw new DebtError(409, 'too_little', `That payment is ${round2(tx.amount)} Beans; ${left} Beans are left to repay.`);
-    const link = db.prepare('SELECT debt_id, payer_pubkey FROM names_debt_payments WHERE transaction_id = ?').get(tx.id) as { debt_id: string; payer_pubkey: string } | undefined;
-    if (!link || link.debt_id !== row.id || link.payer_pubkey !== tx.from_pubkey) {
-        throw new DebtError(409, 'not_for_this_debt', 'That payment wasn’t made for this debt. The member pays it from the debt, so it settles that debt alone.');
-    }
-    if (db.prepare('SELECT 1 FROM names_debts WHERE settle_ref = ?').get(tx.id)) {
-        throw new DebtError(409, 'payment_used', 'That payment settled a debt already.');
-    }
-    db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'pay_back', settled_by = ?, settled_at = ?, settle_ref = ?,
-                note = COALESCE(?, note), repaying_pubkey = NULL WHERE id = ?`).run(actor, nowIso(), tx.id, note, row.id);
+    db.transaction(() => {
+        countDebtPayment(row.id, tx.id, tx.from_pubkey, Math.min(round2(tx.amount), left), actor);
+        if (note !== null) db.prepare('UPDATE names_debts SET note = ? WHERE id = ?').run(note, row.id);
+    })();
     return debtRow(row.id);
 }
 
-/** Forgiven: written off. The record stays, marked forgiven; the Commons took the debt when the member left. */
+/**
+ * Forgiven: what is left is written off. The record stays, marked forgiven, with what was repaid before (by payments or a
+ * work-off) still on it: those Beans counted, and nothing goes back. The Commons took the debt when the member left.
+ */
 export function forgiveDebt(actor: string, id: unknown, body: { note?: unknown; ref?: string } = {}): DebtRecord {
     assertPlainTablesWritable();
     const row = debtRow(id);

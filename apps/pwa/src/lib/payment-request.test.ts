@@ -45,6 +45,23 @@ describe('a retry reuses the id', () => {
         expect(ids).toEqual([p.requestId, p.requestId, p.requestId]);
     });
 
+    it('a proxy\'s gateway status (502, 503, 504, 52x) is no answer: sent again with the same id; a node 500 or 429 is final', async () => {
+        for (const status of [502, 503, 504, 520, 524]) {
+            const p = confirmPayment({ amount: 2 });
+            const ids: string[] = [];
+            const paid = { ok: true, value: { transactionId: 'tx-3', amount: 2 } };
+            const r = await sendConfirmedPayment(p, async (body) => { ids.push(body.requestId); return (ids.length === 1 ? { ok: false, status } : paid) as { ok: boolean; status?: number }; }, noWait);
+            expect(r).toEqual(paid);
+            expect(ids).toEqual([p.requestId, p.requestId]);
+        }
+        for (const status of [500, 429, 409]) {
+            let sends = 0;
+            const r = await sendConfirmedPayment(confirmPayment({ amount: 2 }), async () => { sends++; return { ok: false, status }; }, noWait);
+            expect(r.status).toBe(status);
+            expect(sends).toBe(1);
+        }
+    });
+
     it('any answer from the node is final: a refusal is not sent again, nor a success without a status', async () => {
         const p = confirmPayment({ amount: 30 });
         let sends = 0;

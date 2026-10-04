@@ -162,8 +162,11 @@ export async function request<T>(method: string, path: string, body?: any, signa
 
 /** What `request` throws for an answer that isn't ok. */
 async function refusalError(res: Response): Promise<Error> {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    let unsaid = false;
+    const err = await res.json().catch(() => { unsaid = true; return { error: res.statusText }; });
     const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+    // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
+    if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
     // The status travels with the error: a node older than a route answers 404, and a screen that can
     // hide a feature quietly needs to tell that apart from the node being down or refusing.
     (error as Error & { status?: number }).status = res.status;

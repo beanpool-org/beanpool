@@ -30,7 +30,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
-import { getAllCommunityMembers } from '../utils/db';
+import { getAllCommunityMembers, createDecision } from '../utils/db';
 import { namesListStyleSpec } from '../utils/names-list-style';
 import {
     exceptionRows, departedRows, healthLogSections, readHealthTotals, totalsRows, notOnThisNode, HEALTH_COPY, type HealthExceptionsBody, type HealthLogSection, type HealthTotals,
@@ -40,18 +40,24 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
-    inviteForNamesEntry, readBoundInvites,
+    inviteForNamesEntry, readBoundInvites, firstSentence,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
 import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
 import { makeOfflineTicket } from '../utils/member-statements';
+import {
+    DEBT_COPY, fetchNamesDebts, workOffDebt, settleDebt, debtsOfEntry, openDebtOf, debtLine, openDebtForName, leftOf, beans, type NamesDebt,
+} from '../utils/names-debts';
 
 export { ErrorBoundary };
 
 /** The admin picked to check, or null for "check an admin" with nobody picked (a reinstalled phone, say). */
 type Picked = { pubkey: string; callsign: string } | null;
 /** `addId`: a new entry's id, chosen when its form opens and kept until the add is confirmed (a Save after a lost answer is the same add). */
-type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry } | { kind: 'check'; picked: Picked }
+/** `workOff`: the pick confirms the member to work this open debt off (POST /api/names/debts/:id/work-off). */
+type Mode = { kind: 'list' } | { kind: 'edit'; entry: OpenedEntry | null; addId?: string } | { kind: 'pick'; entry: OpenedEntry; workOff?: NamesDebt } | { kind: 'check'; picked: Picked }
+    // Settling an entry's open debt with the payment the member made for it (#1597): its reference, typed or pasted.
+    | { kind: 'settle'; entry: OpenedEntry; debt: NamesDebt }
     // Community health's exceptions (slice 6): opened by a tap, each opening logged; names overlaid from this list.
     // The totals (any community) and the two access-log lists: looks at a balance, looks at trades and alerts (#1608).
     // `totalsMissing`: why there are no totals (a node from before #1599 needs an update; otherwise "just now").
@@ -95,6 +101,12 @@ export default function NamesListScreen() {
     const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
     const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
+    /** The opening paragraph: its first sentence, the rest behind More (the rehearsal's 320dp finding). */
+    const [showWho, setShowWho] = useState(false);
+    /** Every entry's debt history (#1597), from GET /api/names/debts; empty until read, or on a node that has none. */
+    const [debts, setDebts] = useState<NamesDebt[]>([]);
+    const [payRef, setPayRef] = useState('');
+    const [settleNote, setSettleNote] = useState('');
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
     const loadingRef = useRef(false);
@@ -287,6 +299,14 @@ export default function NamesListScreen() {
         setMode({ kind: 'edit', entry, addId: entry ? undefined : newEntryId() });
     };
 
+    /** The matching-name warning (#1597): a name typed here that is on another entry with an open debt is said first. */
+    const saveChecked = () => {
+        if (mode.kind !== 'edit') return;
+        const match = openDebtForName(name, entries, debts, mode.entry?.id);
+        if (!match) { void save(); return; }
+        ask(DEBT_COPY.sameNameTitle, DEBT_COPY.sameName(match.name, match.debt), DEBT_COPY.sameNameAdd, () => { void save(); }, false);
+    };
+
     const save = async () => {
         if (mode.kind !== 'edit' || !anchor || !identity || !opened || !list) return;
         if (!begin()) return;
@@ -349,6 +369,7 @@ export default function NamesListScreen() {
     };
 
     const confirmAs = async (entry: OpenedEntry, member: CommunityMember) => {
+        if (mode.kind === 'pick' && mode.workOff) { workOffAs(entry, mode.workOff, member); return; }
         if (!anchor || !identity) return;
         if (!begin()) return;
         const done = await confirmMember(anchor, identity, member.publicKey, entry.id);
@@ -367,6 +388,64 @@ export default function NamesListScreen() {
         if (r.ok) setBoundInvites(r.value.invites);
     }, [anchor, identity]);
     useEffect(() => { if (opened) refreshBoundInvites(); }, [opened, refreshBoundInvites]);
+
+    const refreshDebts = useCallback(async () => {
+        if (!anchor || !identity) return;
+        const r = await fetchNamesDebts(anchor, identity);
+        if (r.ok) setDebts(r.value);
+    }, [anchor, identity]);
+    useEffect(() => { if (opened) refreshDebts(); }, [opened, refreshDebts]);
+
+    /** Work it off: asked first, then the node confirms the member with a known floor of 0 and the repayment flag. */
+    const workOffAs = (entry: OpenedEntry, debt: NamesDebt, member: CommunityMember) => {
+        ask(DEBT_COPY.workOffTitle, DEBT_COPY.workOff(`@${member.callsign}`, entry.text?.name ?? 'this person', debt), DEBT_COPY.workOffButton, async () => {
+            if (!anchor || !identity || !begin()) return;
+            const done = await workOffDebt(anchor, identity, debt.id, member.publicKey);
+            if (done.ok) { await afterConfirmation(); await refreshDebts(); }
+            finish();
+            if (!done.ok) { setError(done.message); return; }
+            setNotice(done.value.status === 'awaiting_second'
+                ? `@${member.callsign} is confirmed by you to work off the debt, and waits for a second admin.`
+                : `@${member.callsign} is confirmed against ${entry.text?.name ?? 'the entry'} and is working off ${beans(leftOf(debt))}.`);
+            setMode({ kind: 'list' });
+        }, false);
+    };
+
+    /** Count a payment the member made without the code: asked first; the node counts it once, up to what is left. */
+    const settleWith = (entry: OpenedEntry, debt: NamesDebt) => {
+        if (!payRef.trim()) { setError('Paste the payment’s reference the member gave you.'); return; }
+        ask(DEBT_COPY.settleTitle, DEBT_COPY.settle(debt), DEBT_COPY.settleButton, async () => {
+            if (!anchor || !identity || !begin()) return;
+            const done = await settleDebt(anchor, identity, debt.id, payRef, settleNote);
+            if (done.ok) await refreshDebts();
+            finish();
+            if (!done.ok) { setError(done.message); return; }
+            setNotice(`The debt on ${entry.text?.name ?? 'this entry'} is settled: paid back.`);
+            setMode({ kind: 'list' });
+        }, false);
+    };
+
+    /** Forgiven is the community's Decision (forgive_debt, subject the record's id): asked first; it names no one. */
+    const askToForgive = (debt: NamesDebt) => {
+        ask(DEBT_COPY.forgiveTitle, DEBT_COPY.forgive(debt), DEBT_COPY.forgiveButton, async () => {
+            if (!identity || !begin()) return;
+            try {
+                await createDecision({
+                    authorPubkey: identity.publicKey, touches: 'pool', effect: 'forgive_debt', subject: debt.id,
+                    title: `Forgive a debt of ${beans(leftOf(debt))}`,
+                    description: `A member who left owed the Commons ${beans(debt.amount)}${debt.repaid > 0 ? `, and ${beans(debt.repaid)} of it was repaid` : ''}. `
+                        + 'Forgiving it moves no Beans: the Commons took the debt when they left. The record stays, marked forgiven.',
+                });
+                setNotice('The Decision is open: the community votes on forgiving the debt.');
+            } catch (e: any) {
+                setError(typeof e?.message === 'string' && e.message ? e.message : 'The Decision couldn’t be started. Nothing was changed.');
+            } finally {
+                finish();
+            }
+        }, false);
+    };
+
+    const sharePayBackCode = (debt: NamesDebt) => { void Share.share({ message: DEBT_COPY.shareCode(debt) }).catch(() => {}); };
 
     /** Invite this person: a code bound to the entry, or with no signal an offline ticket bound to it. */
     const inviteEntry = async (entry: OpenedEntry) => {
@@ -482,7 +561,8 @@ export default function NamesListScreen() {
                 <MaterialCommunityIcons name="arrow-left" size={26} color={colors.text.heading} />
             </Pressable>
             <Text style={styles.headerTitle} numberOfLines={2} accessibilityRole="header">
-                {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? 'Confirm a member'
+                {mode.kind === 'edit' ? (mode.entry ? 'Change an entry' : 'Add a name') : mode.kind === 'pick' ? (mode.workOff ? 'Work off a debt' : 'Confirm a member')
+                    : mode.kind === 'settle' ? 'Settle a debt'
                     : mode.kind === 'health' ? 'Community health'
                     : mode.kind === 'check' ? COPY.checkEachOtherTitle : COPY.title}
             </Text>
@@ -570,7 +650,7 @@ export default function NamesListScreen() {
                 <Text style={styles.hint}>A name and a short note only: no address, date of birth or ID number. Sealed on this phone before it’s sent.</Text>
                 {formError ? <View style={styles.error}><Text style={styles.errorText}>{formError}</Text></View> : null}
                 <View style={styles.buttonRow}>
-                    {btn('Save', save, 'primary')}
+                    {btn('Save', saveChecked, 'primary')}
                     {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
                 </View>
                 {entry ? <View style={styles.buttonRow}>{btn('Delete this entry', () => remove(entry), 'danger')}</View> : null}
@@ -582,6 +662,7 @@ export default function NamesListScreen() {
         body = (
             <>
                 <Text style={styles.body}>Which member is {mode.entry.text?.name ?? 'this person'}? Confirm only someone you know is them.</Text>
+                {mode.workOff ? <Text style={styles.hint}>They work off {beans(leftOf(mode.workOff))}: a known floor of 0, and every Bean they receive above 0 goes to the Commons until it is cleared.</Text> : null}
                 <TextInput
                     style={styles.search} value={memberQuery} onChangeText={setMemberQuery} placeholder="Find a member"
                     placeholderTextColor={colors.text.muted} autoCorrect={false} accessibilityLabel="Find a member by name"
@@ -596,6 +677,29 @@ export default function NamesListScreen() {
                         <Text style={styles.pickName}>@{m.callsign}</Text>
                     </Pressable>
                 ))}
+            </>
+        );
+    } else if (mode.kind === 'settle') {
+        body = (
+            <>
+                <Text style={styles.body}>{debtLine(mode.debt, at)}</Text>
+                <Text style={styles.hint}>{DEBT_COPY.settle(mode.debt)}</Text>
+                <Text style={styles.label}>THE PAYMENT’S REFERENCE</Text>
+                <TextInput
+                    style={styles.input} value={payRef} onChangeText={setPayRef} placeholder="As their app showed it"
+                    placeholderTextColor={colors.text.muted} autoCapitalize="none" autoCorrect={false} accessibilityLabel="The payment’s reference"
+                    maxLength={100} editable={!busy}
+                />
+                <Text style={styles.label}>NOTE (OPTIONAL)</Text>
+                <TextInput
+                    style={[styles.input, styles.noteInput]} value={settleNote} onChangeText={setSettleNote} multiline
+                    placeholder="No name: it is kept unsealed" placeholderTextColor={colors.text.muted}
+                    accessibilityLabel="A note, with no name in it" maxLength={200} editable={!busy}
+                />
+                <View style={styles.buttonRow}>
+                    {btn(DEBT_COPY.settleButton, () => settleWith(mode.entry, mode.debt), 'primary')}
+                    {btn('Cancel', () => setMode({ kind: 'list' }), 'secondary')}
+                </View>
             </>
         );
     } else if (mode.kind === 'health') {
@@ -759,6 +863,9 @@ export default function NamesListScreen() {
                 </Text>
                 {shown.map((e) => {
                     const acts = e.confirmation ? confirmationActions(e.confirmation, identity?.publicKey ?? '') : null;
+                    // Its debt history (#1597): while one is open, nobody is confirmed against it; the way on is settling it.
+                    const history = debtsOfEntry(debts, e.id);
+                    const open = openDebtOf(debts, e.id);
                     return (
                         <View key={e.id} style={styles.entry}>
                             {e.text ? (
@@ -773,10 +880,18 @@ export default function NamesListScreen() {
                             {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
                                 <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
                             ) : null}
+                            {history.map((d) => (
+                                <Text key={d.id} style={[styles.entryMeta, d.status === 'open' && styles.lockedText]}>{debtLine(d, at)}</Text>
+                            ))}
                             <View style={styles.buttonRow}>
                                 {btn(e.text ? 'Change' : 'Type it again', () => openForm(e), 'small')}
-                                {!e.confirmation && e.text ? btn('Invite this person', () => inviteEntry(e), 'small') : null}
-                                {!e.confirmation && e.text ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
+                                {!e.confirmation && e.text && !open ? btn('Invite this person', () => inviteEntry(e), 'small') : null}
+                                {!e.confirmation && e.text && !open ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
+                                {!e.confirmation && e.text && open && !open.repaying_pubkey
+                                    ? btn('Work it off', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e, workOff: open }); }, 'small') : null}
+                                {e.text && open ? btn('Count a payment made without the code', () => { setPayRef(''); setSettleNote(''); setMode({ kind: 'settle', entry: e, debt: open }); }, 'small') : null}
+                                {e.text && open ? btn('Share the pay-back code', () => sharePayBackCode(open), 'small') : null}
+                                {open ? btn('Ask to forgive it', () => askToForgive(open), 'small') : null}
                                 {acts?.second ? btn('Confirm as second admin', () => second(e), 'small') : null}
                                 {acts?.revoke ? btn('Revoke', () => revoke(e), 'small') : null}
                             </View>
@@ -829,7 +944,17 @@ export default function NamesListScreen() {
             <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             {header}
             <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-                {mode.kind === 'list' ? <Text style={styles.body}>{COPY.who}</Text> : null}
+                {mode.kind === 'list' ? (
+                    <>
+                        <Text style={styles.body}>{showWho ? COPY.who : firstSentence(COPY.who).first}</Text>
+                        <Pressable
+                            style={[styles.smallBtn, styles.moreBtn]} onPress={() => setShowWho(!showWho)} accessibilityRole="button"
+                            accessibilityState={{ expanded: showWho }}
+                        >
+                            <Text style={styles.smallBtnText}>{showWho ? COPY.whoLess : COPY.whoMore}</Text>
+                        </Pressable>
+                    </>
+                ) : null}
                 {statusBlocks}
                 {body}
                 {busy ? <ActivityIndicator color={colors.brand.primary} accessibilityLabel="Working" /> : null}

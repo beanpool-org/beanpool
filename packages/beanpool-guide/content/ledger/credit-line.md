@@ -50,7 +50,7 @@ Some communities have admins who know every member by name. If yours has turned 
 - One live Offer lets you use all of it. With no Offers, you can't use it.
 - Trust you earn by trading adds to it, up to your community's cap (2,000 Beans unless it chose more, up to 5,000).
 - An admin can set a smaller limit for you, for example while you are new. That never takes Beans from you: if you are already below it, spending pauses until you are back above it.
-- If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid.
+- If you are working off a debt from an earlier account, the Beans you receive above 0 go to the Commons until it is paid. Your Ledger says how much is left. You can also pay some or all of it yourself in **Ledger → Pay the Commons**: your pay-back code is filled in there (or enter the one an admin gives you). What you pay with the code comes off the debt at once, and when nothing is left the debt is settled: nothing more is taken, by a payment or from what you receive. A payment without the code goes to the Commons but not off your debt, and the app says so: to have it count, ask an admin to count it toward your debt with its reference. Until they do, the debt is still being worked off: the next time you receive Beans, what is left is taken from what you hold above 0. The amount in the admin's message is what was left when they shared it: if less is left now, your server refuses a larger payment and says how much is left, and nothing is paid. If the app says a payment may have gone through, tap **Try again** on the same screen: the same payment is never paid twice. If you left that screen, check your Ledger before you pay again.
 
 ## Frozen by the admins
 

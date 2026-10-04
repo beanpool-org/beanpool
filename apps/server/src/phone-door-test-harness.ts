@@ -2,6 +2,7 @@
  * A real node for the phone's end-to-end door tests (apps/native/utils/__tests__/global-door-e2e.test.ts): the global
  * profile, over HTTPS on a port the OS picks, with the real signature middleware, the real door routes
  * (routes/open-join.ts) and the real door work, so the phone's own code is measured against the node it will meet.
+ * Also a community's own node (PHONE_DOOR_PROFILE=community) for utils/__tests__/debts-repayment-e2e.test.ts.
  * A test fixture only: nothing in the server imports it, and no suite runs it on its own.
  *
  * Started by that test with `node --import tsx src/phone-door-test-harness.ts`, in its own data folder
@@ -19,13 +20,19 @@
  *   status {key, status}        the member's status (`suspended`, `active`), as the server suites set it
  *   doorNumber {name, value}    a `doorNumbers.<name>` override, as an operator sets one in node_config
  *   removedNewcomers {ips}      a 12-words newcomer from each address, removed minutes after joining (design §2.4)
+ *   workingOff {key, beans, owed}  a member holding `beans`, confirmed by an admin to work off an `owed`-Bean debt left on
+ *                               their names-list entry (fixture rows, as test-names-debts-http's); answers the debt's id
+ *   receive {key, beans}        a direct payment to the member (transfer()), whose after-commit hook runs the repayment sweep
+ *   debt {key, debtId}          the member's balance and the debt record (repaid, status, how it was settled)
  *   quit                        exit
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 delete process.env.GOOGLE_CLIENT_IDS;
-process.env.NODE_PROFILE = 'global';
+// PHONE_DOOR_PROFILE=community: a community's own node instead (Beans on), for the phone's repayment e2e.
+if (process.env.PHONE_DOOR_PROFILE === 'community') delete process.env.NODE_PROFILE;
+else process.env.NODE_PROFILE = 'global';
 // No release check against GitHub (routes/settings.ts): the guard below would refuse it anyway.
 process.env.DISABLE_UPDATE_CHECK = 'true';
 
@@ -55,6 +62,7 @@ async function main(): Promise<void> {
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
+    const { transfer, getBalance } = await import('./state-engine.js');
 
     await initTls();
     initStateEngine();
@@ -105,6 +113,30 @@ async function main(): Promise<void> {
             const outcome = registerOpenJoin(broadcast, { publicKey: key, callsign: `Gone ${key.slice(0, 4)}`, provider: 'words', joinHash: wordsJoinHash(), ipHash });
             if (outcome.ok) adminPruneUser(key, 'owner:password');
             return { ip, joined: outcome.ok };
+        }),
+        workingOff: ({ key, beans, owed }: { key?: string; beans?: number; owed?: number }) => {
+            const pk = String(key);
+            const hex = (n: number) => crypto.randomBytes(n).toString('hex');
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status) VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`)
+                .run(pk, `Working ${pk.slice(0, 4)}`, new Date(Date.now() - 30 * 86_400_000).toISOString());
+            db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
+            if (Number(beans) > 0) transfer('genesis', pk, Number(beans), 'seed', 'direct', true);
+            const entry = hex(16);
+            const debtId = hex(16);
+            db.prepare('INSERT INTO names_entries (id, ciphertext, key_id, created_by) VALUES (?, ?, ?, ?)').run(entry, 'sealed:' + hex(24), hex(32), 'fixture');
+            db.prepare('INSERT INTO confirmations (id, member_pubkey, entry_id, confirmed_by, needs_second) VALUES (?, ?, ?, ?, 0)').run(hex(16), pk, entry, 'fixture');
+            db.prepare(`INSERT INTO names_debts (id, entry_id, amount, reason, removed_at, repaying_pubkey) VALUES (?, ?, ?, 'account_deleted', ?, ?)`)
+                .run(debtId, entry, Number(owed), new Date().toISOString(), pk);
+            return debtId;
+        },
+        receive: ({ key, beans }: { key?: string; beans?: number }) => {
+            transfer('genesis', String(key), Number(beans), 'paid by a neighbour', 'direct', true);
+            return true;
+        },
+        debt: ({ key, debtId }: { key?: string; debtId?: string }) => ({
+            balance: getBalance(String(key)).balance,
+            record: db.prepare('SELECT amount, repaid, status, settled_how FROM names_debts WHERE id = ?').get(String(debtId)) ?? null,
+            links: (db.prepare('SELECT COUNT(*) n FROM names_debt_payments WHERE debt_id = ?').get(String(debtId)) as { n: number }).n,
         }),
         quit: () => process.exit(0),
     };

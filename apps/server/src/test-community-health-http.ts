@@ -29,7 +29,7 @@ process.env.ADMIN_PASSWORD = 'HealthPanel123!';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { initTls } from './services/tls.js';
-import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance } from './state-engine.js';
+import { initStateEngine, transfer, seedGenesisMember, createPost, getBalance, injectSystemMessage } from './state-engine.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { grantNodeRole } from './engine/node-roles.js';
@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     // what that text said, not today's, so he is in no exception until he agrees to today's wording.
     const leaRow = db.prepare('SELECT version FROM known_consents WHERE member_pubkey = ?').get(lea.pk) as { version: string };
     const [wordingNow, ...leaLines] = leaRow.version.split(':');
-    assert(wordingNow === '3', `he agreed to wording 3, so the one before is wording 2, the round-3 text (${leaRow.version})`);
+    assert(wordingNow === '4', `he agreed to wording 4, so the one before is wording 3, the text that said "if you trade mostly with one member" (${leaRow.version})`);
     db.prepare('UPDATE known_consents SET version = ? WHERE member_pubkey = ?').run([Number(wordingNow) - 1, ...leaLines].join(':'), lea.pk);
     const ex5 = await exceptions(ada);
     const leaMine = await call('GET', lea, '/api/names/consent');
@@ -408,15 +408,15 @@ async function main(): Promise<void> {
         'no text says an admin never sees a trade: every admin sees some (disputes, memberStats, fraud flags)');
     // Wording 3 (round 4): memberStats' posts and messages counts, the ring alert (names, no Beans), the inactivity alert,
     // the pair's one-to-one chat only, and the operator's whole database with its backups, snapshots and standby copies.
-    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; how many trades each member has finished or cancelled and what the finished ones came to, and how many posts each member has up and messages they have sent; fraud alerts that name members, with the Beans that moved, when they trade mostly with one member or with members they invited; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days";
+    const tradeList = "a trade that isn't finished yet or that an admin settled (both members, the listing, the price, and the messages in the two members' one-to-one chat, which an admin can't read if it is private), so that a stuck trade can be settled; how many trades each member has finished or cancelled and what the finished ones came to, and how many posts each member has up and messages they have sent; a fraud alert that names two members who buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; a fraud alert that names a member and the members they invited when those members send them Beans past a limit within a set number of days, with the Beans in total and how many of the members they invited have traded with no one but them; a fraud alert that names a group of members, at least half of them new, who trade mostly with each other, with how much of the group's trading is with each other but no Beans; and an alert that names the members who have had no Beans move in or out for a set number of days";
     assert(policy.includes(`<li><strong>What any admin can see of trades,</strong> in any community and whatever you agreed to: ${tradeList}. Nothing else of anyone's trades. These looks are not logged.</li>`),
         'the policy lists what any admin sees of trades, says nothing else, and says it is not logged');
     assert(operatorPage.includes(`What every admin can see of trades, in any community and with no log, is: ${tradeList}.`),
         'the operator page lists the same, with no log');
     assert(/## What any admin can see of your trades/.test(guide) && /\*\*A trade that isn't finished yet, or that an admin settled\.\*\* Both members, the listing, the price, and the messages in the one-to-one chat of the two members\./.test(guide)
         && /\*\*How many trades each member has finished or cancelled,\*\* and what the finished ones came to, and how many posts each member has up and messages they have sent\./.test(guide)
-        && /\*\*Fraud alerts that name members,\*\* with the Beans that moved: when someone trades mostly with one member, or with members they invited\./.test(guide)
-        && /\*\*A fraud alert that names a group of members,\*\* at least half of them new, who trade mostly with each other\. It shows no Beans\./.test(guide)
+        && /\*\*Fraud alerts that name members,\*\* with Beans\. One names two members who buy from each other back and forth, about evenly, past a limit\. It shows the Beans in total and how evenly they went each way\. Another names a member and the members they invited, when those members send them Beans past a limit within a set number of days\. It shows the Beans in total and how many of the members they invited have traded with no one but them\./.test(guide)
+        && /\*\*A fraud alert that names a group of members,\*\* at least half of them new, who trade mostly with each other\. It shows how much of the group's trading is with each other, but no Beans\./.test(guide)
         && /\*\*An alert that names the members who have had no Beans move in or out\*\* for a set number of days\./.test(guide)
         && /Nothing else of your trades\. These looks are not logged/.test(guide),
         'the members\' guide lists the same five, says nothing else, and says they are not logged');
@@ -425,15 +425,15 @@ async function main(): Promise<void> {
         'the policy and both guide pages say whoever runs the server holds the whole database, with its backups, snapshots and standby copies');
     assert(/any admin can see some of your trades, and those looks are not logged: a trade that isn't finished yet or that an admin settled \(who with, the listing, the price, and your one-to-one chat with them/.test(consentText)
         && /how many trades you have finished or cancelled and what the finished ones came to, and how many posts you have up and messages you have sent;/.test(consentText)
-        && /a fraud alert that names you, and how many Beans moved, if you trade mostly with one member or with members you invited;/.test(consentText)
-        && /one that names you, with no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other;/.test(consentText)
+        && /a fraud alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of the members you invited have traded with no one but you, if members you invited send you Beans past a limit within a set number of days, or if you are one of those members;/.test(consentText)
+        && /one that names you, with how much of the group's trading is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly with each other;/.test(consentText)
         && /an alert that names you if no Beans have moved in or out of your account for a set number of days\./.test(consentText)
         && /Nothing else of your trades\. Whoever runs this community's server holds its whole database, your balance and trades included, and its backups, snapshots and standby copies\.$/.test(consentText)
         && /Every look at your balance is logged/.test(consentText),
         `the wording a member agrees to says what any admin sees of trades, unlogged, that a look at a balance is logged, and that whoever runs the server holds it all (${show(terms9)})`);
     const quoted = consentText.replace(/past \d+% of/, 'past 50% of').replace(/debit for \d+ days/, 'debit for 60 days');
     assert(guide.includes(`"${quoted}"`), 'the guide quotes the wording a member agrees to, word for word (at 50% and 60 days)');
-    assert(String(terms9.body?.version ?? '').startsWith('3:'), `the wording is version 3, so a member who agreed to wording 2 (no posts or messages counts, no ring or inactivity alert, no word of the operator's backups) is asked again (${show(terms9)})`);
+    assert(String(terms9.body?.version ?? '').startsWith('4:'), `the wording is version 4, so a member who agreed to wording 3 ("if you trade mostly with one member", not what the two alerts with Beans fire on) is asked again (${show(terms9)})`);
     const before9 = logRows();
     const disputes9 = await call('GET', null, '/api/local/admin/disputes?minDays=0', undefined, adaSession);
     const data9 = await call('POST', null, '/api/local/admin/data', {}, adaSession);
@@ -476,6 +476,53 @@ async function main(): Promise<void> {
     const withDm = await one9('t9-open');
     assert(withDm.status === 200 && withDm.body?.dispute?.chat?.conversationId === 'c9-dm' && /a line between the two/.test(withDm.text) && !/a line in the group/.test(withDm.text),
         `their one-to-one chat is (${JSON.stringify(withDm.body?.dispute?.chat ?? null).slice(0, 120)})`);
+
+    // The node's plaintext notices in that chat (escrow placed, released: amounts and both keys) are this trade's only, never
+    // the pair's other trades', finished ones included (review r4177156576). A pair with an older finished trade and the
+    // disputed one; the notices go where the node puts them (injectSystemMessage), next to a line the two wrote.
+    const max = makeMember('Maxine');
+    const nia = makeMember('Niamh');
+    const oldPost = createPost('offer', 'produce', 'Niamh\'s old bread', 'Baking', 7, 'fixed', nia.pk)!;
+    const newPost = createPost('offer', 'produce', 'Niamh\'s honey', 'Preserves', 9, 'fixed', nia.pk)!;
+    chatOf.run('c9-pair', 'dm', null, max.pk);
+    for (const m of [max, nia]) inChat.run('c9-pair', m.pk);
+    trade.run('t9-old', oldPost.id, max.pk, nia.pk, 'completed', ago(40 * DAY), null);
+    // Each notice carries its trade's transactionId, as engine/escrow.ts writes it.
+    const notice = (post: { id: string }, txId: string, type: string, amount: number, extra: object = {}) =>
+        injectSystemMessage(post.id, type, { amount, postId: post.id, transactionId: txId, buyerPubkey: max.pk, sellerPubkey: nia.pk, ...extra } as any, max.pk, nia.pk);
+    notice(oldPost, 't9-old', 'ESCROW_FUNDED', 7);
+    notice(oldPost, 't9-old', 'ESCROW_RELEASED', 7);
+    line.run('m9-pair', 'c9-pair', max.pk, 'a line the pair wrote');
+    trade.run('t9-pair', newPost.id, max.pk, nia.pk, 'pending', ago(20 * DAY), null);
+    notice(newPost, 't9-pair', 'ESCROW_FUNDED', 9);
+    const pairOne = await one9('t9-pair');
+    const pairListed = ((await call('GET', null, '/api/local/admin/disputes?minDays=0&limit=200', undefined, adaSession)).body?.disputes ?? [])
+        .find((d: any) => d.id === 't9-pair');
+    for (const [where, d] of [['by its id', pairOne.body?.dispute], ['on the list', pairListed]] as const) {
+        const shown = JSON.stringify({ chat: d?.chat ?? null, chatContext: d?.chatContext ?? null });
+        assert(pairOne.status === 200 && d?.chat?.conversationId === 'c9-pair' && /a line the pair wrote/.test(shown) && /9 Beans placed in escrow/.test(shown)
+            && !/7 Beans/.test(shown) && !shown.includes(oldPost.id)
+            && (d?.chat?.messages ?? []).length === 2 && (d?.chatContext ?? []).length === 2,
+            `${where}, the dispute's chat shows the pair's line and this trade's notice, none of their older trade's (${shown.slice(0, 300)})`);
+    }
+
+    // A repeatable listing (a weekly box) the same pair traded before shares the post id with the disputed trade, so a
+    // notice is this trade's only by its transactionId (review r4177209847): the earlier trade's notices, a ruling on
+    // another trade with its reason, and a notice with no transactionId all stay out.
+    const boxPost = createPost('offer', 'produce', 'Niamh\'s weekly box', 'Produce', 13, 'fixed', nia.pk, undefined, undefined, undefined, true)!;
+    trade.run('t9-box-old', boxPost.id, max.pk, nia.pk, 'completed', ago(30 * DAY), null);
+    notice(boxPost, 't9-box-old', 'ESCROW_FUNDED', 13);
+    notice(boxPost, 't9-box-old', 'ESCROW_RELEASED', 13);
+    notice(boxPost, 't9-box-ruled', 'ESCROW_DISPUTE_RESOLVED', 11, { resolution: 'refund', resolvedByName: 'Ada', reason: 'an older ruling' });
+    injectSystemMessage(boxPost.id, 'ESCROW_FUNDED', { amount: 17, postId: boxPost.id, buyerPubkey: max.pk, sellerPubkey: nia.pk } as any, max.pk, nia.pk);
+    trade.run('t9-box-new', boxPost.id, max.pk, nia.pk, 'pending', ago(10 * DAY), null);
+    notice(boxPost, 't9-box-new', 'ESCROW_FUNDED', 5);
+    const boxOne = await one9('t9-box-new');
+    const boxShown = JSON.stringify({ chat: boxOne.body?.dispute?.chat ?? null, chatContext: boxOne.body?.dispute?.chatContext ?? null });
+    const boxSystem = (boxOne.body?.dispute?.chat?.messages ?? []).filter((m: any) => m.type === 'system' || m.authorPubkey === 'SYSTEM');
+    assert(boxOne.status === 200 && /5 Beans placed in escrow/.test(boxShown) && !/13 Beans/.test(boxShown) && !/older ruling/.test(boxShown)
+        && !/11 Beans/.test(boxShown) && !/17 Beans/.test(boxShown) && !/t9-box-old|t9-box-ruled/.test(boxShown) && boxSystem.length === 1,
+        `a repeatable listing's dispute shows this trade's notice only, not the pair's earlier trade of it, another ruling or a notice with no trade id (${boxShown.slice(0, 400)})`);
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(process.exitCode ?? 0);

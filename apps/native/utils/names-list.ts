@@ -42,6 +42,7 @@ import {
 import { buildSignedHeaders, bytesToHex } from './crypto';
 import { communityAddress } from './push-pins';
 import type { BeanPoolIdentity } from './identity';
+import type { HealthExceptionsBody, HealthLogLine } from './community-health';
 
 export const NAMES_PATH = '/api/names';
 
@@ -219,6 +220,12 @@ export const fetchNamesList = (anchor: string, id: BeanPoolIdentity, forExport =
     call<NamesListBody>(anchor, id, 'GET', `${NAMES_PATH}/entries${forExport ? '?for=export' : ''}`, undefined, listTimeoutMs(entries));
 export const fetchNamesLog = (anchor: string, id: BeanPoolIdentity, limit = 50) =>
     call<{ log: NamesLogLine[]; total: number }>(anchor, id, 'GET', `${NAMES_PATH}/log?limit=${Math.max(1, Math.min(200, Math.floor(limit)))}`);
+/** Community health's exceptions (slice 6): by key and entry id, never a name. Each call is an opening, logged first. */
+export const fetchHealthExceptions = (anchor: string, id: BeanPoolIdentity) =>
+    call<HealthExceptionsBody>(anchor, id, 'GET', `${NAMES_PATH}/health/exceptions`);
+/** Who opened the exceptions, and when: readable by every admin and the owner. */
+export const fetchHealthLog = (anchor: string, id: BeanPoolIdentity, limit = 50) =>
+    call<{ log: HealthLogLine[] }>(anchor, id, 'GET', `${NAMES_PATH}/health/log?limit=${Math.max(1, Math.min(500, Math.floor(limit)))}`);
 export const confirmMember = (anchor: string, id: BeanPoolIdentity, memberPubkey: string, entryId: string) =>
     call<{ id: string; status: ConfirmationStatus }>(anchor, id, 'POST', `${NAMES_PATH}/confirmations`, { memberPubkey, entryId });
 export const secondConfirmation = (anchor: string, id: BeanPoolIdentity, confirmationId: string) =>

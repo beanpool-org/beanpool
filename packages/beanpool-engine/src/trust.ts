@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import { earnedCreditFromValue, getTier, PROTOCOL_CONSTANTS, PER_COUNTERPARTY_VOLUME_CAP } from '@beanpool/core';
 import type { TrustStats, TierInfo } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { memberKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf } from './known-floor.js';
+import { memberUsableKnownGrant, creditCap, confirmationDialOn, enterpriseKnownShareOf } from './known-floor.js';
 
 type Db = Database.Database;
 
@@ -397,6 +397,7 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
             JOIN members m ON m.public_key = p.keeper
             WHERE p.enterprise = ?
               AND p.released_at IS NULL
+              AND p.id NOT LIKE 'known:%'
               AND m.status = 'active'
               AND COALESCE(m.credit_frozen, 0) = 0
         `).get(enterprisePubkey) as any;
@@ -413,8 +414,8 @@ export function getEnterpriseFloor(db: Db, enterprisePubkey: string): Enterprise
         legacyFloor = 0;
     }
 
-    // The known floor (slice 4): the keepers' known share and the community's cap, only with the confirmation dial on;
-    // off, both are main's (share 0, cap CREDIT_FLOOR_CAP).
+    // The known floor (slice 4): the keepers' known pledges (known-floor.ts, recorded and locked like any pledge) and the
+    // community's cap, only with the confirmation dial on; off, both are main's (share 0, cap CREDIT_FLOOR_CAP).
     const knownShare = enterpriseKnownShareOf(db, enterprisePubkey);
     const allowance = isCreditFrozen
         ? 0
@@ -521,7 +522,8 @@ export function getMemberTrustProfile(db: Db, publicKey: string): {
     // vouch required. Restores the documented behaviour (docs/trust-model-shipped.md §1).
     // The known floor (community modes slice 4): a confirmed member's grant, and the community's cap (default
     // CREDIT_FLOOR_CAP). With the confirmation dial off both are today's: knownGrant 0, cap 2,000.
-    const knownGrant = memberKnownGrant(db, publicKey);
+    // Less what of it they have pledged to enterprises (known-floor.ts: own line + known pledges <= their grant).
+    const knownGrant = memberUsableKnownGrant(db, publicKey);
     const cap = creditCap(db);
     const activated = elderVouched || grantedCredit > 0 || earnedCredit > 0 || knownGrant > 0;
     const otherAllowance = vouchCredit + earnedCredit + grantedCredit;

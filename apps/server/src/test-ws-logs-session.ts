@@ -15,7 +15,10 @@
  *   4. a fresh sign-in afterwards gets a ticket and a working stream;
  *   5. an open log socket is closed within a second of its session logging out;
  *   6. an open log socket is closed within two seconds of its member losing their admin role;
- *   7. a password session's socket is closed when that session logs out.
+ *   7. a password session's socket is closed when that session logs out;
+ *   8. a stream opened with the password and a 2FA code (no session) is closed when 2FA is turned off, break-glass is
+ *      turned on, or the password changes, and a ticket issued before 2FA off or break-glass on is refused after it,
+ *      while a key session's stream stays open through all three.
  *
  * Local only: it talks to the server it starts on localhost and nothing else.
  */
@@ -32,7 +35,7 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { consumeHandshakeToken, createAdminChallenge, createPasswordSession, verifyAndSolveChallenge } from './admin-key-auth.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
-import { generateTotpSecret } from './totp.js';
+import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { logger } from './logger.js';
 
 let BASE = '', WSS = '';
@@ -71,6 +74,15 @@ async function post(path: string, s: Session, body: unknown = {}) {
     let json: any = null;
     try { json = await res.json(); } catch { /* not json */ }
     return { status: res.status, body: json };
+}
+/** A ticket asked for with the password and a current 2FA code, and no session. */
+async function passwordTicket(password: string, totpSecret: string): Promise<string> {
+    forgetUsedTotpCodesForTests();
+    const res = await fetch(`${BASE}/api/local/admin/ws-ticket`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, totpCode: generateTotpCode(totpSecret) }) });
+    const body: any = await res.json().catch(() => null);
+    if (res.status !== 200 || typeof body?.ticket !== 'string') throw new Error(`ws-ticket (password + code) answered ${res.status} ${JSON.stringify(body)}`);
+    return body.ticket;
 }
 async function ticketFor(s: Session): Promise<string> {
     const r = await post('/api/local/admin/ws-ticket', s);
@@ -120,7 +132,8 @@ async function main() {
     const PW = 'WsLogs-Session-123!';
     const { hash, salt } = hashPassword(PW);
     // 2FA on, so a password session is not held to the 2FA setup routes.
-    updateLocalConfig({ adminHash: hash, salt, totpEnabled: true, totpSecret: generateTotpSecret(), totpBackupCodesHashes: [], breakGlassMode: false } as any);
+    const SECRET = generateTotpSecret();
+    updateLocalConfig({ adminHash: hash, salt, totpEnabled: true, totpSecret: SECRET, totpBackupCodesHashes: [], breakGlassMode: false } as any);
     const PORT = await startHttpsServer(0);
     BASE = `https://localhost:${PORT}`;
     WSS = `wss://localhost:${PORT}`;
@@ -216,6 +229,56 @@ async function main() {
         const closed = await closesWithin(logs, 1000);
         assert(closed?.code === 4401, `the password session's stream is closed within a second of logging out (got ${closed ? closed.code : 'still open'})`);
         if (!closed) logs.ws.terminate();
+    }
+
+    // ── 8. a stream opened with the password and a 2FA code (no session) ends with that password, its 2FA, or break-glass off ──
+    {
+        const keyLogs = await mustOpen(await ticketFor(keySession(owner)), "the owner's key-session stream");
+
+        // 2FA turned off.
+        const beforeOff = await passwordTicket(PW, SECRET);
+        const offLogs = await mustOpen(await passwordTicket(PW, SECRET), 'the password + code stream');
+        assert(await streams(offLogs), 'the password + code stream carries log lines');
+        updateLocalConfig({ totpEnabled: false, totpSecret: '' } as any);
+        const offClosed = await closesWithin(offLogs, 2000);
+        assert(offClosed?.code === 4401, `the password + code stream is closed within two seconds of 2FA turned off (got ${offClosed ? offClosed.code : 'still open'})`);
+        if (!offClosed) offLogs.ws.terminate();
+        const afterOff = await openLogs(beforeOff);
+        assert(afterOff === 401, `a password + code ticket issued before 2FA off is refused after it → 401 (got ${typeof afterOff === 'number' ? afterOff : 'an open socket'})`);
+        if (typeof afterOff !== 'number') afterOff.ws.terminate();
+
+        // Break-glass turned on (2FA back on, with a new secret, as setting it up again makes).
+        const SECRET2 = generateTotpSecret();
+        updateLocalConfig({ totpEnabled: true, totpSecret: SECRET2 } as any);
+        const beforeBg = await passwordTicket(PW, SECRET2);
+        const bgLogs = await mustOpen(await passwordTicket(PW, SECRET2), 'the second password + code stream');
+        assert(await streams(bgLogs), 'the second password + code stream carries log lines');
+        updateLocalConfig({ breakGlassMode: true } as any);
+        const bgClosed = await closesWithin(bgLogs, 2000);
+        assert(bgClosed?.code === 4401, `the password + code stream is closed within two seconds of break-glass turned on (got ${bgClosed ? bgClosed.code : 'still open'})`);
+        if (!bgClosed) bgLogs.ws.terminate();
+        const afterBg = await openLogs(beforeBg);
+        assert(afterBg === 401, `a password + code ticket issued before break-glass on is refused after it → 401 (got ${typeof afterBg === 'number' ? afterBg : 'an open socket'})`);
+        if (typeof afterBg !== 'number') afterBg.ws.terminate();
+        updateLocalConfig({ breakGlassMode: false } as any);
+
+        // The password changed.
+        const pwLogs = await mustOpen(await passwordTicket(PW, SECRET2), 'the third password + code stream');
+        assert(await streams(pwLogs), 'the third password + code stream carries log lines');
+        const PW2 = 'WsLogs-Session-456!';
+        const next = hashPassword(PW2);
+        updateLocalConfig({ adminHash: next.hash, salt: next.salt } as any);
+        const pwClosed = await closesWithin(pwLogs, 2000);
+        assert(pwClosed?.code === 4401, `the password + code stream is closed within two seconds of the password changing (got ${pwClosed ? pwClosed.code : 'still open'})`);
+        if (!pwClosed) pwLogs.ws.terminate();
+
+        // The new password and a code still open a stream, and the key session's stream was never touched.
+        const fresh = await mustOpen(await passwordTicket(PW2, SECRET2), 'a stream on the new password');
+        assert(await streams(fresh), 'a password + code stream on the new password carries log lines');
+        fresh.ws.terminate();
+        assert(keyLogs.ws.readyState === WebSocket.OPEN, "the owner's key-session stream stays open through 2FA off, break-glass and a password change");
+        assert(await streams(keyLogs), "…and still carries log lines");
+        keyLogs.ws.terminate();
     }
 
     console.log(`\n${passed}/${run} passed`);

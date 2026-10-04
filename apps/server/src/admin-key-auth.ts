@@ -570,12 +570,26 @@ export function validateAdminSession(sessionId: string, now = Date.now()): {
 
 /**
  * Which session something long-lived was opened under (a /ws/logs ticket, then its socket): the session, its member
- * and that member's session_epoch at the time. A password session's member is '' and its epoch 0.
+ * and that member's session_epoch at the time. A password session's member is '' and its epoch 0. Opened with the
+ * password itself and no session (passwordCredentialBinding): sessionId '', and the password and second factor then
+ * in force.
  */
 export interface AdminSessionBinding {
     sessionId: string;
     memberPubkey: string;
     sessionEpoch: number;
+    /** No session only: passwordCredentialStamp() when it was opened. */
+    credentialStamp?: string;
+}
+
+/**
+ * The binding for something opened with the password itself (and, with 2FA on, a code), with no session: it carries on
+ * only while that password and second factor are in force and break-glass is off, as a password session does. Null in
+ * break-glass mode, where the password opens no admin route but key enrolment.
+ */
+export function passwordCredentialBinding(): AdminSessionBinding | null {
+    if (isBreakGlassMode()) return null;
+    return { sessionId: '', memberPubkey: '', sessionEpoch: 0, credentialStamp: passwordCredentialStamp() };
 }
 
 /** The binding for a session that is live now, or null. */
@@ -587,10 +601,12 @@ export function adminSessionBinding(sessionId: string, now = Date.now()): AdminS
 
 /**
  * Whether what was opened under `b` may carry on: its session would pass validateAdminSession now, for the same member
- * and epoch, and still holds a role above moderator (the admin's log is not a moderator route). Changes nothing: no
+ * and epoch, and still holds a role above moderator (the admin's log is not a moderator route); with no session, the
+ * password and second factor it was opened with are still in force and break-glass is off. Changes nothing: no
  * session is ended and no idle window slides, so an open log socket keeps no session alive.
  */
 export function adminSessionBindingLive(b: AdminSessionBinding, now = Date.now()): boolean {
+    if (!b.sessionId) return !!b.credentialStamp && !isBreakGlassMode() && b.credentialStamp === passwordCredentialStamp();
     const session = adminSessions.get(b.sessionId);
     if (!session || session.memberPubkey !== b.memberPubkey || session.sessionEpoch !== b.sessionEpoch) return false;
     if (now > session.hardExpiresAt || now > session.idleExpiresAt) return false;

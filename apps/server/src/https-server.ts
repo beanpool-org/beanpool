@@ -885,7 +885,8 @@ export const LOG_SOCKET_SIGNIN_ENDED = 4401;
 
 /**
  * Closes every /ws/logs socket whose session has ended: logged out, signed out everywhere (session_epoch bumped), timed
- * out, its member no longer an admin, or (a password session) the password or its 2FA changed. Run when a session ends
+ * out, its member no longer an admin, or (a password session, or the password itself with no session) the password or
+ * its 2FA changed or break-glass turned on. Run when a session ends
  * (onAdminSessionsEnded) and every LOG_SESSION_SWEEP_MS for the ends nothing announces (a role taken away, a password
  * changed). At most maxLogSockets sockets, so the sweep is a handful of reads.
  */
@@ -989,7 +990,7 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
-                // The session it was opened under, closed with it (closeEndedLogSockets); null for the password itself.
+                // The session it was opened under (or the password and 2FA, with none), closed with it (closeEndedLogSockets).
                 ws._adminSession = redeemed.binding;
 
                 addLogClient(ws);

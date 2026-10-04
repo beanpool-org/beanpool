@@ -37,8 +37,16 @@ export const QUIET_DAYS_DEFAULT = 60;
  * Wording 4 (review r4177156495) says what the two named-with-Beans alerts fire on: a pair who buy from each other back
  * and forth, about evenly, past the volume cap (wash_trading, which shows the total and how evenly it went), and members
  * who send the member who invited them Beans past a limit in a window (sybil_funnel); not "trade mostly with one member".
+ * Wording 5 (queue item 29, Marty 4 Oct: "Keep disputes, log every look, totals only in member stats"): every admin
+ * look at the disputes and at an alert that names a member is logged (health_access_log), the owner and the admins
+ * read that log, and memberStats carries no member's trades, only the community's totals (tradeTotals). Fix round 1
+ * (reviews r4177560405, r4177560417; wording 5 unreleased, so no bump): every member, admins included, sees each
+ * member's trust profile (POST /api/trust/profile: finished and cancelled trades, the share finished, how many
+ * different members, the trades with the viewer, Trust Points), unlogged, as Marty decided on 2026-09-29; and the
+ * stranded escrows list (an escrow left stuck by a removal on an older node) is a logged look of its own
+ * (stranded_escrows_read).
  */
-export const CONSENT_WORDING_VERSION = 4;
+export const CONSENT_WORDING_VERSION = 5;
 
 export class HealthError extends Error {
     constructor(readonly status: number, readonly code: string, message: string) {
@@ -74,17 +82,20 @@ export function consentTerms() {
     const text = `In this community, the admins can see your balance if it goes past ${debtLinePct}% of your credit line `
         + `or if you stay in debit for ${quietDays} days without a sale. That's how a LETS has always worked. `
         + `Every look at your balance is logged, and you can take this back at any time in Settings. `
-        + `Whatever you choose, any admin can see some of your trades, and those looks are not logged: a trade that isn't `
+        + `Whatever you choose, any admin can see some of your trades: a trade that isn't `
         + `finished yet or that an admin settled (who with, the listing, the price, and your one-to-one chat with them, which `
-        + `they can't read if it is private), so a stuck trade can be settled; how many trades you have finished or `
-        + `cancelled and what the finished ones came to, and how many posts you have up and messages you have sent; a fraud `
+        + `they can't read if it is private), so a stuck trade can be settled; a trade whose Beans were left stuck when a member was removed on an older server (the trade's status, the listing, the price, its dates, the Beans left stuck, how many payments went through it, and the last one's amount and note); a fraud `
         + `alert that names you if you and one member buy from each other back and forth, about evenly, past a limit, with `
         + `the Beans in total and how evenly they went each way; one that names you, with the Beans in total and how many of `
         + `the members you invited have traded with no one but you, if members you invited send you Beans past a limit within `
         + `a set number of days, or if you are one of those members; one that names you, with how much of the group's trading `
         + `is with each other but no Beans, if you are in a group of members, at least half of them new, who trade mostly `
         + `with each other; and an alert that names you if no Beans have moved in or out of your account for a set number `
-        + `of days. Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
+        + `of days. Every look at one of those trades is logged, with who looked, when, and at which trades; a look at the alerts `
+        + `that name you is logged the first time each admin opens them, and again at that admin's first look after 24 hours, `
+        + `and the looks in between add no line. The owner and the admins can see that log. The member stats the admins see show how many posts you have up and messages `
+        + `you have sent, and of trades only the whole community's totals, not yours. Every member, admins included, sees your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. That isn't logged, because every member can see it. `
+        + `Nothing else of your trades. Whoever runs this community's server holds its whole database, your balance `
         + `and trades included, and its backups, snapshots and standby copies.`;
     return { known: isKnownCommunity(), debtLinePct, quietDays, version: `${CONSENT_WORDING_VERSION}:${debtLinePct}:${quietDays}`, text };
 }
@@ -212,12 +223,59 @@ export function logBalanceLook(actor: string, subject: string, action: 'offboard
         .run(crypto.randomBytes(16).toString('hex'), actor, action, subject);
 }
 
-/** Who opened the exceptions or looked at a member's balance, whose, and when: every owner and admin reads it. */
-export function readHealthAccessLog(limit = 100) {
-    return (db.prepare('SELECT id, actor_pubkey, action, subject_pubkey, at FROM health_access_log ORDER BY at DESC, rowid DESC LIMIT ?').all(Math.max(1, Math.min(500, limit))) as any[])
+/**
+ * An admin's look at trades in the disputes view (queue item 29, Marty 4 Oct: "Keep disputes, log every look"): the
+ * list, or one dispute; or at the escrows a member's removal left stuck on an older node (a line of its own). One line
+ * naming the trade ids shown. Written before the answer: a look that can't be logged isn't answered.
+ */
+export function logDisputesLook(actor: string, action: TradeLookAction, tradeIds: string[]): void {
+    assertPlainTablesWritable();
+    db.prepare('INSERT INTO health_access_log (id, actor_pubkey, action, detail) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomBytes(16).toString('hex'), actor, action, JSON.stringify(tradeIds));
+}
+
+/**
+ * An admin's look at the fraud alerts that name members: one line per member named (`subject_pubkey`, which a re-key
+ * moves), at most one per admin and member in 24 hours, so reading the alerts again doesn't flood the log; a read that
+ * names someone new logs that one (review r4177560410). An answer that names no one writes none. Written before the
+ * answer, all lines or none.
+ */
+export function logAlertsLook(actor: string, flags: ReadonlyArray<{ members: string[] }>): void {
+    const named = [...new Set(flags.flatMap(f => Array.isArray(f.members) ? f.members : []).filter(m => typeof m === 'string' && m))];
+    if (!named.length) return;
+    assertPlainTablesWritable();
+    const since = new Date(Date.now() - ALERTS_LOOK_WINDOW_MS).toISOString();
+    const seen = db.prepare("SELECT 1 FROM health_access_log WHERE actor_pubkey = ? AND action = 'alerts_read' AND subject_pubkey = ? AND at > ? LIMIT 1");
+    const insert = db.prepare("INSERT INTO health_access_log (id, actor_pubkey, action, subject_pubkey) VALUES (?, ?, 'alerts_read', ?)");
+    db.transaction(() => {
+        for (const m of named) if (!seen.get(actor, m, since)) insert.run(crypto.randomBytes(16).toString('hex'), actor, m);
+    })();
+}
+
+export type TradeLookAction = 'disputes_listed' | 'dispute_opened' | 'stranded_escrows_read';
+
+const ALERTS_LOOK_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** The looks at a member's balance (#1599) and the looks at trades and alerts: two lists, so one can't bury the other. */
+const BALANCE_LOOKS = "('exceptions_opened', 'offboard_preview', 'offboard_settled')";
+
+function tradeIdsOf(detail: string | null): string[] | null {
+    if (!detail) return null;
+    try { const v = JSON.parse(detail); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null; } catch { return null; }
+}
+
+/**
+ * Who opened the exceptions, looked at a member's balance, at the disputes or at the alerts; whose, which trades, and
+ * when: every owner and admin reads it. `kind` picks the list: the balance looks, or the looks at trades and alerts,
+ * each its own newest `limit`.
+ */
+export function readHealthAccessLog(limit = 100, kind: 'balance' | 'trades' = 'balance') {
+    const where = kind === 'balance' ? `action IN ${BALANCE_LOOKS}` : `action NOT IN ${BALANCE_LOOKS}`;
+    return (db.prepare(`SELECT id, actor_pubkey, action, subject_pubkey, detail, at FROM health_access_log WHERE ${where} ORDER BY at DESC, rowid DESC LIMIT ?`).all(Math.max(1, Math.min(500, limit))) as any[])
         .map(r => ({
             id: r.id, actor: r.actor_pubkey, actorCallsign: getMember(r.actor_pubkey)?.callsign ?? null, action: r.action,
-            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null, at: r.at,
+            subject: r.subject_pubkey ?? null, subjectCallsign: r.subject_pubkey ? getMember(r.subject_pubkey)?.callsign ?? null : null,
+            tradeIds: tradeIdsOf(r.detail), at: r.at,
         }));
 }
 

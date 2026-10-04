@@ -16,6 +16,12 @@ const HEALTH = {
         { id: 'l2', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'offboard_preview', subject: 'k'.repeat(64), subjectCallsign: 'Kim', at: '2026-10-04T07:00:00.000Z' },
         { id: 'l1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'exceptions_opened', at: '2026-10-04T06:00:00.000Z' },
     ],
+    tradeLog: [
+        { id: 't4', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'stranded_escrows_read', tradeIds: ['t9'], at: '2026-10-04T09:00:00.000Z' },
+        { id: 't3', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'alerts_read', subject: 'k'.repeat(64), subjectCallsign: 'Kim', at: '2026-10-04T08:30:00.000Z' },
+        { id: 't2', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'dispute_opened', tradeIds: ['t8'], at: '2026-10-04T08:00:00.000Z' },
+        { id: 't1', actor: 'a'.repeat(64), actorCallsign: 'Ada', action: 'disputes_listed', tradeIds: ['t8'], at: '2026-10-04T07:30:00.000Z' },
+    ],
 };
 
 function mockNode(read: { ok: boolean; status?: number; body: unknown } = { ok: true, body: HEALTH }) {
@@ -55,6 +61,18 @@ describe('CommunityHealthPanel', () => {
         expect(screen.getByTestId('health-log')).toHaveTextContent('Ada opened it on');
         expect(screen.getByTestId('health-log')).toHaveTextContent("Ada saw Kim's balance while removing them on");
         expect(panel.textContent).not.toMatch(/Ʀ|csv|export/i);
+    });
+
+    it('lists the looks at trades and alerts apart from the balance looks, each with its own words', async () => {
+        mockNode();
+        render(<CommunityHealthPanel activeNode={NODE} viewer={ADMIN_KEY} />);
+        const trades = await screen.findByTestId('health-trade-log');
+        expect(trades).toHaveTextContent('Ada opened the escrows a member’s removal left stuck on');
+        expect(trades).toHaveTextContent('Ada read the alerts that named Kim on');
+        expect(trades).toHaveTextContent('Ada opened a dispute on');
+        expect(trades).toHaveTextContent('Ada opened the disputes list on');
+        expect(trades).not.toHaveTextContent('opened it on');
+        expect(screen.getByTestId('health-log')).not.toHaveTextContent('disputes');
     });
 
     it('an owner saves the two lines', async () => {

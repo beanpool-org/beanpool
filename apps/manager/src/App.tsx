@@ -15,6 +15,7 @@ import {
     fetchGatewayConfig,
     updateGatewayConfig,
     fetchNodeData,
+    fetchAlertsSummary,
     fetchNodeLogs,
     freezeNodeUser,
     pruneNodeUser,
@@ -499,6 +500,12 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
     /** The newest data payload per profile, readable from callbacks the poll captured. */
     const fleetNodeDataRef = useRef<Record<string, NodeDataPayload>>({});
     fleetNodeDataRef.current = fleetNodeData;
+    /**
+     * The alerts' summary read since a node's last full payload, laid over that payload (its flags and report ids), so
+     * the five-second tick re-reads the dot from what the node said last rather than from the older payload. Dropped
+     * when a full payload lands.
+     */
+    const alertsSummaryRef = useRef<Record<string, NodeDataPayload>>({});
 
     /**
      * The node whose sections are on screen *right now* — not the one that was on screen when a
@@ -591,13 +598,31 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         // Fetch node data to check for active abuse/security flags
         const flagsDue = manual || now - (lastFlagFetchRef.current[p.id] || 0) >= FLAG_REFRESH_MS;
         if (!flagsDue || dataInFlightRef.current[p.id]) {
-            applyHealthFromData(p.id, fleetNodeDataRef.current[p.id]);
+            applyHealthFromData(p.id, alertsSummaryRef.current[p.id] ?? fleetNodeDataRef.current[p.id]);
         } else {
             lastFlagFetchRef.current[p.id] = now;
             dataInFlightRef.current[p.id] = true;
             (async () => {
                 try {
+                    // The five-minute tick is no admin's look at the alerts (review r4177560410), and neither is a
+                    // Refresh for a node the operator isn't viewing (confirmation 1): both ask for the alerts'
+                    // names-free summary, which the node doesn't log, and keep the rest of the last data in hand. Its
+                    // report ids light the dot for a report filed since the last full read, and a dismissed one stays
+                    // dark (r4177719213). Only a Refresh of the node on screen reads the full data, names and all, logged.
+                    if (!manual || p.id !== activeNodeIdRef.current) {
+                        const summary = await fetchAlertsSummary(p.url, nodeCredential(p), getTfaSessionToken(p.id));
+                        const prev = fleetNodeDataRef.current[p.id];
+                        const fromSummary = {
+                            ...(prev ?? {}),
+                            health: { ...(prev?.health ?? {}), flags: summary.flags },
+                            reports: summary.reportIds.map((id) => ({ id })),
+                        } as NodeDataPayload;
+                        alertsSummaryRef.current[p.id] = fromSummary;
+                        applyHealthFromData(p.id, fromSummary);
+                        return;
+                    }
                     const nData = await fetchNodeData(p.url, nodeCredential(p), getTfaSessionToken(p.id));
+                    delete alertsSummaryRef.current[p.id];
                     setFleetNodeData((prev) => ({ ...prev, [p.id]: nData }));
                     applyHealthFromData(p.id, nData);
                     // The active node's sections read `nodeData`, and this is the same payload
@@ -917,6 +942,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
             if (requestedFor === activeNodeIdRef.current) {
                 setNodeData(data);
             }
+            delete alertsSummaryRef.current[activeNode.id];
             setFleetNodeData((prev) => ({ ...prev, [activeNode.id]: data }));
 
             const flags = data?.health?.flags || [];

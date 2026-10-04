@@ -20,13 +20,20 @@ type Totals = { beansInCirculation: number; sumOfCredit: number; sumOfDebt: numb
 type Lines = { debtLinePct: number; quietDays: number };
 type LogLine = { id: string; actorCallsign: string | null; actor: string; action?: string; subjectCallsign?: string | null; at: string };
 
-/** What a line in the access log says the admin did: opened the exceptions, or looked at a member's balance while removing them. */
-function logDid(l: LogLine): string {
+/**
+ * What a line in the access log says the admin did: opened the exceptions, looked at a member's balance while removing
+ * them, or looked at trades and alerts: the disputes, one dispute, the stranded escrows, the alerts that named a member.
+ */
+export function logDid(l: LogLine): string {
     if (l.action === 'offboard_preview') return `saw ${l.subjectCallsign ? `${l.subjectCallsign}'s` : "a member's"} balance while removing them on`;
     if (l.action === 'offboard_settled') return 'removed a member and saw the balance it settled on';
+    if (l.action === 'disputes_listed') return 'opened the disputes list on';
+    if (l.action === 'dispute_opened') return 'opened a dispute on';
+    if (l.action === 'stranded_escrows_read') return 'opened the escrows a member’s removal left stuck on';
+    if (l.action === 'alerts_read') return `read the alerts that named ${l.subjectCallsign ?? 'a member'} on`;
     return 'opened it on';
 }
-export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[] };
+export type Health = { totals: Totals; settings: Lines; known: boolean; log: LogLine[]; tradeLog: LogLine[] };
 type Status = { kind: 'saved' | 'error'; text: string };
 
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
@@ -44,6 +51,7 @@ export function readHealth(v: unknown): Health | null {
         settings: { debtLinePct: s.debtLinePct!, quietDays: s.quietDays! },
         known: o.known === true,
         log: Array.isArray(o.log) ? o.log.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
+        tradeLog: Array.isArray(o.tradeLog) ? o.tradeLog.filter((l): l is LogLine => !!l && typeof (l as LogLine).at === 'string') : [],
     };
 }
 
@@ -192,6 +200,22 @@ export function CommunityHealthPanel({ activeNode, viewer }: { activeNode: NodeP
                 ) : (
                     <ul data-testid="health-log" className="m-0 p-0 list-none space-y-1">
                         {health.log.map((l) => (
+                            <li key={l.id} className="text-xs text-nature-300 break-words">
+                                <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
+            {/* The looks at trades and alerts: a list of their own, so they can't push a balance look out of the one above. */}
+            <div className="space-y-2">
+                <h4 className="text-sm font-bold text-white m-0 break-words">Who looked at trades and alerts</h4>
+                {health.tradeLog.length === 0 ? (
+                    <p data-testid="health-trade-log-empty" className="text-xs text-nature-400 m-0 break-words">Nobody has looked.</p>
+                ) : (
+                    <ul data-testid="health-trade-log" className="m-0 p-0 list-none space-y-1">
+                        {health.tradeLog.map((l) => (
                             <li key={l.id} className="text-xs text-nature-300 break-words">
                                 <span className="font-bold text-white">{l.actorCallsign ?? `${l.actor.slice(0, 8)}…`}</span> {logDid(l)} {new Date(l.at).toLocaleString()}
                             </li>

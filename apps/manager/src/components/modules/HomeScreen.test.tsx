@@ -37,9 +37,10 @@ describe('HomeScreen Component', () => {
                 { publicKey: 'pk-corp2', name: 'Tool Library', isTreasury: true },
             ],
             memberStats: {
-                'pk-user1': { posts: 1, messages: 2, deals: 3, volume: 50.4, cancelled: 0 },
-                'pk-corp1': { posts: 4, messages: 0, deals: 3, volume: 50.4, cancelled: 0 },
+                'pk-user1': { posts: 1, messages: 2 },
+                'pk-corp1': { posts: 4, messages: 0 },
             },
+            tradeTotals: { deals: 3, volume: 50.4, cancelled: 0 },
         };
 
         render(<HomeScreen {...defaultProps} nodeData={mockNodeData} />);
@@ -48,7 +49,7 @@ describe('HomeScreen Component', () => {
         const enterpriseCard = screen.getByRole('button', { name: /Shared Enterprises/i });
         expect(enterpriseCard).toHaveTextContent('2');
 
-        // Total completed volume is 50.4 (100.8 / 2)
+        // The community's completed volume, from its trade totals (member stats carry no trades)
         const circulationCard = screen.getByRole('button', { name: /Circulation/i });
         expect(circulationCard).toHaveTextContent('50.4 beans');
     });

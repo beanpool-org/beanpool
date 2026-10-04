@@ -204,7 +204,7 @@ export function createNamesListRoutes(_deps: RouteDeps): Router {
     router.get('/api/names/health/log', (ctx) => asAdmin(ctx, () => {
         const limit = wholeQuery(ctx.query.limit, 100, 500);
         if (limit === null || limit < 1) throw new NamesListError(400, 'bad_request', 'limit must be a whole number from 1 to 500.');
-        return { log: readHealthAccessLog(limit) };
+        return { log: readHealthAccessLog(limit, 'balance'), tradeLog: readHealthAccessLog(limit, 'trades') };
     }));
     router.post('/api/names/health/settings', (ctx) => asAdmin(ctx, (actor, body) => {
         if (!isNodeOwner(actor)) throw new NamesListError(403, 'owner_only', 'Only an owner of this community can change what the admins see.');

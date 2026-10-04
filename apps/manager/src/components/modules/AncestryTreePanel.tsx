@@ -18,9 +18,6 @@ interface BranchStats {
     memberCount: number;
     posts: number;
     messages: number;
-    deals: number;
-    volume: number;
-    cancelled: number;
 }
 
 export function AncestryTreePanel({
@@ -63,6 +60,12 @@ export function AncestryTreePanel({
             ? nodeData.memberStats
             : {};
     }, [nodeData?.memberStats]);
+
+    // Of trades, only the community's totals: the node sends no member's deals, volume or cancelled (queue item 29).
+    const tradeTotals = useMemo(() => {
+        const t = (nodeData as NodeDataPayload | null)?.tradeTotals;
+        return t && typeof t.deals === 'number' && typeof t.volume === 'number' && typeof t.cancelled === 'number' ? t : null;
+    }, [nodeData?.tradeTotals]);
 
     // Lookup maps
     const membersMap = useMemo(() => {
@@ -201,9 +204,6 @@ export function AncestryTreePanel({
                     memberCount: 0,
                     posts: 0,
                     messages: 0,
-                    deals: 0,
-                    volume: 0,
-                    cancelled: 0,
                 };
             }
             visiting.add(pubkey);
@@ -212,18 +212,12 @@ export function AncestryTreePanel({
             const personal = {
                 posts: typeof rawPersonal.posts === 'number' ? rawPersonal.posts : 0,
                 messages: typeof rawPersonal.messages === 'number' ? rawPersonal.messages : 0,
-                deals: typeof rawPersonal.deals === 'number' ? rawPersonal.deals : 0,
-                volume: typeof rawPersonal.volume === 'number' ? rawPersonal.volume : 0,
-                cancelled: typeof rawPersonal.cancelled === 'number' ? rawPersonal.cancelled : 0,
             };
             const children = tree[pubkey] || [];
             const agg: BranchStats = {
                 memberCount: 1,
                 posts: personal.posts,
                 messages: personal.messages,
-                deals: personal.deals,
-                volume: personal.volume,
-                cancelled: personal.cancelled,
             };
             for (const child of children) {
                 const childPk = typeof child?.publicKey === 'string' ? child.publicKey : (typeof (child as any)?.pubkey === 'string' ? (child as any).pubkey : '');
@@ -232,12 +226,8 @@ export function AncestryTreePanel({
                     agg.memberCount += childAgg.memberCount;
                     agg.posts += childAgg.posts;
                     agg.messages += childAgg.messages;
-                    agg.deals += childAgg.deals;
-                    agg.volume += childAgg.volume;
-                    agg.cancelled += childAgg.cancelled;
                 }
             }
-            agg.volume = Math.round(agg.volume * 100) / 100;
             cache[pubkey] = agg;
             return agg;
         }
@@ -373,9 +363,6 @@ export function AncestryTreePanel({
         const personal = {
             posts: typeof rawPersonal.posts === 'number' ? rawPersonal.posts : 0,
             messages: typeof rawPersonal.messages === 'number' ? rawPersonal.messages : 0,
-            deals: typeof rawPersonal.deals === 'number' ? rawPersonal.deals : 0,
-            volume: typeof rawPersonal.volume === 'number' ? rawPersonal.volume : 0,
-            cancelled: typeof rawPersonal.cancelled === 'number' ? rawPersonal.cancelled : 0,
         };
 
         // Branch stats
@@ -383,9 +370,6 @@ export function AncestryTreePanel({
             memberCount: 1,
             posts: personal.posts,
             messages: personal.messages,
-            deals: personal.deals,
-            volume: personal.volume,
-            cancelled: personal.cancelled,
         };
 
         const isStatsOpen = Boolean(expandedStats[pk]);
@@ -465,8 +449,6 @@ export function AncestryTreePanel({
                             <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-nature-400 ml-1">
                                 {personal.posts > 0 && <span title={`${personal.posts} posts`}>📦{personal.posts}</span>}
                                 {personal.messages > 0 && <span title={`${personal.messages} msgs`}>💬{personal.messages}</span>}
-                                {personal.deals > 0 && <span title={`${personal.deals} deals`}>🤝{personal.deals}</span>}
-                                {personal.cancelled > 0 && <span title={`${personal.cancelled} cancelled`}>🚫{personal.cancelled}</span>}
                             </span>
                         </button>
                     ) : (
@@ -517,8 +499,6 @@ export function AncestryTreePanel({
                             <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-nature-400 ml-1">
                                 {personal.posts > 0 && <span title={`${personal.posts} posts`}>📦{personal.posts}</span>}
                                 {personal.messages > 0 && <span title={`${personal.messages} msgs`}>💬{personal.messages}</span>}
-                                {personal.deals > 0 && <span title={`${personal.deals} deals`}>🤝{personal.deals}</span>}
-                                {personal.cancelled > 0 && <span title={`${personal.cancelled} cancelled`}>🚫{personal.cancelled}</span>}
                             </span>
                         </div>
                     )}
@@ -570,21 +550,15 @@ export function AncestryTreePanel({
                         id={`stats-${pk.slice(0, 12)}`}
                         className="my-2 p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs font-mono space-y-2"
                     >
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-nature-300">
+                        <div className="grid grid-cols-2 gap-2 text-nature-300">
                             <div>📦 Posts: <strong className="text-white">{personal.posts}</strong></div>
                             <div>💬 Messages: <strong className="text-white">{personal.messages}</strong></div>
-                            <div>🤝 Deals: <strong className="text-white">{personal.deals}</strong></div>
-                            <div>💰 Volume: <strong className="text-white">B{personal.volume}</strong></div>
-                            <div>🚫 Cancelled: <strong className="text-white">{personal.cancelled}</strong></div>
                         </div>
                         {hasChildren && (
                             <div className="p-2 rounded bg-nature-900 border border-sky-900/60 text-sky-300 flex flex-wrap gap-3">
                                 <span>🌳 <strong>Branch ({branchStats.memberCount} members)</strong>:</span>
                                 <span>📦 {branchStats.posts} posts</span>
                                 <span>💬 {branchStats.messages} msgs</span>
-                                <span>🤝 {branchStats.deals} deals</span>
-                                <span>💰 B{branchStats.volume} volume</span>
-                                <span>🚫 {branchStats.cancelled} cancelled</span>
                             </div>
                         )}
                     </div>
@@ -623,6 +597,18 @@ export function AncestryTreePanel({
                     <span>{nodeDataLoading ? 'Refreshing...' : 'Refresh Tree'}</span>
                 </button>
             </div>
+
+            {/* The community's trades, totals only: no member's or branch's trades are sent */}
+            {tradeTotals && (
+                <div id="community-trade-totals" className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-nature-300 space-y-1">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono">
+                        <span>🤝 Deals: <strong className="text-white">{tradeTotals.deals}</strong></span>
+                        <span>💰 Volume: <strong className="text-white">{tradeTotals.volume} Beans</strong></span>
+                        <span>🚫 Cancelled: <strong className="text-white">{tradeTotals.cancelled}</strong></span>
+                    </div>
+                    <p className="m-0 text-nature-400">The whole community's trades. No member's trades are shown here.</p>
+                </div>
+            )}
 
             {/* Search & Audit Filter Controls */}
             <div className="space-y-3">

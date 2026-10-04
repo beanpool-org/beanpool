@@ -6,6 +6,8 @@ import {
     CLAIM_COMMAND,
     fetchClaimState,
     buildClaimQr,
+    sanitizeNodeAddress,
+    fetchCommunityInfo,
 } from './node-claim';
 
 describe('node-claim lib', () => {
@@ -77,6 +79,9 @@ describe('node-claim lib', () => {
                 codeId: 'deadbeef',
                 communityName: 'Bean Town',
                 password: false,
+                primaryAddress: null,
+                address: null,
+                addresses: [],
             });
         });
 
@@ -99,6 +104,9 @@ describe('node-claim lib', () => {
                 codeId: '00000000',
                 communityName: 'Test',
                 password: true,
+                primaryAddress: null,
+                address: null,
+                addresses: [],
             });
         });
 
@@ -121,7 +129,11 @@ describe('node-claim lib', () => {
                 codeId: null,
                 communityName: null,
                 password: true,
+                primaryAddress: null,
+                address: null,
+                addresses: [],
             });
+
         });
 
         it('returns unknown state for HTTP error responses or non-object bodies', async () => {
@@ -184,5 +196,107 @@ describe('node-claim lib', () => {
             const result = await promise;
             expect(result).toEqual({ kind: 'unknown' });
         });
+
+        it('ignores any address fields returned by /api/local/claim', async () => {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn().mockResolvedValue({
+                    ok: true,
+                    json: async () => ({
+                        unclaimed: true,
+                        codeId: 'deadbeef',
+                        communityName: 'Test Town',
+                        address: 'https://test.beanpool.org',
+                        primaryAddress: 'https://test.beanpool.org',
+                        addresses: ['test.beanpool.org'],
+                    }),
+                } as Response)
+            );
+
+            const result = await fetchClaimState('/api/local/claim');
+            expect(result).toEqual({
+                kind: 'unclaimed',
+                codeId: 'deadbeef',
+                communityName: 'Test Town',
+                password: true,
+                primaryAddress: null,
+                address: null,
+                addresses: [],
+            });
+        });
+    });
+
+    describe('fetchCommunityInfo', () => {
+        it('fetches /api/community/info and returns primaryAddress and addresses', async () => {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn().mockResolvedValue({
+                    ok: true,
+                    json: async () => ({
+                        primaryAddress: 'Town.BeanPool.org',
+                        addresses: ['Town.BeanPool.org', 'town.example.org'],
+                    }),
+                } as Response)
+            );
+
+            const result = await fetchCommunityInfo('/api/community/info');
+            expect(result).toEqual({
+                primaryAddress: 'town.beanpool.org',
+                addresses: ['town.beanpool.org', 'town.example.org'],
+            });
+        });
+
+        it('returns null primaryAddress and empty addresses on error or non-200 response', async () => {
+            const fetchMock = vi.fn();
+            vi.stubGlobal('fetch', fetchMock);
+
+            fetchMock.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
+            expect(await fetchCommunityInfo('/api/community/info')).toEqual({
+                primaryAddress: null,
+                addresses: [],
+            });
+
+            fetchMock.mockRejectedValueOnce(new TypeError('Network error'));
+            expect(await fetchCommunityInfo('/api/community/info')).toEqual({
+                primaryAddress: null,
+                addresses: [],
+            });
+        });
+    });
+
+    describe('sanitizeNodeAddress', () => {
+        it('returns null for empty, non-string, or invalid inputs', () => {
+            expect(sanitizeNodeAddress(null)).toBeNull();
+            expect(sanitizeNodeAddress(undefined)).toBeNull();
+            expect(sanitizeNodeAddress('')).toBeNull();
+            expect(sanitizeNodeAddress('   ')).toBeNull();
+            expect(sanitizeNodeAddress(123)).toBeNull();
+            expect(sanitizeNodeAddress({})).toBeNull();
+        });
+
+        it('normalizes a bare hostname into an https origin', () => {
+            expect(sanitizeNodeAddress('community.beanpool.org')).toBe('https://community.beanpool.org');
+            expect(sanitizeNodeAddress('town.example.org:8443')).toBe('https://town.example.org:8443');
+        });
+
+        it('preserves a valid https origin', () => {
+            expect(sanitizeNodeAddress('https://community.beanpool.org')).toBe('https://community.beanpool.org');
+            expect(sanitizeNodeAddress('https://community.beanpool.org/')).toBe('https://community.beanpool.org');
+            expect(sanitizeNodeAddress('https://town.example.org:8443')).toBe('https://town.example.org:8443');
+        });
+
+        it('rejects hostile schemes and inputs (only https origins allowed)', () => {
+            expect(sanitizeNodeAddress('http://community.beanpool.org')).toBeNull();
+            expect(sanitizeNodeAddress('javascript:alert(1)')).toBeNull();
+            expect(sanitizeNodeAddress('data:text/html,<script>alert(1)</script>')).toBeNull();
+            expect(sanitizeNodeAddress('//evil.example.com')).toBeNull();
+            expect(sanitizeNodeAddress('ftp://files.example.com')).toBeNull();
+            expect(sanitizeNodeAddress('https://user:pass@evil.com')).toBeNull();
+            expect(sanitizeNodeAddress('https://evil.com/path')).toBeNull();
+            expect(sanitizeNodeAddress('https://evil.com?query=1')).toBeNull();
+            expect(sanitizeNodeAddress('https://evil.com#hash')).toBeNull();
+            expect(sanitizeNodeAddress('<script>alert(1)</script>')).toBeNull();
+        });
     });
 });
+

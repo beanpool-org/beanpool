@@ -5057,14 +5057,16 @@ export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unk
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
         throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
     }
+    // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
+    const beans = Math.round(amount * 100) / 100;
     const txn = conservingTransaction(() => {
         const { balance } = getBalance(memberPubkey);
-        if (amount > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+        if (beans > balance) throw Object.assign(new Error(`You hold ${balance} Beans: you can pay the Commons only what you hold.`), { status: 409 });
         const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId);
-        const t = moveToCommons(memberPubkey, amount, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
+        const t = moveToCommons(memberPubkey, beans, 'Paid to the Commons', { allowMemberDebit: true, authSigner: memberPubkey });
         if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
         // Made for a debt: the link an admin's settle reads (engine/names-debts.ts settleByPayment).
-        if (debt) linkDebtPayment(debt, t.id, memberPubkey, amount);
+        if (debt) linkDebtPayment(debt, t.id, memberPubkey, beans);
         return t;
     });
     try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }

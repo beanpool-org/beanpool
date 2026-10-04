@@ -412,7 +412,7 @@ const INVITER_KEY_SPELLING = 'This ticket names its inviter by a key written ano
  * signature has checked out; a ticket made for community A is refused at B, so it can't join B for 30 days in A's hands.
  */
 export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketBinding):
-    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
+    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; namesEntryId?: string; codeHash: string }
     | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed' | TicketBindingRefusal['reason']; error: string } {
     try {
         const normalizedB64 = ticketB64.replace(/-/g, '+').replace(/_/g, '/');
@@ -421,12 +421,12 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         const { p: payloadStr, s: signatureBase64 } = ticketObj;
 
         let signedBytes: Uint8Array = Buffer.from(payloadStr);
-        let inviterPubkey: unknown, timestamp: unknown, intendedFor: string | undefined;
+        let inviterPubkey: unknown, timestamp: unknown, intendedFor: string | undefined, namesEntryId: string | undefined;
         let audience: string | null = null;
         const bound = parseInviteTicketText(payloadStr);
         if (bound) {
             signedBytes = signedRequestBytes(payloadStr);
-            ({ inviter: inviterPubkey, timestamp, intendedFor } = bound);
+            ({ inviter: inviterPubkey, timestamp, intendedFor, namesEntryId } = bound);
             audience = bound.host;
         } else {
             let payloadJson = payloadStr;
@@ -492,7 +492,7 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         // Standard padded base64, as the apps write it (native encodeBase64, core toBase64, the web app's btoa): for
         // their tickets this is the string as sent, so a ticket used before this stays used.
         const codeHash = crypto.createHash('sha256').update(signature.toString('base64')).digest('hex').substring(0, 16);
-        return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
+        return { ok: true, inviterPubkey, timestamp, intendedFor, ...(namesEntryId ? { namesEntryId } : {}), codeHash };
     } catch (e) {
         return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };
     }

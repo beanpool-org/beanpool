@@ -19,7 +19,7 @@
  * is at least 48dp tall and every row wraps at 320dp and 1.3× text.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Switch, Modal, Share, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -37,8 +37,11 @@ import {
     putHistoryBack, makeKeyOnThisPhone, followServerHistory, startAfreshOnThisPhone, COPY_REFUSED_CODES, sendKeysAgain, myKeyCheck, openEntries, filterEntries, saveNamesEntry,
     deleteNamesEntry, confirmableMembers, confirmMember, secondConfirmation, revokeConfirmation, confirmationLine, confirmationActions,
     logLineText, namesListHtml, setNamesSettings, planWords, newEntryId, listKeyOf, pendingRemovals, followRemovesAny,
+    inviteForNamesEntry, readBoundInvites,
     type NamesOpened, type OpenedEntry, type NamesLogLine, type CommunityMember, type NamesAdminRow,
 } from '../utils/names-list';
+import { inviteThisPerson, invitesForEntry, boundInviteLine, inviteLink, type BoundInvite } from '../utils/names-invite';
+import { makeOfflineTicket } from '../utils/member-statements';
 
 export { ErrorBoundary };
 
@@ -81,6 +84,9 @@ export default function NamesListScreen() {
     const [typedCode, setTypedCode] = useState('');
     const [checkError, setCheckError] = useState<string | null>(null);
     const [scanning, setScanning] = useState(false);
+    // Invites bound to entries (community modes slice 3): the node's list, and the one just made, shown as a QR code.
+    const [boundInvites, setBoundInvites] = useState<BoundInvite[]>([]);
+    const [invited, setInvited] = useState<{ name: string; code: string; offline: boolean } | null>(null);
     const [showMyKey, setShowMyKey] = useState(false);
     const [permission, requestPermission] = useCameraPermissions();
     const scanLock = useRef(false); // one scan at a time: the camera reports the same code many times a second
@@ -346,6 +352,27 @@ export default function NamesListScreen() {
             ? `@${member.callsign} is confirmed by you and waits for a second admin.`
             : `@${member.callsign} is confirmed against ${entry.text?.name ?? 'the entry'}.`);
         setMode({ kind: 'list' });
+    };
+
+    const refreshBoundInvites = useCallback(async () => {
+        if (!anchor || !identity) return;
+        const r = await readBoundInvites(anchor, identity);
+        if (r.ok) setBoundInvites(r.value.invites);
+    }, [anchor, identity]);
+    useEffect(() => { if (opened) refreshBoundInvites(); }, [opened, refreshBoundInvites]);
+
+    /** Invite this person: a code bound to the entry, or with no signal an offline ticket bound to it. */
+    const inviteEntry = async (entry: OpenedEntry) => {
+        if (!anchor || !identity) return;
+        if (!begin()) return;
+        const made = await inviteThisPerson(
+            () => inviteForNamesEntry(anchor, identity, entry.id),
+            () => makeOfflineTicket(anchor, identity.publicKey, identity.privateKey, { namesEntryId: entry.id }),
+        );
+        finish();
+        if (!made.ok) { setError(made.message); return; }
+        setInvited({ name: entry.text?.name ?? 'this person', code: made.code, offline: made.offline });
+        if (!made.offline) refreshBoundInvites();
     };
 
     const second = async (entry: OpenedEntry) => {
@@ -656,8 +683,12 @@ export default function NamesListScreen() {
                                 <Text style={styles.lockedText}>{COPY.lockedEntry(e.key?.n ?? null, callsignOf(e.key?.maker ?? ''), e.holders, e.notTrusting, e.checkedHere)}</Text>
                             )}
                             <Text style={styles.entryMeta}>{e.confirmation ? confirmationLine(e.confirmation, at) : 'No member confirmed against it'}</Text>
+                            {!e.confirmation && invitesForEntry(boundInvites, e.id)[0] ? (
+                                <Text style={styles.entryMeta}>{boundInviteLine(invitesForEntry(boundInvites, e.id)[0], (pk) => (callsignOf(pk) ? `@${callsignOf(pk)}` : 'Someone'))}</Text>
+                            ) : null}
                             <View style={styles.buttonRow}>
                                 {btn(e.text ? 'Change' : 'Type it again', () => openForm(e), 'small')}
+                                {!e.confirmation && e.text ? btn('Invite this person', () => inviteEntry(e), 'small') : null}
                                 {!e.confirmation && e.text ? btn('Confirm a member', () => { setMemberQuery(''); setMode({ kind: 'pick', entry: e }); }, 'small') : null}
                                 {acts?.second ? btn('Confirm as second admin', () => second(e), 'small') : null}
                                 {acts?.revoke ? btn('Revoke', () => revoke(e), 'small') : null}
@@ -730,6 +761,32 @@ export default function NamesListScreen() {
                         <CameraView style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ['qr'] }} onBarcodeScanned={onScanned} />
                     </View>
                     <View style={styles.buttonRow}>{btn(COPY.stopScan, () => setScanning(false), 'secondary')}</View>
+                </SafeAreaView>
+            </Modal>
+            <Modal visible={!!invited} animationType="slide" onRequestClose={() => setInvited(null)}>
+                <SafeAreaView style={styles.screen} edges={['top', 'left', 'right', 'bottom']}>
+                    <ScrollView contentContainerStyle={styles.scroll}>
+                        <Text style={styles.headerTitle} accessibilityRole="header">Invite {invited?.name}</Text>
+                        <Text style={styles.body}>
+                            {invited?.offline
+                                ? 'No signal, so this is an offline ticket. When they join with it, they are confirmed as this person, by you.'
+                                : 'When they join with this invite, they are confirmed as this person, by you. Give it to them yourself.'}
+                        </Text>
+                        {invited && anchor ? (
+                            <View style={styles.keyCard}>
+                                <View style={styles.qrBox}>
+                                    <QRCode value={invited.offline ? invited.code : inviteLink(anchor, invited.code)} size={200} quietZone={8} backgroundColor="#ffffff" color="#000000" />
+                                </View>
+                                <Text style={styles.codeText} selectable>{invited.code}</Text>
+                            </View>
+                        ) : null}
+                        <View style={styles.buttonRow}>
+                            {btn('Share', () => {
+                                if (invited && anchor) Share.share({ message: invited.offline ? invited.code : `Join us on BeanPool: ${inviteLink(anchor, invited.code)}\n\nOr enter this invite code in the app: ${invited.code}` }).catch(() => {});
+                            }, 'secondary')}
+                            {btn('Done', () => setInvited(null))}
+                        </View>
+                    </ScrollView>
                 </SafeAreaView>
             </Modal>
         </SafeAreaView>

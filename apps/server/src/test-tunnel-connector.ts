@@ -361,6 +361,7 @@ async function main(): Promise<void> {
 
         await section('5. a child that keeps crashing: growing, capped backoff; never two at once', async () => {
             const n0 = fake.runs().length;
+            const log0 = tunnelLogs().length;
             fake.crash(true);
             let most = 0;
             const sampler = setInterval(() => { most = Math.max(most, fakes().length); }, 10);
@@ -370,7 +371,13 @@ async function main(): Promise<void> {
             const starts = fake.runs().slice(n0).map((r) => r.at);
             const gaps = starts.slice(1).map((t, i) => t - starts[i]);
             assert(starts.length >= 6, `restarted after each crash (${starts.length} starts)`);
-            assert(gaps[0] >= 80 && gaps[1] > gaps[0] && gaps[2] > gaps[1], `the wait grows (${gaps.join(', ')} ms)`);
+            const scheduled = tunnelLogs().slice(log0)
+                .map((l) => l.message.match(/starting it again in (\d+)\s*ms/))
+                .filter((m): m is RegExpMatchArray => m !== null)
+                .map((m) => Number(m[1]));
+            assert(scheduled.length >= 3 && scheduled[0] < scheduled[1] && scheduled[1] < scheduled[2]
+                && gaps[0] >= 80 && gaps[2] > gaps[0],
+                `the wait grows (schedule: ${scheduled.slice(0, 3).join(', ')} ms; measured: ${gaps.join(', ')} ms)`);
             assert(gaps.every((g) => g < 400 + 600) && gaps[3] >= 350 && gaps[4] >= 350, `and is capped (${gaps.join(', ')} ms; cap 400)`);
             assert(most <= 1, `never two children at once (at most ${most})`);
             // waitForRuns resolves the moment the 6th child has STARTED; its exit (and so the retrying reason) lands slightly after.

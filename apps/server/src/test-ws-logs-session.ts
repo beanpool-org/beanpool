@@ -158,6 +158,16 @@ async function main() {
     {
         const s = keySession(owner);
         const ownerLogs = await mustOpen(await ticketFor(s), "the owner's stream");
+        // Two streams open and no member socket: a log line is one frame on each, and no ws_traffic line. The traffic
+        // lines describe members' sockets; one about a log socket's frame went to the other log socket, whose frame
+        // made one for the first, until the stack ran out: thousands of frames a line, ahead of any close frame.
+        adminLogs.lines.length = 0;
+        ownerLogs.lines.length = 0;
+        assert(await streams(ownerLogs), 'with two streams open, a log line reaches the owner');
+        await sleep(300);
+        const traffic = (l: LogSocket) => l.lines.filter(x => x.includes('"ws_traffic"')).length;
+        assert(traffic(ownerLogs) === 0 && traffic(adminLogs) === 0,
+            `…and neither stream gets a ws_traffic line about the other (got ${traffic(ownerLogs)} and ${traffic(adminLogs)})`);
         assert(await streams(ownerLogs), "the owner's stream carries a log line while signed in");
         const revokedAt = Date.now();
         const revoked = await post('/api/local/admin/auth/revoke-all', s);

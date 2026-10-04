@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, enterpriseKnownShare, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
 import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
@@ -2910,7 +2910,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         SELECT COALESCE(SUM(p.amount), 0) as total
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
-        WHERE p.enterprise = ? AND p.released_at IS NULL
+        WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
           AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
     `).get(enterprisePubkey) as any;
     const pledgeBacking = Number(pledgeRow?.total || 0);
@@ -2929,7 +2929,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         legacyFloor = 0;
     }
 
-    // A confirmed keeper's known grant counts at half (community modes slice 4); 0 with the confirmation dial off.
+    // A confirmed keeper's known pledges (community modes slice 4, engine known-floor.ts); 0 with the confirmation dial off.
     const knownShare = enterpriseKnownShareOf(enterprisePubkey);
     const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit + knownShare);
     if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0 || knownShare > 0) {
@@ -2940,7 +2940,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
     return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
-/** The keepers' known share of this enterprise's floor: engine enterpriseKnownShareOf, each keeper's half counted once. */
+/** The keepers' known pledges to this enterprise, as its floor counts them (engine enterpriseKnownShareOf). */
 export function enterpriseKnownShareOf(enterprisePubkey: string): number {
     return engine.enterpriseKnownShareOf(db, enterprisePubkey);
 }
@@ -3221,6 +3221,7 @@ function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): n
         WHERE p.enterprise = ?
           AND p.keeper != ?
           AND p.released_at IS NULL
+          AND p.id NOT LIKE 'known:%'
           AND m.status = 'active'
           AND COALESCE(m.credit_frozen, 0) = 0
     `).get(treasuryPubkey, memberPubkey) as any;
@@ -3249,6 +3250,70 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
         "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
     ).get(memberPubkey, treasuryPubkey) as any;
     return Number(row?.total || 0);
+}
+
+/** The known part of one keeper's active pledge to one enterprise (engine known-floor.ts KNOWN_PLEDGE_PREFIX). */
+function activeKnownPledge(treasuryPubkey: string, memberPubkey: string): number {
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+    ).get(memberPubkey, treasuryPubkey) as any;
+    return Number(row?.total || 0);
+}
+
+/** A keeper's earned credit not yet pledged (main's Rule 3 headroom; known pledges draw on their known grant instead). */
+function earnedPledgeRoom(keeperPubkey: string): number {
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
+    ).get(keeperPubkey) as any;
+    return Math.max(0, earnedCredit - Number(row?.total || 0));
+}
+
+/**
+ * Write one keeper's pledge to one enterprise as up to two rows: the earned part as on main, the known part under the
+ * known prefix. Runs inside the caller's transaction.
+ */
+function insertPledgeRows(keeperPubkey: string, enterprisePubkey: string, earnedPart: number, knownPart: number, at: string): string {
+    let id = '';
+    if (earnedPart > 0) {
+        id = crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(id, keeperPubkey, enterprisePubkey, earnedPart, at);
+    }
+    if (knownPart > 0) {
+        const knownId = engine.KNOWN_PLEDGE_PREFIX + crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(knownId, keeperPubkey, enterprisePubkey, knownPart, at);
+        if (!id) id = knownId;
+    }
+    return id;
+}
+
+/**
+ * Split a new pledge: earned headroom first, then half the keeper's known grant. A known part comes off the keeper's own
+ * known line, so it is refused while their own debt is using that line (their balance would fall below their new floor):
+ * the same lock a pledge has on the enterprise side. Runs inside the caller's transaction, after the rows are written.
+ */
+function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: number; knownPart: number } {
+    const earnedRoom = earnedPledgeRoom(keeperPubkey);
+    const knownRoom = engine.knownPledgeRoom(db, keeperPubkey);
+    if (amount > earnedRoom + knownRoom) {
+        // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
+        if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
+            throw new Error(`Pledge amount (${amount}) exceeds available earned credit (${earnedRoom} available to add across all enterprises)`);
+        }
+        throw new Error(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
+    }
+    const earnedPart = Math.min(amount, earnedRoom);
+    return { earnedPart, knownPart: amount - earnedPart };
+}
+
+function assertKeeperOwnDebtCovered(keeperPubkey: string): void {
+    const { balance } = getBalance(keeperPubkey);
+    const floor = usableFloor(keeperPubkey);
+    if (balance < floor) {
+        throw new Error(`Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+    }
 }
 
 /**
@@ -3280,14 +3345,13 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
             const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
             const toRelease = keeperPledge - lockedNeeded;
             if (toRelease > 0) {
+                // The known part is released first, as releaseEnterpriseBacking does; what stays locked keeps its kind.
+                const knownLocked = Math.max(0, activeKnownPledge(treasuryPubkey, memberPubkey) - toRelease);
                 const nowIso = new Date().toISOString();
                 db.prepare(
                     "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
                 ).run(nowIso, memberPubkey, treasuryPubkey);
-                db.prepare(`
-                    INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                    VALUES (?, ?, ?, ?, ?, NULL)
-                `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                insertPledgeRows(memberPubkey, treasuryPubkey, lockedNeeded - knownLocked, knownLocked, nowIso);
             }
         }
     }
@@ -3368,12 +3432,8 @@ export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: strin
     if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
         return 0;
     }
-    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-    const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-    ).get(keeperPubkey) as any;
-    const totalPledged = Number(row?.total || 0);
-    return Math.max(0, earnedCredit - totalPledged);
+    // Earned credit not yet pledged, plus what is left of half their known grant (0 with the dial off).
+    return earnedPledgeRoom(keeperPubkey) + engine.knownPledgeRoom(db, keeperPubkey);
 }
 
 /**
@@ -3464,25 +3524,13 @@ export function pledgeEnterpriseBacking(
             throw new Error('Pledge amount must be a positive number');
         }
 
-        const totalPledgedRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-        ).get(keeperPubkey) as any;
-        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
-        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
-
-        if (parsedAmount > availableToAdd) {
-            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
-        }
+        // Earned credit first (main's Rule 3), then half the keeper's known grant (engine known-floor.ts, the bound).
+        const { earnedPart, knownPart } = splitNewPledge(keeperPubkey, parsedAmount);
 
         const pledgeToAdd = parsedAmount;
-        const pledgeId = crypto.randomUUID();
         const pledgedAt = new Date().toISOString();
-
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+        const pledgeId = insertPledgeRows(keeperPubkey, enterprisePubkey, earnedPart, knownPart, pledgedAt);
+        if (knownPart > 0) assertKeeperOwnDebtCovered(keeperPubkey);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -3552,37 +3600,33 @@ export function releaseEnterpriseBacking(
         const balance = getBalance(enterprisePubkey).balance;
         const deficit = Math.max(0, -balance);
 
-        const totalPledgesRow = db.prepare(`
-            SELECT COALESCE(SUM(p.amount), 0) as total
-            FROM enterprise_pledges p
-            JOIN members m ON m.public_key = p.keeper
-            WHERE p.enterprise = ?
-              AND p.released_at IS NULL
-              AND m.status = 'active'
-              AND COALESCE(m.credit_frozen, 0) = 0
-        `).get(enterprisePubkey) as any;
-        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
-        const newTotalPledges = currentTotalPledges - toRelease;
         const legacyFloor = Number(t.legacy_credit_floor || 0);
-
-        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, newTotalPledges + enterpriseKnownShareOf(enterprisePubkey)));
-        if (newAllowance < deficit) {
-            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
-        }
-
         const remainingPledge = currentKeeperPledge - toRelease;
+        // The known part goes first (it gives the keeper their own known line back); the rest is pledged again as before.
+        const knownPledge = activeKnownPledge(enterprisePubkey, keeperPubkey);
+        const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
         db.prepare(
             "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
         ).run(nowIso, keeperPubkey, enterprisePubkey);
+        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
 
-        if (remainingPledge > 0) {
-            const newPledgeId = crypto.randomUUID();
-            db.prepare(`
-                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                VALUES (?, ?, ?, ?, ?, NULL)
-            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
+        // refused, the transaction writes nothing.
+        const earnedRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND p.id NOT LIKE 'known:%'
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, Number(earnedRow?.total || 0) + enterpriseKnownShareOf(enterprisePubkey)));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -3814,10 +3858,9 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     }
 
     if (pledged > 0) {
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(crypto.randomUUID(), memberPubkey, enterprisePubkey, pledged, new Date().toISOString());
+        const { earnedPart, knownPart } = splitNewPledge(memberPubkey, pledged);
+        insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
+        if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;

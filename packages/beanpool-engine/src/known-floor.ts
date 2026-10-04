@@ -10,7 +10,7 @@
  *   confirmations                       the names list's confirmations (#1411); live = not revoked and not awaiting a second
  */
 import type Database from 'better-sqlite3';
-import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, knownGrantFor, enterpriseKnownShare, type KnownFloorException } from '@beanpool/core';
+import { KNOWN_FLOOR_DEFAULT, CREDIT_CAP_DEFAULT, CREDIT_CAP_MAX, knownGrantFor, type KnownFloorException } from '@beanpool/core';
 
 type Db = Database.Database;
 
@@ -91,19 +91,74 @@ export function memberKnownGrant(db: Db, pubkey: string): number {
 }
 
 /**
- * What an enterprise's active, unfrozen keepers' known grants add to its floor (core enterpriseKnownShare): each keeper's
- * half split over every enterprise they keep, so it counts once in all. 0 with the dial off. `exceptKeeper` leaves one
- * keeper out (what the others would still back if they went).
+ * A keeper backs an enterprise from their known grant only by a recorded pledge (main's enterprise_pledges, Rule 3), never
+ * by a share recomputed on each read: a pledge row whose id starts with this prefix is drawn from the known grant, any other
+ * row from earned credit as on main. So a known pledge is locked exactly as a pledge is (release covenant, step-down, unbind).
+ *
+ * THE BOUND: a confirmed member with known grant G can pledge at most floor(G/2) of it, in all, and every Bean pledged comes
+ * off their own known line 1:1. Own usable known line + every enterprise's known backing from them <= G, however many
+ * enterprises they keep. Half of G is the most an enterprise can draw (design §4.2's half rate); 1:1 keeps the sum at G.
+ */
+export const KNOWN_PLEDGE_PREFIX = 'known:';
+
+/** The known part of a keeper's active pledges, across every enterprise (as recorded, before any shrink of G). */
+export function memberKnownPledged(db: Db, pubkey: string): number {
+    try {
+        const row = db.prepare(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id LIKE 'known:%'",
+        ).get(pubkey) as { total: number } | undefined;
+        return Number(row?.total || 0);
+    } catch {
+        return 0;
+    }
+}
+
+/** How much of a keeper's known pledges counts today: never above half their grant now (0 with the dial off or unconfirmed). */
+function countedKnownPledged(db: Db, pubkey: string): { grant: number; pledged: number; counted: number } {
+    const grant = memberKnownGrant(db, pubkey);
+    const pledged = memberKnownPledged(db, pubkey);
+    return { grant, pledged, counted: Math.min(pledged, Math.floor(grant / 2)) };
+}
+
+/** What is left of half a keeper's known grant to pledge. */
+export function knownPledgeRoom(db: Db, pubkey: string): number {
+    const { grant, pledged } = countedKnownPledged(db, pubkey);
+    return Math.max(0, Math.floor(grant / 2) - pledged);
+}
+
+/** A member's own known line: their grant less what of it is pledged to enterprises (the bound above). */
+export function memberUsableKnownGrant(db: Db, pubkey: string): number {
+    const { grant, counted } = countedKnownPledged(db, pubkey);
+    return Math.max(0, grant - counted);
+}
+
+/**
+ * What keepers' known pledges add to an enterprise's floor: each active, unfrozen keeper's known pledges to it, scaled down
+ * when their grant has shrunk (dial off, floor lowered, confirmation revoked, an exception) so that across all their
+ * enterprises they count at most half the grant they have now. The rows stay: a shrink spend-freezes, it claws nothing back.
+ * 0 with the dial off. `exceptKeeper` leaves one keeper out (what the others would still back if they went).
  */
 export function enterpriseKnownShareOf(db: Db, enterprisePubkey: string, exceptKeeper?: string): number {
     if (!confirmationDialOn(db)) return 0;
-    const keepers = db.prepare(`
-        SELECT o.member_pubkey AS pk,
-               (SELECT COUNT(*) FROM treasury_operators o2 WHERE o2.member_pubkey = o.member_pubkey) AS kept
-        FROM treasury_operators o
-        JOIN members m ON m.public_key = o.member_pubkey
-        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
-    `).all(enterprisePubkey) as { pk: string; kept: number }[];
-    return enterpriseKnownShare(keepers.filter(k => k.pk !== exceptKeeper)
-        .map(k => ({ knownGrant: memberKnownGrant(db, k.pk), enterprisesKept: Number(k.kept) })));
+    let rows: { pk: string; amount: number }[];
+    try {
+        rows = db.prepare(`
+            SELECT p.keeper AS pk, SUM(p.amount) AS amount
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id LIKE 'known:%'
+              AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
+            GROUP BY p.keeper
+        `).all(enterprisePubkey) as { pk: string; amount: number }[];
+    } catch {
+        return 0;
+    }
+    let share = 0;
+    for (const r of rows) {
+        if (r.pk === exceptKeeper) continue;
+        const { pledged, counted } = countedKnownPledged(db, r.pk);
+        if (pledged <= 0) continue;
+        share += Math.floor(Number(r.amount) * counted / pledged);
+    }
+    return share;
 }

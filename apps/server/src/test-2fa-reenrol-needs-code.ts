@@ -145,6 +145,15 @@ async function main() {
         const tfa = login.body.tfaSessionToken as string;
         assert(login.status === 200 && typeof tfa === 'string', 'password + a right code signs in and gets a 2FA session');
         const pwWith2fa = { 'X-Admin-Password': PW, 'X-Admin-2FA-Session': tfa };
+        // A 2FA session ends with the 2FA it was made under (isValid2faSession). When a step below replaces the secret
+        // with this session, and set2fa(true) then puts the old one back, the session is signed in again.
+        async function renew2fa(): Promise<void> {
+            forgetUsedTotpCodesForTests();
+            const again = await call('/api/local/verify-password', {}, { password: PW, totpCode: generateTotpCode(SECRET) });
+            if (again.status !== 200) throw new Error(`signing in again answered ${again.status}`);
+            pwWith2fa['X-Admin-2FA-Session'] = again.body.tfaSessionToken;
+            forgetUsedTotpCodesForTests();
+        }
 
         // ── 1. Re-enrolling with 2FA on needs a current code ──
         for (const [who, headers] of [['owner key session', asOwner], ['password + 2FA session', pwWith2fa]] as const) {
@@ -183,6 +192,7 @@ async function main() {
         // The legacy page's shape: password + X-Admin-TOTP (no session). The one code signs in and is the current code.
         resetAdminAuthTarpit();
         set2fa(true);
+        await renew2fa(); // section 1 replaced the secret with this session
         {
             const s = await setup(pwWith2fa);
             const inline = await call('/api/local/admin/2fa/verify', { 'X-Admin-Password': PW, 'X-Admin-TOTP': generateTotpCode(SECRET) }, { code: generateTotpCode(s.secret) });
@@ -204,6 +214,8 @@ async function main() {
         }
 
         // ── 2. A stolen owner session: swap the secret, then disable ──
+        set2fa(true);
+        await renew2fa(); // the block above replaced the secret with this session
         for (const [who, headers] of [['stolen key session', asOwner], ['password + stolen 2FA session', pwWith2fa]] as const) {
             resetAdminAuthTarpit();
             set2fa(true);
